@@ -7226,6 +7226,20 @@ export function draftAnswer(ctx, env, question) {
     if (!before) return 'theme';
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
+    // ("big buttons, a sky blue, high contrast": a list piece that is only a
+    // color, with no look or part word of its own, is the theme's, never
+    // a fill on the part a piece before it named; "buttons rounder and
+    // red" is still the buttons'.)
+    if (
+      j.sep === 'comma' &&
+      j.list == null &&
+      c.colors.length &&
+      !aspectsOf(c.text).length &&
+      !lex.parts.some(([re]) => re.test(` ${c.text.toLowerCase()} `)) &&
+      !c.state &&
+      !c.dir
+    )
+      return 'theme';
     const subject =
       /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary|success|warning|danger|error|info|destructive)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
         c.text,
@@ -7507,8 +7521,10 @@ export function draftAnswer(ctx, env, question) {
       }
       if (named.size > 1) return 'theme';
     }
-    // A text color: the part's, when it holds text.
-    if (own.every(a => a === 'text'))
+    // A text color: the part's, when it holds text. (A color with no look
+    // of its own, "big buttons, a sky blue", is no text color: never the
+    // part's fill or text.)
+    if (own.length && own.every(a => a === 'text'))
       return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
         ? 'inherit'
         : 'theme';
