@@ -22,7 +22,10 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
-import {useTopNavRenderMode} from './TopNavRenderContext';
+import {
+  useTopNavRenderMode,
+  useTopNavUnreadBreakpoint,
+} from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
 import {Divider} from '../Divider/Divider';
 import {MobileNav} from '../MobileNav/MobileNav';
@@ -35,8 +38,43 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNav.generated';
 import {isRenderable} from '../utils/isRenderable';
+import type {WidthBreakpointName} from '../theme/themeAdaptations';
 
 registerEnglishFallback(english);
+
+// AppShell's phone layout replaces these regions once the shell reads the
+// window. StyleX compiles media queries at build time, so each standard width
+// point has its own rule. Below the point, the regions do not paint. StyleX
+// keeps `not all and (min-width)` as written, so the rule stops at the point
+// itself.
+const unreadRegionStyles: Readonly<
+  Record<WidthBreakpointName, stylex.StyleXStyles>
+> = stylex.create({
+  sm: {
+    display: {default: 'flex', '@media not all and (min-width: 640px)': 'none'},
+  },
+  md: {
+    display: {default: 'flex', '@media not all and (min-width: 768px)': 'none'},
+  },
+  lg: {
+    display: {
+      default: 'flex',
+      '@media not all and (min-width: 1024px)': 'none',
+    },
+  },
+  xl: {
+    display: {
+      default: 'flex',
+      '@media not all and (min-width: 1280px)': 'none',
+    },
+  },
+  '2xl': {
+    display: {
+      default: 'flex',
+      '@media not all and (min-width: 1536px)': 'none',
+    },
+  },
+});
 
 /**
  * Base TopNav styles
@@ -236,6 +274,9 @@ export function TopNav({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
+  const unreadBreakpoint = useTopNavUnreadBreakpoint();
+  const unreadRegionStyle =
+    unreadBreakpoint == null ? undefined : unreadRegionStyles[unreadBreakpoint];
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
@@ -340,7 +381,7 @@ export function TopNav({
         )}
         {hasStartContent && (
           <TopNavSlotContext value="start">
-            <div {...stylex.props(styles.startContent)}>
+            <div {...stylex.props(styles.startContent, unreadRegionStyle)}>
               {resolvedStartContent}
             </div>
           </TopNavSlotContext>
@@ -348,7 +389,9 @@ export function TopNav({
       </div>
       {hasCenterContent && (
         <TopNavSlotContext value="center">
-          <div {...stylex.props(styles.centerContent)}>{centerContent}</div>
+          <div {...stylex.props(styles.centerContent, unreadRegionStyle)}>
+            {centerContent}
+          </div>
         </TopNavSlotContext>
       )}
       {hasCenterContent ? (

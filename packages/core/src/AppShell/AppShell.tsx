@@ -67,7 +67,10 @@ import {
   type LayoutChange,
   type LayoutSwap,
 } from '../motion/animatedLayout';
-import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
+import {
+  TopNavRenderContext,
+  TopNavUnreadBreakpointContext,
+} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
 import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
@@ -198,8 +201,9 @@ export interface MobileNavConfig {
    * Seeds the breakpoint state so the server-rendered HTML is the phone
    * layout, menu toggle included. Without it, when the theme keeps the
    * standard width points, the server-rendered wide layout still paints
-   * without its inline side nav below the breakpoint, and the toggle
-   * arrives when the page's script runs. Ignored when `breakpoint` is
+   * without its inline side nav, and with only the top nav's heading and end
+   * content, below the breakpoint, and the toggle arrives when the page's
+   * script runs. Ignored when `breakpoint` is
    * `none`, which is always non-mobile.
    *
    * Derive from the User-Agent header or a device-detection cookie
@@ -1004,13 +1008,31 @@ export function AppShell({
     </SideNavRenderContext>
   ) : null;
 
+  const topNavTakesMobileBar = !mobileNavDisabled && mobileNavReactNode == null;
+  // Until the shell reads the window, the server's full bar can be showing on
+  // a phone. The full bar then hides its start and center content below the
+  // breakpoint, as the mobile bar does. The toggle arrives when the shell
+  // reads the window. A theme that moves the point has no compiled rule, so
+  // its bar keeps the server's layout until then.
+  const unreadTopNavBreakpoint =
+    layoutWidth === 'unread' &&
+    !isBelowBreakpoint &&
+    topNavTakesMobileBar &&
+    sideNavBreakpoint !== 'none' &&
+    breakpointWidth === DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
+      ? sideNavBreakpoint
+      : null;
   const topNavContent = hasTopNav ? (
-    isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
+    isBelowBreakpoint && topNavTakesMobileBar ? (
       <TopNavMobileContentContext value={mobileContentValue}>
         <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
       </TopNavMobileContentContext>
     ) : (
-      topNav
+      // Always present on this branch, so reading the window keeps the bar
+      // mounted.
+      <TopNavUnreadBreakpointContext value={unreadTopNavBreakpoint}>
+        {topNav}
+      </TopNavUnreadBreakpointContext>
     )
   ) : null;
 
