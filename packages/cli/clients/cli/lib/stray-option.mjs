@@ -292,6 +292,19 @@ const REMOVED_OPTIONS = {
 };
 
 /**
+ * Options that answer a question in other tools. No Astryx command asks one,
+ * so the run without the option is the run as meant.
+ */
+const CONFIRM_OPTIONS = new Set([
+  '--yes',
+  '-y',
+  '--assume-yes',
+  '--non-interactive',
+  '--no-interactive',
+  '--no-input',
+]);
+
+/**
  * The answer to an option a command does not take.
  *
  * The message names the options the command takes, and a group's
@@ -328,6 +341,22 @@ export function strayOptionAnswer(
         },
       ],
     };
+  }
+  if (CONFIRM_OPTIONS.has(stray.split('=')[0])) {
+    const flag = stray.split('=')[0];
+    const run = words.filter(word => word.split('=')[0] !== flag);
+    if (runParses(rootOf(cmd), run))
+      return {
+        message: `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
+        suggestions: [
+          {
+            name: formatCliCommand(
+              run.map(w => quoteCommandArgument(w)).join(' '),
+            ),
+            reason: 'do this instead',
+          },
+        ],
+      };
   }
   const json = path.length === 0 || jsonSupported(path.join(' '));
   const offered = optionsInReach(
