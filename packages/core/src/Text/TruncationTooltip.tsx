@@ -22,11 +22,13 @@ import {
   type FocusEvent,
   type PointerEvent,
   type ReactNode,
+  type RefCallback,
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -214,5 +216,31 @@ export function TruncationTooltip({
     <TooltipPresentInterestContext value={interest.interestRef}>
       <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
     </TooltipPresentInterestContext>
+  );
+}
+
+/**
+ * Attaches a tooltip to its anchor without a description, for a tooltip whose
+ * content is the anchor's own name (a cut Button label or table heading), so
+ * a screen reader does not hear the name twice. `attach` is the tooltip hook's
+ * trigger ref.
+ */
+export function useUndescribedTrigger(
+  attach: RefCallback<HTMLElement>,
+  anchorRef: RefObject<HTMLElement | null>,
+): void {
+  // Syncs the tooltip's trigger listeners with the anchor's current element
+  // on every render: a Button that renders a new element (a link Button that
+  // becomes disabled) moves them to it. Attaching the same element again is
+  // a no-op.
+  useIsomorphicLayoutEffect(() => {
+    attach(anchorRef.current);
+  });
+  // Syncs the trigger listeners with the tooltip's lifetime.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      attach(null);
+    },
+    [attach],
   );
 }

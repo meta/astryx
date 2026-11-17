@@ -6,8 +6,7 @@
  * @file useTooltip.tsx
  * @input Uses useLayer, useTouchTriggerInternal, React hooks
  * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
- *   and imperative show() and hide() for an app-built toggle trigger, and
- *   UndescribedTooltip, a tooltip that repeats its anchor's own name
+ *   and imperative show() and hide() for an app-built toggle trigger
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -22,7 +21,6 @@ import {
   useState,
   type ReactNode,
   type RefCallback,
-  type RefObject,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -1035,39 +1033,4 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     show,
     hide,
   };
-}
-
-/**
- * A tooltip whose content is its anchor's own name (a cut Button label or
- * table heading). It attaches without a description, so a screen reader does
- * not hear the name twice. Internal: the Tooltip entry does not export it.
- */
-export function UndescribedTooltip({
-  anchorRef,
-  content,
-  placement = 'above',
-  focusTrigger = 'auto',
-}: {
-  anchorRef: RefObject<HTMLElement | null>;
-  content: ReactNode;
-  placement?: LayerPlacement;
-  focusTrigger?: TooltipFocusTrigger;
-}): ReactNode {
-  const tooltip = useTooltip({placement, focusTrigger});
-  const attach = tooltip.ref;
-  // Syncs the tooltip's trigger listeners with the anchor's current element
-  // on every render: a Button that renders a new element (a link Button that
-  // becomes disabled) moves them to it. Attaching the same element again is
-  // a no-op.
-  useIsomorphicLayoutEffect(() => {
-    attach(anchorRef.current);
-  });
-  // Syncs the trigger listeners with this tooltip's lifetime.
-  useIsomorphicLayoutEffect(
-    () => () => {
-      attach(null);
-    },
-    [attach],
-  );
-  return tooltip.renderTooltip(content);
 }

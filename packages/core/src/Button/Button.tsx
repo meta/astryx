@@ -26,13 +26,17 @@ import {
   useState,
   useTransition,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {UndescribedTooltip, useTooltip} from '../Tooltip/useTooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
-import {useTruncationTooltipInterest} from '../Text/TruncationTooltip';
+import {
+  useTruncationTooltipInterest,
+  useUndescribedTrigger,
+} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -829,6 +833,19 @@ function visibleLabelText(label: HTMLElement): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** The tooltip for a cut label: the label in full, with no description. */
+function CutLabelTooltip({
+  anchorRef,
+  label,
+}: {
+  anchorRef: RefObject<HTMLElement | null>;
+  label: string;
+}): ReactNode {
+  const tooltip = useTooltip({placement: 'above'});
+  useUndescribedTrigger(tooltip.ref, anchorRef);
+  return tooltip.renderTooltip(label);
+}
+
 /**
  * A versatile button component with multiple variants.
  *
@@ -1302,7 +1319,7 @@ export function Button({
       {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
       {canShowCutLabel && cutLabelInterest.isWanted && cutLabel != null ? (
         <TooltipPresentInterestContext value={cutLabelInterest.interestRef}>
-          <UndescribedTooltip anchorRef={buttonRef} content={cutLabel} />
+          <CutLabelTooltip anchorRef={buttonRef} label={cutLabel} />
         </TooltipPresentInterestContext>
       ) : null}
     </>

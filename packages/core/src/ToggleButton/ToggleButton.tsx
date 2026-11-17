@@ -82,7 +82,10 @@ const labelStyles = stylex.create({
   },
   visible: {
     maxWidth: '100%',
-    overflow: 'hidden',
+    overflow: 'clip',
+    // Glyph edges that paint outside the text box (the foot of an "A") stay
+    // visible, so a label that fits looks as it did.
+    overflowClipMargin: 2,
     textOverflow: 'ellipsis',
   },
   pressed: {
