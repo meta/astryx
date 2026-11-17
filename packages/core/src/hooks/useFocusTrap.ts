@@ -126,6 +126,20 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * A negative `tabindex` takes an element out of the Tab order, whatever the
+ * element is: a roving group's other members hold `tabindex="-1"`.
+ * FOCUSABLE_SELECTOR keeps such a button or link, so the region filters it.
+ */
+function isTabStop(el: HTMLElement): boolean {
+  const value = el.getAttribute('tabindex');
+  return value == null || !(Number.parseInt(value, 10) < 0);
+}
+
+function getTabStops(container: HTMLElement): HTMLElement[] {
+  return getFocusableElements(container).filter(isTabStop);
+}
+
+/**
  * The name of a named native radio, or null for any other element and for an
  * unnamed radio, which is its own Tab stop.
  */
@@ -227,8 +241,10 @@ function wrapFocus(event: KeyboardEvent, target: HTMLElement): void {
  * Focus the first focusable descendant of a container.
  * Returns true if a focusable element was found and focused.
  */
-function focusFirstDescendant(container: HTMLElement): boolean {
-  const focusable = getFocusableElements(container);
+function focusFirstDescendant(
+  container: HTMLElement,
+  focusable: HTMLElement[] = getFocusableElements(container),
+): boolean {
   for (const element of focusable) {
     if (attemptFocus(element)) {
       return true;
@@ -241,8 +257,10 @@ function focusFirstDescendant(container: HTMLElement): boolean {
  * Focus the last focusable descendant of a container.
  * Returns true if a focusable element was found and focused.
  */
-function focusLastDescendant(container: HTMLElement): boolean {
-  const focusable = getFocusableElements(container);
+function focusLastDescendant(
+  container: HTMLElement,
+  focusable: HTMLElement[] = getFocusableElements(container),
+): boolean {
   for (let i = focusable.length - 1; i >= 0; i--) {
     if (attemptFocus(focusable[i])) {
       return true;
@@ -334,12 +352,13 @@ export function useFocusRegionContainment(
         lastFocusRef.current = target as Element;
       } else if (isKeyboardNavigationRef.current) {
         // Focus escaped via keyboard - redirect it back
-        const focusedFirst = focusFirstDescendant(container);
+        const tabStops = getTabStops(container);
+        const focusedFirst = focusFirstDescendant(container, tabStops);
 
         // If we're back at the same element (Shift+Tab from first element),
         // try focusing the last element instead
         if (focusedFirst && lastFocusRef.current === doc.activeElement) {
-          focusLastDescendant(container);
+          focusLastDescendant(container, tabStops);
         } else if (
           !focusedFirst &&
           isHTMLElement(lastFocusRef.current) &&
@@ -423,7 +442,7 @@ export function useFocusRegionContainment(
         // focus that lands outside is redirected back in.
         isKeyboardNavigationRef.current = true;
 
-        const focusable = getFocusableElements(container);
+        const focusable = getTabStops(container);
         if (focusable.length === 0) {
           // There is nowhere to advance to. Keep focus on the current
           // programmatic target (for example a dialog panel with tabIndex=-1)
