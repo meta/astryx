@@ -230,7 +230,7 @@ test.describe('a list that is not the lane’s own child', () => {
     expect(row.labels).toHaveLength(row.itemCount);
   });
 
-  test('the table filter template keeps its lane sizing at 1280 px', async ({
+  test('the table filter template shows every clause at 1280 px', async ({
     page,
   }) => {
     await openStory(
@@ -239,12 +239,13 @@ test.describe('a list that is not the lane’s own child', () => {
       'table-filter-frame',
     );
     const row = await rowAt(page, 'table-filter-frame', 1280);
-    // The lane keeps its own sizing; compare the shown clauses with main's.
+    // Its list is not the lane's own child, so the lane rule does not apply
+    // and every clause shows at desktop width, as on main.
     test.info().annotations.push({
       type: 'template-clauses-1280',
       description: `${row.labels.length} of ${row.itemCount}: ${row.labels.join(', ')}`,
     });
-    expect(row.startFlexBasis).not.toBe('0%');
+    expect(row.labels).toHaveLength(row.itemCount);
   });
 
   test('reports the width where the table filter template lanes first meet', async ({
