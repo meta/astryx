@@ -145,6 +145,34 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('says a part already has the corners asked, and writes nothing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('t', {cwd, like: 'neutral'});
+    await themeEditSet('t', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    const ask = async (/** @type {string} */ q) =>
+      (await themeEditHow(q, {cwd, theme: 't'})).data;
+    for (const q of [
+      'tabs rounded on top',
+      'tab corners 4px except the bottom',
+      'tabs square at the bottom',
+    ]) {
+      const data = await ask(q);
+      expect(
+        (data.results ?? []).flatMap((/** @type {any} */ r) => r.commands),
+        q,
+      ).toEqual([]);
+      expect(data.hint, q).toMatch(/is already so in t: nothing to change/);
+    }
+    // A corner the ask rounds that is square now takes the part's own
+    // rounded corner.
+    const left = await ask('tabs rounded on the left only');
+    expect(
+      left.results?.[0]?.commands.map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set t /, ''),
+      ),
+    ).toEqual(["border-radius '4px 0 0 4px' --on tab"]);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [

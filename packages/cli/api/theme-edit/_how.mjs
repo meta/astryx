@@ -799,6 +799,7 @@ async function answer(subject, options, cwd) {
   }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
+  const already = results.length > 0 && results.every(r => ALREADY.has(r));
   return {
     kind: 'question',
     subject: t,
@@ -806,21 +807,25 @@ async function answer(subject, options, cwd) {
     ...themeFields,
     results,
     ...unknown,
-    ...(empty
+    ...(empty && already
       ? {
-          hint: `${
-            results.length
-              ? `No command does all of "${t}" on ${env.slug}; each result says why.`
-              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
-          } See ${HOW} --help for the asks it understands.`,
-          run: [
-            `${HOW} --help`,
-            `${HOW} --list parts`,
-            `${HOW} "rounder buttons"`,
-            `${HOW} colors`,
-          ],
+          hint: `"${t}" is already so in ${env.slug}: nothing to change. Each result says what it found.`,
         }
-      : {}),
+      : empty
+        ? {
+            hint: `${
+              results.length
+                ? `No command does all of "${t}" on ${env.slug}; each result says why.`
+                : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+            } See ${HOW} --help for the asks it understands.`,
+            run: [
+              `${HOW} --help`,
+              `${HOW} --list parts`,
+              `${HOW} "rounder buttons"`,
+              `${HOW} colors`,
+            ],
+          }
+        : {}),
   };
 }
 
@@ -927,6 +932,13 @@ export function questionOnly(q) {
     .slice(1)
     .some(seg => seg.trim() && !QUESTION_LEAD.test(seg.trim()));
 }
+
+/**
+ * The results that say the theme already does what was asked: when every
+ * result is one, the answer leads with that, never with a failure.
+ * @type {WeakSet<object>}
+ */
+const ALREADY = new WeakSet();
 
 /**
  * Check each draft's commands and keep what passes; a draft whose commands
@@ -1067,6 +1079,13 @@ function finish(env, drafts) {
     }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    // (The draft found it in place already: said, with no command.)
+    if (d.already) {
+      const r = {text: d.text, commands: lookups};
+      ALREADY.add(r);
+      out.push(r);
+      continue;
+    }
     if (!commands.length && !d.options.length && unmet.length) {
       out.push({text: d.text, commands: lookups});
       continue;
@@ -1083,10 +1102,12 @@ function finish(env, drafts) {
       const steps = d.options[0];
       const values = [...new Set(steps.map(st => String(st.value)))];
       const parts = [...new Set(steps.map(st => st.on).filter(Boolean))];
-      out.push({
+      const r = {
         text: `already ${values.join(', ')}${parts.length ? ` on the ${parts.join(', ')}` : ''} in ${env.slug}, nothing to change (${d.text})`,
         commands: lookups,
-      });
+      };
+      ALREADY.add(r);
+      out.push(r);
       continue;
     }
     if (!commands.length && d.options.length && !lookups.length) {
