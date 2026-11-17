@@ -60,7 +60,10 @@ owns response fields and compatibility.
   including its domain priority. Inside a run, a family's root leads a part of
   its own family when the part answers no query word the root does not, and no
   query word, in any plural or stem form, is a word of the part's name that
-  does not start a word of the root's name.
+  does not start a word of the root's name. Among matches of the first
+  result's domain that tie with it on score and on the query words they
+  matched, the match whose own name holds more query words leads, unless it is
+  a part of the first result.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
   ranker's answer unchanged.
