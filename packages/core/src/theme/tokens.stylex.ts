@@ -38,7 +38,7 @@ export const colorDefaults = {
 
   // Text
   '--color-text-primary': 'light-dark(#0A1317, #DFE2E5)',
-  '--color-text-secondary': 'light-dark(#4E606F, #AAAFB5)',
+  '--color-text-secondary': 'light-dark(#445564, #AAAFB5)',
   '--color-text-disabled': 'light-dark(#A4B0BC, #6F747C)',
   '--color-text-accent': 'light-dark(#0064E0, #3E9EFB)',
   '--color-on-dark': 'light-dark(#FFFFFF, #FFFFFF)',
