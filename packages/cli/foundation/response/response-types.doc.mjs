@@ -56,7 +56,7 @@ export const doc = {
     {
       value: 'component.detail.props',
       description:
-        "Just one component's props table (ComponentPropDoc[]). The envelope's package names the npm package that owns the component.",
+        "Just one component's props table (ComponentPropDoc[]). A prop whose type names types the owner package exports carries types: [{name, declaration?}], those types and then the types they name; a nested type past the answer's length limit carries only its name. Import each name from the envelope's package, the npm package that owns the component.",
     },
     {
       value: 'component.detail.source',

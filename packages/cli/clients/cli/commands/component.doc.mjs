@@ -52,7 +52,8 @@ export const doc = {
     {
       flag: '--props',
       param: 'options.props',
-      description: 'Print only the props list',
+      description:
+        'Print only the props list, then the types the props name that the owner package exports: one import line and each declaration',
     },
     {
       flag: '--source',

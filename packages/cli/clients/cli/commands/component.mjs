@@ -14,6 +14,7 @@ import {
   formatCompact,
   formatBrief,
   formatProps,
+  formatPropTypes,
   formatBriefAll,
 } from '../lib/component-format.mjs';
 import {resolveTheme} from '../lib/resolve-theme.mjs';
@@ -172,7 +173,11 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName), MARKDOWN),
+        code(
+          formatProps({props: result.data}, resolvedName) +
+            formatPropTypes(result.data, result.package),
+          MARKDOWN,
+        ),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':

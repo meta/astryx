@@ -867,6 +867,41 @@ export function formatProps(docs, componentName) {
 }
 
 /**
+ * The types a props answer names, as one TypeScript block: the line that
+ * imports them, then each declaration once, in the order the props name
+ * them. A type without a declaration is named on the last line. Empty when
+ * no prop names a type.
+ * @param {readonly {types?: {name: string, declaration?: string}[]}[]} props
+ * @param {string} packageName
+ * @returns {string}
+ */
+export function formatPropTypes(props, packageName) {
+  /** @type {Map<string, {name: string, declaration?: string}>} */
+  const byName = new Map();
+  for (const prop of props) {
+    for (const type of prop.types ?? []) {
+      if (!byName.has(type.name)) byName.set(type.name, type);
+    }
+  }
+  const types = [...byName.values()];
+  if (types.length === 0) return '';
+  const names = types.map(type => type.name);
+  const declarations = types.flatMap(type =>
+    type.declaration === undefined ? [] : [type.declaration],
+  );
+  const unshown = types.filter(type => type.declaration === undefined);
+  const lines = [
+    `import type {${names.join(', ')}} from '${packageName}';`,
+    '',
+    ...declarations,
+    ...(unshown.length > 0
+      ? ['', `// Not shown: ${unshown.map(type => type.name).join(', ')}`]
+      : []),
+  ];
+  return `\n## Types\n\n\`\`\`ts\n${lines.join('\n')}\n\`\`\`\n`;
+}
+
+/**
  * Format brief summaries for ALL components in one output.
  * `replacements` maps a replaced Core name to the full list entry of the
  * integration component that takes its slot; that entry is printed in its

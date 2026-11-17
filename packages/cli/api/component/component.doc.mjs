@@ -131,7 +131,8 @@ export const doc = {
     },
     {
       type: 'component.detail.props',
-      description: "Just the component's props table (ComponentPropDoc[]).",
+      description:
+        "Just the component's props table (ComponentPropDoc[]). A prop whose type names types the owner package exports carries types: [{name, declaration?}], those types and then the types they name, each declaration without comments; a nested type past the answer's length limit carries only its name.",
     },
     {
       type: 'component.detail.source',
