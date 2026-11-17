@@ -2527,6 +2527,16 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
   }, 60_000);
 
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed');
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {

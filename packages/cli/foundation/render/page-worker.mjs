@@ -1326,7 +1326,9 @@ function browserPackageDir(name, importerDir) {
 function packageResolves(spec, file) {
   const pkg = packageOf(spec);
   if (findNodeModulesPackage(path.dirname(file), pkg)) return true;
-  if (served && (pkg in SINGLE_COPY_ALIASES || isServedPackage(pkg, served.integrations))) return true;
+  // A package the set serves counts only when the set holds it.
+  if (served && pkg in SINGLE_COPY_ALIASES) return true;
+  if (served && isServedPackage(pkg, served.integrations) && resolveServed(spec, file, served)) return true;
   const require = createRequire(file);
   for (const request of [spec, `${pkg}/package.json`]) {
     try {
