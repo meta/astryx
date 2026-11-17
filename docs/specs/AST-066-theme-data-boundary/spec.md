@@ -372,8 +372,9 @@ PostCSS integration always emits it.
 
 Concrete standalone and family themes contain only authored scoped overrides.
 Nested themes inherit omissions, JavaScript resolution remains compatible, and
-the global `color-scheme` rules, built marker, filenames, and paired CSS/JS/type
-outputs are unchanged.
+the built marker, filenames, and paired CSS/JS/type outputs are unchanged.
+Theme bundles pin the page's color scheme only where `html` forces a mode
+(FR16, DEC-11).
 
 `architecture:theme-compilation` owns runtime/static sparse theme output.
 `architecture:theme-application` owns provider nesting and style lifetime.
@@ -532,20 +533,18 @@ callers that already need concrete values onto a DOM computed-style API.
 Rejected: deleting `dataTokenDefaults` or changing `useTheme` into a cascade
 reader. Neither is required to fix CSS ownership.
 
-### DEC-7 — A theme follows the page's color scheme
+### DEC-7 — Keep one compatible global color-scheme policy
 
 **Reference:** `spec:AST-066/DEC-7`
-**Decider:** maintainers, `2026-11-17`
+**Decider:** `cixzhang`, `2026-10-01`
 
-Theme bundles pin the scheme only where the page or the Theme provider forces a
-mode on `html`, and complete bundles repeat those two pins when identical or
-omit both. The page alone chooses to follow the reader's device, through
-`reset.css` or its own `color-scheme` on `html`, so installing a theme leaves a
-host's scheme alone. Tests prevent a root or scope `light dark` declaration and
-partial emission.
+The three root/html rules intentionally configure browser-wide `light-dark()`
+and UA behavior. Complete theme bundles may repeat them when identical, or omit
+the complete set. Tests prevent specialization or partial emission.
 
-Rejected: a theme declaring `:root { color-scheme: light dark; }`, which turns a
-host with no scheme of its own to the reader's device.
+Rejected: scoping or splitting color-scheme packaging.
+
+DEC-11 replaces the root rule of this policy: bundles keep the two mode pins.
 
 ### DEC-8 — Migrate through an atomic stack and breaking minor
 
@@ -592,6 +591,21 @@ without a `dataVars` import are unsupported (FR4).
 
 Rejected: an upgrade check that infers the build mode and requires fallbacks,
 since no project signal reliably separates prebuilt from source builds.
+
+### DEC-11 — A theme follows the page's color scheme
+
+**Reference:** `spec:AST-066/DEC-11`
+**Decider:** maintainers (HQ, under Joey's delegation), `2026-11-17`
+
+Theme bundles pin the scheme only where the page or the Theme provider forces a
+mode on `html`, and complete bundles repeat those two pins when identical or
+omit both (FR16). The page alone chooses to follow the reader's device, through
+`reset.css` or its own `color-scheme` on `html`, so installing a theme leaves a
+host's scheme alone. Tests prevent a root or scope `light dark` declaration and
+partial emission.
+
+Rejected: a theme declaring `:root { color-scheme: light dark; }`, which turns a
+host with no scheme of its own to the reader's device.
 
 ## Deprecation and cleanup records
 
