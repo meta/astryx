@@ -319,7 +319,7 @@ export interface ComponentPlaygroundConfig {
    *  drawer open state interactive, and notes the simulation under the
    *  rendered component (#4983). */
   appShellMobile?: boolean;
-  /** Props merged over `defaults` for a second render at a phone viewport,
+  /** Props merged over `defaults` for a second render at a phone viewport
    *  for a component whose layout changes at phone width (AppShell's mobile
    *  layout: its menu button in the top bar, its drawer). The theme editor's
    *  part census renders it as one more item, so a theme reaches the parts
@@ -328,10 +328,10 @@ export interface ComponentPlaygroundConfig {
    *
    *  @example
    *  ```
-   *  playground: {phone: {mobileNav: {defaultIsMobile: true, isOpen: true}}}
+   *  playground: {mobile: {mobileNav: {defaultIsMobile: true, isOpen: true}}}
    *  ```
    */
-  phone?: Record<string, unknown>;
+  mobile?: Record<string, unknown>;
   /** Required parent wrapper for sub-components that depend on a parent
    *  context provider (e.g. `Tab` calls `useTabListContext()` and throws
    *  standalone). The preview wraps the component in this parent before

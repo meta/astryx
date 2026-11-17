@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `playground.phone`: a component whose layout changes at phone width
+ * @file `playground.mobile`: a component whose layout changes at phone width
  * declares the props of its phone render, merged over `defaults`; the
  * authoring contract types it and AppShell declares its mobile layout there.
  *
@@ -16,12 +16,12 @@ import {describe, expect, it} from 'vitest';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../../../../..');
 
-describe('playground.phone', () => {
+describe('playground.mobile', () => {
   it('is typed in the authoring contract and described in the component doc type', () => {
     const type = fs.readFileSync(path.join(HERE, '../base/type.ts'), 'utf8');
-    expect(type).toMatch(/\n {2}phone\?: Record<string, unknown>;/);
+    expect(type).toMatch(/\n {2}mobile\?: Record<string, unknown>;/);
     const doc = fs.readFileSync(path.join(HERE, 'component.doc.mjs'), 'utf8');
-    expect(doc).toMatch(/`phone` \(props merged over `defaults`/);
+    expect(doc).toMatch(/`mobile` \(props merged over `defaults`/);
   });
 
   it("holds AppShell's mobile layout beside its playground defaults", async () => {
@@ -31,7 +31,7 @@ describe('playground.phone', () => {
       ).href
     );
     const playground = (mod.default ?? mod.docs).playground;
-    expect(playground.phone).toEqual({
+    expect(playground.mobile).toEqual({
       mobileNav: {defaultIsMobile: true, isOpen: true},
     });
     // (The docsite playground's own defaults stay as they are.)

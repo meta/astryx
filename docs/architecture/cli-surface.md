@@ -166,7 +166,9 @@ and remains available through explicit Core package selection.
   from it.** Help text, the README command and error-code tables, and the
   manifest are generated. None of them is written by hand. Every command and
   subcommand's `CommandDoc` declares `outsideProject`, which the manifest
-  publishes (`spec:AST-081` FR4).
+  publishes (`spec:AST-081` FR4). A component doc's optional `playground.mobile` holds the
+  props of its render at a phone viewport, merged over `defaults`; the tools
+  that render docs read it as the component's mobile layout.
 - **INV8 — Exit codes do not depend on the output mode.** The same condition
   exits the same way with and without `--json`, so a command works as a gate
   without parsing stdout.

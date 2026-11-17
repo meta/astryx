@@ -456,6 +456,20 @@ export function catalogItems(project) {
         label: v.label,
         tree: {__element: name, props: v.props},
       });
+  // (A component whose layout changes at phone width renders that layout
+  // too, from its doc's mobile props over its demo: AppShell's menu button
+  // in the top bar and its open drawer.)
+  for (const [name, info] of Object.entries(project.components)) {
+    const mobile = /** @type {any} */ (info).mobile;
+    if (!mobile) continue;
+    const demo = demoProps(project, name);
+    if (!demo) continue;
+    items.push({
+      name,
+      label: 'mobile',
+      tree: {__element: name, props: {...demo, ...mobile}},
+    });
+  }
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
