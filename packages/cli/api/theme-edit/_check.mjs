@@ -86,6 +86,7 @@ import {
   ratio,
   mixSide,
   splitTop,
+  colorSides,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -7690,7 +7691,26 @@ function checkOne(
             : [`${HOW} ${prop}`],
         },
       );
+    // A box color shorthand takes a color per side (`#ddd #ddd
+    // transparent`), each one read as a color.
+    const sides = colorSides(prop, v);
+    if (sides?.tooMany)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${prop} takes 1 to ${sides.max} colors, one per side; "${v}" has ${sides.colors.length}.`,
+        {run: [`${HOW} ${prop}`]},
+      );
+    const notColor = sides?.colors.find(
+      x => !isColorValue(x.color) || !isFixedColor(x.color),
+    );
+    if (sides && notColor)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${prop} takes a color for each side; "${notColor.color}" in "${v}" is not one.`,
+        {run: [`${HOW} ${prop}`]},
+      );
     if (
+      !sides &&
       COLOR_PROPS.test(prop) &&
       !CSS_WIDE.includes(v.trim().toLowerCase()) &&
       (!isColorValue(v) || !isFixedColor(v))
@@ -8248,10 +8268,18 @@ export function propertyValueProblem(ctx, prop, value, TOKENS, reads) {
   const mismatch = tokenKindMismatch(ctx, prop, v);
   if (mismatch) return mismatch.message;
   if (CSS_WIDE.includes(v.toLowerCase())) return null;
-  if (COLOR_PROPS.test(prop))
-    return /\bvar\(/i.test(v) || isColorValue(v)
-      ? null
-      : `${prop} takes a color; "${v}" is not one.`;
+  if (COLOR_PROPS.test(prop)) {
+    const sides = colorSides(prop, v);
+    const one = (/** @type {string} */ x) =>
+      /\bvar\(/i.test(x) || isColorValue(x);
+    if (sides)
+      return sides.tooMany
+        ? `${prop} takes 1 to ${sides.max} colors, one per side; "${v}" has ${sides.colors.length}.`
+        : sides.colors.every(x => one(x.color))
+          ? null
+          : `${prop} takes a color for each side; "${v}" is not that.`;
+    return one(v) ? null : `${prop} takes a color; "${v}" is not one.`;
+  }
   const grammar = propertyProblem(prop, v);
   return grammar ? `${prop} takes ${grammar.takes}; "${v}" is not one.` : null;
 }
