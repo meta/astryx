@@ -23,7 +23,7 @@ import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
-import {projectInstallCommand} from '../_adapter.mjs';
+import {projectInstallStep} from '../_adapter.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
@@ -56,10 +56,7 @@ const THEME_PACKAGE = '@astryxdesign/theme-neutral';
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {
-  const {installCommand} = projectInstallCommand(
-    [THEME_PACKAGE],
-    cwd,
-  );
+  const install = projectInstallStep([THEME_PACKAGE], cwd);
   return [
     '',
     '  Next steps:',
@@ -69,8 +66,8 @@ export function getNextSteps(invocation, cwd = process.cwd()) {
     "       and import '@astryxdesign/core/astryx.css'",
     "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
-    `       ${installCommand ?? `npm install ${THEME_PACKAGE}`}`,
-    ...(installCommand ? [] : ['       (the lockfiles here disagree; use the package manager this project uses)']),
+    `       ${install.line}`,
+    ...(install.note ? [`       (${install.note})`] : []),
     `       ${invocation} theme add neutral`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",

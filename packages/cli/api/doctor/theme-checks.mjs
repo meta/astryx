@@ -45,6 +45,7 @@ import {
   dependencyInstallFor,
   coreAddCommand,
   packageInstallCommand,
+  packageInstallStep,
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
@@ -1015,10 +1016,8 @@ export async function themeImportWiring(cwd) {
  * @returns {string}
  */
 function themeInstallFix(cwd, run) {
-  const {installCommand} = packageInstallCommand(['@astryxdesign/theme-neutral'], cwd);
-  const install = installCommand ?? 'npm install @astryxdesign/theme-neutral';
-  const note = installCommand ? '' : ' (the lockfiles here disagree; use the package manager this project uses)';
-  return `Install a theme, e.g. \`${install}\`${note}, then add it to the app with \`${run} theme add neutral\`.`;
+  const {line, note} = packageInstallStep(['@astryxdesign/theme-neutral'], cwd);
+  return `Install a theme, e.g. \`${line}\`${note ? ` (${note})` : ''}, then add it to the app with \`${run} theme add neutral\`.`;
 }
 
 /**

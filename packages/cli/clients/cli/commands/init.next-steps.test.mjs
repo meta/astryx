@@ -89,7 +89,7 @@ describe('init Next steps when the lockfiles disagree', () => {
       project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n", 'yarn.lock': '# yarn\n'}),
     ).join('\n');
     expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
-    expect(text).toContain('the lockfiles here disagree');
+    expect(text).toContain('(the lockfiles in this folder disagree; use the package manager this project uses)');
   });
 
   it('follows a declared packageManager over a stray lockfile', () => {

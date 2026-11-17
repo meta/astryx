@@ -28,7 +28,7 @@ import {
 } from '../../foundation/env/user-settings.mjs';
 import {recordAgentTextWritten} from '../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
-import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
+import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
 
@@ -61,13 +61,13 @@ export function applyComputerAgentText({remove}) {
 }
 
 /**
- * The command that installs `packages` in the project at `cwd`, in its
- * package manager; null, with the reason, when several lockfiles leave the
- * package manager open.
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note when its lockfiles
+ * disagree.
  * @param {string[]} packages
  * @param {string} cwd
- * @returns {{installCommand: string | null, noCommandReason: string | null}}
+ * @returns {{line: string, note: string | null}}
  */
-export function projectInstallCommand(packages, cwd) {
-  return installCommandFor(packages, cwd);
+export function projectInstallStep(packages, cwd) {
+  return installStepFor(packages, cwd);
 }

@@ -280,6 +280,26 @@ export function installCommandFor(packages, cwd) {
 }
 
 /**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note naming the folder
+ * whose lockfiles disagree when the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const {installCommand} = installCommandFor(packages, cwd);
+  if (installCommand) return {line: installCommand, note: null};
+  const resolved = resolveInstallVerb(cwd);
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${packages.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
+  };
+}
+
+/**
  * Analyze what a template source needs that the target project lacks.
  *
  * Returns a `notes` array of human-readable setup notes, a structured
