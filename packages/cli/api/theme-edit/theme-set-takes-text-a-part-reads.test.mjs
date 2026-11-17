@@ -7,7 +7,8 @@
  * turn light and the result measures them that way. A link's color goes
  * into the token its color prop reads. A text size or weight on a part
  * whose text is drawn by elements that read one token for it goes into
- * that token. A bare 0 inside calc() is saved as 0px. A refusal points at
+ * that token. A text property an element inside the part sets by the
+ * component's props is refused. A bare 0 inside calc() is saved as 0px. A refusal points at
  * the token that reaches the text, and a part name with a piece after it
  * points at the part that holds it. `how` keeps these asks to what they
  * say.
@@ -219,6 +220,20 @@ describe('a bare 0 read inside calc()', () => {
         saved().find((/** @type {any} */ x) => x.on === 'segmented-control')
           ?.value,
       ).toBe('0px');
+    },
+    T,
+  );
+});
+
+describe("a text property an element inside the part sets by the component's props", () => {
+  it(
+    'is refused, naming the values the props choose, and nothing is written',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      const r = await set(['white-space', 'pre-wrap', '--on', 'code-block']);
+      expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+      expect(r.error).toMatch(/sets its own white-space \(pre or pre-wrap/);
+      expect(fs.readFileSync(file(), 'utf8')).toBe(fresh);
     },
     T,
   );
