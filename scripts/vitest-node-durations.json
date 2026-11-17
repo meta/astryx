@@ -1,6 +1,6 @@
 {
   "$comment": "Seconds of test time per Node test file, from the Node legs of a pull request's CI run (files that run did not reach keep their earlier Main-run times). Only how scripts/vitest-shard-sequencer.mjs balances legs depends on these numbers; a missing or stale entry never drops or repeats a file. Regenerate from a run's Node legs: gh run view <run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log. The swizzle-proof slices keep the time they take when a change reaches them, the largest seen; a split books them at their import alone when the run's swizzle-proof scope proves no target. CI's Node legs leave them out: they run in ci.yml's swizzle-proof legs.",
-  "source": "recorded Node leg logs",
+  "source": "recorded Node leg logs; mcp-server, mcp-tools, real-base-themes and check-text-contrast-by-role measured locally on Node 24.22.1 (maximum of three runs, rounded up to 0.1 s)",
   "seconds": {
     ".github/scripts/a11y-contract-shard.test.mjs": 0.5,
     ".github/scripts/a11y-dependent-audits.test.mjs": 1.8,
@@ -1252,6 +1252,8 @@
     "packages/cli/clients/cli/lib/hook-format.test.mjs": 0,
     "packages/cli/clients/cli/lib/json-shim.test.mjs": 1.9,
     "packages/cli/clients/cli/lib/manifest.test.mjs": 0.1,
+    "packages/cli/clients/cli/lib/mcp-server.test.mjs": 2.2,
+    "packages/cli/clients/cli/lib/mcp-tools.test.mjs": 3.7,
     "packages/cli/clients/cli/lib/parse-error-format.test.mjs": 1.5,
     "packages/cli/clients/cli/lib/resolve-theme.test.mjs": 10.6,
     "packages/cli/clients/cli/lib/stray-option.test.mjs": 0.5,
@@ -1432,6 +1434,7 @@
     "packages/cli/test-utils/global-local-fixtures.test.mjs": 1.7,
     "packages/cli/test-utils/linked-fixture.test.mjs": 0,
     "packages/cli/test-utils/native-require.test.mjs": 0.3,
+    "packages/cli/test-utils/real-base-themes.test.mjs": 0.9,
     "packages/cli/test-utils/release-fixtures.test.mjs": 0,
     "packages/cli/test-utils/run-cli-sequence.test.mjs": 2.2,
     "packages/cli/test-utils/run-cli.stuck.test.mjs": 1,
@@ -1557,6 +1560,7 @@
     "scripts/check-status-text-contrast.test.mjs": 2.4,
     "scripts/check-stone-secondary-text-contrast.test.mjs": 0,
     "scripts/check-syntax-punctuation-contrast.test.mjs": 0,
+    "scripts/check-text-contrast-by-role.test.mjs": 0.1,
     "scripts/check-theme-icon-coverage.test.mjs": 0.2,
     "scripts/check-theme-template.test.mjs": 0.5,
     "scripts/check-theme-text-size-units.test.mjs": 0.6,
