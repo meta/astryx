@@ -4,9 +4,9 @@
  * @file layerViewportInset.consumer-build.test.mjs
  * @input Uses Babel, the StyleX compiler, Core's build config, and the
  *   published `./Layer/layerViewportInset.stylex` entry as Core builds it
- * @output Shows that a StyleX build outside Core that reads the layer viewport
- *   inset references CSS variables Core's stylesheet does not define (an
- *   expected failure until the gap closes)
+ * @output Shows that a StyleX build outside Core that reads the built layer
+ *   viewport inset references CSS variables Core's stylesheet does not
+ *   define, while the gap stands
  * @position Regression test for the published layer viewport inset entry
  *   (spec:AST-059 FR1, FR7)
  */
@@ -114,12 +114,10 @@ async function coreDefinitions() {
 }
 
 describe('the published layer viewport inset in an app StyleX build (spec:AST-059 FR7)', () => {
-  // The INV11 gap in architecture:layer-runtime: the module's constants
-  // resolve only inside Core's own build. This fails until the gap closes.
-  it.fails(
-    'references no CSS variable that Core leaves undefined',
-    async () => {
-      const css = await compileApp(`
+  // The INV11 gap in architecture:layer-runtime. When the gap closes this
+  // test fails: then it asserts that no reference is undefined.
+  it('references the three constants it reads as variables Core leaves undefined', async () => {
+    const css = await compileApp(`
       import * as stylex from '@stylexjs/stylex';
       import {layerViewportInset} from '@astryxdesign/core/Layer/layerViewportInset.stylex';
       export const styles = stylex.create({
@@ -130,13 +128,12 @@ describe('the published layer viewport inset in an app StyleX build (spec:AST-05
         },
       });
     `);
-      const defined = await coreDefinitions();
-      // A variable with no fallback that nothing defines makes the whole
-      // declaration invalid, so the app's sheet loses its cap.
-      const undefinedReferences = [...css.matchAll(/var\((--[\w-]+)\)/g)]
-        .map(match => match[1])
-        .filter(name => !defined.has(name));
-      expect(undefinedReferences).toEqual([]);
-    },
-  );
+    const defined = await coreDefinitions();
+    // A variable with no fallback that nothing defines makes the whole
+    // declaration invalid, so the app's sheet loses its cap.
+    const undefinedReferences = [...css.matchAll(/var\((--[\w-]+)\)/g)]
+      .map(match => match[1])
+      .filter(name => !defined.has(name));
+    expect(undefinedReferences).toHaveLength(3);
+  });
 });
