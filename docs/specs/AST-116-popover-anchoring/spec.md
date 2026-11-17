@@ -3,11 +3,11 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-116
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: nynexman4464
+approved_at: 2026-11-17
 phase: proposed
 owners: [nynexman4464]
 affects_architecture: [architecture:layer-runtime]
