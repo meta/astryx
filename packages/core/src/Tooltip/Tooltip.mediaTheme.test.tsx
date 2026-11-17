@@ -14,6 +14,7 @@ import {describe, expect, it} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Theme, defineTheme} from '../theme';
 import {Text} from '../Text/Text';
+import {MediaTheme} from '../theme/MediaTheme';
 import {Tooltip} from './Tooltip';
 
 /** A theme whose inverted surface is `surface` in both modes. */
@@ -63,5 +64,25 @@ describe('Tooltip content media context', () => {
     expect(mediaOfContent(withSurface('oklch(0.2 0.01 230)'), 'light')).toBe(
       'dark',
     );
+  });
+
+  it('content that already holds a MediaTheme keeps its own and gets no second one', () => {
+    render(
+      <Theme theme={withSurface('#0a1317')} mode="light">
+        <Tooltip
+          content={
+            <MediaTheme mode="light">
+              <Text type="body">Own context</Text>
+            </MediaTheme>
+          }
+          isDefaultOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </Theme>,
+    );
+    const text = screen.getByText('Own context');
+    const media = text.closest('[data-astryx-media]');
+    expect(media?.getAttribute('data-astryx-media')).toBe('light');
+    expect(media?.parentElement?.closest('[data-astryx-media]')).toBeNull();
   });
 });

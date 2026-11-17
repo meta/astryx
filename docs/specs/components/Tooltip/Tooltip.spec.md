@@ -15,7 +15,6 @@ verified_by:
     packages/core/src/InfoTip/InfoTip.pin.test.tsx,
     packages/core/src/Layer/layerDismissalFamilies.test.tsx,
     packages/core/src/Tooltip/Tooltip.test.tsx,
-    packages/core/src/Tooltip/Tooltip.mediaTheme.test.tsx,
     packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts,
     packages/core/src/Tooltip/useTooltip.test.tsx,
     packages/core/src/Layer/touchTriggerTargets.test.tsx,
@@ -230,10 +229,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                                                                                                                                                                                                                                                                                                                              | Representation authority       | Hierarchy role | Component contract |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------------- | ------------------ |
-| Tooltip surface  | Presents the current painted overlay surface, in the theme's inverted surface color (`--color-background-inverted`, the surface Toast paints). The layer is always a scroll container (`overflow-y: auto`), so `position: sticky` and `scroll(nearest)` timelines inside its content resolve against the layer, not the page.                                   | Current source and public docs | Supporting     | FR1                |
-| Tooltip text     | Presents supplied content within the owned surface, inside a `MediaTheme` on the side whose text reads best on that surface (on-dark or on-light, measured as Toast measures its surface). Plain text and token-colored content, such as `Text`, take that side's text colors, so no content resolves against the page theme and takes the surface's own color. | Current source and public docs | Prominent      | FR1                |
+| Anatomy or state | Design requirement                                                                                                                                                                                                                                                                                                                                                                                   | Representation authority       | Hierarchy role | Component contract |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------------- | ------------------ |
+| Tooltip surface  | Presents the current painted overlay surface, in the theme's inverted surface color (`--color-background-inverted`, the surface Toast paints) with the page surface color (`--color-background-surface`) as its text. The layer is always a scroll container (`overflow-y: auto`), so `position: sticky` and `scroll(nearest)` timelines inside its content resolve against the layer, not the page. | Current source and public docs | Supporting     | FR1                |
+| Tooltip text     | Presents supplied content within the owned surface.                                                                                                                                                                                                                                                                                                                                                  | Current source and public docs | Prominent      | FR1                |
 
 The trigger is caller-owned and outside this anatomy. The current implementation
 has no arrow element.

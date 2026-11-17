@@ -6,6 +6,7 @@ import {Tooltip, useTooltip} from '@astryxdesign/core/Tooltip';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {Icon} from '@astryxdesign/core/Icon';
 
 const meta: Meta<typeof Tooltip> = {
   title: 'Core/Tooltip',
@@ -419,13 +420,14 @@ export const TouchTriggers: Story = {
 };
 
 /**
- * Rich content on the inverted surface: `Text` in each type, a plain string
- * and `Text type="inherit"` stay readable in light and dark.
+ * Rich content on the inverted surface: a plain string, the docs' `Text`
+ * example, default and secondary `Text`, and an icon with text stay readable
+ * in light and dark.
  */
 export const RichContent: Story = {
   render: () => (
     <div style={{padding: '80px 24px'}}>
-      <HStack gap={12}>
+      <HStack gap={4}>
         <Tooltip content="Plain string" isDefaultOpen>
           <Button label="Plain string" />
         </Tooltip>
@@ -443,6 +445,16 @@ export const RichContent: Story = {
           }
           isDefaultOpen>
           <Button label="Text secondary" />
+        </Tooltip>
+        <Tooltip
+          content={
+            <HStack gap={1}>
+              <Icon icon="calendar" size="sm" />
+              <Text type="body">With icon</Text>
+            </HStack>
+          }
+          isDefaultOpen>
+          <Button label="Icon and text" />
         </Tooltip>
       </HStack>
     </div>

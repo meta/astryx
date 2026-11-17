@@ -14,6 +14,7 @@
  */
 
 import {
+  isValidElement,
   use,
   useCallback,
   useEffect,
@@ -78,35 +79,47 @@ const pickTooltipSide: MediaSidePicker = (
 ) => pickInvertedSide(background, null, onDark, onLight);
 
 /**
- * The media side for content on the tooltip surface. Token-colored content,
- * such as `Text`, otherwise resolves against the page theme and can take the
- * surface's own color.
+ * Content on the tooltip surface, inside the media side that reads on it.
+ * Token-colored content, such as `Text`, otherwise resolves against the page
+ * theme and can take the surface's own color.
  *
  * Before a measurement, the side comes from the theme's resolved inverted
  * surface. When that color is translucent or unreadable, the side is the
- * opposite of the color mode.
+ * opposite of the color mode. This component renders only inside the layer,
+ * which mounts on the first show, and it measures only while the tooltip
+ * shows. So a trigger whose tooltip does not show pays nothing for it.
  */
-function useTooltipMediaMode(
-  contentRef: RefObject<HTMLElement | null>,
-  isShown: boolean,
-): 'dark' | 'light' {
+function TooltipMediaContent({
+  surfaceRef,
+  isShown,
+  children,
+}: {
+  surfaceRef: RefObject<HTMLElement | null>;
+  isShown: boolean;
+  children: ReactNode;
+}): ReactNode {
   const {mode, tokens} = useTheme();
-  const surface = parseColor(tokens['--color-background-inverted'] ?? '');
-  const fromTokens =
-    surface !== null && surface.a >= 1
-      ? pickTooltipSide(
-          surface,
-          null,
-          parseColor(tokens['--color-on-dark'] ?? ''),
-          parseColor(tokens['--color-on-light'] ?? ''),
-        )
-      : null;
-  const measured = useSurfaceMediaMode(contentRef, isShown, pickTooltipSide);
-  const side = measured ?? fromTokens;
-  if (side === 'dark' || side === 'light') {
-    return side;
+  const measured = useSurfaceMediaMode(surfaceRef, isShown, pickTooltipSide);
+  let side = measured;
+  if (side !== 'dark' && side !== 'light') {
+    const surface = parseColor(tokens['--color-background-inverted'] ?? '');
+    side =
+      surface !== null && surface.a >= 1
+        ? pickTooltipSide(
+            surface,
+            null,
+            parseColor(tokens['--color-on-dark'] ?? ''),
+            parseColor(tokens['--color-on-light'] ?? ''),
+          )
+        : null;
   }
-  return mode === 'light' ? 'dark' : 'light';
+  const resolved =
+    side === 'dark' || side === 'light'
+      ? side
+      : mode === 'light'
+        ? 'dark'
+        : 'light';
+  return <MediaTheme mode={resolved}>{children}</MediaTheme>;
 }
 
 const styles = stylex.create({
@@ -521,7 +534,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     contentRef,
     registerLayerSurface,
   );
-  const mediaMode = useTooltipMediaMode(contentRef, isLayerOpen);
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
@@ -1026,7 +1038,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          <MediaTheme mode={mediaMode}>{children}</MediaTheme>
+          {isValidElement(children) && children.type === MediaTheme ? (
+            // The caller already chose the media context for its content.
+            children
+          ) : (
+            <TooltipMediaContent surfaceRef={contentRef} isShown={isLayerOpen}>
+              {children}
+            </TooltipMediaContent>
+          )}
         </div>,
         renderProps,
       );
@@ -1039,7 +1058,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       cancelHide,
       scheduleHide,
       contentRefs,
-      mediaMode,
+      contentRef,
+      isLayerOpen,
     ],
   );
 
