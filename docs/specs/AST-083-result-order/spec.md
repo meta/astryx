@@ -52,7 +52,13 @@ owns response fields and compatibility.
 - **FR1 — search answers with the lexical matches.** Every result is an entry
   the lexical ranker matched, with that ranker's score and reason, and
   `matchCount` equals its match count. Search never returns more results than
-  the lexical ranker does for the same query and limit.
+  the lexical ranker does for the same query and limit. In search's reading of
+  the catalog, a doc that opens a level (a docs-tree namespace) does not answer
+  a query word through its text (its prose, or a code term or table cell its
+  keywords gather) when a doc beneath its route answers that word at least as
+  strongly: the word is that doc's evidence. Its name, title, description and
+  declared keywords stay its own. `searchCore`, which build reads, keeps the
+  gathered reading.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
