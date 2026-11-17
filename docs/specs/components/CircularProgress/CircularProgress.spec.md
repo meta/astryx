@@ -74,12 +74,12 @@ usage lives in `CircularProgress.doc.mjs`.
 
 ## Public concepts
 
-| Concept        | Closed values or states                                         | Meaning                                                                      | Availability by variant/orientation/state        | Default  | Owner                        | Stability | Invalid-value behavior           |
-| -------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ | -------- | ---------------------------- | --------- | -------------------------------- |
-| Size           | `sm` (32 px), `md` (48 px), `lg` (64 px); the full scale is OQ1 | The ring's diameter; each step has its own stroke width.                     | Every state                                      | `md`     | `component:CircularProgress` | stable    | TypeScript rejects other values. |
-| Variant        | `accent`, `success`, `warning`, `error`, `neutral`              | The fill's semantic color; themes add variants by module augmentation.       | Determinate and indeterminate                    | `accent` | `component:CircularProgress` | stable    | TypeScript rejects other values. |
-| Center content | `children`, the value label, or nothing                         | What shows inside the ring; `children` take precedence over the value label. | Determinate; indeterminate shows `children` only | nothing  | `component:CircularProgress` | stable    | Not applicable                   |
-| Indeterminate  | on, off                                                         | Whether the amount is unknown; the ring turns and announces no value.        | Every size and variant                           | off      | `component:CircularProgress` | stable    | Not applicable                   |
+| Concept        | Closed values or states                                              | Meaning                                                                      | Availability by variant/orientation/state        | Default  | Owner                        | Stability | Invalid-value behavior           |
+| -------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ | -------- | ---------------------------- | --------- | -------------------------------- |
+| Size           | lab: `sm` (32 px), `md` (48 px), `lg` (64 px); the core shape is OQ1 | The ring's diameter; the stroke follows it.                                  | Every state                                      | `md`     | `component:CircularProgress` | stable    | TypeScript rejects other values. |
+| Variant        | `accent`, `success`, `warning`, `error`, `neutral`                   | The fill's semantic color; themes add variants by module augmentation.       | Determinate and indeterminate                    | `accent` | `component:CircularProgress` | stable    | TypeScript rejects other values. |
+| Center content | `children`, the value label, or nothing                              | What shows inside the ring; `children` take precedence over the value label. | Determinate; indeterminate shows `children` only | nothing  | `component:CircularProgress` | stable    | Not applicable                   |
+| Indeterminate  | on, off                                                              | Whether the amount is unknown; the ring turns and announces no value.        | Every size and variant                           | off      | `component:CircularProgress` | stable    | Not applicable                   |
 
 ## Behavioral and layout contract
 
@@ -89,7 +89,7 @@ usage lives in `CircularProgress.doc.mjs`.
 | FR2 | The fill draws on a full track of the same diameter and stroke width, with rounded ends that never overshoot the track at 0% or 100%.                                                                                                                                                                                                                                                                                   | Current lab behavior      | verify             |
 | FR3 | `hasValueLabel` (default off) shows the formatted value in the center (default format: the rounded percentage); `formatValueLabel` replaces the format. `children` replace the value label.                                                                                                                                                                                                                             | Current lab behavior      | verify             |
 | FR4 | `isIndeterminate` turns the ring at Spinner's speed and arc, slows it under reduced motion as Spinner does, ignores `value` and `hasValueLabel`, and still shows `children`.                                                                                                                                                                                                                                            | Current lab behavior      | verify             |
-| FR5 | `size` sets the diameter and stroke width from a fixed scale, each value with its own tuned stroke, and there is no separate stroke width. FR5 gap: the scale is 32 to 64 px, so an inline indicator (16 to 24 px) and a hero gauge (72 to 160 px) have no size (OQ1).                                                                                                                                                  | Current lab behavior; OQ1 | human decision     |
+| FR5 | `size` sets the diameter, and the stroke follows it; there is no separate stroke width. FR5 gap: lab sizes are three steps from 32 to 64 px, so an inline indicator (16 to 24 px) and a hero gauge (72 to 220 px) have no size (OQ1).                                                                                                                                                                                   | Current lab behavior; OQ1 | human decision     |
 | FR6 | `isDisabled` draws the ring and its text in the disabled colors and keeps the value. It is visual only: assistive technology hears the label and value, so the label states why (for example, "Upload canceled").                                                                                                                                                                                                       | Current lab behavior      | verify             |
 | FR7 | The fill color comes from `variant` through theme tokens; a theme adds a variant through `CircularProgressVariantMap`. Every variant's fill, and the disabled fill, reaches 3:1 against its track in light and dark mode. FR7 gap: `variant="neutral"` and `isDisabled` fill with rgb(82, 82, 82) on a track of rgb(90, 94, 102) in dark mode, about 1.2:1, so the ring reads as empty; in light mode they reach 2.1:1. | Current lab behavior      | verify             |
 
@@ -161,17 +161,14 @@ moves the ring's geometry and its accessibility wiring into every call site.
 
 ## Open questions
 
-- **OQ1 — Which sizes does a ring take?** (`human-api`) Apps size rings from
-  16 px inline indicators to 160 px hero gauges, with a stroke near a tenth of
-  the diameter. The first two options tune and test a stroke per size; the
-  third derives it.
-  - Six named steps: `xsm` (about 20 px), `sm` 32, `md` 48, `lg` 64, `xl`
-    (about 96 px) and `2xl` (about 160 px). Other sizes round to the nearest
-    step.
-  - Named `sm`, `md` and `lg`, plus a closed union of pixel sizes, as Avatar
-    takes: 16, 20, 24, 32, 40, 48, 64, 72, 96, 100, 120, 128 and 160.
-  - Named steps plus any pixel size, with the stroke derived from the
-    diameter.
+- **OQ1 — How is a ring sized?** (`human-api`) Apps size rings from 16 px
+  inline indicators to 220 px hero gauges, with a stroke near a tenth of the
+  diameter. The ring's geometry is computed in pixels.
+  - A pixel `size` (a number, default 48): the stroke is a tenth of the
+    diameter, at least 2 px, and the value label scales with the diameter and
+    is not drawn below a minimum size.
+  - Three or four named steps (for example 20, 48, 96 and 160 px), each with a
+    tuned stroke and label; other sizes round to the nearest step.
 
 ## Content boundary
 
