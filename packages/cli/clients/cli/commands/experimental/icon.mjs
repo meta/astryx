@@ -52,6 +52,7 @@ import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
+import {noIconSetNext} from '../../../../foundation/text/icon-set-next.mjs';
 
 /** How many missing icons an `add --all` receipt names in text. */
 const MISSING_SHOWN = 10;
@@ -220,6 +221,36 @@ export function registerExperimentalIcon(group, program) {
       }
       if (result.type === 'icon.search') {
         const {query: q, matchCount, matches} = result.data;
+        if (result.data.next) {
+          const definitions = result.data.definitions ?? [];
+          const builtIn = definitions.filter(each => each.builtIn);
+          const others = definitions.filter(each => !each.builtIn);
+          emit(
+            text(`No icon set is installed, so no icon matches "${q}".`),
+            ...(builtIn.length > 0
+              ? [
+                  text(
+                    "Core draws these names with no set; pass one to a component's icon prop:",
+                  ),
+                  list(
+                    builtIn.map(each => `${each.name}: ${each.description}`),
+                  ),
+                ]
+              : []),
+            ...(others.length > 0
+              ? [
+                  text(
+                    'Icon definitions that match; an icon set draws them once one is installed:',
+                  ),
+                  list(others.map(each => `${each.name}: ${each.description}`)),
+                ]
+              : []),
+            text(
+              `[next] ${noIconSetNext(command => formatCliCommand(command))}`,
+            ),
+          );
+          return answered;
+        }
         if (matches.length === 0) {
           emit(
             text(`No icons match "${q}".`),
@@ -233,11 +264,17 @@ export function registerExperimentalIcon(group, program) {
               ? `Icons for "${q}" (${matches.length} of ${matchCount})`
               : `Icons for "${q}" (${matches.length})`,
           ),
-          // The import draws the icon's default look; its other variants
-          // are named with their exports and read with `icon <set>/<id>`.
+          // The import draws the project's look where the icon has it, else
+          // its default look; its other variants are named with their
+          // exports and read with `icon <set>/<id>`.
           records(
-            matches.map(({variants, ...match}) => ({
+            matches.map(({variants, look, ...match}) => ({
               ...match,
+              ...(look
+                ? {
+                    look: `no ${look.asked} look; draws ${look.used ?? 'its one look'}`,
+                  }
+                : {}),
               ...(variants.length > 0
                 ? {
                     variant: variants
@@ -252,6 +289,7 @@ export function registerExperimentalIcon(group, program) {
                 'id',
                 'package',
                 'import',
+                'look',
                 'words',
                 'definitions',
                 'variant',
@@ -296,17 +334,34 @@ export function registerExperimentalIcon(group, program) {
         return answered;
       }
 
-      const {status, projectSet, reason, sets, withdrawn, order, next} =
-        result.data;
+      const {
+        status,
+        projectSet,
+        reason,
+        sets,
+        withdrawn,
+        order,
+        next,
+        variant,
+      } = result.data;
       emit(
         section('Icon sets'),
         record({
           status,
           projectSet,
           ...(order.length > 1 ? {order: order.join(' > ')} : {}),
+          ...(variant ? {variant} : {}),
           reason,
         }),
-        ...(next ? [text(`[warn] ${next}`)] : []),
+        ...(next
+          ? [
+              text(
+                sets.length === 0
+                  ? `[next] ${noIconSetNext(command => formatCliCommand(command))}`
+                  : `[warn] ${next}`,
+              ),
+            ]
+          : []),
         ...(sets.length > 0
           ? [
               records(
@@ -326,6 +381,7 @@ export function registerExperimentalIcon(group, program) {
                     'iconCount',
                     'default',
                     'variants',
+                    ...(variant ? ['look'] : []),
                     'builtIn',
                     'definitions',
                     'own',
@@ -349,7 +405,11 @@ export function registerExperimentalIcon(group, program) {
               ),
             ]
           : []),
-        text(`Find one: ${run} experimental icon <words>`),
+        // With no set installed, the finder has nothing to find: `next` says
+        // what to do.
+        ...(next && sets.length === 0
+          ? []
+          : [text(`Find one: ${run} experimental icon <words>`)]),
       );
       return answered;
     },
@@ -396,10 +456,15 @@ export function registerExperimentalIcon(group, program) {
     fn: iconUseFn,
     action: (
       /** @type {string} */ set,
-      /** @type {{backup?: string[]}} */ options,
+      /** @type {{backup?: string[], variant?: string}} */ options,
     ) =>
       run(
-        () => iconUse(set, {cwd: process.cwd(), backups: options.backup ?? []}),
+        () =>
+          iconUse(set, {
+            cwd: process.cwd(),
+            backups: options.backup ?? [],
+            variant: options.variant,
+          }),
         ({data}) => {
           /** @type {Array<{iconSet: string, set: string}>} */
           const backups = data.backups;
@@ -410,9 +475,18 @@ export function registerExperimentalIcon(group, program) {
             backups.length > 0
               ? `main set ${main}, then ${backups.map(each => `"${each.iconSet}" (${each.set})`).join(', then ')}`
               : main;
+          const written =
+            backups.length > 0
+              ? [data.iconSet, ...backups.map(each => each.iconSet)]
+              : data.iconSet;
+          const setChanged =
+            JSON.stringify(data.previous) !== JSON.stringify(written);
+          const variantChanged = data.previousVariant !== data.variant;
+          /** @type {Array<{set: string, variant: string | null}>} */
+          const looks = data.looks ?? [];
           emit(
             text(
-              data.changed
+              setChanged
                 ? `[ok] experimental.iconSet is now ${order} in ${data.config}${data.created ? ', created' : ''}.`
                 : `[ok] experimental.iconSet already names ${order} in ${data.config}.`,
             ),
@@ -423,8 +497,39 @@ export function registerExperimentalIcon(group, program) {
                   ),
                 ]
               : []),
-            ...(data.previous && data.changed
+            ...(data.previous && setChanged
               ? [text(`It was ${shown(data.previous)}.`)]
+              : []),
+            ...(data.variant
+              ? [
+                  text(
+                    variantChanged
+                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} look where its set has one.`
+                      : `[ok] experimental.iconVariant already names "${data.variant}".`,
+                  ),
+                ]
+              : data.previousVariant
+                ? [
+                    text(
+                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default look.`,
+                    ),
+                  ]
+                : []),
+            ...looks
+              .filter(look => look.variant !== data.variant)
+              .map(look =>
+                text(
+                  look.variant
+                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default look, ${look.variant}.`
+                    : `[note] ${look.set} declares no variants: its icons draw its one look.`,
+                ),
+              ),
+            ...(data.themeMap
+              ? [
+                  text(
+                    `A theme draws the built-in icons in this look with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
+                  ),
+                ]
               : []),
             ...(data.next ? [text(`[warn] ${data.next}`)] : []),
             ...(data.warning ? [text(`[warn] ${data.warning}`)] : []),

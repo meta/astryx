@@ -137,14 +137,17 @@ async function listedOf(dir) {
 }
 
 /**
- * The example notes, which nearly every fixture here draws (a component with
- * no example template); authoring-checks.test.mjs covers them.
+ * The example and listing notes, which nearly every fixture here draws (a
+ * component with no example template, a package with no logo);
+ * authoring-checks.test.mjs and package-listing-check.test.mjs cover them.
  */
 const EXAMPLE_CODES = new Set([
   'component_without_example',
   'template_category',
   'showcase_not_standalone',
   'template_asset_not_packed',
+  'package_without_logo',
+  'package_without_example',
 ]);
 
 /**
@@ -264,7 +267,12 @@ describe('a name that differs from its file name', () => {
       });
 
       const {data} = await validateIntegration(undefined, {cwd: dir});
-      expect(others(data.notes)).toEqual([]);
+      // A relative module that is not in the package is a note of its own.
+      expect(
+        others(data.notes).filter(
+          note => note.code !== 'relative_import_not_shipped',
+        ),
+      ).toEqual([]);
       expect(data.docNames).toEqual({
         status: 'checked',
         findings: [],
@@ -950,6 +958,13 @@ describe('block component names', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
     expect(data.issues).toEqual([]);
+    // The package exports the template, so the missing helper also breaks
+    // an app that imports it.
+    expect(
+      (data.notes ?? [])
+        .filter(note => note.code === 'relative_import_not_shipped')
+        .map(note => note.next),
+    ).toEqual([true]);
     expect(data.blockComponents?.unchecked.map(entry => entry.name)).toEqual([
       'Panel',
     ]);

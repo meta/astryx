@@ -30,6 +30,7 @@ import {
   User,
 } from 'lucide-react';
 import {Text, Heading} from '@astryxdesign/core/Text';
+import {DialogHeader, useImperativeDialog} from '@astryxdesign/core/Dialog';
 import {
   VStack,
   HStack,
@@ -71,6 +72,8 @@ import {
   useChatNewMessages,
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 
 // StackItem has no wrapping basis; Stack has no body variant.
 // LayoutContent has no height cap; keep the message viewport bounded.
@@ -195,50 +198,111 @@ function ShowcaseContent({
 
 function ShowcaseNavigation() {
   const {isMobile} = useAppShellMobile();
+  // Named explicitly: DialogHeader only names a dialog that already contains
+  // it when the dialog mounts, and imperative content arrives later.
+  const signIn = useImperativeDialog({
+    purpose: 'form',
+    width: 400,
+    'aria-label': 'Sign in',
+  });
+  // A new key on each open mounts a new form, so a reopened dialog starts empty.
+  const signInOpens = useRef(0);
   return (
-    <TopNav
-      label="Theme preview navigation"
-      heading={<TopNavHeading heading="Studio" />}
-      centerContent={
-        isMobile ? undefined : (
-          <>
-            <TopNavItem label="Shop" href="#" isSelected />
-            <TopNavItem label="New In" href="#" />
-            <TopNavItem label="Stories" href="#" />
-            <TopNavItem label="Help" href="#" />
-          </>
-        )
-      }
-      endContent={
-        <HStack gap={2} vAlign="center">
-          <HStack gap={0.5}>
+    <>
+      <TopNav
+        label="Theme preview navigation"
+        heading={<TopNavHeading heading="Studio" />}
+        centerContent={
+          isMobile ? undefined : (
+            <>
+              <TopNavItem label="Shop" href="#" isSelected />
+              <TopNavItem label="New In" href="#" />
+              <TopNavItem label="Stories" href="#" />
+              <TopNavItem label="Help" href="#" />
+            </>
+          )
+        }
+        endContent={
+          <HStack gap={2} vAlign="center">
+            <HStack gap={0.5}>
+              <Button
+                label="Search"
+                tooltip="Search"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={Search} size="md" />}
+                href="#"
+              />
+              <Button
+                label="Account"
+                tooltip="Account"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={User} size="md" />}
+                href="#"
+              />
+              <Button
+                label="Cart"
+                tooltip="Cart"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={ShoppingBag} size="md" />}
+                href="#"
+              />
+            </HStack>
             <Button
-              label="Search"
-              tooltip="Search"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={Search} size="md" />}
-              href="#"
-            />
-            <Button
-              label="Account"
-              tooltip="Account"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={User} size="md" />}
-              href="#"
-            />
-            <Button
-              label="Cart"
-              tooltip="Cart"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={ShoppingBag} size="md" />}
-              href="#"
+              label="Sign in"
+              variant="primary"
+              onClick={() =>
+                signIn.show(
+                  <SignInForm
+                    key={++signInOpens.current}
+                    onClose={signIn.hide}
+                  />,
+                )
+              }
             />
           </HStack>
-          <Button label="Sign in" variant="primary" href="#" />
-        </HStack>
+        }
+      />
+      {signIn.element}
+    </>
+  );
+}
+
+/** Sign in opens a real dialog, so a theme's header, close control, fields
+ * and footer buttons can be reviewed together. */
+function SignInForm({onClose}: {onClose: () => void}) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  return (
+    <Layout
+      header={<DialogHeader title="Sign in" onOpenChange={() => onClose()} />}
+      content={
+        <LayoutContent>
+          <VStack gap={4}>
+            <TextInput
+              label="Email"
+              placeholder="you@studio.com"
+              value={email}
+              onChange={setEmail}
+            />
+            <TextInput
+              label="Password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+            />
+          </VStack>
+        </LayoutContent>
+      }
+      footer={
+        <LayoutFooter>
+          <HStack gap={2} hAlign="end">
+            <Button label="Cancel" variant="secondary" onClick={onClose} />
+            <Button label="Sign in" variant="primary" onClick={onClose} />
+          </HStack>
+        </LayoutFooter>
       }
     />
   );
@@ -570,6 +634,7 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 function ChatCard() {
+  const showToast = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const {lock, isLocked, scrollIfLocked} = useChatStreamScroll({scrollRef});
   const {contentRef} = useChatNewMessages({isLocked, onResize: scrollIfLocked});
@@ -606,6 +671,13 @@ function ChatCard() {
                   label="Export conversation"
                   tooltip="Export conversation"
                   icon={<Icon icon={Download} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the conversation would export here',
+                      uniqueID: 'export-chat',
+                    })
+                  }
                 />
                 <Button
                   variant="ghost"
@@ -614,6 +686,13 @@ function ChatCard() {
                   label="Close chat"
                   tooltip="Close chat"
                   icon={<Icon icon={X} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the chat would close here',
+                      uniqueID: 'close-chat',
+                    })
+                  }
                 />
               </HStack>
             </HStack>
@@ -646,6 +725,13 @@ function ChatCard() {
                     label="Attach"
                     tooltip="Attach"
                     icon={<Icon icon={Plus} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: a file picker would open here',
+                        uniqueID: 'attach',
+                      })
+                    }
                   />
                 }
                 sendActions={
@@ -656,6 +742,13 @@ function ChatCard() {
                     label="Voice input"
                     tooltip="Voice input"
                     icon={<Icon icon={Mic} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: voice input would start here',
+                        uniqueID: 'voice',
+                      })
+                    }
                   />
                 }
               />
@@ -1007,18 +1100,61 @@ function TagsCell({row}: {row: InventoryRow}) {
 }
 
 function ActionsCell() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
-    <MoreMenu
-      label="Row actions"
-      size="sm"
-      items={[
-        {label: 'Edit'},
-        {label: 'Duplicate'},
-        {label: 'Move to…'},
-        {type: 'divider'},
-        {label: 'Delete'},
-      ]}
-    />
+    <>
+      <MoreMenu
+        label="Row actions"
+        size="sm"
+        // Demo only: replace these toasts with the calls that perform each action.
+        items={[
+          {
+            label: 'Edit',
+            onClick: () =>
+              showToast({
+                body: 'Demo: edit would happen here',
+                uniqueID: 'row-edit',
+              }),
+          },
+          {
+            label: 'Duplicate',
+            onClick: () =>
+              showToast({
+                body: 'Demo: duplicate would happen here',
+                uniqueID: 'row-duplicate',
+              }),
+          },
+          {
+            label: 'Move to…',
+            onClick: () =>
+              showToast({
+                body: 'Demo: moving the item would happen here',
+                uniqueID: 'row-move-to',
+              }),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            onClick: () =>
+              confirm.show({
+                title: 'Delete this item?',
+                description: "This demo won't delete anything.",
+                actionLabel: 'Delete',
+                onAction: () => {
+                  confirm.hide();
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the item would be deleted here',
+                    uniqueID: 'row-delete',
+                  });
+                },
+              }),
+          },
+        ]}
+      />
+      {confirm.element}
+    </>
   );
 }
 
@@ -1029,6 +1165,7 @@ function InventoryCard({
   images: Record<string, string>;
   inventory: InventoryRow[];
 }) {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
@@ -1073,6 +1210,13 @@ function InventoryCard({
             variant="primary"
             size="sm"
             icon={<Icon icon={Plus} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: a new item form would open here',
+                uniqueID: 'add-item',
+              })
+            }
           />
         </HStack>
         <Divider variant="subtle" />
@@ -1143,6 +1287,13 @@ function InventoryCard({
                 label="List view"
                 tooltip="List view"
                 icon={<List size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the list view would show here',
+                    uniqueID: 'list-view',
+                  })
+                }
               />
               <Button
                 variant="ghost"
@@ -1151,6 +1302,13 @@ function InventoryCard({
                 label="Grid view"
                 tooltip="Grid view"
                 icon={<LayoutGrid size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the grid view would show here',
+                    uniqueID: 'grid-view',
+                  })
+                }
               />
             </HStack>
           </HStack>

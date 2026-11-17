@@ -16,7 +16,8 @@
  * made a cycle across the layer boundary — Project reached up for discovery and
  * this module imported Project back. Nothing here depends on api/; every import
  * is node:*, jiti, foundation/*, or authoring/*, plus a lazily required
- * @babel/parser for extractComponents' local-declaration scan.
+ * @babel/parser for extractComponents' local-declaration scan, and Project,
+ * imported only when integration templates are discovered.
  *
  * @position packages/cli/foundation/discovery — shared template discovery/IO;
  *   consumed by Project and by the api/template leaves.
@@ -24,22 +25,41 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
-import {Project} from '../config/project.mjs';
 import {
   isReference,
   parseTemplateSource,
   programPath,
   traverseTemplateSource,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {keptTreeSummary} from '../fs/kept-tree.mjs';
+import {
+  ALL_TEMPLATE_SUFFIXES,
+  BLOCKS_DIR,
+  PAGES_DIR,
+  TEMPLATE_SUFFIX_RE,
+  findIntegrationDocFiles,
+  matchedTemplateSuffix,
+} from './template-ids.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
-const require = createRequire(import.meta.url);
+export {
+  coreTemplateIds,
+  integrationTemplateIds,
+  listTemplates,
+} from './template-ids.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -115,6 +135,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string} [category]
  * @property {boolean} [isReady]
  * @property {boolean} [scaffold]
+ * @property {boolean} [hidden] a Core page doc's `isHiddenFromOverview`: kept
+ *   off the gallery, so never taken as the app shell
  * @property {number} [aspectRatio]
  * @property {string} [exampleFor]
  * @property {string[]} [alsoExampleFor]
@@ -156,42 +178,6 @@ export function effectiveTemplateDiscovery(templates) {
  */
 
 /**
- * Released compatibility suffixes, in precedence order. Stable 0.6.0
- * documented `.template.*`, so discovery keeps reading those files while all
- * new authoring uses `.doc.mjs`.
- */
-const TEMPLATE_SUFFIXES = ['.template.ts', '.template.mjs', '.template.js'];
-
-/**
- * Descriptor suffixes for templates, in precedence order. New authoring always
- * emits `.doc.mjs`; the TypeScript and JavaScript variants remain readable.
- */
-const DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
-
-/**
- * Every template-spec suffix, in the released precedence a core page directory
- * uses to pick one file. Integration discovery never picks: every match is a
- * template, so two specs for one stem list twice and read as ambiguous.
- */
-const ALL_TEMPLATE_SUFFIXES = [...TEMPLATE_SUFFIXES, ...DOC_SUFFIXES];
-
-/**
- * The template-spec suffix present on `file`, or null if none matches.
- * Recognizes both the canonical `.doc.*` and released `.template.*` families.
- * @param {string} file
- * @returns {string | null}
- */
-function matchedTemplateSuffix(file) {
-  return ALL_TEMPLATE_SUFFIXES.find(suffix => file.endsWith(suffix)) ?? null;
-}
-
-/**
- * RegExp matching either template-spec suffix family at end of a basename.
- * Used where a per-file regex is convenient (e.g. block discovery walks).
- */
-const TEMPLATE_SUFFIX_RE = /\.(template|doc)\.(ts|mjs|js)$/;
-
-/**
  * Load an integration template doc module and validate it against the template
  * envelope at the load boundary. Default export only — `.ts` via jiti,
  * `.mjs`/`.js` via dynamic import. Throws (caught by discovery) if the default
@@ -212,18 +198,16 @@ async function loadIntegrationDoc(file, label) {
   });
 }
 
-const TEMPLATES_DIR = path.join(CLI_ROOT, 'assets', 'templates');
-const PAGES_DIR = path.join(TEMPLATES_DIR, 'pages');
-const BLOCKS_DIR = path.join(TEMPLATES_DIR, 'blocks');
-
 /**
  * Inline placeholder swapped in for demo imagery when scaffolding a template,
  * so scaffolded pages render with zero setup (see stripTemplateAssetRefs).
- * Neutral hex colors (not design tokens) so it renders in any project, themed
- * or not. Mirrors apps/docsite/public/template-assets/placeholder.svg.
+ * A gray at low opacity, not design tokens, so it renders in any project,
+ * themed or not, and takes its tone from the surface behind it: light on a
+ * light page, dark in dark mode. Mirrors
+ * apps/docsite/public/template-assets/placeholder.svg.
  */
 const PLACEHOLDER_IMAGE =
-  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23f5f6f8%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23c2cad6%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23c2cad6%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.12%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23808080%22%20stroke-opacity%3D%220.55%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.55%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
 
 /**
  * Extensions that need a video-safe placeholder rather than the image data
@@ -355,10 +339,41 @@ export function stripTemplateAssetRefs(source) {
  * @returns {{source: string, demoMediaReplaced: number}}
  */
 export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
+  const {source: output, replaced} = mapFixtureRefs(source, ({kind}) =>
+    kind === 'video' ? videoPlaceholder : PLACEHOLDER_IMAGE,
+  );
+  return {source: output, demoMediaReplaced: replaced};
+}
+
+/**
+ * One Astryx template fixture reference in template source.
+ * @typedef {object} FixtureRef
+ * @property {string} reference - The whole reference, query and fragment
+ *   included.
+ * @property {'image' | 'video'} kind - What the suffix of its last path
+ *   segment names.
+ * @property {boolean} isValue - Whether the reference is a whole quoted or
+ *   `url()` value. False for a mention in text.
+ */
+
+/**
+ * Replace each Astryx template fixture reference with what `map` returns for
+ * it. This is the one scanner for fixture references: a copy replaces them
+ * with placeholders ({@link replaceDemoMedia}), and the docsite's preview
+ * build points them at its image optimizer. It finds and refuses references
+ * as {@link stripTemplateAssetRefs} describes.
+ *
+ * @param {string} source - Template source code.
+ * @param {(ref: FixtureRef) => string | null} map - The replacement text, or
+ *   null to keep the reference as written.
+ * @returns {{source: string, replaced: number}} `replaced` counts the
+ *   references that `map` replaced.
+ */
+export function mapFixtureRefs(source, map) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
-  let demoMediaReplaced = 0;
+  let replaced = 0;
   /** @type {Array<[number, number]> | undefined} */
   let comments;
   let at = source.indexOf(needle);
@@ -370,7 +385,7 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
+      edit = fixtureEdit(source, start, at, end, map);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -379,11 +394,11 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     if (edit) {
       output += source.slice(copied, start) + edit.text;
       copied = edit.end;
-      demoMediaReplaced += 1;
+      replaced += 1;
     }
     at = source.indexOf(needle, end);
   }
-  return {source: output + source.slice(copied), demoMediaReplaced};
+  return {source: output + source.slice(copied), replaced};
 }
 
 /**
@@ -908,15 +923,15 @@ function fixtureSegments(reference) {
 /**
  * The replacement for the fixture reference in the URL token [start, end),
  * which contains FIXTURE_SEGMENT's path at `at`; null when the token is not a
- * fixture reference or is a prose mention.
+ * fixture reference, is a prose mention, or `map` keeps it.
  * @param {string} source
  * @param {number} start
  * @param {number} at
  * @param {number} end
- * @param {string} videoPlaceholder
+ * @param {(ref: FixtureRef) => string | null} map
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end, videoPlaceholder) {
+function fixtureEdit(source, start, at, end, map) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -984,11 +999,17 @@ function fixtureEdit(source, start, at, end, videoPlaceholder) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) {
-    return {text: videoPlaceholder, end: referenceEnd};
-  }
-  if (IMAGE_EXTENSIONS.has(ext)) {
-    return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
+  /** @type {FixtureRef['kind'] | null} */
+  let kind = null;
+  if (VIDEO_EXTENSIONS.has(ext)) kind = 'video';
+  else if (IMAGE_EXTENSIONS.has(ext)) kind = 'image';
+  if (kind) {
+    const text = map({
+      reference: source.slice(start, referenceEnd),
+      kind,
+      isValue: whole,
+    });
+    return text === null ? null : {text, end: referenceEnd};
   }
   if (whole || ext) {
     throw new Error(
@@ -1029,19 +1050,6 @@ function expressionUse(source, open, close) {
   return null;
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
-/**
- * The template source parser, loaded on first use so listing templates
- * never pays for it.
- * @returns {typeof import('@babel/parser')}
- */
-function templateSourceParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -1050,7 +1058,7 @@ function templateSourceParser() {
  */
 function commentRanges(source) {
   try {
-    const {comments} = templateSourceParser().parse(source, {
+    const {comments} = babelParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -1106,25 +1114,6 @@ async function loadDocModule(docPath) {
 }
 
 /**
- * List the core page-template directory names (sorted). The `template --list`
- * view discovers far more; this is the minimal core-page set `init` scaffolds
- * from.
- * @returns {string[]}
- */
-export function listTemplates() {
-  /** @type {string[]} */
-  const all = [];
-  if (fs.existsSync(PAGES_DIR)) {
-    all.push(
-      ...listDirEntries(PAGES_DIR)
-        .filter(e => e.isDirectory())
-        .map(e => e.name),
-    );
-  }
-  return all.sort();
-}
-
-/**
  * @param {string} dir
  * @param {RegExp} pattern
  * @returns {string[]}
@@ -1159,6 +1148,8 @@ export function findPageDocFile(dirPath) {
 }
 
 async function discoverPages() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   if (!fs.existsSync(PAGES_DIR)) return [];
   const dirs = listDirEntries(PAGES_DIR).filter(e => e.isDirectory());
 
@@ -1178,6 +1169,7 @@ async function discoverPages() {
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
+      hidden: doc?.isHiddenFromOverview === true,
       ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
@@ -1187,6 +1179,8 @@ async function discoverPages() {
 }
 
 async function discoverBlocks() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   const docFiles = findDocFiles(BLOCKS_DIR, TEMPLATE_SUFFIX_RE);
   /** @type {DiscoveredTemplate[]} */
   const blocks = [];
@@ -1493,7 +1487,7 @@ export function applyTemplateReplacements(templates, declarationErrors = []) {
   });
 
   return {
-    templates: effective.sort((a, b) => a.name.localeCompare(b.name)),
+    templates: effective.sort((a, b) => compareText(a.name, b.name)),
     errors,
   };
 }
@@ -1524,9 +1518,21 @@ async function discoverAllSources(cwd = process.cwd()) {
  */
 export async function discoverAllUnresolved(cwd = process.cwd()) {
   return (await discoverAllSources(cwd)).templates.sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareText(a.name, b.name),
   );
 }
+
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
 
 /**
  * Resolve replacement declarations while retaining package-addressable entries
@@ -1535,6 +1541,26 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers: outside a project
+      // the integrations beside the answering copy load too. A host's inputs
+      // are in every entry's key (gather-cache.mjs).
+      ['template-sources', realDir(cwd), CLI_ROOT],
+      () => resolveAllSourcesNow(cwd),
+      TEMPLATE_SOURCES_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,
@@ -1586,33 +1612,58 @@ export async function discoverAllWithErrors(cwd = process.cwd()) {
   };
 }
 
+/** This module's own file: its code decides the kept summaries' shape. */
+const OWN_FILE = fileURLToPath(import.meta.url);
+
 /**
- * Recursively collect integration template-spec files under `root`.
- * Returns absolute paths to files ending in one of ALL_TEMPLATE_SUFFIXES
- * (canonical `.doc.*` or released `.template.*` compatibility files).
- *
- * @param {string} root
- * @returns {string[]}
+ * Code that lets a template doc declare a replacement: the field itself, or an
+ * import, a require or a spread that can bring it in. Comments do not count.
  */
-function findIntegrationDocFiles(root) {
-  /** @type {string[]} */
-  const results = [];
-  if (!fs.existsSync(root)) return results;
-  /** @param {string} dir */
-  const walk = dir => {
-    for (const entry of listDirEntries(dir)) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (
-        ALL_TEMPLATE_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
-      ) {
-        results.push(full);
-      }
-    }
-  };
-  walk(root);
-  return results;
+const MAY_REPLACE_RE =
+  /\breplaces\b|^\s*import\b|\bimport\s*\(|\brequire\s*\(|\.\.\.\s*[A-Za-z_$]/m;
+
+/**
+ * Whether any template doc an integration ships can declare a replacement,
+ * read from its text without loading it.
+ * @param {{templates?: string}} integration
+ * @returns {boolean}
+ */
+export function integrationMayReplaceTemplate(integration) {
+  return integrationsMayReplaceTemplate([integration]);
+}
+
+/**
+ * Whether any template doc any of the integrations ships can declare a
+ * replacement, read from a kept summary of the docs' text.
+ * @param {Array<{templates?: string}>} integrations
+ * @returns {boolean}
+ */
+export function integrationsMayReplaceTemplate(integrations) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  if (roots.length === 0) return false;
+  return keptTreeSummary(
+    {kind: 'integration-template-replaces', roots, code: [OWN_FILE]},
+    trees =>
+      trees.some(({folders, readText}) =>
+        folders.some(({rel, entries}) =>
+          entries.some(({name, isDir}) => {
+            if (isDir || !matchedTemplateSuffix(name)) return false;
+            try {
+              const code = readText(rel === '' ? name : path.join(rel, name))
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/^\s*\/\/.*$/gm, '');
+              return MAY_REPLACE_RE.test(code);
+            } catch {
+              return true;
+            }
+          }),
+        ),
+      ),
+  );
 }
 
 /**
@@ -1636,6 +1687,9 @@ async function discoverIntegrationTemplates(cwd = process.cwd()) {
   /** @type {TemplateDiscoveryError[]} */
   const errors = [];
 
+  // Imported here, not at the top: the not-found hint reads Core's template
+  // ids from this module without the project's module graph.
+  const {Project} = await import('../config/project.mjs');
   let loadedIntegrations;
   try {
     const project = await Project.load(cwd);
@@ -1736,11 +1790,17 @@ function missingTemplateSourceFix(docPath, sourcePath) {
  * rules as {@link discoverIntegrationTemplates} (same-stem source required,
  * page|block type required); broken templates are recorded in `errors` rather
  * than thrown. Exposed for `doctor integration validate` and template authoring checks.
+ * With `keep`, only the template docs whose ids `keep` accepts are read, so
+ * the lookup commands' not-found hint checks a few ids as discovery does.
  *
  * @param {{name?: string, __spec?: string, __autolinked?: boolean, templates?: string}} integration
+ * @param {(id: string) => boolean} [keep]
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: TemplateDiscoveryError[]}>}
  */
-export async function discoverIntegrationTemplatesForOne(integration) {
+export async function discoverIntegrationTemplatesForOne(
+  integration,
+  keep = () => true,
+) {
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
   /** @type {TemplateDiscoveryError[]} */
@@ -1758,6 +1818,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       .slice(0, -suffix.length)
       .split(path.sep)
       .join('/');
+    if (!keep(id)) continue;
 
     const sourcePath = docPath.slice(0, -suffix.length) + '.tsx';
     if (!fs.existsSync(sourcePath)) {
@@ -2038,7 +2099,7 @@ function topLevelBindings(src) {
   const astryxImports = new Map();
   let program;
   try {
-    program = templateSourceParser().parse(src, {
+    program = babelParser().parse(src, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
       errorRecovery: true,
@@ -2094,11 +2155,27 @@ export function extractComponents(pagePath) {
 /**
  * The components a template source composes. A surface that returns rewritten
  * source lists the components of that source, so a component the rewrite
- * removed is not listed.
+ * removed is not listed. A template Astryx ships answers from its stored list
+ * (TEMPLATE_COMPONENTS_FILE), which holds what parsing it returns; any other
+ * source, such as an integration's template, is parsed.
  * @param {string} src
  * @returns {string[]}
  */
 export function componentsInSource(src) {
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
+  if (known) return [...known];
+  return parsedComponents(src);
+}
+
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
+
+/**
+ * The components a template source composes, read from its syntax tree (see
+ * componentsInSource).
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function parsedComponents(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration,
   // so the `XDS` prefix is optional. Anchoring on the `<`

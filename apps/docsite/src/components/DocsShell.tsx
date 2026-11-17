@@ -23,6 +23,7 @@ import {DocsBanner} from './InternalDocsPrompt';
 import type {
   DocsNav,
   DocsNavEntry,
+  DocsNavGroup,
   DocsNavItem,
   DocsNavPackage,
 } from './docsNav';
@@ -43,6 +44,14 @@ const styles = stylex.create({
     width: 24,
   },
 });
+
+// A component and the group of its hooks can share a name.
+// Sibling rows with one key outlive the list that rendered them, so the two
+// kinds of row never share a key.
+const entryKey = (entry: DocsNavEntry) =>
+  `entry:${entry.packageName}:${entry.name}`;
+const groupKey = (group: DocsNavGroup) =>
+  `group:${group.packageName}:${group.label}`;
 
 function CanaryCategoryMarker() {
   return (
@@ -122,21 +131,21 @@ export function DocsShell({children, nav}: DocsShellProps) {
     items.map(item =>
       item.type === 'entry' ? (
         <SideNavItem
-          key={`${item.packageName}:${item.name}`}
+          key={entryKey(item)}
           label={item.displayName}
           href={item.href}
           isSelected={pathname === item.href}
         />
       ) : (
         <SideNavItem
-          key={`${item.packageName}:${item.label}`}
+          key={groupKey(item)}
           label={item.displayName}
           collapsible={{
             defaultIsCollapsed: !item.entries.some(e => pathname === e.href),
           }}>
           {item.entries.map(entry => (
             <SideNavItem
-              key={`${entry.packageName}:${entry.name}`}
+              key={entryKey(entry)}
               label={entry.displayName}
               href={entry.href}
               isSelected={pathname === entry.href}
@@ -172,7 +181,10 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 <SideNavItem
                   label="What's New"
                   href="/changelog"
-                  isSelected={pathname === '/changelog'}
+                  isSelected={
+                    pathname === '/changelog' ||
+                    pathname.startsWith('/changelog/')
+                  }
                 />
               </SideNavSection>
 
@@ -249,7 +261,7 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 {q
                   ? flatSearchResults.map(item => (
                       <SideNavItem
-                        key={`${item.packageName}:${item.name}`}
+                        key={entryKey(item)}
                         label={item.displayName}
                         href={item.href}
                         isSelected={pathname === item.href}
@@ -262,7 +274,7 @@ export function DocsShell({children, nav}: DocsShellProps) {
                   (q ? (
                     filteredUtilities.map(comp => (
                       <SideNavItem
-                        key={`${comp.packageName}:${comp.name}`}
+                        key={entryKey(comp)}
                         label={comp.displayName}
                         href={comp.href}
                         isSelected={pathname === comp.href}
@@ -274,7 +286,7 @@ export function DocsShell({children, nav}: DocsShellProps) {
                       collapsible={{defaultIsCollapsed: true}}>
                       {utilities.map(comp => (
                         <SideNavItem
-                          key={`${comp.packageName}:${comp.name}`}
+                          key={entryKey(comp)}
                           label={comp.displayName}
                           href={comp.href}
                           isSelected={pathname === comp.href}
@@ -306,7 +318,7 @@ export function DocsShell({children, nav}: DocsShellProps) {
                           collapsible={{defaultIsCollapsed: true}}>
                           {category.utilities.map(comp => (
                             <SideNavItem
-                              key={`${comp.packageName}:${comp.name}`}
+                              key={entryKey(comp)}
                               label={comp.displayName}
                               href={comp.href}
                               isSelected={pathname === comp.href}

@@ -3,7 +3,7 @@
 /**
  * @file `icon.list` leaf (AST-084 FR7): every installed icon set with the
  * icon definitions its `map` covers, the project's main set and backups in
- * order, and the sets withdrawn with why.
+ * order, the look the project's icons draw, and the sets withdrawn with why.
  *
  * @output the `icon.list` envelope
  * @position api/icon/list — dispatched by ../icon.mjs
@@ -12,7 +12,9 @@
 import {
   astryxIconDefinitions,
   ICON_USE_ORDER_COMMAND,
+  noIconSetNext,
   iconSetKey,
+  iconSetLook,
   loadIconSets,
 } from '../_adapter.mjs';
 
@@ -36,6 +38,7 @@ export async function iconList({cwd}) {
         : null,
       reason: choice.reason,
       order: order.map(iconSetKey),
+      variant: choice.variant ?? null,
       backups: (choice.backups ?? []).map(each => ({
         iconSet: each.selector,
         status: each.status,
@@ -45,7 +48,9 @@ export async function iconList({cwd}) {
         ? {
             next: `${sets.length} icon sets are installed and none is your main set: run \`${ICON_USE_ORDER_COMMAND}\`.`,
           }
-        : {}),
+        : sets.length === 0 && withdrawn.length === 0
+          ? {next: noIconSetNext()}
+          : {}),
       sets: sets.map(set => {
         const rank = order.indexOf(set);
         const mapped = new Set(Object.keys(set.data.map ?? {}));
@@ -78,6 +83,10 @@ export async function iconList({cwd}) {
                 ? /** @type {const} */ ('backup')
                 : null,
           rank: rank === -1 ? null : rank + 1,
+          // A set the list leaves out draws no look in the project.
+          ...(choice.variant
+            ? {look: rank === -1 ? null : iconSetLook(set, choice.variant)}
+            : {}),
         };
       }),
       withdrawn: withdrawn.map(each => ({

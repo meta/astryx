@@ -41,10 +41,15 @@ export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   setConfigString,
-  setConfigValue,
+  setConfigValues,
 } from '../../foundation/config/config-writer.mjs';
+export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
 export {
   ICON_USE_ORDER_COMMAND,
+  iconLookExport,
+  iconSetLook,
+  iconUseCommand,
+  missingIconLook,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
@@ -82,6 +87,11 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+export {
+  ICON_SET_GUIDE_COMMAND,
+  ICON_USE_COMMAND,
+  noIconSetNext,
+} from '../../foundation/text/icon-set-next.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
 export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 
@@ -167,7 +177,12 @@ export async function loadIconSets(cwd) {
 export async function loadIconProject(cwd) {
   const project = await Project.load(cwd);
   const {sets, withdrawn} = await project.iconSets({experimental: true});
-  return {projectDir: findProjectDir(cwd), sets, withdrawn};
+  return {
+    projectDir: findProjectDir(cwd),
+    sets,
+    withdrawn,
+    variant: project.config.experimental?.iconVariant ?? null,
+  };
 }
 
 /**
@@ -190,7 +205,8 @@ function findProjectDir(cwd) {
  * `experimental.iconSet`, read from the project's package.json; null when
  * nothing says so.
  * @param {string} projectDir
- * @param {{list?: boolean}} [options] `list`: the value written is a list
+ * @param {{list?: boolean, variant?: boolean}} [options] `list`: the value
+ *   written is a list; `variant`: `experimental.iconVariant` is written too
  * @returns {string | null}
  */
 export function iconSetConfigCliWarning(projectDir, options = {}) {

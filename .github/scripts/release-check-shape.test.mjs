@@ -237,6 +237,7 @@ describe('release re-check trigger', () => {
           'release-branch': 'main',
           'expected-head': TIP,
           recheck: 'true',
+          evidence: 'true',
         },
       },
       {

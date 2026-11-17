@@ -44,6 +44,11 @@
         "default": "<text>"
       },
       {
+        "flag": "--base <package>",
+        "description": "<text>",
+        "type": "string"
+      },
+      {
         "flag": "--json",
         "description": "<text>",
         "type": "boolean"
@@ -63,6 +68,7 @@
         ],
         "options": [],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>"
@@ -98,20 +104,24 @@
           {
             "flag": "--type <domain>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--limit <n>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--verbose",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>"
@@ -147,40 +157,48 @@
           {
             "flag": "--list",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--category <category>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--props",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--source",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--showcase",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--blocks",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--package <name>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -223,30 +241,36 @@
           {
             "flag": "--components",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--type <kind>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--installed",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--available",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--limit <n>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -293,22 +317,32 @@
         ],
         "options": [
           {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          },
+          {
             "flag": "--index",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--full",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--depth <levels>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -317,6 +351,7 @@
           "<text>"
         ],
         "examples": [
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
@@ -348,10 +383,12 @@
           {
             "flag": "--built <path>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>"
         ],
@@ -382,6 +419,7 @@
             "arguments": [],
             "options": [],
             "json": false,
+            "available": true,
             "examples": [
               "<text>",
               "<text>",
@@ -412,6 +450,7 @@
                 ],
                 "options": [],
                 "json": true,
+                "available": true,
                 "responseTypes": [
                   "<text>"
                 ],
@@ -444,6 +483,7 @@
                 ],
                 "options": [],
                 "json": true,
+                "available": true,
                 "responseTypes": [
                   "<text>"
                 ],
@@ -476,6 +516,7 @@
                 ],
                 "options": [],
                 "json": true,
+                "available": true,
                 "responseTypes": [
                   "<text>"
                 ],
@@ -508,6 +549,7 @@
                 ],
                 "options": [],
                 "json": true,
+                "available": true,
                 "responseTypes": [
                   "<text>"
                 ],
@@ -546,40 +588,48 @@
           {
             "flag": "--category <category>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--reason <reason>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--additional-context <text>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--package <pkg>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--confirm-public",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--to <package>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--list-categories",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>"
@@ -616,20 +666,24 @@
           {
             "flag": "--list",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--category <category>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--params",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -659,35 +713,42 @@
           {
             "flag": "--features <list>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--all",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--remove-agents",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--user",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--agent <tool>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--agent-docs-path <path...>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -718,6 +779,7 @@
         "arguments": [],
         "options": [],
         "json": false,
+        "available": true,
         "examples": [
           "<text>",
           "<text>",
@@ -742,7 +804,12 @@
                 "name": "kind",
                 "required": true,
                 "variadic": false,
-                "description": "<text>"
+                "description": "<text>",
+                "requires": {
+                  "theme": [
+                    "<text>"
+                  ]
+                }
               },
               {
                 "name": "name",
@@ -755,40 +822,48 @@
               {
                 "flag": "--dry-run",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--type <type>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--replaces <topic>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--extends <topic>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--parent <namespace>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--from <theme>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--to <version>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               }
             ],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -826,15 +901,18 @@
               {
                 "flag": "--strict",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--next",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               }
             ],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -865,10 +943,12 @@
               {
                 "flag": "--check",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               }
             ],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -893,6 +973,7 @@
             "arguments": [],
             "options": [],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -920,6 +1001,7 @@
         "arguments": [],
         "options": [],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>"
         ],
@@ -954,20 +1036,24 @@
           {
             "flag": "--type <domain>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--limit <n>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--verbose",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>"
         ],
@@ -1005,25 +1091,30 @@
             "flag": "--output <dir>",
             "description": "<text>",
             "type": "string",
-            "default": "<text>"
+            "default": "<text>",
+            "available": true
           },
           {
             "flag": "--package <pkg>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--list",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "-f, --overwrite",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>"
@@ -1066,35 +1157,48 @@
           {
             "flag": "--list",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--type <type>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--package <pkg>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--skeleton",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "requires": [
+              "<text>"
+            ],
+            "available": true
           },
           {
             "flag": "--cdn [path]",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "requires": [
+              "<text>"
+            ],
+            "available": true
           },
           {
             "flag": "-f, --overwrite",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -1128,7 +1232,9 @@
         "arguments": [],
         "options": [],
         "json": false,
+        "available": true,
         "examples": [
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
@@ -1162,20 +1268,27 @@
               {
                 "flag": "--list",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--import",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--package <package>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               }
             ],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>",
               "<text>"
@@ -1211,35 +1324,45 @@
               {
                 "flag": "--family",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--family-key <key>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "-o, --out <path>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "--icons-specifier <specifier>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               },
               {
                 "flag": "-w, --watch",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "-c, --check",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               }
             ],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>",
               "<text>",
@@ -1285,15 +1408,18 @@
               {
                 "flag": "-f, --overwrite",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               },
               {
                 "flag": "--package <package>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               }
             ],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1321,10 +1447,12 @@
               {
                 "flag": "--package <package>",
                 "description": "<text>",
-                "type": "string"
+                "type": "string",
+                "available": true
               }
             ],
             "json": true,
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1350,6 +1478,7 @@
             "arguments": [],
             "options": [],
             "json": false,
+            "available": true,
             "examples": [
               "<text>"
             ],
@@ -1379,20 +1508,24 @@
                   {
                     "flag": "-o, --out <path>",
                     "description": "<text>",
-                    "type": "string"
+                    "type": "string",
+                    "available": true
                   },
                   {
                     "flag": "--preview <path>",
                     "description": "<text>",
-                    "type": "string"
+                    "type": "string",
+                    "available": true
                   },
                   {
                     "flag": "-f, --overwrite",
                     "description": "<text>",
-                    "type": "boolean"
+                    "type": "boolean",
+                    "available": true
                   }
                 ],
                 "json": true,
+                "available": true,
                 "responseTypes": [
                   "<text>"
                 ],
@@ -1428,6 +1561,10 @@
             ],
             "options": [],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1459,6 +1596,10 @@
             ],
             "options": [],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1495,10 +1636,15 @@
               {
                 "flag": "-f, --overwrite",
                 "description": "<text>",
-                "type": "boolean"
+                "type": "boolean",
+                "available": true
               }
             ],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1531,6 +1677,10 @@
             ],
             "options": [],
             "json": true,
+            "requires": [
+              "<text>"
+            ],
+            "available": true,
             "responseTypes": [
               "<text>"
             ],
@@ -1559,62 +1709,73 @@
           {
             "flag": "--from <version>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--apply",
             "description": "<text>",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "available": true
           },
           {
             "flag": "--force",
             "description": "<text>",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "available": true
           },
           {
             "flag": "--codemod <name>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--skip-codemod <name...>",
             "description": "<text>",
-            "type": "string"
+            "type": "string",
+            "available": true
           },
           {
             "flag": "--integration <package>",
             "description": "<text>",
             "type": "string",
-            "default": []
+            "default": [],
+            "available": true
           },
           {
             "flag": "--path <dir>",
             "description": "<text>",
             "type": "string",
-            "default": "<text>"
+            "default": "<text>",
+            "available": true
           },
           {
             "flag": "--install-deps",
             "description": "<text>",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "available": true
           },
           {
             "flag": "--registry",
             "description": "<text>",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "available": true
           },
           {
             "flag": "--list",
             "description": "<text>",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "available": true
           }
         ],
         "json": true,
+        "available": true,
         "responseTypes": [
           "<text>",
           "<text>",
@@ -1675,6 +1836,24 @@
     "globalMode": {
       "docs": "<text>",
       "summary": "<text>"
+    },
+    "base": {
+      "name": "@astryxdesign/core",
+      "version": "<version>",
+      "steps": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ]
     },
     "responseTypes": {
       "blog": [

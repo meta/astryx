@@ -38,6 +38,9 @@ import type {
 import type {DefinedTheme} from '../theme/defineTheme';
 import {getRegisteredTheme} from '../theme/themeRegistry';
 import {warnOnce} from '../utils/devWarning';
+import {sharedForReact} from '../utils/sharedForReact';
+
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Types
@@ -161,7 +164,11 @@ const PUBLIC_READ_REQUEST: IconRequest<never> = {size: 'md'};
 // Global Registry
 // =============================================================================
 
-let globalRegistry: Record<string, StoredIconEntry> = {};
+// Every copy of Core on one React shares this registry. Entries are React
+// elements, so a second React keeps its own.
+const registry = sharedForReact('icon/global-icon-registry/state', 1, () => ({
+  entries: {} as Record<string, StoredIconEntry>,
+}));
 
 /**
  * A key is namespaced when it carries a `<namespace>:` prefix — the runtime
@@ -232,7 +239,7 @@ function selectIconEntry(
       variantLists: [activeVariants, definingVariants],
     };
   }
-  const globalEntry = globalRegistry[name];
+  const globalEntry = registry.entries[name];
   if (globalEntry != null) {
     return {entry: globalEntry, variantLists: [activeVariants]};
   }
@@ -312,7 +319,7 @@ export function registerIcons(
     'Icon',
     '`registerIcons()` applies icon overrides globally. Prefer `defineTheme({ icons })` for theme-scoped icon overrides.',
   );
-  globalRegistry = {...globalRegistry, ...icons};
+  registry.entries = {...registry.entries, ...icons};
 }
 
 /**
@@ -462,7 +469,22 @@ function getThemeComponentIcons(
   return theme.__componentIcons ?? theme.componentIcons ?? null;
 }
 
-function warnMalformedRequest(slot: string, problem: string): void {
+function warnMalformedRequest(
+  slot: string,
+  prefix: string,
+  value: unknown,
+  suffix = '',
+): void {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+  let formatted: string | undefined;
+  try {
+    formatted = JSON.stringify(value);
+  } catch {
+    formatted = '[unserializable value]';
+  }
+  const problem = `${prefix} ${formatted}${suffix}`;
   warnOnce(
     `component-icons:${slot}:${problem}`,
     'Icon',
@@ -489,10 +511,7 @@ function applyComponentIconRequest(
     return {...fallback, icon: null};
   }
   if (typeof request !== 'object' || Array.isArray(request)) {
-    warnMalformedRequest(
-      slot,
-      `returned ${JSON.stringify(request)}, which is not a request`,
-    );
+    warnMalformedRequest(slot, 'returned', request, ', which is not a request');
     return fallback;
   }
   const {icon, variant, size} = request as Record<string, unknown>;
@@ -500,26 +519,22 @@ function applyComponentIconRequest(
   if (icon === null || isIconName(icon)) {
     resolved = {...resolved, icon};
   } else if (icon !== undefined) {
-    warnMalformedRequest(
-      slot,
-      `requests the unknown icon ${JSON.stringify(icon)}`,
-    );
+    warnMalformedRequest(slot, 'requests the unknown icon', icon);
   }
   if (typeof variant === 'string' && theme?.iconVariants?.includes(variant)) {
     resolved = {...resolved, variant};
   } else if (variant !== undefined) {
     warnMalformedRequest(
       slot,
-      `requests the variant ${JSON.stringify(variant)}, which the theme does not list`,
+      'requests the variant',
+      variant,
+      ', which the theme does not list',
     );
   }
   if (ICON_SIZES.has(size)) {
     resolved = {...resolved, size: size as IconSize};
   } else if (size !== undefined) {
-    warnMalformedRequest(
-      slot,
-      `requests the unsupported size ${JSON.stringify(size)}`,
-    );
+    warnMalformedRequest(slot, 'requests the unsupported size', size);
   }
   return resolved;
 }
@@ -557,7 +572,9 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
     if (typeof result === 'string') {
       warnMalformedRequest(
         slot,
-        `returned ${JSON.stringify(result)}, which is not a request`,
+        'returned',
+        result,
+        ', which is not a request',
       );
       return own;
     }
@@ -574,5 +591,5 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
  * @internal
  */
 export function resetIcons(): void {
-  globalRegistry = {};
+  registry.entries = {};
 }

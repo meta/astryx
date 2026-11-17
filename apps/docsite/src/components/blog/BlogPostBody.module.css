@@ -8,3 +8,18 @@
 .body :is(h1, h2, h3, h4, h5, h6)[id] {
   scroll-margin-top: calc(var(--appshell-header-height, 0px) + 16px);
 }
+
+/* Image-only Markdown blocks have no paragraph margin between them. */
+.body img + img {
+  margin-block-start: var(--spacing-6);
+}
+
+.body picture {
+  display: block;
+}
+
+/* Keep the same media/prose gap before and after themed images hydrate. */
+.body :global(.astryx-markdown-paragraph) + :is(img, picture),
+.body :is(img, picture) + :global(.astryx-markdown-paragraph) {
+  margin-block-start: var(--spacing-8);
+}

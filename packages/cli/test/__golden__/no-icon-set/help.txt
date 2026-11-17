@@ -2,12 +2,15 @@ Usage: astryx [options] [command]
 
 <text>
 
+<text>
+
 Options:
   -V, --version                     <text>
   --zh                              <text>
   --dense                           <text>
   --lang <locale>                   <text>
   --detail <level>                  <text>
+  --base <package>                  <text>
   --json                            <text>
   -h, --help                        <text>
 

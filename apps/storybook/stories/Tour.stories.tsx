@@ -5,6 +5,7 @@ import {useRef, useState} from 'react';
 import {Tour, TourStep} from '@astryxdesign/lab';
 import type {LayerAlignment, LayerPlacement} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
 import {Heading} from '@astryxdesign/core/Heading';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
@@ -87,6 +88,53 @@ export const WithoutBackdrop: Story = {
             heading="Try the new feature"
             placement="below">
             We just shipped this — click to explore.
+          </TourStep>
+        </Tour>
+      </VStack>
+    );
+  },
+};
+
+// A step can point at any element, such as a card, and the page stays usable
+// while a step shows: Tab reaches the page, and pressing the control a step
+// introduces keeps the tour running.
+export const CardTarget: Story = {
+  render: () => {
+    const [isActive, setIsActive] = useState(false);
+    const [refreshCount, setRefreshCount] = useState(0);
+    const cardRef = useRef<HTMLDivElement>(null);
+    const refreshRef = useRef<HTMLButtonElement>(null);
+
+    return (
+      <VStack gap={4}>
+        <Card ref={cardRef} padding={4}>
+          <VStack gap={1}>
+            <Heading level={4}>Revenue</Heading>
+            <Text type="body">$1.2M this quarter</Text>
+          </VStack>
+        </Card>
+        <HStack gap={2}>
+          <Button
+            ref={refreshRef}
+            variant="secondary"
+            label="Refresh"
+            onClick={() => setRefreshCount(count => count + 1)}
+          />
+          <Text type="supporting" color="secondary">
+            {`Refreshed ${refreshCount} times`}
+          </Text>
+        </HStack>
+        <Button label="Start tour" onClick={() => setIsActive(true)} />
+
+        <Tour
+          isActive={isActive}
+          isStepCountShown
+          onDismiss={() => setIsActive(false)}>
+          <TourStep targetRef={cardRef} heading="Your revenue">
+            Totals for the quarter, updated daily.
+          </TourStep>
+          <TourStep targetRef={refreshRef} heading="Refresh it">
+            Press Refresh to try it. The tour stays open.
           </TourStep>
         </Tour>
       </VStack>

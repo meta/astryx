@@ -2,7 +2,7 @@
 
 /**
  * @file InputGroup.test.tsx
- * @input Uses vitest, @testing-library/react, InputGroup, TextInput, NumberInput, DateInput components
+ * @input Uses vitest, @testing-library/react, InputGroup, TextInput, NumberInput, DateInput, Typeahead, Tokenizer, Selector, MultiSelector components
  * @output Unit tests for InputGroup
  * @position Testing; validates InputGroup component implementation
  *
@@ -24,6 +24,7 @@ import {MultiSelector} from '../MultiSelector';
 import {TimeInput} from '../TimeInput';
 import {Button} from '../Button';
 import {SizeProvider} from '../SizeContext/SizeContext';
+import {Tokenizer} from '../Tokenizer/Tokenizer';
 
 const fruits: SearchableItem[] = [
   {id: '1', label: 'Apple'},
@@ -264,6 +265,39 @@ describe('InputGroup', () => {
     );
   });
 
+  it('labels grouped Tokenizer from the group and inner input labels', () => {
+    const {container} = render(
+      <InputGroup label="Recipients" description="Who receives the digest">
+        <InputGroupText>To</InputGroupText>
+        <Tokenizer
+          label="People"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={[]}
+          onChange={() => {}}
+        />
+      </InputGroup>,
+    );
+
+    const group = screen.getByRole('group', {name: 'Recipients'});
+    const groupLabelID = group.getAttribute('aria-labelledby');
+    const input = screen.getByRole('combobox', {name: 'Recipients People'});
+    const labelledByIDs =
+      input.getAttribute('aria-labelledby')?.split(' ') ?? [];
+
+    expect(labelledByIDs).toHaveLength(2);
+    expect(labelledByIDs[0]).toBe(groupLabelID);
+    expect(document.getElementById(labelledByIDs[1])).toHaveTextContent(
+      'People',
+    );
+    expect(input).not.toHaveAttribute('aria-label');
+    expect(input).toHaveAttribute(
+      'aria-describedby',
+      group.getAttribute('aria-describedby'),
+    );
+    expect(container.querySelectorAll('.astryx-field')).toHaveLength(1);
+  });
+
   it('keeps grouped DateInput calendar button and popover semantics', () => {
     render(
       <InputGroup label="Deadline">
@@ -321,6 +355,14 @@ describe('InputGroup', () => {
             disabledMessage="Unavailable"
           />
         </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Tokenizer
+            label="People"
+            value={[]}
+            searchSource={fruitSource}
+            onChange={onChange}
+          />
+        </InputGroup>
       </>,
     );
 
@@ -335,6 +377,7 @@ describe('InputGroup', () => {
       'Group Date',
       'Group Time',
       'Group Fruit',
+      'Group People',
     ]) {
       expect(screen.getByLabelText(name)).toHaveAttribute(
         'aria-disabled',

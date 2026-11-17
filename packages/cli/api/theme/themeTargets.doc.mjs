@@ -40,7 +40,7 @@ export const doc = {
       name: 'filter',
       type: 'string',
       description:
-        'A component name (exact, case-insensitive), or a substring of a target key, class or component. Omit for the whole surface.',
+        'A component name (exact, case-insensitive), or a substring of a target key, class or component. A class selector as the output prints it (`.astryx-switch`) reads without its dot, and surrounding spaces are ignored. Omit for the whole surface.',
     },
     {
       name: 'ctx.cwd',

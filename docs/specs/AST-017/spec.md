@@ -312,7 +312,11 @@ one removal merged ahead of the decision to allow it.
   Automation MUST use the documented programmatic API.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
-  options MUST appear in generated help and the machine-readable manifest.
+  options MUST appear in generated help and the machine-readable manifest; help
+  leaves out the ones the run's base does not serve and counts them, and the
+  manifest lists every command and every command's option with `available`;
+  the global options, which every base serves, carry none (`spec:AST-114`
+  FR7).
   Automatic behavior and other controls MUST either appear there or be linked from
   those discovery surfaces to consumer documentation. A
   normal invocation mode MUST have a documented command, option, or configuration
@@ -474,6 +478,16 @@ one removal merged ahead of the decision to allow it.
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
   data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
+  One named exception: stable theme help and docs, one theme line of the agent
+  docs block, one line of `init`'s next steps (beside, never instead of, its
+  existing steps), and one line in each of the `theme eject` and
+  `theme palette generate` results MAY point at the experimental theme editor
+  (`experimental theme editor`, `experimental theme preview`) as the way to make
+  and change a theme, and `experimental theme preview app <dir>` as the starter
+  app that shows a theme when there is no app yet, phrased for theme work only
+  and labeled experimental each time; no other experimental surface may be
+  named, and the
+  exception ends when the theme editor graduates or is removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

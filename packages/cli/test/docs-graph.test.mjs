@@ -299,6 +299,8 @@ function problemWith(shown, {commands, groups, global}) {
   for (; i < rest.length; i++) {
     const token = rest[i];
     if (!/^--?[a-zA-Z]/.test(token)) continue;
+    // `experimental theme` takes a design token's name as an operand.
+    if (name.startsWith('experimental theme') && TOKEN_OPERAND.test(token)) continue;
     if (!known(flags, token)) {
       return `\`astryx ${name}\` has no option ${token.split('=')[0]}`;
     }
@@ -306,6 +308,9 @@ function problemWith(shown, {commands, groups, global}) {
   }
   return null;
 }
+
+/** A design token's name, such as `--color-text-primary`. */
+const TOKEN_OPERAND = /^--(?:color|radius|spacing|size|font|text|shadow|border|focus|duration|ease|syntax)-[a-z0-9-]+$/;
 
 /**
  * Commands a doc shows on purpose as wrong: the error codes they trigger. Each

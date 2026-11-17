@@ -359,6 +359,7 @@ describe('sidebar parents', () => {
       'icons',
     );
     expect(SIDEBAR_PARENTS.get('styling')).toBe('styling-overview');
+    expect(SIDEBAR_PARENTS.get('calendars')).toBe('internationalization');
   });
 });
 

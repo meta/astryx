@@ -7,7 +7,7 @@
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * records every module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {moduleRecorder} from '../../test-utils/module-recorder.mjs';
 
 const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
 const CLI_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -44,6 +45,25 @@ const LARGE_CLI_MODULES = [
   'foundation/fs/module-loader.mjs',
   'foundation/integrations/integrations.mjs',
 ];
+
+/**
+ * The CLI's own modules that only a run that resolves its base uses: the base
+ * resolver, and the identity code that brands provider names. A run whose
+ * base is plainly Core, as every run that prints the version is, answers
+ * without them.
+ */
+const BASE_RESOLUTION_MODULES = [
+  'foundation/bases/resolve.mjs',
+  'foundation/identity/provider-identity.mjs',
+  'foundation/identity/providers.mjs',
+];
+
+/**
+ * The most CLI modules a run that prints the version loads. Each one costs
+ * every run its load time, so a module new to this path takes the place of
+ * one, or raises this number on purpose.
+ */
+const VERSION_RUN_MODULE_LIMIT = 73;
 
 /** The runs that print the version, as text or as JSON. */
 const VERSION_RUNS = ['--version', '-V', '--version --json'];
@@ -74,30 +94,13 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved and the paths of the CLI's
+ * return the packages of the modules it loaded and the paths of the CLI's
  * own modules under the CLI root.
  * @param {string[]} args
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'resolved.txt');
-  fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-resolved.mjs');
-  fs.writeFileSync(
-    hook,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      "import {registerHooks} from 'node:module';",
-      'registerHooks({',
-      '  resolve(specifier, context, nextResolve) {',
-      '    const result = nextResolve(specifier, context);',
-      `    appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '    return result;',
-      '  },',
-      '});',
-      '',
-    ].join('\n'),
-  );
+  const {preload, loads: log} = moduleRecorder(dir);
   const app = path.join(dir, 'app');
   const home = path.join(dir, 'home');
   fs.mkdirSync(app, {recursive: true});
@@ -119,7 +122,7 @@ function modulesLoadedBy(args) {
   });
   const result = spawnSync(
     process.execPath,
-    ['--import', pathToFileURL(hook).href, BIN, ...args],
+    ['--import', pathToFileURL(preload).href, BIN, ...args],
     {cwd: app, env, encoding: 'utf8'},
   );
   const packages = new Set();
@@ -142,6 +145,9 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'loaded.txt'), 'utf8')).toContain(
+      '/node_modules/commander/lib/command.js',
+    );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
   });
 
@@ -167,6 +173,28 @@ describe('a run of the bin that prints the version', () => {
           ),
         ),
       ).toEqual([]);
+    },
+  );
+});
+
+describe('a run of the bin that prints the version, and its base', () => {
+  it.each(VERSION_RUNS)(
+    'loads no base resolver or identity module (astryx %s)',
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(
+        BASE_RESOLUTION_MODULES.filter(file => cliModules.has(file)),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(VERSION_RUNS)(
+    `loads at most ${VERSION_RUN_MODULE_LIMIT} of the CLI's own modules (astryx %s)`,
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(cliModules.size).toBeLessThanOrEqual(VERSION_RUN_MODULE_LIMIT);
     },
   );
 });

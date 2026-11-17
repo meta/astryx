@@ -744,6 +744,7 @@ function DateFilterControl({
     <DateInput
       label={t('@astryx.tableFiltering.filterByColumn', {header})}
       isLabelHidden
+      entryErrorBehavior="complete"
       value={(value as ISODateString | undefined) ?? undefined}
       onChange={newValue => {
         store.getConfig().onFilterChange(columnKey, newValue ?? null);
@@ -773,6 +774,7 @@ function TimeFilterControl({
     <TimeInput
       label={t('@astryx.tableFiltering.filterByColumn', {header})}
       isLabelHidden
+      entryErrorBehavior="complete"
       value={(value as ISOTimeString | undefined) ?? undefined}
       onChange={newValue => {
         store.getConfig().onFilterChange(columnKey, newValue ?? null);

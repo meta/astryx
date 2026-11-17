@@ -137,6 +137,12 @@ const STRUCTURAL_VARS = new Set([
   // Also beside it: how far above the viewport's bottom a layer ends while the
   // keyboard is up. Runtime geometry, never authored by a theme.
   '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
+  '--_sheet-scrim-easing',
 ]);
 
 /**
@@ -324,6 +330,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // publication beside container().
   '--_container-corner-block-start',
   '--_container-corner-block-end',
+  // The container-padding record's block-edge bleed: a padding publisher
+  // gives its block padding only to a direct first or last Table.
+  '--_container-bleed-block-start',
+  '--_container-bleed-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
@@ -367,6 +377,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_avatar-group-overlap',
   '--_field-status-overlap',
   '--_codeblock-gutter-width',
+  // The page's direction, read with :dir(rtl) on the block root so the
+  // gutter mirrors; a theme has no direction to set.
+  '--_codeblock-direction',
   '--_tab-indicator-bottom',
   // Hit-area outset on a ::after overlay, and whether that overlay is
   // generated at all — `inset` and `content` on a pseudo-element are not
@@ -389,9 +402,13 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  // A checkbox row's touch press image, which an indicator that paints its
-  // own press inherits. The row writes it from the press paint above.
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',

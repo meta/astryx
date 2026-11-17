@@ -19,7 +19,12 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import {isFocusLost} from '../utils/focusReturn';
-import {isHTMLElement} from '../utils/nodeType';
+import {
+  isDialogShown,
+  isDisplayedWhileClosed,
+  isHTMLElement,
+} from '../utils/nodeType';
+import {sharedState} from '../utils/sharedRealm';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -29,7 +34,9 @@ import {useLayerDismissal} from '../Layer/useLayerDismissal';
 // keep answering about focus traps alone — the stack now carries families that
 // never trapped focus (tooltips, hover cards), and counting those would tell
 // callers a trap is above them when none is.
-let activeEscapeTrapCount = 0;
+const escapeTraps = sharedState('hooks/use-focus-trap/escape-traps', 1, () => ({
+  count: 0,
+}));
 
 /**
  * Whether an Escape-dismissible focus trap is currently active — a Popover,
@@ -41,7 +48,7 @@ let activeEscapeTrapCount = 0;
  *   stack rather than ask whether a trap exists.
  */
 export function hasActiveFocusTrapEscape(): boolean {
-  return activeEscapeTrapCount > 0;
+  return escapeTraps.count > 0;
 }
 
 /**
@@ -58,24 +65,11 @@ export function useFocusTrapEscapeCompatibilitySignal(isActive: boolean): void {
     if (!isActive) {
       return;
     }
-    activeEscapeTrapCount += 1;
+    escapeTraps.count += 1;
     return () => {
-      activeEscapeTrapCount -= 1;
+      escapeTraps.count -= 1;
     };
   }, [isActive]);
-}
-
-/**
- * Whether an element is shown as a popover. jsdom and browsers without the
- * Popover API do not recognize `:popover-open`, and nothing is popover-open
- * there.
- */
-function isPopoverOpen(el: Element): boolean {
-  try {
-    return el.matches(':popover-open');
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -92,15 +86,14 @@ function isVisiblyFocusable(el: HTMLElement): boolean {
   if (el.hidden || el.closest('[hidden]')) {
     return false;
   }
-  // A closed <dialog> renders nothing, so nothing inside it can take focus.
-  // A dialog shown with showPopover() (a non-modal sheet or drawer) never
-  // sets `open`, so it counts as shown while it is popover-open.
+  // A closed <dialog> that the page does not display renders nothing, so
+  // nothing inside it can take focus.
   for (
     let dialog = el.closest('dialog');
     dialog != null;
     dialog = dialog.parentElement?.closest('dialog') ?? null
   ) {
-    if (!dialog.open && !isPopoverOpen(dialog)) {
+    if (!isDialogShown(dialog) && !isDisplayedWhileClosed(dialog)) {
       return false;
     }
   }
@@ -258,10 +251,14 @@ function focusLastDescendant(container: HTMLElement): boolean {
   return false;
 }
 
-// Containers of the focus regions currently active, in every document. A Tab
-// is answered by the innermost region that holds focus, so regions that nest
-// in the DOM never fight over one key press.
-const activeRegionContainers = new Set<HTMLElement>();
+// Every copy of Core shares these focus-region containers. The innermost
+// region that holds focus answers a Tab, so nested regions never both answer
+// one key press.
+const activeRegionContainers = sharedState(
+  'hooks/use-focus-trap/active-region-containers',
+  1,
+  () => new Set<HTMLElement>(),
+);
 
 function hasInnerRegionHolding(
   container: HTMLElement,
@@ -392,6 +389,12 @@ export function useFocusRegionContainment(
       }
 
       if (event.key === 'Tab') {
+        if (event.ctrlKey || event.metaKey) {
+          // Ctrl+Tab and Meta+Tab switch tabs or apps. They do not move
+          // focus, so the region leaves them to the browser and the page.
+          // Alt+Tab stays: Safari moves focus to each item on Option+Tab.
+          return;
+        }
         if (event.defaultPrevented) {
           // A control that handles Tab itself (an editor that indents) keeps
           // focus where it is.

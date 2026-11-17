@@ -2,8 +2,8 @@
 
 /**
  * @file listWindow.ts
- * @input Fixed CSS-pixel row pitch, scroll geometry and canonical row keys
- * @output Half-open row and gap segments, and first-visible-key reconciliation
+ * @input Fixed or per-item CSS-pixel pitch, scroll geometry and canonical row keys
+ * @output Half-open ranges, row and gap segments, and first-visible-key reconciliation
  * @position The one private long-list windowing module in Core
  */
 export type ListWindowSegment =
@@ -179,6 +179,92 @@ export function createListWindowSegments(
   return segments;
 }
 
+export interface VariableListRangeOptions {
+  /** The start of each item, then the total extent: one more entry than items. */
+  offsets: ReadonlyArray<number>;
+  viewportSize: number;
+  scrollOffset: number;
+  isMeasured: boolean;
+  overscan: number;
+}
+
+export interface VariableListRange {
+  start: number;
+  end: number;
+  firstVisibleIndex: number;
+  /** Distance from the first visible item's start to the scroll offset. */
+  offset: number;
+}
+
+/**
+ * The first index in `[0, limit)` whose offset is at least `value`, or above
+ * it when `isStrict` is set.
+ */
+function lowerBound(
+  offsets: ReadonlyArray<number>,
+  value: number,
+  limit: number,
+  isStrict = false,
+): number {
+  let low = 0;
+  let high = limit;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (isStrict ? offsets[middle] <= value : offsets[middle] < value) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}
+
+/**
+ * The half-open item range for items of varying size. Before measurement it
+ * holds the items that start inside the viewport, plus overscan after them.
+ */
+export function calculateVariableListRange({
+  offsets,
+  viewportSize,
+  scrollOffset,
+  isMeasured,
+  overscan,
+}: VariableListRangeOptions): VariableListRange {
+  const count = Math.max(0, offsets.length - 1);
+  if (count === 0) {
+    return {start: 0, end: 0, firstVisibleIndex: 0, offset: 0};
+  }
+  if (!isMeasured) {
+    return {
+      start: 0,
+      end: Math.min(count, lowerBound(offsets, viewportSize, count) + overscan),
+      firstVisibleIndex: 0,
+      offset: 0,
+    };
+  }
+  const total = offsets[count];
+  const visibleSize = Math.max(0, viewportSize);
+  const scroll = Math.min(
+    Math.max(0, total - visibleSize),
+    Math.max(0, scrollOffset),
+  );
+  // The last item that starts at or before the scroll offset.
+  const first = Math.max(
+    0,
+    Math.min(count - 1, lowerBound(offsets, scroll, count, true) - 1),
+  );
+  const last = Math.max(
+    first + 1,
+    lowerBound(offsets, scroll + visibleSize, count),
+  );
+  return {
+    start: Math.max(0, first - overscan),
+    end: Math.min(count, last + overscan),
+    firstVisibleIndex: first,
+    offset: scroll - offsets[first],
+  };
+}
+
 export interface ListAnchorOptions {
   previousKeys: ReadonlyArray<string | number>;
   keys: ReadonlyArray<string | number>;
@@ -191,6 +277,12 @@ export interface ListAnchorOptions {
   trailingContentHeight?: number;
   /** Key-to-index map. Build it when the keys change, never on scroll. */
   keyIndices?: ReadonlyMap<string | number, number>;
+  /**
+   * Item start offsets plus the total extent, for items of varying size. With
+   * them, `offset` is a fraction of the anchor item's size, and `rowHeight`
+   * is not read.
+   */
+  offsets?: ReadonlyArray<number>;
 }
 
 export function reconcileListAnchor(options: ListAnchorOptions): number {
@@ -226,13 +318,23 @@ export function reconcileListAnchor(options: ListAnchorOptions): number {
       }
     }
   }
+  const {offsets} = options;
   const maximumScroll = Math.max(
     0,
     startOffset +
-      keys.length * rowHeight +
+      (offsets ? (offsets[keys.length] ?? 0) : keys.length * rowHeight) +
       (options.trailingContentHeight ?? 0) -
       viewportHeight,
   );
+  if (offsets) {
+    const itemStart = offsets[index ?? 0] ?? 0;
+    const itemSize = index === undefined ? 0 : offsets[index + 1] - itemStart;
+    const fraction = Math.min(1, Math.max(0, offset));
+    return Math.max(
+      0,
+      Math.min(maximumScroll, startOffset + itemStart + fraction * itemSize),
+    );
+  }
   // With no surviving key, a position inside the leading content stays where
   // it is, and a position inside the rows moves to the first row.
   const fraction =

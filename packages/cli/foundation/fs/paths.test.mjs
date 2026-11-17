@@ -4,9 +4,10 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {findAstryxProject, findCoreDir, findProjectCoreDir, findProjectRoot, listComponents, discoverExternalPackages, existsCaseExact, findInstalledPackage, findNodeModulesPackage, findPackageRoot, findProjectPackageOf, findWorkspaceRoot} from './paths.mjs';
+import {findAstryxProject, findCoreDir, findProjectCoreDir, findProjectRoot, listComponents, discoverExternalPackages, existsCaseExact, findInstalledPackage, findNodeModulesPackage, findPackageRoot, findProjectPackageOf, findWorkspaceRoot, isInside, pnpDependsOn} from './paths.mjs';
 import {CLI_ROOT} from './paths.mjs';
 import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
+import {usePnpApi} from '../../test-utils/pnp-fixtures.mjs';
 
 let tmpDir;
 
@@ -78,29 +79,8 @@ function install(root, name, version) {
  */
 function withPnp(resolved) {
   const runtime = path.join(tmpDir, 'runtime');
-  const api = path.join(runtime, 'node_modules', 'pnpapi');
-  fs.mkdirSync(api, {recursive: true});
-  fs.writeFileSync(
-    path.join(api, 'package.json'),
-    JSON.stringify({name: 'pnpapi', version: '1.0.0', main: 'index.js'}),
-  );
-  fs.writeFileSync(
-    path.join(api, 'index.js'),
-    `const resolved = ${JSON.stringify(resolved)};\n` +
-      'module.exports = {\n' +
-      '  resolveToUnqualified(name) {\n' +
-      '    if (!(name in resolved)) {\n' +
-      "      const e = new Error(name); e.code = 'MODULE_NOT_FOUND'; throw e;\n" +
-      '    }\n' +
-      '    return resolved[name];\n' +
-      '  },\n' +
-      '};\n',
-  );
-  Object.defineProperty(process.versions, 'pnp', {
-    value: '3',
-    configurable: true,
-  });
-  return runtime;
+  fs.mkdirSync(runtime, {recursive: true});
+  return usePnpApi(runtime, resolved);
 }
 
 describe('findCoreDir', () => {
@@ -296,6 +276,21 @@ describe('findInstalledPackage', () => {
       const project = withPnp({});
 
       expect(findInstalledPackage(project, '@astryxdesign/core')).toBeNull();
+    });
+  });
+
+  describe('pnpDependsOn', () => {
+    it('is true for a package the workspace that holds the folder depends on', () => {
+      const project = withPnp({'@astryxdesign/cli': path.join(tmpDir, 'store', 'cli')});
+      const src = path.join(project, 'src');
+      fs.mkdirSync(src);
+
+      expect(pnpDependsOn(src, '@astryxdesign/cli')).toBe(true);
+      expect(pnpDependsOn(src, '@astryxdesign/core')).toBe(false);
+    });
+
+    it("is false outside a Plug'n'Play process", () => {
+      expect(pnpDependsOn(tmpDir, '@astryxdesign/cli')).toBe(false);
     });
   });
 });
@@ -735,5 +730,17 @@ describe('existsCaseExact', () => {
 
   it('refuses a target outside the root', () => {
     expect(existsCaseExact(os.tmpdir(), tmpDir)).toBe(false);
+  });
+});
+
+describe('isInside', () => {
+  it('reads a name that begins with two dots as a name, and .. as the folder above', () => {
+    const parent = path.resolve('/work/site');
+    expect(isInside(path.join(parent, 'app/page.tsx'), parent)).toBe(true);
+    expect(isInside(path.join(parent, '..x/page.tsx'), parent)).toBe(true);
+    expect(isInside(path.join(parent, '...'), parent)).toBe(true);
+    expect(isInside(parent, parent)).toBe(false);
+    expect(isInside(path.dirname(parent), parent)).toBe(false);
+    expect(isInside(path.resolve('/work/other/page.tsx'), parent)).toBe(false);
   });
 });

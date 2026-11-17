@@ -716,6 +716,17 @@ the release speed a pager pages from (`releasePxPerS`), or the hold after
 which it catches the content (`holdMs`). In WebKit the play then fails by
 name when the page read the release, or the first finger's hold from
 touch-down to lift, on the other side of the threshold from the script. A
+multi-tap gesture names the component's interval between taps
+(`tapIntervalMs`, UIKit's `maximumIntervalBetweenTaps`). The window closes that
+long after the lift's stamp. In every engine, a touch-down can reach the page
+after the close, where the script taps within the window. If the page drew a
+frame in between, the play fails with `TouchTapIntervalError`: the page read
+separate taps. Without such a frame, the component decides. The error names
+the cause by the page's frames across the close. Where the page kept drawing,
+a dispatch stalled before the page. Where it drew no frame for longer than
+`FRAME_STARVATION_MS`, its main thread was held across the close. In
+Chromium, a page task across the close ends with a frame before the touch-down
+it held. A
 scrolling surface reads its release as Core's `scrollVelocity` does: pass
 `release: 'scroll'`. Each pacing error names the longest time the page drew no
 frame during the gesture. A page that drew nothing for 100 ms or more never
