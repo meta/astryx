@@ -44,7 +44,7 @@ export const WORKFLOW_TITLE =
 export const WORKFLOW_STEPS = Object.freeze([
   '1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.',
   '2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.',
-  '3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one.',
+  '3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one. Astryx names differ from other libraries: buttons, badges, tokens and tabs take their text in `label` (Text, Heading and Link take children), booleans start with `is` or `has` (`isOpen`, `isDisabled`), every input takes `value` and `onChange`, and VStack and HStack align with `hAlign` and `vAlign`.',
 ]);
 
 /**
