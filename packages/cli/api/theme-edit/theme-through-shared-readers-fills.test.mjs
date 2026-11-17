@@ -398,7 +398,8 @@ describe('asks it used to drop', () => {
         (await answer('make text on the accent color white')).first,
       ).toEqual(["set n --color-on-accent '#ffffff'"]);
       expect(
-        (await answer('make labels on the accent color white')).first,
+        // ("labels" said bare reads two parts; a form's labels are one.)
+        (await answer('make form labels on the accent color white')).first,
       ).toEqual(["set n color '#ffffff' --on field-label"]);
     },
     T,
