@@ -170,11 +170,11 @@ describe('a part setting Core already draws', () => {
   it('the missed line names the variant a miss is in', async () => {
     if (unbuilt) return;
     const r = /** @type {any} */ (
-      await themeEditSet('t', 'danger', '#e11d48', {cwd})
+      await themeEditSet('t', 'accent', '#0b5cff', {cwd})
     );
     const where = /** @type {string[]} */ (r.data?.missedWhere ?? []);
-    expect(where).toContain('toast type:error at rest');
-    await themeEditUndo('t', {cwd, thing: 'danger'});
+    expect(where).toContain('button variant:primary disabled');
+    await themeEditUndo('t', {cwd, thing: 'accent'});
   }, 240_000);
 
   it('square corners on a badge are written and styled', async () => {

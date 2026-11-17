@@ -71,6 +71,7 @@ import {
 import {
   isLookFamily,
   lookSeeds,
+  statusSeeds,
 } from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
@@ -779,8 +780,7 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
   return {
     base,
     has: token => token in tokenDefaults,
-    // The editor's own rules (Core's context.editor).
-    editor: true,
+    defaults: tokenDefaults,
     reader: {
       rgb: value =>
         /** @type {[number, number, number] | null} */ (parseColor(value)),
@@ -1026,15 +1026,34 @@ function planPalette(cwd, slug, data, base) {
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
   // The category and chart hues grow with the look, after the theme's own
-  // colors, and so do the status roles the theme leaves unset (Core's
-  // grownFamilies); a family the author's config already holds stays
-  // theirs. A status family that is not a setting is the editor's, grown
-  // again at every plan.
-  for (const family of grownFamilies(fams, {
-    base,
-    reader: {rgb: parseColor, alpha: alphaOf},
-  }))
-    if (!families.some(f => f?.id === family.id)) families.push(family);
+  // colors; a hue the author's config already holds stays theirs.
+  if (derived && fams.length)
+    for (const [id, seed] of Object.entries(derived))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each (statusSeeds). They are grown again at every plan: a
+  // status family that is not a setting is the editor's.
+  if (fams.length) {
+    const unset = Object.keys(STATUS_TOKEN).filter(
+      d => !fams.some(f => f.id === d),
+    );
+    /** @type {Record<string, string>} */
+    const baseColors = {};
+    for (const d of unset) {
+      const v = base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+      const rgb = v ? parseColor(v) : null;
+      if (rgb && alphaOf(String(v)) >= 1)
+        baseColors[d] = hex(/** @type {number[]} */ (rgb));
+    }
+    const seeds = statusSeeds(
+      baseColors,
+      fams.find(f => f.id === 'accent')?.seed,
+    );
+    for (const [id, seed] of Object.entries(seeds))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  }
   // A color change on a palette made with the first recipe says what the
   // newer one does, and how to choose it.
   /** @param {any} c */

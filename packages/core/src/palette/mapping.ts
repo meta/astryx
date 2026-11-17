@@ -101,6 +101,8 @@ export interface PaletteMappingContext {
   editor?: boolean;
   /** Whether a token exists, so the mapping sets it. */
   has: (token: string) => boolean;
+  /** Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness. */
+  defaults?: Readonly<Record<string, unknown>>;
   reader: PaletteColorReader;
   /** The value a token is set to exactly in a mode, as written. */
   settingOf?: (token: string, mode: PaletteMode) => string | undefined;
@@ -1119,8 +1121,40 @@ export function mapPalette(
     return ref(id, m, b.stop);
   };
 
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   */
+  const nearCore = (
+    token: string,
+    id: string,
+  ): Partial<Record<PaletteMode, StopRef>> => {
+    const core = String(context.defaults?.[token] ?? '').trim();
+    const halves = /^light-dark\((.*)\)$/i.exec(core);
+    const parts = halves ? splitTopComma(halves[1]) : [core];
+    return each(m => {
+      const target = parseColor(
+        String(parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+      );
+      const best = target
+        ? stops.reduce((x, y) =>
+            perceptualDelta(ref(id, m, y).color, hex(target)) <
+            perceptualDelta(ref(id, m, x).color, hex(target))
+              ? y
+              : x,
+          )
+        : stops[Math.floor(stops.length / 2)];
+      return ref(id, m, best);
+    });
+  };
+
   const neutral = dials.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -1475,6 +1509,17 @@ export function mapPalette(
           })
         : text,
     );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it (its
+    // text takes the readable side of Core's media surface).
+    if (word === 'error') {
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
+    }
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
