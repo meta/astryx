@@ -17,16 +17,20 @@ const GLIDE_WIDTH = `var(--_table-row-glide-width, ${DIVIDER_WIDTH})`;
 /** Conditional divider geometry for pinned cells in a gliding row. */
 export const tableStickyCellGlidingStyles = stylex.create({
   cell: {
-    '::before': {
-      marginBottom: {[CELL_GLIDING]: `calc(-1 * ${GLIDE_WIDTH})`},
-      borderBottomWidth: {[CELL_GLIDING]: GLIDE_WIDTH},
-      borderBottomStyle: {
-        [CELL_GLIDING]: 'var(--_table-row-glide-style, solid)',
-      },
-      borderBottomColor: {
-        [CELL_GLIDING]: 'var(--_table-row-glide-color, var(--color-border))',
-      },
-      backgroundSize: {[CELL_GLIDING]: `100% ${GLIDE_WIDTH}`},
+    '--_table-pinned-cell-divider-margin-bottom': {
+      [CELL_GLIDING]: `calc(-1 * ${GLIDE_WIDTH})`,
+    },
+    '--_table-pinned-cell-divider-width': {
+      [CELL_GLIDING]: GLIDE_WIDTH,
+    },
+    '--_table-pinned-cell-divider-style': {
+      [CELL_GLIDING]: 'var(--_table-row-glide-style, solid)',
+    },
+    '--_table-pinned-cell-divider-color': {
+      [CELL_GLIDING]: 'var(--_table-row-glide-color, var(--color-border))',
+    },
+    '--_table-pinned-cell-divider-background-size': {
+      [CELL_GLIDING]: `100% ${GLIDE_WIDTH}`,
     },
   },
 });

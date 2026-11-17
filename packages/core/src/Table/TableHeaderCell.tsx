@@ -130,9 +130,21 @@ const stickyHeaderStyles = stylex.create({
     position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
-    // Sticky-column surfaces allow their shadow to bleed; header labels still
-    // need the normal overflow clip for ellipsis.
+    // The sticky-column surface and its divider need to bleed out of the
+    // header cell. The label's inner wrapper owns truncation instead.
+    backgroundColor: `var(--table-sticky-background, ${colorVars['--color-background-card']})`,
+    backgroundClip: 'padding-box',
+    overflow: 'visible',
+  },
+});
+
+const stickyHeaderContentStyles = stylex.create({
+  content: {
+    display: 'block',
+    maxWidth: '100%',
     overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
@@ -181,9 +193,11 @@ export function TableHeaderCell({
   // focus reaches something inside the cell (a sortable header's sort
   // control). Only a cell inside a Table truncates.
   const cellRef = useRef<HTMLTableCellElement | null>(null);
+  const headerContentRef = useRef<HTMLDivElement | null>(null);
   const mergedRef = useMergedRefs(ref, cellRef);
   const cutHeading = useCutTextOnKeyboardFocus({
     anchorRef: cellRef,
+    measureRef: ctx?.hasStickyHeader ? headerContentRef : undefined,
     isEnabled: ctx != null,
   });
 
@@ -208,7 +222,7 @@ export function TableHeaderCell({
       cellStyles.push(headerMenuCellStyles.cell);
     }
     if (ctx.hasStickyHeader) {
-      cellStyles.push(tableStickyCellStyles, stickyHeaderStyles.cell);
+      cellStyles.push(stickyHeaderStyles.cell);
     }
   }
 
@@ -224,6 +238,15 @@ export function TableHeaderCell({
   const mergedStyle = ctx?.hasStickyHeader
     ? {position: 'sticky' as const, insetBlockStart: 0, ...incomingStyle}
     : incomingStyle;
+  const renderedContent = ctx?.hasStickyHeader ? (
+    <div
+      ref={headerContentRef}
+      {...stylex.props(stickyHeaderContentStyles.content)}>
+      {content}
+    </div>
+  ) : (
+    content
+  );
 
   return (
     <th
@@ -241,7 +264,7 @@ export function TableHeaderCell({
         props.onPointerDown,
         cutHeading.onPointerDown,
       )}>
-      {content}
+      {renderedContent}
       {cutHeading.cutText != null && cutHeading.Tooltip ? (
         <cutHeading.Tooltip
           anchorRef={cellRef}
