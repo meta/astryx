@@ -21,7 +21,7 @@ import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
 import {doc as importCommand} from '../experimental-import.doc.mjs';
 import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
-import {printRendered, printRestored} from './render-output.mjs';
+import {printRestored} from './render-output.mjs';
 
 /**
  * Register `import` under the `experimental` group.
@@ -63,8 +63,7 @@ export function registerExperimentalImport(group, program) {
         return answered;
       }
       const run = getCliInvocation();
-      if (result.type === 'render.page') printRendered(result.data, run);
-      else printRestored(result.data, run);
+      if (result.type === 'render.reverse') printRestored(result.data, run);
       return answered;
     },
   });
