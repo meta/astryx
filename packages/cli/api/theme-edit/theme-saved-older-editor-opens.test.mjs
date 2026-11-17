@@ -204,3 +204,114 @@ describe('a whole theme an earlier editor saved', () => {
     T,
   );
 });
+
+describe('a saved strip look on the pagination', () => {
+  // A trimmed copy of a theme an earlier editor wrote: a bordered,
+  // shadowed pagination strip, and one entry today's rules refuse (a
+  // white-space on the code block, whose inner text sets its own).
+  const strip = [
+    {
+      thing: 'border',
+      value: '1px solid rgba(0, 0, 0, 0.15)',
+      source: 'property',
+      on: 'pagination',
+    },
+    {
+      thing: 'border-radius',
+      value: '3px',
+      source: 'property',
+      on: 'pagination',
+    },
+    {
+      thing: 'box-shadow',
+      value: '0 1px 2px rgba(0, 0, 0, 0.05)',
+      source: 'property',
+      on: 'pagination',
+    },
+    {
+      thing: 'width',
+      value: 'fit-content',
+      source: 'property',
+      on: 'pagination',
+    },
+  ];
+  const quiet = {
+    thing: 'white-space',
+    value: 'pre-wrap',
+    source: 'property',
+    on: 'code-block',
+  };
+  const base = [
+    {thing: 'accent', value: '#0069d6', source: 'dial'},
+    {thing: 'neutral', value: '#808080', source: 'dial'},
+    {thing: 'corners', value: '4px', source: 'dial'},
+    {thing: 'spacing', value: 'compact', source: 'dial'},
+  ];
+  /** @param {object[]} settings */
+  const write = settings =>
+    fs.writeFileSync(
+      file(),
+      JSON.stringify(
+        {name: 't', like: 'neutral', mode: 'light-only', settings},
+        null,
+        2,
+      ),
+    );
+
+  it(
+    'opens and builds the strip; the entry today refuses is kept with a note whose line runs',
+    async () => {
+      const settings = [...base, ...strip, quiet];
+      write(settings);
+      const shown = await cli([...ED, 'show', 't']);
+      expect(shown.status).toBe(0);
+      expect(saved()).toEqual(settings);
+      const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+      expect(css).toMatch(/rgba\(0,\s*0,\s*0,\s*0?\.15\)/);
+      const note = JSON.stringify(shown.json.data.notes).match(
+        /white-space = pre-wrap on code-block[^"]*/,
+      )?.[0];
+      expect(note).toMatch(/kept and built as an earlier editor built it/);
+      const line = /astryx experimental theme editor [^,"]+/.exec(
+        String(note),
+      )?.[0];
+      expect(line).toBeTruthy();
+      const args = splitCommand(
+        String(line).slice(String(line).indexOf('experimental ')),
+      );
+      expect((await runCli(/** @type {string[]} */ (args), cwd)).status).toBe(
+        0,
+      );
+      expect(saved()).toEqual([...base, ...strip]);
+    },
+    T,
+  );
+
+  it(
+    'refused for damage that could matter, every line the refusal offers runs while it is refused',
+    async () => {
+      write([
+        ...base,
+        ...strip,
+        {thing: 'color', value: 'banana', source: 'property', on: 'card'},
+        {thing: '--color-accent', value: '12px', source: 'token'},
+      ]);
+      const shown = await cli([...ED, 'show', 't']);
+      expect(shown.status).not.toBe(0);
+      expect(shown.json.code).toBe('ERR_THEME_INVALID');
+      const lines = (shown.json.suggestions ?? []).map(
+        (/** @type {{name: string}} */ s) => s.name,
+      );
+      expect(lines.length).toBe(2);
+      for (const line of lines) {
+        const args = splitCommand(line.slice(line.indexOf('experimental ')));
+        expect((await runCli(/** @type {string[]} */ (args), cwd)).status).toBe(
+          0,
+        );
+      }
+      expect((await cli([...ED, 'show', 't'])).status).toBe(0);
+      expect(saved()).toEqual([...base, ...strip]);
+    },
+    T,
+  );
+});
