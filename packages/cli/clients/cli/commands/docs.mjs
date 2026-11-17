@@ -3,8 +3,10 @@
 /**
  * @file docs command — Print Astryx reference docs
  *
- * In text, every read is one level: a topic lists its sections, so a reader can
- * open one section by its key, and `--full` prints the whole topic. `--depth`
+ * In text, a topic prints whole, unless the whole topic is more than one docs
+ * read may return (DOC_OUTPUT_BUDGET_BYTES): then it lists its sections, so a
+ * reader opens one by its key. `--index` lists the sections of any topic, and
+ * `--full` prints any topic whole. `--depth`
  * reads a docs-tree namespace as many levels down as asked, each doc below it
  * at --detail (brief by default: one line each). `--json` keeps the docs()
  * contract: a topic returns its whole doc, and `--index` its sections.
@@ -17,8 +19,9 @@
  * Usage:
  *   astryx docs                          List available topics
  *   astryx docs --list                   The same list, asked for by flag
- *   astryx docs <topic>                  List the topic's sections (a topic
- *                                        with one section prints whole)
+ *   astryx docs <topic>                  Print the topic (its sections when
+ *                                        the whole is over one read's budget)
+ *   astryx docs <topic> --index          List the topic's sections
  *   astryx docs <topic> <section>        Print one section
  *   astryx docs <topic> --full           Print the whole topic
  *   astryx docs <route>                  Open a node of the docs tree, such as
@@ -46,6 +49,10 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {docs as docsApi} from '../../../api/docs/docs.mjs';
+import {
+  DOC_OUTPUT_BUDGET_BYTES,
+  docPayloadBytes,
+} from '../../../foundation/discovery/docs-output-budget.mjs';
 import {doc as docsCommand} from './docs.doc.mjs';
 import {doc as docsFn} from '../../../api/docs/docs.doc.mjs';
 
@@ -717,16 +724,18 @@ export function registerDocs(program) {
       // its default, each is one line.
       const childDetail =
         program.getOptionValueSource('detail') === 'default' ? 'brief' : detail;
-      // Text reads one level: a topic lists its sections (one with a single
-      // section prints whole). JSON keeps docs(): the whole topic unless
-      // --index. The dense variant is written to be read whole.
-      const listSections =
-        Boolean(options.index) ||
-        (!json &&
-          !options.full &&
-          !dense &&
-          lang !== 'dense' &&
-          sectionName == null);
+      // A text read prints a topic whole, as JSON and docs() do: agents act
+      // on the first read, and most never open a section from an index. Only
+      // a topic too long for one read (DOC_OUTPUT_BUDGET_BYTES, the same
+      // budget doctor holds every docs read to) lists its sections instead.
+      // --index always lists them, --full always prints the whole topic, and
+      // the dense variant is written to be read whole.
+      const mayList =
+        !json &&
+        !options.full &&
+        !dense &&
+        lang !== 'dense' &&
+        sectionName == null;
       let result;
       try {
         result = await docsApi(topic, sectionName, {
@@ -734,15 +743,17 @@ export function registerDocs(program) {
           zh,
           dense,
           list: options.list,
-          index: listSections,
+          index: Boolean(options.index),
           ...(depth != null ? {depth, detail: childDetail} : {}),
         });
         if (
+          mayList &&
           !options.index &&
-          result.type === 'docs.index' &&
-          result.data.sections.length <= 1
+          result.type === 'docs.detail' &&
+          result.data.sections.length > 1 &&
+          docPayloadBytes(result) > DOC_OUTPUT_BUDGET_BYTES
         ) {
-          result = await docsApi(topic, sectionName, {lang, zh, dense});
+          result = await docsApi(topic, sectionName, {lang, zh, index: true});
         }
       } catch (e) {
         // docs API throws structured errors with {name, reason} suggestions —
@@ -788,9 +799,9 @@ export function registerDocs(program) {
             }),
             text(
               [
-                `Usage: ${run} docs <topic>                  list a topic's sections`,
+                `Usage: ${run} docs <topic>                  read a topic`,
+                `       ${run} docs <topic> --index          list a topic's sections`,
                 `       ${run} docs <topic> <section>        read one section`,
-                `       ${run} docs <topic> --full           read the whole topic`,
                 `       ${run} docs cli/api                  go down the docs tree one level at a time`,
                 `       ${run} docs cli --depth all          every doc below cli, one line each`,
                 `With --json, a topic returns its whole doc; add --index for its section list.`,

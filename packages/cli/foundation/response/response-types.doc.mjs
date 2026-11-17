@@ -83,7 +83,7 @@ export const doc = {
     {
       value: 'docs.detail',
       description:
-        "One topic's full ReferenceDoc (the JSON read of a topic, --full, --dense, or a topic with one section), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
+        "One topic's full ReferenceDoc (a read of a topic, unless the whole doc is over one docs read's budget; --full; --dense), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
     },
     {
       value: 'docs.index',
