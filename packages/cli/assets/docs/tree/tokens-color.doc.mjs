@@ -141,7 +141,7 @@ export const docs = {
             [
               "--color-text-secondary",
               "#4E606F",
-              "#AAAFB5"
+              "#B0B5BB"
             ],
             [
               "--color-text-disabled",
