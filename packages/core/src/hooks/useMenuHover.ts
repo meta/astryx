@@ -409,6 +409,8 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       popoverId,
       clearTimeouts,
       isOpen,
+      openAndFocus,
+      ownsFocus,
       confirmHoverOpen,
       openFromKeyboard,
       focusMenu,
