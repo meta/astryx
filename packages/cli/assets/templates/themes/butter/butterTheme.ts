@@ -10,6 +10,7 @@
  * The signature blue and butter yellow remain exact anchors.
  */
 
+import {parseStyleKey} from '@astryxdesign/core/utils';
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {butterIconRegistry} from './icons';
@@ -149,9 +150,7 @@ const COLOURED_CARDS = [
 
 /** The selector Core gives a part's rule key. */
 function ruleSelector(part: string, key: string): string {
-  if (key === 'base') return `.astryx-${part}`;
-  const [name, value = name] = key.split(':');
-  return `.astryx-${part}[data-${name}="${value}"]`;
+  return `.astryx-${part}${parseStyleKey(key)}`;
 }
 
 /**
@@ -168,7 +167,8 @@ const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
 const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
 /**
  * The same one level down: a coloured card inside a part with its own fill
- * that itself sits in a coloured card.
+ * that itself sits in a coloured card. The dark stop holds two coloured
+ * cards deep.
  */
 const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
 

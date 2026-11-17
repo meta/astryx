@@ -29,6 +29,7 @@
  * @position Repo-level guard, sibling of the other scripts/check-*.
  */
 
+import {parseStyleKey} from '../packages/core/src/utils/parseStyleKey';
 import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import {
@@ -92,22 +93,20 @@ function rule(theme, part, key = 'base') {
 
 const {document} = new JSDOM('').window;
 
-/** An element as Core marks a part's rule key. */
+/** An element as Core marks a part's rule key: its selector's attributes. */
 function partElement(part, key) {
   const element = document.createElement('div');
   element.className = `astryx-${part}`;
-  if (key !== 'base') {
-    const [name, value = name] = key.split(':');
-    element.setAttribute(`data-${name}`, value);
-  }
+  for (const [, name, value] of parseStyleKey(key).matchAll(
+    /\[([^=\]]+)="([^"]*)"\]/g,
+  ))
+    element.setAttribute(name, value);
   return element;
 }
 
 /** The selector Core gives a part's rule key. */
 function ruleSelector(part, key) {
-  if (key === 'base') return `.astryx-${part}`;
-  const [name, value = name] = key.split(':');
-  return `.astryx-${part}[data-${name}="${value}"]`;
+  return `.astryx-${part}${parseStyleKey(key)}`;
 }
 
 /**
