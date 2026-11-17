@@ -16,9 +16,6 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 16,
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: 'var(--color-border-default)',
   },
   demoArea: {
     display: 'flex',
@@ -32,9 +29,6 @@ const styles = stylex.create({
     justifyContent: 'center',
     width: 200,
     height: 96,
-    borderWidth: '1px',
-    borderStyle: 'dashed',
-    borderColor: 'var(--color-border-default)',
     borderRadius: 8,
   },
   contextRow: {
