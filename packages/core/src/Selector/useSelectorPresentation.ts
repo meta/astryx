@@ -30,7 +30,7 @@ import {
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {useOutsidePress} from '../Layer/outsidePress';
-import {containsAlongFlatTree} from '../utils/flatTree';
+import {containsAlongFlatTree, deepActiveElement} from '../utils/flatTree';
 import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
@@ -73,18 +73,6 @@ interface SelectorPresentationController {
 /** The browser light-dismisses the list; the press watch only reports. */
 function closesNothing(): void {}
 
-/**
- * The focused element itself. Focus inside a shadow root shows on the
- * document as the root's host, so the read goes down through each open root.
- * A closed root hides its focus, so the read stops at its host.
- */
-function focusedElement(): Element | null {
-  let active = document.activeElement;
-  while (active?.shadowRoot?.activeElement != null) {
-    active = active.shadowRoot.activeElement;
-  }
-  return active;
-}
 export function useSelectorPresentation({
   presentation,
   onHide,
@@ -140,7 +128,8 @@ export function useSelectorPresentation({
     // Escape, a press inside the list, or a press on nothing focusable returns
     // focus to the trigger. So does a press on a container around the list
     // that is no Tab stop, such as one with `tabIndex={-1}`.
-    const active = focusedElement();
+    // Read through open shadow roots: the document reports a root's host.
+    const active = deepActiveElement(document);
     const list = popoverContentRef.current?.current ?? null;
     // The press inside the list explains focus only while that focus still
     // holds the list. A later key can move focus to another field.
