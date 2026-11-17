@@ -6,8 +6,10 @@ import {
   defineTheme,
   generateOnMediaCSS,
   generateThemeCSS,
+  generateAdaptationCSS,
   generateThemeRules,
   generateThemeRulesSplit,
+  THEME_SUB_LAYER_ORDER,
 } from '@astryxdesign/core/theme';
 
 const theme = defineTheme({
@@ -63,5 +65,37 @@ describe('public theme helper selector contract', () => {
     expect(css.component).toContain(selector);
     expect(css.component).not.toContain('.astryx-button.primary');
     expect(css.prose).not.toContain(selector);
+  });
+  // The layered outputs the CLI's theme build reads from a project's Core
+  // (architecture:theme-compilation INV20), beside the ones above.
+  it('returns the shared-element parts apart only when asked for the layered output', () => {
+    const parted = defineTheme({
+      name: 'public-helper-layered',
+      components: {
+        button: {'variant:primary': {color: 'red'}},
+        'toggle-button': {base: {color: 'blue'}},
+      },
+      onDark: {components: {'toggle-button': {base: {color: 'white'}}}},
+    });
+    expect(THEME_SUB_LAYER_ORDER).toBe('@layer components, parts;');
+
+    const split = generateThemeRulesSplit(parted, undefined, {layered: true});
+    expect(Object.keys(split).sort()).toEqual(['component', 'parts', 'prose']);
+    expect(split.parts?.join('\n')).toContain('.astryx-toggle-button');
+    expect(split.component.join('\n')).not.toContain('.astryx-toggle-button');
+
+    const media = generateOnMediaCSS(parted, undefined, {layered: true});
+    expect(Object.keys(media).sort()).toEqual(['component', 'parts']);
+    expect(media.parts).toContain('.astryx-toggle-button');
+
+    expect(Object.keys(generateAdaptationCSS(parted)).sort()).toEqual([
+      'component',
+      'prose',
+    ]);
+    expect(
+      Object.keys(
+        generateAdaptationCSS(parted, undefined, {layered: true}),
+      ).sort(),
+    ).toEqual(['component', 'parts', 'prose']);
   });
 });
