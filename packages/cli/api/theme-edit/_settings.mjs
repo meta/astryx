@@ -37,6 +37,7 @@ import {
   hexToOklch,
   oklabCoordinates,
   oklabCoordinatesToHex,
+  oklchClampedHex,
 } from '../theme/palette/generate/color.mjs';
 import {
   loadThemeExport,
@@ -4903,6 +4904,41 @@ function keepShades(pal, kept) {
 }
 
 /**
+ * A border color carried to a frame's strength: its hue and chroma at the
+ * lightness where it reads on the ground as the frame does. Null for a gray
+ * border (it lends no color) or one that cannot reach that strength.
+ * @param {string} border
+ * @param {string} frame
+ * @param {string} ground
+ * @returns {string | null}
+ */
+function inFrameStrength(border, frame, ground) {
+  const b = parseColor(border);
+  const f = parseColor(frame);
+  const g = parseColor(ground);
+  if (!b || !f || !g) return null;
+  const {C, H} = hexToOklch(hex(b));
+  if (C < 0.02) return null;
+  const want = ratio(
+    /** @type {[number, number, number]} */ (f),
+    /** @type {[number, number, number]} */ (g),
+  );
+  const darker = hexToOklch(hex(g)).L > 0.5;
+  for (let i = 0; i <= 100; i++) {
+    const L = darker ? 1 - i / 100 : i / 100;
+    const c = oklchClampedHex(L, C, H);
+    const rgb = /** @type {[number, number, number]} */ (parseColor(c));
+    const r = ratio(rgb, /** @type {[number, number, number]} */ (g));
+    if (
+      r >= want &&
+      (darker ? L <= hexToOklch(hex(b)).L : L >= hexToOklch(hex(b)).L)
+    )
+      return c;
+  }
+  return null;
+}
+
+/**
  * A size in px: px, rem (16px each), or a calc() of those added and
  * subtracted; null for anything else.
  * @param {string} v
@@ -7530,7 +7566,10 @@ export function compileTheme(ctx, data, base) {
       }
     // The emphasized border (input and selector frames) is never fainter
     // than the border: an opaque border stronger than it on the surface
-    // carries it; a fainter one leaves it as it is.
+    // carries it. A fainter border in a color of its own lends that color
+    // to the frame at the frame's own strength, so inputs, selectors and
+    // selectable cards stay in the border's family and keep their contrast;
+    // a fainter gray leaves the frame as it is.
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
@@ -7540,21 +7579,20 @@ export function compileTheme(ctx, data, base) {
     const ground =
       written('--color-background-surface', m) ??
       baseColor('--color-background-surface', m);
-    if (
-      border &&
-      !pinned('--color-border-emphasized', m) &&
-      (!emphasized ||
-        !ground ||
-        ratio(
-          /** @type {[number, number, number]} */ (parseColor(border)),
-          /** @type {[number, number, number]} */ (parseColor(ground)),
-        ) >
-          ratio(
-            /** @type {[number, number, number]} */ (parseColor(emphasized)),
-            /** @type {[number, number, number]} */ (parseColor(ground)),
-          ))
-    )
-      putTok('--color-border-emphasized', border, m);
+    /** A color's contrast on the surface. @param {string} c */
+    const onGround = c =>
+      ratio(
+        /** @type {[number, number, number]} */ (parseColor(c)),
+        /** @type {[number, number, number]} */ (parseColor(String(ground))),
+      );
+    if (border && !pinned('--color-border-emphasized', m)) {
+      if (!emphasized || !ground || onGround(border) > onGround(emphasized))
+        putTok('--color-border-emphasized', border, m);
+      else {
+        const framed = inFrameStrength(border, emphasized, String(ground));
+        if (framed) putTok('--color-border-emphasized', framed, m);
+      }
+    }
   }
   // A flat panel is tinted with the muted fill. The pieces inside it drawn
   // in that same color (a neutral badge, a track, whatever token the base
