@@ -4,12 +4,14 @@
  * @file Item.focusRing.test.tsx
  * @input vitest (jsdom), React Testing Library, the StyleX rules injected at
  *   runtime, Item in each interaction mode, Button, VisuallyHidden,
- *   CheckboxListItem and a reorderable List
- * @output Counts the elements that paint a focus ring for one focus move. A
- *   delegated row leaves the ring to a nested Button, which rings itself, and
- *   rings for a control that draws no ring. A reorderable row leaves it to an
- *   end Button too. Rows with their own action, a CheckboxList option row
- *   and pointer focus keep their rings
+ *   CheckboxList and RadioList option rows, and a reorderable List
+ * @output Counts the elements that paint a visible focus ring for one focus
+ *   move. A delegated row leaves the ring to a nested Button, which rings
+ *   itself. It rings for a control that shows no ring, such as one inside
+ *   VisuallyHidden, and a disabled row rings for any focused control. Option
+ *   rows and reorderable rows leave the ring to an end Button. Rows with their
+ *   own action and option rows keep their own ring, and pointer focus on a
+ *   Button paints none
  * @position Testing; validates Item's focus-within ring
  */
 
@@ -21,6 +23,8 @@ import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
+import {RadioList} from '../RadioList/RadioList';
+import {RadioListItem} from '../RadioList/RadioListItem';
 import {createReorderable} from '../reorderable/createReorderable';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {Item} from './Item';
@@ -67,9 +71,30 @@ function paintsRing(element: Element): boolean {
   );
 }
 
-/** Every element under `root`, `root` included, that paints an outline now. */
+/** Whether a rule that matches `element` clips it to an empty rectangle. */
+function isClippedAway(element: Element): boolean {
+  return ownRules(element).some(
+    rule =>
+      element.matches(rule.selectorText) &&
+      /^rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)$/.test(
+        rule.style.getPropertyValue('clip'),
+      ),
+  );
+}
+
+/**
+ * Every element under `root`, `root` included, that paints an outline a
+ * person can see now. An outline inside clipped content does not show.
+ */
 function ringedElements(root: Element): Element[] {
-  return [root, ...Array.from(root.querySelectorAll('*'))].filter(paintsRing);
+  return [root, ...Array.from(root.querySelectorAll('*'))].filter(
+    element =>
+      paintsRing(element) &&
+      !isClippedAway(element) &&
+      !Array.from(root.querySelectorAll('*')).some(
+        ancestor => ancestor.contains(element) && isClippedAway(ancestor),
+      ),
+  );
 }
 
 // jsdom decides `:focus-visible` from the last key or mouse event before the
@@ -121,6 +146,35 @@ function RowDelegatingToHiddenControl() {
   );
 }
 
+function RowDelegatingToHiddenButton() {
+  const selectRef = useRef<HTMLButtonElement | null>(null);
+  return (
+    <Item
+      data-testid="row"
+      label="Invoice 42"
+      interactiveRef={selectRef}
+      startContent={
+        <VisuallyHidden>
+          <Button
+            ref={selectRef}
+            label="Select Invoice 42"
+            onClick={() => {}}
+          />
+        </VisuallyHidden>
+      }
+    />
+  );
+}
+
+/** The Item row around `element`, found by the row's theme class. */
+function optionRowOf(element: Element): Element {
+  const row = element.closest('.astryx-item');
+  if (row == null) {
+    throw new Error('the element has no option row');
+  }
+  return row;
+}
+
 describe('Item focus ring', () => {
   it('leaves the ring to the Button a delegated row gives its keyboard access to', () => {
     render(<RowDelegatingToButton />);
@@ -139,6 +193,44 @@ describe('Item focus ring', () => {
     focusWithKeyboard(screen.getByRole('button', {name: 'Select Invoice 42'}));
 
     expect(ringedElements(row)).toEqual([row]);
+  });
+
+  it('rings a delegated row whose Button sits inside VisuallyHidden', () => {
+    render(<RowDelegatingToHiddenButton />);
+    const row = screen.getByTestId('row');
+
+    focusWithKeyboard(screen.getByRole('button', {name: 'Select Invoice 42'}));
+
+    expect(ringedElements(row)).toEqual([row]);
+  });
+
+  it('keeps the ring of a disabled delegated row, which dims its Button', () => {
+    function DisabledRow() {
+      const openRef = useRef<HTMLButtonElement | null>(null);
+      return (
+        <Item
+          data-testid="row"
+          label="Invoice 42"
+          isDisabled
+          interactiveRef={openRef}
+          endContent={
+            <Button
+              ref={openRef}
+              label="Open"
+              size="sm"
+              isDisabled
+              onClick={() => {}}
+            />
+          }
+        />
+      );
+    }
+    render(<DisabledRow />);
+    const row = screen.getByTestId('row');
+
+    focusWithKeyboard(screen.getByRole('button', {name: 'Open'}));
+
+    expect(paintsRing(row)).toBe(true);
   });
 
   it('paints no ring for pointer focus on the Button of a delegated row', () => {
@@ -214,6 +306,24 @@ describe('Item focus ring', () => {
     expect(ringedElements(row)).toEqual([share]);
   });
 
+  it('keeps the ring of a disabled reorderable List row for its end Button', () => {
+    render(
+      <List reorderable={createReorderable({onReorder: () => {}})}>
+        <ListItem
+          itemKey="report"
+          label="Quarterly report"
+          isDisabled
+          endContent={<Button label="Share" size="sm" onClick={() => {}} />}
+        />
+      </List>,
+    );
+    const share = screen.getByRole('button', {name: 'Share'});
+
+    focusWithKeyboard(share);
+
+    expect(paintsRing(optionRowOf(share))).toBe(true);
+  });
+
   it('keeps the row ring of a CheckboxList option for its checkbox', () => {
     render(
       <CheckboxList label="Notifications" value={[]} onChange={() => {}}>
@@ -221,13 +331,56 @@ describe('Item focus ring', () => {
       </CheckboxList>,
     );
     const checkbox = screen.getByRole('checkbox', {name: 'Email'});
-    const row = checkbox.closest('li');
-    if (row == null) {
-      throw new Error('the checkbox has no option row');
-    }
 
     focusWithKeyboard(checkbox);
 
-    expect(paintsRing(row)).toBe(true);
+    expect(paintsRing(optionRowOf(checkbox))).toBe(true);
+  });
+
+  it('keeps the row ring of a RadioList option for its radio', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+      </RadioList>,
+    );
+    const radio = screen.getByRole('radio', {name: 'Free'});
+
+    focusWithKeyboard(radio);
+
+    expect(paintsRing(optionRowOf(radio))).toBe(true);
+  });
+
+  it('leaves the ring to a Button in the end content of a CheckboxList option row', () => {
+    render(
+      <CheckboxList label="Notifications" value={[]} onChange={() => {}}>
+        <CheckboxListItem
+          label="Email"
+          value="email"
+          endContent={<Button label="Edit" size="sm" onClick={() => {}} />}
+        />
+      </CheckboxList>,
+    );
+    const edit = screen.getByRole('button', {name: 'Edit'});
+
+    focusWithKeyboard(edit);
+
+    expect(ringedElements(optionRowOf(edit))).toEqual([edit]);
+  });
+
+  it('leaves the ring to a Button in the end content of a RadioList option row', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={<Button label="Edit" size="sm" onClick={() => {}} />}
+        />
+      </RadioList>,
+    );
+    const edit = screen.getByRole('button', {name: 'Edit'});
+
+    focusWithKeyboard(edit);
+
+    expect(ringedElements(optionRowOf(edit))).toEqual([edit]);
   });
 });

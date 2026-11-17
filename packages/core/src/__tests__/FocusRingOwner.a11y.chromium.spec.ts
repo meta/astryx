@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Selector|Item|Token)/ ^packages/core/src/privateAttributes/(focusOwner|ownRing) ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token)
+// @pr-a11y scope ^packages/core/src/(Selector|Item|Token|Button|VisuallyHidden)/ ^packages/core/src/privateAttributes/(focusOwner|ownRing) ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token)
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
@@ -11,7 +11,7 @@
  *   focus ring. The wrapper rings for its own control only; a control inside
  *   it (a clear button, an end action, a remove button) rings itself, and the
  *   wrapper stays unringed. A row that delegates to its end Button leaves
- *   the ring to the Button
+ *   the ring to the Button, and rings for a Button inside VisuallyHidden
  * @position Regression proof for focusWithinOwner in Selector, Item and
  *   Token, and for the own-ring row ring in a delegating Item
  */
@@ -114,15 +114,22 @@ for (const width of [1280, 390]) {
     }
   });
 
-  test(`at ${width} px, a row that delegates to its end Button shows only the Button's ring`, async ({
+  test(`at ${width} px, a row that delegates to a Button shows one ring`, async ({
     page,
   }) => {
     await open(page, 'core-item--delegated-end-button', width);
-    // Open is the row's only tab stop.
+    // Open, the first row's only tab stop: its own ring is the one ring.
     await page.keyboard.press('Tab');
-    const rings = await ringedElements(page);
-    expect(rings, 'rings while Open is focused').toHaveLength(1);
-    expect(rings[0]?.isFocused, 'the one ring is on Open itself').toBe(true);
+    const atOpen = await ringedElements(page);
+    expect(atOpen, 'rings while Open is focused').toHaveLength(1);
+    expect(atOpen[0]?.isFocused, 'the one ring is on Open').toBe(true);
+    // The second row's visually hidden Button: the row draws the one ring.
+    await page.keyboard.press('Tab');
+    const atHidden = await ringedElements(page);
+    expect(atHidden, 'rings while the hidden Button is focused').toHaveLength(
+      1,
+    );
+    expect(atHidden[0]?.isFocused, 'the one ring is on the row').toBe(false);
   });
 
   test(`at ${width} px, each tab stop in a Token shows one ring`, async ({

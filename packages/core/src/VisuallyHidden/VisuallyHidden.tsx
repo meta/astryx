@@ -18,6 +18,7 @@ import {createElement, type ElementType, type ReactNode, type Ref} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import * as stylex from '@stylexjs/stylex';
+import {ownRingHiddenProps} from '../privateAttributes/ownRing.stylex';
 
 /**
  * VisuallyHidden is deliberately styling-free: it exists to *not* be seen, so it
@@ -133,6 +134,9 @@ export function VisuallyHidden({
       // the fixed clip styles, so the visually-hidden class can never be
       // displaced. There is no consumer className/style to merge — by design.
       ...props,
+      // A control in here cannot show its own focus ring, so a row that rings
+      // on focus within rings for it.
+      ...ownRingHiddenProps,
       ...stylex.props(styles.visuallyHidden),
     },
     children,

@@ -24,6 +24,7 @@ import {createSwipe} from '@astryxdesign/core/Swipe';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {Token} from '@astryxdesign/core/Token';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 const storyStyles = stylex.create({
   markerAnatomy: {
@@ -390,13 +391,15 @@ export const NumberedWithActions: Story = {
 };
 
 /**
- * A row that delegates to the Button in its end slot: a press anywhere on the
- * row presses Open. Open is the row's only tab stop, and its own ring is the
- * only ring while it has keyboard focus.
+ * Rows that delegate to a nested Button: a press anywhere on a row presses its
+ * Button, which is the row's only tab stop. The first row's Open shows the
+ * only ring while it has keyboard focus. The second row's Button is visually
+ * hidden, so its ring cannot show and the row draws the ring.
  */
 export const DelegatedEndButton: Story = {
   render: function DelegatedEndButtonStory() {
     const openRef = useRef<HTMLButtonElement | null>(null);
+    const selectRef = useRef<HTMLButtonElement | null>(null);
     return (
       <div style={{maxWidth: 420}}>
         <Item
@@ -405,6 +408,20 @@ export const DelegatedEndButton: Story = {
           interactiveRef={openRef}
           endContent={
             <Button ref={openRef} label="Open" size="sm" onClick={() => {}} />
+          }
+        />
+        <Item
+          label="Invoice 43"
+          description="Due in 5 days"
+          interactiveRef={selectRef}
+          startContent={
+            <VisuallyHidden>
+              <Button
+                ref={selectRef}
+                label="Select Invoice 43"
+                onClick={() => {}}
+              />
+            </VisuallyHidden>
           }
         />
       </div>
