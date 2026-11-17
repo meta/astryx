@@ -36,6 +36,8 @@ beforeAll(async () => {
   if (unbuilt) return;
   await themeEditNew('fresh', {cwd, like: 'neutral'});
   await themeEditNew('white', {cwd, like: 'neutral'});
+  await themeEditNew('lo', {cwd, like: 'neutral'});
+  await themeEditSet('lo', 'mode', 'light-only', {cwd});
   for (const v of ['default', 'transparent', 'muted'])
     await themeEditSet('white', 'background-color', '#ffffff', {
       cwd,
@@ -105,5 +107,17 @@ describe('offers follow the answer', () => {
     expect(r[0].commands.some(c => / --color-background-body /.test(c))).toBe(
       true,
     );
+  }, 300_000);
+
+  it('a light-only theme names the dark media surfaces a color leaves', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    const r = await results('lo', 'high contrast');
+    expect(r[0].text).toMatch(
+      /lo is light only, but Core's dark media surfaces \(lightbox, overlay-scrim\) still read --color-text-secondary's dark half/,
+    );
+    expect(r[0].commands.some(c => /--mode dark/.test(c))).toBe(false);
   }, 300_000);
 });
