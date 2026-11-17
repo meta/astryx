@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Selector|Item|Token|Button|VisuallyHidden)/ ^packages/core/src/privateAttributes/(focusOwner|ownRing) ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token)
+// @pr-a11y scope ^packages/core/src/(Selector|Item|Token|Thumbnail|Button|VisuallyHidden)/ ^packages/core/src/privateAttributes/(focusOwner|ownRing) ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token|Thumbnail)
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
@@ -8,12 +8,14 @@
  *   with Tab, at desktop and phone widths
  * @output Browser evidence for `architecture:interaction-modality` INV3: each
  *   tab stop in a Selector trigger, an Item row or a Token shows exactly one
- *   focus ring. The wrapper rings for its own control only; a control inside
- *   it (a clear button, an end action, a remove button) rings itself, and the
- *   wrapper stays unringed. A row that delegates to its end Button leaves
- *   the ring to the Button, and rings for a Button inside VisuallyHidden
+ *   focus ring, and focusing a Thumbnail's Open shows one. The wrapper rings
+ *   for its own control only; a control inside it (a clear button, an end
+ *   action, a remove button) rings itself, and the wrapper stays unringed. A
+ *   row that delegates to its end Button leaves the ring to the Button, and
+ *   rings for a Button inside VisuallyHidden
  * @position Regression proof for focusWithinOwner in Selector, Item and
- *   Token, and for the own-ring row ring in a delegating Item
+ *   Token, for the own-ring row ring in a delegating Item, and for
+ *   Thumbnail's single ring on Open
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -138,6 +140,17 @@ for (const width of [1280, 390]) {
     await open(page, 'core-token--clickable-with-remove', width);
     // Design, Remove Design, Docs, Remove Docs.
     for (const {focused, rings} of await ringsAtEachStop(page, 4)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`at ${width} px, focusing a Thumbnail's Open shows one ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-thumbnail--clickable-with-remove', width);
+    for (const {focused, rings} of await ringsAtEachStop(page, 1)) {
       expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
     }
   });

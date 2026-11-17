@@ -32,6 +32,7 @@ import {
   checkIntegrationCoreRange,
   checkVersionAlignment,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
 } from './doctor.mjs';
@@ -333,6 +334,159 @@ describe('the core-installed check in a fresh clone', () => {
     ).toBe(
       'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
     );
+  });
+});
+
+describe("the check that the app loads Core's component styles", () => {
+  const ctx = (/** @type {string} */ cwd) => ({
+    cwd,
+    nodeVersion: '',
+    coreDir: path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+    configPath: null,
+  });
+  const app = (/** @type {Record<string, string>} */ files) =>
+    mkProject({
+      'package.json': JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16'},
+      }),
+      'src/App.tsx':
+        'import {Button} from \'@astryxdesign/core/Button\';\nexport default () => <Button label="Hi" />;\n',
+      ...files,
+    });
+
+  it('passes for a global stylesheet that @imports it, or a module that imports it', () => {
+    const css = app({
+      'src/index.css':
+        "@import '@astryxdesign/core/reset.css';\n@import url('@astryxdesign/core/astryx.css');\n",
+    });
+    expect(checkCoreStylesheets(ctx(css))).toMatchObject({
+      id: 'core-stylesheets',
+      status: 'pass',
+      message: `${path.join('src', 'index.css')} loads @astryxdesign/core/astryx.css, Core's component styles.`,
+    });
+    const entry = app({
+      'src/main.tsx':
+        "import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(entry))?.status).toBe('pass');
+  });
+
+  it('warns when no source imports it, a commented-out import included, and names the imports to add', () => {
+    const missing = app({
+      'src/index.css':
+        "/* @import '@astryxdesign/core/astryx.css'; */\nbody { margin: 0; }\n",
+      'src/main.tsx':
+        "// import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(missing))).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('render unstyled'),
+      fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
+    });
+  });
+
+  it('passes for a page that links it, from a package CDN or the installed package, but not in a comment', () => {
+    for (const href of [
+      'https://cdn.jsdelivr.net/npm/@astryxdesign/core@0.7.16/dist/astryx.css',
+      '/node_modules/@astryxdesign/core/dist/astryx.css',
+    ]) {
+      const page = app({
+        'index.html': `<!doctype html><head><link rel="stylesheet" href="${href}" /></head>`,
+      });
+      expect(checkCoreStylesheets(ctx(page))).toMatchObject({
+        status: 'pass',
+        message: expect.stringMatching(/^index\.html loads /),
+      });
+    }
+    const commented = app({
+      'index.html':
+        '<!-- <link rel="stylesheet" href="/node_modules/@astryxdesign/core/dist/astryx.css"> -->',
+    });
+    expect(checkCoreStylesheets(ctx(commented))?.status).toBe('warn');
+  });
+
+  it.each([
+    [
+      'withAstryx() in next.config.mjs',
+      {
+        'next.config.mjs':
+          "import {withAstryx} from '@astryxdesign/build/next';\nexport default withAstryx({});\n",
+      },
+    ],
+    [
+      'astryxStylex() in vite.config.ts',
+      {
+        'vite.config.ts':
+          "import {defineConfig} from 'vite';\nimport {astryxStylex} from '@astryxdesign/build/vite';\nexport default defineConfig({plugins: [...astryxStylex()]});\n",
+      },
+    ],
+    [
+      `the \`@astryx;\` rule in ${path.join('src', 'app', 'globals.css')}`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@astryx;\n",
+      },
+    ],
+    [
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in postcss.config.mjs`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        'postcss.config.mjs':
+          "export default {plugins: {'@astryxdesign/build/postcss': {}}};\n",
+      },
+    ],
+    [
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in .postcssrc.json`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        '.postcssrc.json': JSON.stringify({
+          plugins: {'@astryxdesign/build/postcss': {}},
+        }),
+      },
+    ],
+  ])(
+    'is not checked in an app that compiles Core from source: %s',
+    (setup, files) => {
+      expect(checkCoreStylesheets(ctx(app(files)))).toMatchObject({
+        id: 'core-stylesheets',
+        status: 'info',
+        message: expect.stringContaining(`(${setup})`),
+      });
+    },
+  );
+
+  it('warns an app whose `@stylex;` rule is its own StyleX, with no PostCSS plugin of @astryxdesign/build', () => {
+    const own = app({
+      'src/app/globals.css':
+        "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+      'postcss.config.mjs':
+        "export default {plugins: {'@stylexjs/postcss-plugin': {}}};\n",
+    });
+    expect(checkCoreStylesheets(ctx(own))?.status).toBe('warn');
+  });
+
+  it('passes an app that loads it beside a StyleX rule of its own', () => {
+    const stylex = app({
+      'src/app/globals.css':
+        "@import '@astryxdesign/core/reset.css';\n@import '@astryxdesign/core/astryx.css';\n@stylex;\n",
+    });
+    expect(checkCoreStylesheets(ctx(stylex))?.status).toBe('pass');
+  });
+
+  it('still checks an app that names the source build only in a comment', () => {
+    const commented = app({
+      'next.config.mjs':
+        "// import {withAstryx} from '@astryxdesign/build/next';\nexport default {};\n",
+      'src/app/globals.css': '/* @astryx; */\nbody { margin: 0; }\n',
+    });
+    expect(checkCoreStylesheets(ctx(commented))?.status).toBe('warn');
+  });
+
+  it('is left out when Core is not installed', () => {
+    expect(checkCoreStylesheets({...ctx(app({})), coreDir: null})).toBeNull();
   });
 });
 

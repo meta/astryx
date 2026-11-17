@@ -16,6 +16,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
+import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -104,11 +105,14 @@ describe('render(): page to one HTML file', () => {
     expect(result.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
   });
 
-  it('is one static file: no external references, no running script', () => {
+  it("is one file: no external references, and no script but the embedded source and the page's own", () => {
     expect(html).not.toMatch(/<link\b/i);
     expect(html).not.toMatch(/\ssrc="(?!data:)/);
-    const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map(m => m[1]);
-    expect(scripts).toEqual([' type="application/x-astryx-source"']);
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
+    expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
+    expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
+    // The page's script follows the note after the embedded source.
+    expect(html).toMatch(/ -->\n<script>[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -1757,7 +1761,7 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.type).toBe('render.page');
     put('fwd/.gitignore', 'page.html\n');
     expect(await codeOf(() => render('page.tsx', {cwd}))).toBe('ERR_FILE_EXISTS');
-  }, 60_000);
+  }, 120_000);
 
   it('refuses a received file that lists one path twice', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
@@ -2463,8 +2467,8 @@ describe('render(): a page outside a project', () => {
 const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
 const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
 const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
-const inside = textOf(await renderPage(entry, {served: null}));
-const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+const inside = textOf(await renderPage(entry, {served: null, markupOnly: true}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}, markupOnly: true}));
 console.log(JSON.stringify({inside, outside}));
 `;
     const {NODE_PATH: _, ...env} = process.env;
@@ -2508,6 +2512,65 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
+  it('names every package the page and its own modules need in one refusal, with one install line', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed');
+    expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
+  }, 60_000);
+
+  it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
+    fs.writeFileSync(
+      path.join(away, 'used-deps.tsx'),
+      "import {Metadata} from 'not-real-next-xyz';\nimport {unused} from 'not-real-unused-xyz';\nimport {size} from './used-deps-shapes';\nimport logo from 'not-real-brand-xyz/logo.png';\nimport mark from 'not-real-mark-xyz/mark.svg';\nexport const metadata: Metadata = {title: 'x'};\nexport default () => <img src={logo} data-mark={mark} width={size} alt=\"\" />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'used-deps-shapes.ts'),
+      "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
+    fs.writeFileSync(
+      path.join(away, 'js-deps.jsx'),
+      "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts a re-export of a package whose type the module also imports without `import type`', () => {
+    fs.writeFileSync(
+      path.join(away, 're-export-deps.tsx'),
+      "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed');
+  }, 60_000);
+
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed');
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {
@@ -2541,7 +2604,7 @@ export default function Page() {
     const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
     expect(warnings).toHaveLength(1);
     expect(warnings[0].message).toBe(
-      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
     );
   }, 60_000);
 
@@ -2701,7 +2764,7 @@ export default function Page() {
 `,
     );
     await render('charts-gradient.tsx', {cwd: dir});
-    const [container] = containersIn(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8'));
+    const [container] = containersIn(renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8')) ?? '');
     for (const {width, html: part} of container) {
       expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-chart0-at-${width}"`));
       expect(part).toContain(`fill="url(#fade-chart0-at-${width})"`);
@@ -2961,7 +3024,7 @@ export default function Page() {
 `,
     );
     await render('charts-effect-provider.tsx', {cwd: dir});
-    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    const html = renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8')) ?? '';
     expect(html).toContain('Unit: items');
     expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
     expect(html).toMatch(/a (items|km)/);

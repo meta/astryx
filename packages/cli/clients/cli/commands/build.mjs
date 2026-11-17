@@ -105,9 +105,9 @@ export function registerBuild(program) {
           /** @type {import('../../../api/build/build.type.mjs').BuildHelpResponse} */ (
             await buildApi(undefined, {cwd: process.cwd()})
           );
-        // The playbook is a document, not a lookup: one doc, always the same
-        // one. Counting it as a result keeps "what did this run answer with"
-        // true for the no-argument form too.
+        // The playbook is a document, not a lookup: one doc, whose theme
+        // wiring follows the project. Counting it as a result keeps "what did
+        // this run answer with" true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
         pointToSearch(options.type, json);
         if (json) {

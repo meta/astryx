@@ -722,7 +722,7 @@ export default function CourseDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
             <VStack gap={4}>
               <CourseHead />

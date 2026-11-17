@@ -50,7 +50,7 @@ import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
-import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
+import {hostedRun, recordResolved, servingRootPackages} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -413,7 +413,17 @@ function asAstryxError(e) {
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      suggestions.push({name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'});
+      // The install command in the project's package manager, when the
+      // render named one; else one npm line for every package it found.
+      const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
+      suggestions.push(
+        typeof e.detail.install === 'string'
+          ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
+          : {
+              name: `npm install ${packages.join(' ')}`,
+              reason: packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports',
+            },
+      );
     }
     return new AstryxError(e.message, suggestions, code);
   }
@@ -422,6 +432,16 @@ function asAstryxError(e) {
     return new AstryxError(err.message, [], err.code);
   }
   return e;
+}
+
+/**
+ * The packages besides Astryx, React and StyleX that a page outside a project
+ * takes from the package set: the integrations the host approves, and the
+ * other packages its set declares, such as the icon library templates import.
+ * @returns {string[]}
+ */
+function servedExtras() {
+  return [...(hostedRun()?.integrations ?? []), ...servingRootPackages()];
 }
 
 /**
@@ -440,7 +460,7 @@ function servedSet(input) {
   const dir = path.dirname(input);
   if (runChoice(dir).inProject) return null;
   try {
-    return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
+    return {dir: requireCoreDir(dir), integrations: servedExtras()};
   } catch (e) {
     const err = /** @type {any} */ (e);
     return err?.code === ERROR_CODES.ERR_VERSIONS_UNAVAILABLE ? {unavailable: err} : null;
@@ -468,8 +488,11 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
       page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
-      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
-      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+      const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
+      /** @type {unknown[]} */
+      const missing = Array.isArray(detail?.packages) ? detail.packages : [detail?.package];
+      const served = servedExtras();
+      if (set && 'unavailable' in set && missing.some(name => typeof name === 'string' && isServedPackage(name, served))) {
         throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
       }
       throw e;
@@ -533,6 +556,8 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
+    scriptBytes: page.scriptBytes ?? 0,
+    scriptModules: page.scriptModules ?? 0,
   };
 }
 

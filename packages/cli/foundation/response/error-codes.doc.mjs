@@ -335,7 +335,7 @@ export const doc = {
       value: 'ERR_RENDER_MISSING_DEPENDENCY',
       stability: 'experimental',
       description:
-        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+        "The page imports a package that is not installed where the page is, or the esbuild the CLI depends on to build the page's script is missing from the CLI's install (install the CLI again). Nothing was written. For a package the page imports, the suggestion is the install command. Raised only by the experimental render command.",
     },
     {
       value: 'ERR_RENDER_BROWSER_API',
@@ -378,6 +378,12 @@ export const doc = {
       stability: 'experimental',
       description:
         '`render --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_SCRIPT',
+      stability: 'experimental',
+      description:
+        "`render` could not build the page's script for the browser: a module the page loads needs Node (such as `fs` or `path`), or cannot be found or compiled for the browser. Nothing was written. The message names the module. Raised only by the experimental render command.",
     },
     {
       value: 'ERR_THEME_BAD_VALUE',

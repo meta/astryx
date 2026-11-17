@@ -172,7 +172,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',
@@ -351,7 +351,7 @@ export const doc = {
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined), and isReady. The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, when several lockfiles leave the package manager undetermined, or when no package.json holds the folder, where an install would make the folder a project), and isReady. The envelope's package names the npm package that owns the template.",
     },
 
     {
