@@ -90,7 +90,7 @@ describe('Timestamp', () => {
   describe('label in name', () => {
     const TWO_HOURS_AGO = '2026-03-25T10:00:00Z';
 
-    it("holds a focused control's name through a live tick, then follows the text on blur", () => {
+    it('pauses a live refresh while a control it names has focus, keeping its words and name in step', () => {
       const now = Date.now() / 1000;
       render(
         <>
@@ -104,20 +104,52 @@ describe('Timestamp', () => {
       act(() => {
         pushed.focus();
       });
-      const nameAtFocus = /^Pushed now, /;
-      expect(pushed).toHaveAccessibleName(nameAtFocus);
-
       act(() => {
         vi.advanceTimersByTime(30_000);
       });
-      // The visible words tick, but the focused control's name does not.
-      expect(pushed).toHaveTextContent('35 seconds ago');
-      expect(pushed).toHaveAccessibleName(nameAtFocus);
+      // Neither the words nor the name change under the focused control.
+      expect(pushed).toHaveTextContent('Pushed now');
+      expect(pushed).toHaveAccessibleName(/^Pushed now, /);
 
       act(() => {
         screen.getByRole('button', {name: 'Elsewhere'}).focus();
       });
+      expect(pushed).toHaveTextContent('Pushed 35 seconds ago');
       expect(pushed).toHaveAccessibleName(/^Pushed 35 seconds ago, /);
+    });
+
+    it('keeps ticking inside a focused control that has a name of its own', () => {
+      const now = Date.now() / 1000;
+      render(
+        <button type="button" aria-label="Latest push">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </button>,
+      );
+      const button = screen.getByRole('button', {name: 'Latest push'});
+      act(() => {
+        button.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(button).toHaveTextContent('Pushed 35 seconds ago');
+    });
+
+    it('keeps ticking inside a focused log region', () => {
+      const now = Date.now() / 1000;
+      render(
+        <div role="log" tabIndex={0} aria-label="Activity">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </div>,
+      );
+      const log = screen.getByRole('log');
+      act(() => {
+        log.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(log).toHaveTextContent('Pushed 35 seconds ago');
     });
 
     it('names a standalone relative timestamp by its visible text, then the full date', () => {

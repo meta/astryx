@@ -48,7 +48,6 @@ import type {
 } from './tooltipEntries';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useCommittedRef} from '../hooks/useCommittedRef';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -282,16 +281,55 @@ function isRelativeFormat(
 // Component
 // =============================================================================
 
+/** Roles whose accessible name comes from their content. */
+const NAMED_FROM_CONTENT = new Set([
+  'button',
+  'link',
+  'tab',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'radio',
+  'checkbox',
+  'switch',
+  'treeitem',
+]);
+
+/** The element's role: its own `role`, or the implicit role of a control. */
+function roleOf(element: Element): string {
+  const role = element.getAttribute('role');
+  if (role != null) {
+    return role;
+  }
+  if (element.tagName === 'BUTTON' || element.tagName === 'SUMMARY') {
+    return 'button';
+  }
+  if (element.tagName === 'A' && element.hasAttribute('href')) {
+    return 'link';
+  }
+  return '';
+}
+
 /**
- * Whether `focused` is the time, or a control whose accessible name the time
- * helps form: a control that contains it, or the control of a label that
- * contains it.
+ * Whether `focused` is the time, or a control whose name the time helps form:
+ * a control named from its content with no name of its own, or the control
+ * of a label that holds the time. A focused region that only holds the time,
+ * such as a log, is neither.
  */
 function focusIsNamedBy(time: HTMLElement, focused: Element | null): boolean {
   if (focused == null || focused === time.ownerDocument.body) {
     return false;
   }
-  if (focused === time || focused.contains(time)) {
+  if (focused === time) {
+    return true;
+  }
+  if (
+    focused.contains(time) &&
+    NAMED_FROM_CONTENT.has(roleOf(focused)) &&
+    !focused.hasAttribute('aria-label') &&
+    !focused.hasAttribute('aria-labelledby')
+  ) {
     return true;
   }
   const label = time.closest('label');
@@ -436,44 +474,51 @@ export function Timestamp({
           date: fullAbsoluteSpokenText,
         });
 
-  // A live tick must not change the name a focused control speaks: the name
-  // holds while focus is on the time, or on a control whose name it helps
-  // form, and follows the visible text again when focus leaves.
-  const holdsNameOnFocus = isLive && isRelativeFormat(effectiveFormat);
-  const latestLabelRef = useCommittedRef(ariaLabelText);
-  const [heldLabel, setHeldLabel] = useState<string | null>(null);
+  // Syncs with the document's focus events. A focused control that the time
+  // names keeps its words and name through a refresh. Both update when focus
+  // leaves.
+  const isLiveRelative =
+    isLive && isValidDate && isRelativeFormat(effectiveFormat);
+  const holdsRefreshRef = useRef(false);
   useEffect(() => {
-    const time = timeRef.current;
-    if (!holdsNameOnFocus || time == null) {
+    const doc = timeRef.current?.ownerDocument;
+    if (!isLiveRelative || doc == null) {
       return;
     }
-    const doc = time.ownerDocument;
     const syncHold = () => {
-      const named = focusIsNamedBy(time, doc.activeElement);
-      setHeldLabel(held => (named ? (held ?? latestLabelRef.current) : null));
+      const time = timeRef.current;
+      const holds = time != null && focusIsNamedBy(time, doc.activeElement);
+      if (holdsRefreshRef.current && !holds) {
+        // Focus left: catch up with the refreshes that waited.
+        setNow(new Date());
+      }
+      holdsRefreshRef.current = holds;
     };
+    syncHold();
     doc.addEventListener('focusin', syncHold);
     doc.addEventListener('focusout', syncHold);
     return () => {
       doc.removeEventListener('focusin', syncHold);
       doc.removeEventListener('focusout', syncHold);
+      holdsRefreshRef.current = false;
     };
-  }, [holdsNameOnFocus, latestLabelRef]);
-  const spokenLabel = (holdsNameOnFocus ? heldLabel : null) ?? ariaLabelText;
+  }, [isLiveRelative]);
 
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
-    if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
+    if (!isLiveRelative) {
       return;
     }
 
     const interval = getLiveInterval(diffSeconds);
     const timer = setInterval(() => {
-      setNow(new Date());
+      if (!holdsRefreshRef.current) {
+        setNow(new Date());
+      }
     }, interval);
 
     return () => clearInterval(timer);
-  }, [isLive, isValidDate, effectiveFormat, diffSeconds]);
+  }, [isLiveRelative, diffSeconds]);
 
   useDevWarning(
     'Timestamp',
@@ -541,9 +586,9 @@ export function Timestamp({
       // falls back to reading the visible <time> content.
       // A caller's own name wins.
       {...(isRelativeFormat(effectiveFormat) &&
-      spokenLabel !== '' &&
+      ariaLabelText !== '' &&
       rest['aria-label'] == null
-        ? {'aria-label': spokenLabel}
+        ? {'aria-label': ariaLabelText}
         : {})}
       // A bare <time> cannot take focus. Add the tab stop only while a card
       // is attached, so keyboard users can open it. A caller's tabIndex wins.
