@@ -7,7 +7,8 @@
  *   source that changed, and whether the checkout has a parent commit
  * @output Proves which targets the swizzle proof checks for each kind of run
  *   (spec:AST-110 FR7)
- * @position Node test of scope.mjs's scope choice; reads no files
+ * @position Node test of scope.mjs's scope choice; the toolchain case walks
+ *   the swizzle module graph from disk, and the rest read no files
  */
 
 import {describe, expect, it} from 'vitest';
