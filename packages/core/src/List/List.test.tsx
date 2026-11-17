@@ -364,33 +364,28 @@ describe('List', () => {
     };
   }
 
-  it('gives a focused row’s ring room only while a ring is drawn, and only inside the host’s padding edge', () => {
+  it('moves its inline clip out by a focused row’s ring only while a ring is drawn, and only inside the host’s padding edge', () => {
     for (const edge of ['padded', 'flush', 'outset', 'bleed'] as const) {
       const {ul} = renderEdge({edge});
       const rules = rulesDeclaredFor(ul).map(rule => rule.replace(/\s+/g, ''));
-      const room = rules.filter(rule => rule.includes('--_list-ring-room'));
+      const margin = rules.filter(rule =>
+        rule.includes('overflow-clip-margin'),
+      );
       if (edge === 'outset' || edge === 'bleed') {
-        // The list reaches the host's padding edge and takes no room past it.
-        expect(room).toEqual([]);
+        // The list reaches the host's padding edge and keeps its clip there.
+        expect(margin).toEqual([]);
       } else {
-        // At rest the room is zero, so the list keeps its box.
-        expect(room.some(rule => /--_list-ring-room:0(px)?;/.test(rule))).toBe(
-          true,
-        );
         expect(
-          room.some(
+          margin.some(
             rule =>
               rule.includes(':has(:focus-visible)') &&
               rule.includes(
-                '--_list-ring-room:calc(var(--focus-outline-offset)+var(--focus-outline-width))',
+                'overflow-clip-margin:calc(var(--focus-outline-offset)+var(--focus-outline-width))',
               ),
           ),
         ).toBe(true);
-        const css = rules.join('\n');
-        expect(css).toContain('padding-inline-start:var(--_list-ring-room)');
-        expect(css).toContain(
-          'margin-inline-start:calc(-1*var(--_list-ring-room))',
-        );
+        // No rule makes room by padding and margin, so no layout changes.
+        expect(rules.join('\n')).not.toContain('--_list-ring-room');
       }
       cleanup();
     }

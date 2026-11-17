@@ -191,8 +191,6 @@ export interface ListProps extends BaseProps<
 
 // How far a row's focus ring reaches past the row: its offset plus its width.
 const FOCUS_RING_REACH = `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`;
-const RING_ROOM_VAR = '--_list-ring-room';
-const RING_ROOM = `var(${RING_ROOM_VAR})`;
 
 const styles = stylex.create({
   root: {
@@ -218,20 +216,15 @@ const styles = stylex.create({
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
   },
   // The inline clip cuts at the list's padding edge, so it would cut a focused
-  // row's ring. While a ring is drawn in the list, the list pads by the
-  // ring's reach and takes it back as negative margin: the ring paints whole
-  // and the rows stay in place. At rest the list keeps its box, so a
-  // scrolling ancestor gains no overflow. 'outset' and 'bleed' lists take no
-  // room, so their rows never paint past the host's padding edge.
+  // row's ring. While a ring is drawn in the list, the clip edge moves out by
+  // the ring's reach. A clip margin changes no layout: the list, its rows and
+  // a scrolling ancestor keep their boxes. 'outset' and 'bleed' lists keep
+  // the edge, so their rows never paint past the host's padding edge.
   ringRoom: {
-    [RING_ROOM_VAR]: {
-      default: '0px',
+    overflowClipMargin: {
+      default: null,
       ':has(:focus-visible)': FOCUS_RING_REACH,
     },
-    paddingInlineStart: RING_ROOM,
-    paddingInlineEnd: RING_ROOM,
-    marginInlineStart: `calc(-1 * ${RING_ROOM})`,
-    marginInlineEnd: `calc(-1 * ${RING_ROOM})`,
   },
   // A list under an `animatedLayout` handle isolates for every pointer. A row
   // that slides across others rides above them with a mouse too, and it must
