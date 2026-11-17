@@ -38,8 +38,10 @@ import {
   STABLE_KINDS,
   officialFirst,
   officialList,
+  savedCatalog,
   withDeclaredOfficial,
 } from './_adapter.mjs';
+import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
 import {
   availableEntries,
   catalogState,
@@ -50,10 +52,11 @@ import {list} from './list/list.mjs';
 import {detail} from './detail/detail.mjs';
 import {doc, docFromResult} from './detail/doc/doc.mjs';
 import {item} from './detail/item/item.mjs';
-import {search} from './search/search.mjs';
+import {anyAvailableWord, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
+import {CORE_PACKAGE_NAME} from '../../foundation/release/project.mjs';
 
 const DEFAULT_LIMIT = 20;
 
@@ -162,6 +165,33 @@ export function answersQueries(project) {
     (project.loadedIntegrations.some(i => !i.__loadError) ||
       hasSources(project))
   );
+}
+
+/**
+ * Whether a package the project could add has an item that carries a word of
+ * `query` (see anyAvailableWord), by the saved copies of the discover
+ * sources' catalogs alone: no source is called. Null when no source has a
+ * saved copy, so nothing is known. The search command reads it to point at
+ * `discover` only when discover has something to show.
+ * @param {import('../../foundation/config/project.mjs').Project | undefined} project
+ * @param {string} query
+ * @param {{type?: string}} [options] an item kind, when the search keeps one
+ * @returns {boolean | null}
+ */
+export function addableMatch(project, query, {type} = {}) {
+  const packages = savedCatalog(project);
+  if (packages == null) return null;
+  const items = searchItems(
+    [],
+    {sources: [], packages},
+    declaredDependencies(project),
+  );
+  const kind = /** @type {readonly string[]} */ (DISCOVER_KINDS).includes(
+    type ?? '',
+  )
+    ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
+    : undefined;
+  return anyAvailableWord(items, query, {type: kind});
 }
 
 /**
@@ -379,10 +409,60 @@ export async function discover(query, options = {}) {
   }
 
   const packages = installedFor(listing);
-  return await search(packages, query, {
-    items: searchItems(packages, listing, declared, declarations.any),
-    type,
-    only,
-    limit: limit ?? DEFAULT_LIMIT,
-  });
+  try {
+    return await search(packages, query, {
+      items: searchItems(packages, listing, declared, declarations.any),
+      type,
+      only,
+      limit: limit ?? DEFAULT_LIMIT,
+    });
+  } catch (err) {
+    if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_NOT_FOUND) {
+      throw await withCoreMatch(err, query, project?.cwd);
+    }
+    throw err;
+  }
+}
+
+/**
+ * The not-found error with Core's match for the query in its suggestions:
+ * the first Core component or hook `astryx search` gives, as the lookups'
+ * shared hint (foundation/suggest/other-command.mjs) names it. The error is
+ * unchanged when search gives none, or fails.
+ * @param {AstryxError} err
+ * @param {string} query
+ * @param {string | undefined} cwd
+ * @returns {Promise<AstryxError>}
+ */
+async function withCoreMatch(err, query, cwd) {
+  try {
+    const [{search: searchAll}, {hintFor, withOtherCommand, MATCH_TIER}] =
+      await Promise.all([
+        import('../search/search.mjs'),
+        import('../../foundation/suggest/other-command.mjs'),
+      ]);
+    const {results} = (await searchAll(query, {cwd: cwd ?? process.cwd()}))
+      .data;
+    const core = results.find(
+      r =>
+        (r.domain === 'component' || r.domain === 'hook') &&
+        r.package === CORE_PACKAGE_NAME,
+    );
+    if (!core) return err;
+    const found = hintFor(
+      /** @type {'component' | 'hook'} */ (core.domain),
+      core.name,
+      undefined,
+      MATCH_TIER.words,
+    );
+    return new AstryxError(
+      err.message,
+      withOtherCommand(err.suggestions, found, query, {
+        from: /** @type {'component' | 'hook'} */ (core.domain),
+      }),
+      err.code,
+    );
+  } catch {
+    return err;
+  }
 }

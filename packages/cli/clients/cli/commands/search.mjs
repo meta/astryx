@@ -53,8 +53,10 @@ export function registerSearch(program) {
       // mode". Taking only the first word dropped the rest without a word.
       const query = Array.isArray(words) ? words.join(' ') : words;
 
+      /** @type {Project | undefined} */
+      let project;
       try {
-        const project = await Project.load(process.cwd());
+        project = await Project.load(process.cwd());
         await warnOnIntegrationIssues(project, {json});
       } catch {
         // Never let the nudge break the command.
@@ -104,6 +106,7 @@ export function registerSearch(program) {
 
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
+      const addable = () => addableMatch(project, query, options.type);
       const {query: q, matchCount, results} = result.data;
       // When Core could not be had, an open search covers the rest alone. Say
       // so, on standard error and in the output, so the list does not read as
@@ -130,7 +133,7 @@ export function registerSearch(program) {
           text(
             `Try a broader term, or browse: ${run} ${note.length > 0 ? 'docs' : 'component --list'}`,
           ),
-          ...discoverHint(run, q, options.type),
+          ...discoverHint(run, q, options.type, await addable()),
         );
         return answered;
       }
@@ -192,7 +195,7 @@ export function registerSearch(program) {
           },
         }),
         ...note,
-        ...discoverHint(run, q, options.type),
+        ...discoverHint(run, q, options.type, await addable()),
       );
       return answered;
     },
@@ -211,14 +214,36 @@ function withNotReadyKind(result) {
 }
 
 /**
+ * Whether the saved copy of a discover catalog has a package the project
+ * could add with an item that carries a word of `query`, or null when that is
+ * not known. No discover source is called. Never throws.
+ * @param {Project | undefined} project
+ * @param {string} query
+ * @param {string | undefined} type
+ * @returns {Promise<boolean | null>}
+ */
+async function addableMatch(project, query, type) {
+  if (type === 'hook') return null;
+  try {
+    const discover = await import('../../../api/discover/discover.mjs');
+    return discover.addableMatch(project, query, {type});
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search reads only what is installed. Point at `discover` for the packages
- * that could add more, except for hooks, which no integration adds.
+ * that could add more, except for hooks, which no integration adds. When the
+ * saved copy of a discover catalog says no package the project could add
+ * matches, discover has nothing to add, so the line is left out.
  * @param {string} run - The caller's CLI invocation prefix.
  * @param {string} query
  * @param {string | undefined} type
+ * @param {boolean | null} addable - {@link addableMatch}
  */
-function discoverHint(run, query, type) {
-  if (type === 'hook') return [];
+function discoverHint(run, query, type, addable) {
+  if (type === 'hook' || addable === false) return [];
   return [
     text(`More in packages you could add: ${run} discover ${shellWord(query)}`),
   ];
@@ -229,7 +254,9 @@ function discoverHint(run, query, type) {
  * @param {string} value
  */
 function shellWord(value) {
-  return /^[\w@./:-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+  return /^[\w@./:-]+$/.test(value)
+    ? value
+    : `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Re-export the API for external consumers.

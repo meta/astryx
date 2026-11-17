@@ -710,28 +710,14 @@ async function callSource(source, request, label, timeoutMs, iconSets) {
 }
 
 /**
- * Call the discover sources — the project's `discover` first, then each
- * integration's in load order, then each a host passed, named as the host's
- * (spec AST-081 FR1, AST-051 FR6) — once per distinct function. A source that
- * throws, times out, or returns an invalid catalog falls back to its saved copy;
- * with none, it is reported and adds nothing. The others always count.
- *
+ * Where each discover source comes from, in call order: the project's
+ * `discover` first, then each integration's in load order, then each a host
+ * passed. `key` names a source's saved copies when it differs from `from`.
  * @param {Project | undefined} project
- * @param {{package?: string, version?: string}} [request] ask for one package,
- *   and optionally one version's contributions
- * @param {{cacheDir?: string, timeoutMs?: number}} [options]
- * @returns {Promise<CatalogResult>}
+ * @returns {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>}
  */
-async function callOwnSources(project, request = {}, options = {}) {
-  const {cacheDir = defaultCacheDir(), timeoutMs = SOURCE_TIMEOUT_MS} = options;
-  /** @type {CatalogResult} */
-  const result = {sources: [], packages: []};
+function sourceOrigins(project) {
   const fromDoor = doorSources();
-  if (project == null && fromDoor.length === 0) return result;
-  // Without the opt-in, icon-set items and fields are unknown before the
-  // catalog is checked, so one cannot fail a source (spec:AST-051 FR7).
-  const iconSets = optedIntoIconSets(project);
-
   /** @type {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>} */
   const origins = [];
   if (typeof project?.config?.discover === 'function') {
@@ -756,6 +742,68 @@ async function callOwnSources(project, request = {}, options = {}) {
       fromDoor.length === 1 ? DOOR_SOURCE : `${DOOR_SOURCE} (${index + 1})`;
     origins.push({from, key: `${from}\n${host}`, source});
   });
+  return origins;
+}
+
+/**
+ * The packages in the saved copies of the discover sources' full catalogs,
+ * read without calling a source. Null when no source has a saved copy. A
+ * copy is read as saved: it was checked before it was saved, and checking it
+ * again costs more than a hint may. A caller treats a copy that does not
+ * read as unknown.
+ * @param {Project | undefined} project
+ * @param {{cacheDir?: string}} [options]
+ * @returns {CatalogResult['packages'] | null}
+ */
+export function savedCatalog(project, {cacheDir = defaultCacheDir()} = {}) {
+  /** @type {CatalogResult['packages']} */
+  const packages = [];
+  /** @type {Set<unknown>} */
+  const read = new Set();
+  /** @type {Set<string>} */
+  const seen = new Set();
+  let saved = false;
+  for (const {from, key = from, source} of sourceOrigins(project)) {
+    if (source == null || read.has(source)) continue;
+    read.add(source);
+    const file = savedCopyPath(cacheDir, key, {});
+    if (!fs.existsSync(file)) continue;
+    /** @type {import('../../authoring/discover/type').DiscoverCatalog} */
+    const catalog = JSON.parse(fs.readFileSync(file, 'utf8')).catalog;
+    saved = true;
+    for (const pkg of catalog.packages) {
+      if (seen.has(pkg.package)) continue;
+      seen.add(pkg.package);
+      packages.push({...pkg, source: catalog.source.name});
+    }
+  }
+  return saved ? withoutUnreadKinds(project, packages) : null;
+}
+
+/**
+ * Call the discover sources — the project's `discover` first, then each
+ * integration's in load order, then each a host passed, named as the host's
+ * (spec AST-081 FR1, AST-051 FR6) — once per distinct function. A source that
+ * throws, times out, or returns an invalid catalog falls back to its saved copy;
+ * with none, it is reported and adds nothing. The others always count.
+ *
+ * @param {Project | undefined} project
+ * @param {{package?: string, version?: string}} [request] ask for one package,
+ *   and optionally one version's contributions
+ * @param {{cacheDir?: string, timeoutMs?: number}} [options]
+ * @returns {Promise<CatalogResult>}
+ */
+async function callOwnSources(project, request = {}, options = {}) {
+  const {cacheDir = defaultCacheDir(), timeoutMs = SOURCE_TIMEOUT_MS} = options;
+  /** @type {CatalogResult} */
+  const result = {sources: [], packages: []};
+  const fromDoor = doorSources();
+  if (project == null && fromDoor.length === 0) return result;
+  // Without the opt-in, icon-set items and fields are unknown before the
+  // catalog is checked, so one cannot fail a source (spec:AST-051 FR7).
+  const iconSets = optedIntoIconSets(project);
+
+  const origins = sourceOrigins(project);
 
   /** @type {Set<unknown>} */
   const called = new Set();

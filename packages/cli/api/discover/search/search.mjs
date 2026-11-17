@@ -6,14 +6,15 @@
  *
  * A free-text query always answers with a list, so its response type depends
  * on the form of the query and never on what the project has:
- *   1. any matches, a near-miss name included -> discover.search (a one- to
- *      three-edit miss counts when both words are long enough: 5, 8 and 11
- *      letters)
- *   2. other fuzzy hits (distance <= 3)        -> throw ERR_NOT_FOUND with
- *      suggestions
- *   3. otherwise                               -> throw ERR_NOT_FOUND
+ *   1. any matches                       -> discover.search
+ *   2. fuzzy hits on installed component names (distance <= 3)
+ *                                        -> throw ERR_NOT_FOUND with
+ *                                           suggestions
+ *   3. otherwise                         -> throw ERR_NOT_FOUND
  * Matches are installed components, the project's other installed items,
  * packages, and every item a source lists for a package the project could add.
+ * Each item is scored with search's word scorer (api/search/_score.mjs), so a
+ * query matches word by word, typos in a one-word query included.
  * A caller opens one item by its package path, which ../detail answers.
  *
  * @position api/discover/search — pure ranking over the installed component
@@ -21,6 +22,18 @@
  */
 
 import {levenshteinDistance} from '../../../foundation/text/string-utils.mjs';
+import {scoreQuery} from '../../search/_score.mjs';
+import {
+  phraseWords,
+  SEARCH_DOMAINS,
+  tokenizeQuery,
+} from '../../search/_query.mjs';
+import {
+  sameTermWord,
+  spellIdentifiers,
+  termWords,
+  wordsOf,
+} from '../../search/_words.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {DISCOVER_KINDS} from '../../../authoring/discover/parse.mjs';
@@ -34,43 +47,123 @@ import {compareText} from '../../../foundation/text/compare-text.mjs';
 const KIND_ORDER = ['package', ...DISCOVER_KINDS];
 
 /**
- * How well an item matches: 0 exact name, 1 name prefix, 2 name substring,
- * 3 a near-miss name (3.0, 3.1, 3.2 for one, two or three edits), 4 title,
- * summary, keyword, or description; null for no match.
+ * The item as one of search's candidates (api/search/_score.mjs). Its title
+ * is another name. The words of its name are derived keywords, so a word
+ * inside a camelCase name counts (`chart` in `SalesChart`). Its summary,
+ * or a package's own description, is its description.
  * @param {SearchItem} item
- * @param {string} lower
- * @returns {number | null}
+ * @param {string} [packageText] the description of the item's package
  */
-function rank(item, lower) {
-  const name = item.name.toLowerCase();
-  if (name === lower) return 0;
-  if (name.startsWith(lower)) return 1;
-  if (name.includes(lower)) return 2;
-  // A near-miss name ranks above a match in the title or text: how closely
-  // the name matches decides first (AST-051 FR4).
-  // Typo tolerance: same minimum-length guards as search (api/search/search.mjs).
-  // A one-edit miss is a typo only on words long enough that one edit rarely
-  // makes a different real word.
-  const dist = levenshteinDistance(lower, name);
-  if (dist >= 1 && dist <= 3) {
-    /** @type {Record<number, number>} */
-    const MIN_LENGTHS = {1: 5, 2: 8, 3: 11};
-    if (Math.min(lower.length, name.length) >= MIN_LENGTHS[dist]) {
-      return 3 + (dist - 1) / 10;
-    }
-  }
-  const text = [
-    item.title,
-    item.summary,
-    item.description,
-    ...(item.keywords ?? []),
-  ]
-    .filter(Boolean)
-    .join('\n')
-    .toLowerCase();
-  if (text.includes(lower)) return 4;
-  return null;
+function candidateOf(item, packageText) {
+  return {
+    domain: domainOf(item.kind),
+    name: item.name,
+    aliases: item.title ? [item.title] : [],
+    keywords: item.keywords ?? [],
+    weakKeywords: wordsOf(item.name),
+    description: item.summary ?? item.description ?? '',
+    prose: packageText ? [packageText] : [],
+  };
 }
+
+/**
+ * The search domain an item kind is scored as. A kind search has no domain
+ * for (a package, a codemod, an agent doc, an icon set) is scored as a template is: by the
+ * words of its name, with neither a doc route's rules nor a component's
+ * joined-name rule.
+ * @param {SearchItem['kind']} kind
+ * @returns {import('../../search/_lexical.mjs').Candidate['domain']}
+ */
+function domainOf(kind) {
+  return /** @type {readonly string[]} */ (SEARCH_DOMAINS).includes(kind)
+    ? /** @type {import('../../search/_lexical.mjs').Candidate['domain']} */ (
+        kind
+      )
+    : 'template';
+}
+
+/**
+ * How well an item matches the query, scored the way search scores a
+ * candidate: how many query words it matches, then how strongly. The words
+ * may match across the item's name, title, keywords, summary, and its
+ * package's description. The package's description only adds words the
+ * item's own text lacks: an item must match some query word in its own text.
+ * Null for no match.
+ * @param {SearchItem} item
+ * @param {{term: string, tokens: string[], words: string[]}} query
+ * @returns {{matched: number, total: number, score: number} | null}
+ */
+function rank(item, {term, tokens, words}) {
+  const own = scoreQuery(term, tokens, candidateOf(item), words);
+  if (own == null) return null;
+  const withPackage =
+    item.packageDescription &&
+    item.kind !== 'package' &&
+    own.matched < own.total
+      ? scoreQuery(
+          term,
+          tokens,
+          candidateOf(item, item.packageDescription),
+          words,
+        )
+      : null;
+  const best =
+    withPackage != null && byMatch(withPackage, own) < 0 ? withPackage : own;
+  return {matched: best.matched, total: best.total, score: best.score};
+}
+
+/**
+ * A query as rank() reads it. An identifier counts as the words it spells
+ * (`EmployeeTypeahead`), and still matches whole as typed.
+ * @param {string} query
+ */
+function queryOf(query) {
+  const spelled = spellIdentifiers(String(query).trim());
+  return {
+    term: String(query).trim().toLowerCase(),
+    tokens: tokenizeQuery(spelled),
+    words: phraseWords(spelled),
+  };
+}
+
+/**
+ * Whether an item a project could add carries a word of `query`: a word of
+ * its name, title, keywords, summary, or a package's own description, in any
+ * form search counts as the same word (plural, stem). It reads each word
+ * once, so it costs far less than ranking every item, at the price of the
+ * matches search() finds only by a word's start, a typo, or a synonym.
+ * @param {SearchItem[]} items
+ * @param {string} query
+ * @param {{type?: import('../../../authoring/discover/type').DiscoverKind}} [opts]
+ * @returns {boolean}
+ */
+export function anyAvailableWord(items, query, {type} = {}) {
+  const terms = queryOf(query)
+    .tokens.flatMap(token => wordsOf(token))
+    .map(word => termWords(word));
+  if (terms.length === 0) return false;
+  /** @param {string | undefined} text */
+  const carries = text =>
+    text != null &&
+    wordsOf(text).some(w => terms.some(t => sameTermWord(t, w)));
+  return items.some(
+    item =>
+      !item.installed &&
+      (type == null || item.kind === type) &&
+      (carries(item.name) ||
+        carries(item.title) ||
+        carries(item.summary) ||
+        carries(item.description) ||
+        (item.keywords ?? []).some(carries)),
+  );
+}
+
+/**
+ * Better match first: more query words matched, then the higher score.
+ * @param {{matched: number, score: number}} a
+ * @param {{matched: number, score: number}} b
+ */
+const byMatch = (a, b) => b.matched - a.matched || b.score - a.score;
 
 /**
  * Search all packages for `query` (a free-text term that never starts with
@@ -102,6 +195,7 @@ export async function search(packages, query, opts) {
     );
   }
   const lower = query.toLowerCase();
+  const words = queryOf(query);
 
   /** @type {SearchItem[]} */
   const installedComponents = packages.flatMap(pkg =>
@@ -113,7 +207,7 @@ export async function search(packages, query, opts) {
     })),
   );
 
-  const ranked = [...installedComponents, ...items]
+  const scored = [...installedComponents, ...items]
     .filter(item => (type == null ? true : item.kind === type))
     .filter(item =>
       only === 'installed'
@@ -122,19 +216,23 @@ export async function search(packages, query, opts) {
           ? !item.installed
           : true,
     )
-    .map(item => ({item, score: rank(item, lower)}))
+    .map(item => ({item, score: rank(item, words)}))
     .filter(
-      /** @returns {m is {item: SearchItem, score: number}} */
+      /** @returns {m is {item: SearchItem, score: {matched: number, total: number, score: number}}} */
       m => m.score != null,
     )
     .sort(
       (a, b) =>
-        a.score - b.score ||
+        byMatch(a.score, b.score) ||
         Number(b.item.installed) - Number(a.item.installed) ||
         KIND_ORDER.indexOf(a.item.kind) - KIND_ORDER.indexOf(b.item.kind) ||
         compareText(a.item.package, b.item.package) ||
         compareText(a.item.name, b.item.name),
     );
+  // The cut search's suggestions make (orderByAffinity `closest`): when an
+  // item matches every word of the query, only such items stay.
+  const everyWord = scored.filter(m => m.score.matched >= m.score.total);
+  const ranked = everyWord.length > 0 ? everyWord : scored;
 
   if (ranked.length > 0) {
     const matches = ranked.map(({item}) => ({

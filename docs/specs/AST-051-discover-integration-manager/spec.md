@@ -96,10 +96,16 @@ discover sources follow it except where this record says otherwise.
   project could add, by name, title, summary, and keywords. It MUST answer with
   the list of matches, even when one name matches exactly or only one item
   matches, so the response type depends on the form of the query and never on
-  what the project has. Matches are ranked by how closely the name matches,
-  with installed items first among equals. Each match states its kind and
-  whether the project has its package. One item opens by its package path
-  (FR3).
+  what the project has. A query matches word by word, as `astryx search`
+  scores words: an item matches by the words of its name, title, summary, and
+  keywords, and its package's description adds words the item's own text
+  lacks. When an item matches every word, only such items are listed. Matches
+  are ranked by how many words they match, then by how closely the name
+  matches, with installed items first among equals. Each match states its kind
+  and whether the project has its package. One item opens by its package path
+  (FR3). When nothing matches, the not-found error suggests the first Core
+  component or hook `astryx search` gives for the query, as the lookups'
+  other-command hint names it.
 - **FR5 — Filters follow the CLI's existing options.** `--type <kind>` keeps one
   kind (`component`, `template`, `doc`, `theme`, `codemod`, `agent-doc`): in the
   list, packages that add it; in a search, items of that kind. `--installed`
