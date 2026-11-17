@@ -65,14 +65,16 @@ export const docs = {
           lang: 'bash',
           code: `npm install @heroicons/react
 astryx experimental icon new-set heroicons --from @heroicons/react/24/outline
+# Add the entry the receipt names: index.js, index.d.ts, and package.json "main", "types", "exports".
 astryx integration check
+# One pair for every definition the check lists:
 astryx experimental icon map --pairs close=x-mark,search=magnifying-glass
 astryx integration check
 astryx experimental icon use heroicons`,
         },
         {
           type: 'prose',
-          text: "`new-set` wraps every icon of the library, writes the set in `icon-sets/`, and declares it in `astryx.integration.mjs`. The set's icons import from your app's package name, so add the entry its receipt names: `index.js` and `index.d.ts`, each with `export * from './icon-sets/heroicons/heroicons.generated.js';`, and `main`, `types`, and `exports` in package.json. A package can import itself by name through its `exports`, so your code and copied templates find the icons. `integration check` lists each built-in definition the set does not map yet, with a suggested icon when one fits. Check each meaning, then map them all in one `map --pairs` run; when the library has no icon for a meaning, map the closest one. When the check passes, `use` makes the set the app's main set: `astryx experimental icon <meaning>` finds its icons, and copied templates follow it.",
+          text: "`new-set` wraps every icon of the library, writes the set in `icon-sets/`, and declares it in `astryx.integration.mjs`. The set's icons import from your app's package name, so add the entry its receipt names before the first check: `index.js` and `index.d.ts`, each with `export * from './icon-sets/heroicons/heroicons.generated.js';`, and `main`, `types`, and `exports` in package.json. A package can import itself by name through its `exports`, so your code and copied templates find the icons. `integration check` lists each built-in definition the set does not map yet, with a suggested icon when one fits. Check each meaning, then map them all in one `map --pairs` run; when the library has no icon for a meaning, map the closest one. When the check passes, `use` makes the set the app's main set: `astryx experimental icon <meaning>` finds its icons, and copied templates follow it.",
         },
         {
           type: 'prose',

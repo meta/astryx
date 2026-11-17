@@ -556,7 +556,7 @@ export async function addIconSet(name, options) {
     // A private package is never published: it is the app itself, or a
     // local package the app installs. Peers, the strict check, and the
     // public description are publishing steps, so its receipt leaves them
-    // out and ends with the step that turns the set on.
+    // out, and its notes end with the step that turns the set on.
     const isPrivate = packageAfter.private === true;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.

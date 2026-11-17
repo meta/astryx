@@ -439,8 +439,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     none. A private package (`"private": true`, never published: the app
     itself or a local package the app installs) gets none of the publishing
     notes (peers, the script, the strict check's TypeScript, the placeholder
-    description); its receipt ends with the `experimental icon use <set>`
-    step instead. `--variants` and `--default-variant` declare `variants` and
+    description); instead, its receipt's notes end with the
+    `experimental icon use <set>` step. `--variants` and `--default-variant` declare `variants` and
     `default`; `--display-name` and `--description` fill the descriptor.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a

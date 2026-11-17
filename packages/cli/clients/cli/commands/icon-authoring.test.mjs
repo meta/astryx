@@ -1852,7 +1852,7 @@ describe('blind run 4 fixes', () => {
     );
   });
 
-  it('a private package, such as the app itself, gets no publishing notes and ends with the step that turns the set on', async () => {
+  it('a private package, such as the app itself, gets no publishing notes, and its notes end with the step that turns the set on', async () => {
     const pkgFile = path.join(pkg, 'package.json');
     const manifest = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
     fs.writeFileSync(
