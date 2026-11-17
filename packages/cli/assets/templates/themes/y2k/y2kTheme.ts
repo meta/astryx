@@ -228,7 +228,7 @@ export const y2kTheme = defineTheme({
     '--color-border-emphasized': [neutral.light[20], neutral.dark[45]],
 
     // Effects
-    '--color-skeleton': [neutral.light[80], neutral.dark[25]],
+    '--color-skeleton': [neutral.light[75], neutral.dark[25]],
     '--color-shadow': [
       withAlpha(neutral.light[15], '1A'),
       withAlpha(neutral.dark[0], '4D'),

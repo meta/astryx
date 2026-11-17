@@ -20,6 +20,7 @@ import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
+import {listedPackageInstall} from '../release/notices.mjs';
 import {installCommandFor} from './template-needs.mjs';
 
 export class ThemeImportError extends Error {
@@ -138,20 +139,52 @@ function complete(triplet) {
 }
 
 /**
+ * The folder the app imports a package theme's built output from, or null
+ * when the package that holds it is not installed, so `theme add` refuses
+ * it: an integration theme's own package folder, else (a bundled theme) its
+ * own package as the app installs it.
+ * @param {import('./theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function themePackageDir(theme, cwd) {
+  return (
+    /** @type {any} */ (theme).packageDir ??
+    findInstalledPackage(cwd, themeImportPackage(theme)) ??
+    null
+  );
+}
+
+/**
  * @param {import('./theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} cwd
  * @param {number} ownerThemeCount
  */
 function resolvePackageTheme(theme, cwd, ownerThemeCount) {
   const importPackage = themeImportPackage(theme);
-  const packageDir =
-    /** @type {any} */ (theme).packageDir ??
-    findInstalledPackage(cwd, importPackage);
+  const packageDir = themePackageDir(theme, cwd);
   if (!packageDir) {
+    const add = formatCliCommand(`theme add ${theme.slug}`, cwd);
+    // A package the app lists but has not installed, as in a fresh clone,
+    // comes from installing the app's dependencies, at the version it lists.
+    const listed = listedPackageInstall(cwd, importPackage);
+    if (listed) {
+      throw new ThemeImportError(
+        `Theme package "${importPackage}" is not installed, though this project lists it: install the project's dependencies with \`${listed}\`.`,
+        {
+          suggestions: [
+            {
+              name: listed,
+              reason: `install the packages the project lists, ${importPackage} among them`,
+            },
+            {name: add, reason: 'add the theme once it is installed'},
+          ],
+        },
+      );
+    }
     // The app imports a theme from its package, bundled themes included, so
     // the package is installed in the app before the theme is added.
     const {installCommand} = installCommandFor([importPackage], cwd);
-    const add = formatCliCommand(`theme add ${theme.slug}`, cwd);
     const install = installCommand ?? `npm install ${importPackage}`;
     throw new ThemeImportError(
       `Theme package "${importPackage}" is not installed. The app imports ${theme.slug} from it, so install it, then add the theme: \`${install}\`, then \`${add}\`.`,

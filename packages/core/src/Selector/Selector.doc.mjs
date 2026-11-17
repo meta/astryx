@@ -152,7 +152,7 @@ export const docs = {
       {
         className: 'astryx-selector-option-row',
         visualProps: ['size'],
-        states: ['selected', 'disabled'],
+        states: ['highlighted', 'selected', 'disabled'],
       },
       {className: 'astryx-selector-search'},
       {className: 'astryx-selector-section-heading'},

@@ -836,4 +836,42 @@ describe('addCommand with the official list', () => {
       / @astryxdesign\/theme-matcha@0\.7\.1$/,
     );
   });
+
+  it('saves one version exactly in a project that pins its Core, and a range as the range', () => {
+    // A lockfile names npm, whichever package manager runs the tests.
+    const pinned = fs.mkdtempSync(path.join(cacheDir, 'pinned-'));
+    fs.writeFileSync(
+      path.join(pinned, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(pinned, 'package-lock.json'), '{}');
+    const command = addCommand(project({cwd: pinned}), {official: list});
+    expect(command('@astryxdesign/theme-gothic')).toBe(
+      'npm install -E @astryxdesign/theme-gothic@0.6.8',
+    );
+    expect(command('@astryxdesign/theme-matcha', '0.7.1')).toBe(
+      'npm install -E @astryxdesign/theme-matcha@0.7.1',
+    );
+    expect(command('@astryxdesign/theme-matcha')).toBe(
+      'npm install "@astryxdesign/theme-matcha@^0.6.8"',
+    );
+    expect(command('@acme/ui')).toBe('npm install @acme/ui');
+    // The pin is about Astryx's release: another package keeps the package
+    // manager's own way of saving it.
+    expect(command('@acme/widgets', '1.2.3')).toBe(
+      'npm install @acme/widgets@1.2.3',
+    );
+
+    const ranged = fs.mkdtempSync(path.join(cacheDir, 'ranged-'));
+    fs.writeFileSync(
+      path.join(ranged, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '^0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(ranged, 'package-lock.json'), '{}');
+    expect(
+      addCommand(project({cwd: ranged}), {official: list})(
+        '@astryxdesign/theme-gothic',
+      ),
+    ).toBe('npm install @astryxdesign/theme-gothic@0.6.8');
+  });
 });

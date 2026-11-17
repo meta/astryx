@@ -392,7 +392,7 @@ export function parseBlockVersion(content) {
  * }}
  */
 export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
-  const version = installedVersion ?? getXdsVersion(findCoreDir(targetDir));
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
 
@@ -673,7 +673,7 @@ export function generateCompressedIndex(
   } else {
     lines.push("- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.");
   }
-  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
+  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
   // Self-check — post-generation pass. Validated via vibe tests (internal/vibe-tests/
   // prompt-purity-test): on complex multi-step UIs the rules above alone still leave raw
   // CSS in ~11-13% of runs; a re-read-and-fix pass cuts that ~4x at negligible token cost.
@@ -749,7 +749,7 @@ export async function renderAgentDocsBlock(
   {installedVersion, fresh = false} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
-  const version = installedVersion ?? getXdsVersion(coreDir);
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   const project = await Project.load(targetDir, {fresh});
   const failedIntegration = project.loadedIntegrations.find(
     integration => integration.__loadError != null,
@@ -811,6 +811,16 @@ export async function renderAgentDocsBlock(
     topics,
     agentDocs,
   });
+}
+
+/**
+ * The version an agent-docs block names when no caller gives one, as `init`
+ * writes it: the Core the folder reads, else this CLI's own.
+ * @param {string} targetDir
+ * @returns {string}
+ */
+export function agentDocsVersion(targetDir) {
+  return getXdsVersion(findCoreDir(targetDir));
 }
 
 /**

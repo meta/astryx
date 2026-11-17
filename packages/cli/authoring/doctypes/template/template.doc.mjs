@@ -75,7 +75,7 @@ export const doc = {
       name: 'isReady',
       type: 'boolean',
       description:
-        "Whether the template is ready for use. false shows as '(WIP)' in the gallery and CLI.",
+        "Whether the template is ready for use. false shows as '(not ready)' in the CLI; the gallery hides the template.",
     },
     {
       name: 'scaffold',

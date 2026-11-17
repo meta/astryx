@@ -11,7 +11,7 @@
  *
  * @input  made-up names, a project whose integration contributes made-up
  *   components and a template, and Core's own files
- * @output assertions on entryCommand, the cheap name checks, and the docs()
+ * @output assertions on the docs hint, the cheap name checks, and the docs()
  *   not-found error
  * @position api/docs/ beside the docs dispatcher tests
  */
@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {docs} from './docs.mjs';
-import {entryCommand} from './_adapter.mjs';
+import {otherCommand} from '../../foundation/suggest/other-command.mjs';
 import {
   discoverComponentNamesWhere,
   discoverComponents,
@@ -31,17 +31,34 @@ import {
   listTemplates,
   integrationMayReplaceTemplate,
   integrationTemplateIds,
-  templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {
   coreFilesNaming,
   foldEntryName,
-  integrationFilesNaming,
+  integrationsFilesNaming,
 } from '../../foundation/discovery/entry-name-files.mjs';
+import {
+  hintNameIndex,
+  templateFilesNaming,
+} from '../../foundation/suggest/name-index.mjs';
 import {getAllHookNames} from '../../foundation/discovery/hook-discovery.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 30_000;
+
+/**
+ * Whether an integration component in `components` can fold to `wanted`, by
+ * the name index made now.
+ * @param {string} components
+ * @param {string} wanted
+ * @returns {Promise<boolean>}
+ */
+const componentsNaming = async (components, wanted) =>
+  integrationsFilesNaming(
+    [components],
+    (await hintNameIndex(process.cwd(), null, [{components}])).components,
+    wanted,
+  )[0];
 
 const NAMES = {
   components: ['Zorblet', 'ZorbletCard'],
@@ -49,7 +66,15 @@ const NAMES = {
   templates: ['glimmer-panel', 'wobble'],
 };
 
-describe('entryCommand', () => {
+/**
+ * The hint the docs lookup gets for a typed name.
+ * @param {string} typed
+ * @param {import('../../foundation/suggest/other-command.mjs').LookupNames} names
+ */
+const entryCommand = (typed, names) =>
+  otherCommand(typed, names, 'docs')?.hint ?? null;
+
+describe('the docs hint', () => {
   it('names the command for an exact name in any case, with or without spaces and hyphens', () => {
     for (const typed of [
       'ZorbletCard',
@@ -77,11 +102,11 @@ describe('entryCommand', () => {
     expect(entryCommand('use-wobble', NAMES)).toEqual(hook);
   });
 
-  it('prefers a component to a hook, and a hook to a template', () => {
+  it('prefers a component to a hook, and an exact name to a hook without use', () => {
     expect(entryCommand('zorblet', NAMES)?.name).toBe(
       'astryx component Zorblet',
     );
-    expect(entryCommand('wobble', NAMES)?.name).toBe('astryx hook useWobble');
+    expect(entryCommand('wobble', NAMES)?.name).toBe('astryx template wobble');
   });
 
   it('gives nothing for a near name, a route, or an empty name', () => {
@@ -128,6 +153,14 @@ function scaffold() {
     'export function ZorbletCard() { return null; }\n',
   );
   fs.writeFileSync(
+    path.join(pkgDir, 'components', 'ZorbletKnob.doc.mjs'),
+    "export default {type: 'component', name: 'ZorbletKnob', description: 'A knob.', props: []};\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'components', 'ZorbletKnob.tsx'),
+    'export function ZorbletKnob() { return null; }\n',
+  );
+  fs.writeFileSync(
     path.join(pkgDir, 'components', 'ThemeSwatch.doc.mjs'),
     "export default {type: 'component', name: 'ThemeSwatch', description: 'A swatch.', props: []};\n",
   );
@@ -141,6 +174,14 @@ function scaffold() {
   );
   fs.writeFileSync(
     path.join(pkgDir, 'templates', 'glimmer-panel.tsx'),
+    'export default function Fixture() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'glimmer-swirl.doc.mjs'),
+    "export default {type: 'block', name: 'Glimmer swirl', description: 'A swirl.'};\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'glimmer-swirl.tsx'),
     'export default function Fixture() { return null; }\n',
   );
 }
@@ -169,8 +210,8 @@ describe('docs() for a name another command reads', () => {
     'stays not found and gives the command alone when no doc shares a word',
     async () => {
       for (const [typed, command] of [
-        ['zorblet-card', 'astryx component ZorbletCard'],
-        ['glimmer panel', 'astryx template glimmer-panel'],
+        ['zorblet-knob', 'astryx component ZorbletKnob'],
+        ['glimmer swirl', 'astryx template glimmer-swirl'],
       ]) {
         const plain = await docs(typed, undefined, {cwd: bareDir}).catch(
           e => e,
@@ -188,23 +229,43 @@ describe('docs() for a name another command reads', () => {
   );
 
   it(
-    'keeps the docs that share a word after the command, one fewer',
+    'adds no doc that shares a word only by its title or keywords when a command leads',
     async () => {
-      const plain = await docs('theme-swatch', undefined, {cwd: bareDir}).catch(
-        e => e,
-      );
-      expect(plain.suggestions.length).toBeGreaterThan(1);
-      const error = await docs('theme-swatch', undefined, {cwd: tmpDir}).catch(
+      const error = await docs('zorblet-card', undefined, {cwd: tmpDir}).catch(
         e => e,
       );
       expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
       expect(error.suggestions).toEqual([
         {
-          name: 'astryx component ThemeSwatch',
-          reason: 'a component, not a docs topic',
+          name: 'astryx component ZorbletCard',
+          reason: expect.stringContaining('not a docs topic'),
         },
-        ...plain.suggestions.slice(0, -1),
       ]);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps the docs that share a word after the command, one fewer',
+    async () => {
+      const error = await docs('theme-swatch', undefined, {cwd: tmpDir}).catch(
+        e => e,
+      );
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      const [command, ...rest] = error.suggestions;
+      expect(command).toEqual({
+        name: 'astryx component ThemeSwatch',
+        reason: 'a component, not a docs topic',
+      });
+      // The topics and namespaces that share a word follow, never a page
+      // found only by its title or keywords.
+      expect(rest.length).toBeGreaterThan(0);
+      for (const suggestion of rest) {
+        expect(suggestion.name).toContain('theme');
+        expect(['available topic', 'docs namespace']).toContain(
+          suggestion.reason,
+        );
+      }
       for (const suggestion of error.suggestions) {
         expect(Object.keys(suggestion).sort()).toEqual(['name', 'reason']);
       }
@@ -254,24 +315,28 @@ describe('the cheap name checks', () => {
     async () => {
       const ids = (await discoverCoreTemplates()).map(t => t.dirName);
       expect([...coreTemplateIds()].sort()).toEqual([...ids].sort());
-      // The kept file-name summary finds each block id, and no made-up one.
+      // The name index's block ids hold each block id, and no made-up one.
+      const kept = (await hintNameIndex(process.cwd(), null, [])).templates;
       for (const id of coreTemplateIds()) {
         if (listTemplates().includes(id)) continue;
-        expect(templateFilesNaming([], foldEntryName(id)).blocks).toBe(true);
+        expect(templateFilesNaming(kept, foldEntryName(id)).blocks).toBe(true);
       }
-      expect(templateFilesNaming([], 'zorbletwobble').blocks).toBe(false);
+      expect(templateFilesNaming(kept, 'zorbletwobble').blocks).toBe(false);
     },
     SLOW,
   );
 
   it(
     'find a file for each Core component and hook, and none for a made-up name',
-    () => {
+    async () => {
       const isNamed =
         (/** @type {string} */ wanted) => (/** @type {string} */ n) =>
           n === wanted;
+      const core = /** @type {string | string[]} */ (
+        (await hintNameIndex(process.cwd(), coreDir, [])).core
+      );
       for (const name of Object.values(discoverComponents(coreDir)).flat()) {
-        const found = coreFilesNaming(coreDir, foldEntryName(name));
+        const found = coreFilesNaming(core, foldEntryName(name));
         expect(found.component).toBe(true);
         // Only the top folders the name's files are in need reading.
         expect(
@@ -286,17 +351,17 @@ describe('the cheap name checks', () => {
       expect(hooks.length).toBeGreaterThan(5);
       for (const hook of hooks) {
         expect(getAllHookNames(coreDir, n => n === hook)).toEqual([hook]);
-        const found = coreFilesNaming(coreDir, foldEntryName(hook));
+        const found = coreFilesNaming(core, foldEntryName(hook));
         expect(found.hook).toBe(true);
         expect(getAllHookNames(coreDir, isNamed(hook), found.hookTops)).toEqual(
           [hook],
         );
         const bare = foldEntryName(hook).replace(/^use/, '');
         if (bare !== foldEntryName(hook)) {
-          expect(coreFilesNaming(coreDir, bare).hook).toBe(true);
+          expect(coreFilesNaming(core, bare).hook).toBe(true);
         }
       }
-      expect(coreFilesNaming(coreDir, 'zorbletwobble')).toEqual({
+      expect(coreFilesNaming(core, 'zorbletwobble')).toEqual({
         component: false,
         hook: false,
         componentTops: new Set(),
@@ -306,7 +371,7 @@ describe('the cheap name checks', () => {
     SLOW,
   );
 
-  it('find an integration component by its file name or its doc text', () => {
+  it('find an integration component by its file name or its doc text', async () => {
     const components = path.join(
       tmpDir,
       'node_modules',
@@ -314,16 +379,22 @@ describe('the cheap name checks', () => {
       'widgets',
       'components',
     );
-    expect(integrationFilesNaming(components, 'zorbletcard')).toBe(true);
-    expect(integrationFilesNaming(components, 'zorblet')).toBe(false);
+    expect(await componentsNaming(components, 'zorbletcard')).toBe(true);
+    expect(await componentsNaming(components, 'zorblet')).toBe(false);
+    fs.writeFileSync(
+      path.join(components, 'Prose.doc.mjs'),
+      "export default {type: 'component', name: 'Prose', description: 'Not a zorblet.'};\n",
+    );
+    // A word in lower case names no component.
+    expect(await componentsNaming(components, 'zorblet')).toBe(false);
     fs.writeFileSync(
       path.join(components, 'Family.doc.mjs'),
       "export default {type: 'component', name: 'Family', components: [{name: 'Zorblet'}]};\n",
     );
-    expect(integrationFilesNaming(components, 'zorblet')).toBe(true);
+    expect(await componentsNaming(components, 'zorblet')).toBe(true);
   });
 
-  it('read integration template ids, and whether one may replace Core', () => {
+  it('read integration template ids, and whether one may replace Core', async () => {
     const templates = path.join(
       tmpDir,
       'node_modules',
@@ -331,11 +402,14 @@ describe('the cheap name checks', () => {
       'widgets',
       'templates',
     );
-    expect(integrationTemplateIds({templates})).toEqual(['glimmer-panel']);
-    expect(templateFilesNaming([{templates}], 'glimmerpanel').listed).toBe(
-      true,
-    );
-    expect(templateFilesNaming([{templates}], 'glimmer').listed).toBe(false);
+    expect(integrationTemplateIds({templates})).toEqual([
+      'glimmer-panel',
+      'glimmer-swirl',
+    ]);
+    const ids = (await hintNameIndex(process.cwd(), null, [{templates}]))
+      .templates;
+    expect(templateFilesNaming(ids, 'glimmerpanel').listed).toBe(true);
+    expect(templateFilesNaming(ids, 'glimmer').listed).toBe(false);
     expect(integrationMayReplaceTemplate({templates})).toBe(false);
     fs.writeFileSync(
       path.join(templates, 'wobble.doc.mjs'),
