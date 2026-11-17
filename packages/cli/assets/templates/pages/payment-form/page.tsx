@@ -6,7 +6,6 @@ import {useState, type CSSProperties} from 'react';
 import {
   VStack,
   HStack,
-  Stack,
   StackItem,
   Layout,
   LayoutContent,
@@ -164,13 +163,10 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 // :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
 
 const fullWidth: CSSProperties = {width: '100%'};
-// Form column flex-basis so the two checkout columns share width evenly.
-const formColBasis: CSSProperties = {flexBasis: 0};
 // Space the Order Summary content below its collapsible trigger title.
 const summaryContent: CSSProperties = {paddingBlockStart: 'var(--spacing-2)'};
 // Order-summary column: sticky beside the form on desktop.
 const summarySticky: CSSProperties = {
-  flexBasis: 0,
   position: 'sticky',
   top: 'var(--spacing-4)',
   alignSelf: 'flex-start',
@@ -272,722 +268,710 @@ export default function PaymentFormPage() {
                   <Divider />
                 </VStack>
 
-                <Stack
-                  direction={isMobile ? 'vertical' : 'horizontal'}
-                  gap={8}
-                  vAlign="start">
-                  <StackItem
-                    size="fill"
-                    style={isMobile ? undefined : formColBasis}>
-                    <VStack gap={8}>
-                      {/* Sign in */}
+                {/* CSS folds the two columns into one below about 768px, so the first paint fits a phone. */}
+                <Grid columns={{minWidth: 340, max: 2}} gap={8} align="start">
+                  <VStack gap={8}>
+                    {/* Sign in */}
+                    <VStack gap={1}>
+                      <HStack gap={2} hAlign="between" vAlign="center">
+                        <Text type="large" weight="bold">
+                          Sign in to check out
+                        </Text>
+                        <Button
+                          label="Sign In"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            // Demo only: replace this toast with the call that signs the shopper in.
+                            showToast({
+                              body: 'Demo: sign-in would start here',
+                              uniqueID: 'sign-in',
+                            })
+                          }
+                        />
+                      </HStack>
+                      <Text type="supporting" color="secondary">
+                        Sign in to track your order and save your information
+                        for faster checkout.
+                      </Text>
+                    </VStack>
+
+                    {/* Contact Information */}
+                    <VStack gap={3}>
+                      <Text type="large" weight="bold">
+                        Contact Information
+                      </Text>
+                      <TextInput
+                        size="lg"
+                        label="Email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={setEmail}
+                        status={
+                          errors.email
+                            ? {type: 'error', message: errors.email}
+                            : undefined
+                        }
+                      />
+                      <CheckboxInput
+                        label="Email me with news and offers"
+                        value={emailOffers}
+                        onChange={setEmailOffers}
+                      />
+                    </VStack>
+
+                    {/* Shipping Information */}
+                    <VStack gap={3}>
+                      <Text type="large" weight="bold">
+                        Shipping Information
+                      </Text>
+                      <Grid columns={2} gap={3}>
+                        <TextInput
+                          size="lg"
+                          label="First Name"
+                          placeholder="John"
+                          value={firstName}
+                          onChange={setFirstName}
+                          status={
+                            errors.firstName
+                              ? {type: 'error', message: errors.firstName}
+                              : undefined
+                          }
+                        />
+                        <TextInput
+                          size="lg"
+                          label="Last Name"
+                          placeholder="Doe"
+                          value={lastName}
+                          onChange={setLastName}
+                          status={
+                            errors.lastName
+                              ? {type: 'error', message: errors.lastName}
+                              : undefined
+                          }
+                        />
+                      </Grid>
+                      <TextInput
+                        size="lg"
+                        label="Address"
+                        placeholder="123 Main Street"
+                        value={address}
+                        onChange={setAddress}
+                        status={
+                          errors.address
+                            ? {type: 'error', message: errors.address}
+                            : undefined
+                        }
+                      />
+                      <Grid columns={2} gap={3}>
+                        <TextInput
+                          size="lg"
+                          label="City"
+                          placeholder="New York"
+                          value={city}
+                          onChange={setCity}
+                          status={
+                            errors.city
+                              ? {type: 'error', message: errors.city}
+                              : undefined
+                          }
+                        />
+                        <TextInput
+                          size="lg"
+                          label="ZIP Code"
+                          placeholder="10001"
+                          value={zip}
+                          onChange={setZip}
+                          status={
+                            errors.zip
+                              ? {type: 'error', message: errors.zip}
+                              : undefined
+                          }
+                        />
+                      </Grid>
+                      <Selector
+                        size="lg"
+                        label="State"
+                        placeholder="Select state"
+                        options={US_STATES}
+                        value={state}
+                        onChange={setState}
+                        status={
+                          errors.state
+                            ? {type: 'error', message: errors.state}
+                            : undefined
+                        }
+                      />
+                      <TextInput
+                        size="lg"
+                        label="Phone Number"
+                        placeholder="+1 (555) 123-4567"
+                        value={phone}
+                        onChange={setPhone}
+                        labelTooltip="We use your phone number to provide shipping updates and contact you about your delivery if needed."
+                        status={
+                          errors.phone
+                            ? {type: 'error', message: errors.phone}
+                            : undefined
+                        }
+                      />
+                      <CheckboxInput
+                        label="Save my information for a faster checkout"
+                        value={saveInfo}
+                        onChange={setSaveInfo}
+                      />
+                    </VStack>
+
+                    {/* Delivery */}
+                    <VStack gap={3}>
                       <VStack gap={1}>
-                        <HStack gap={2} hAlign="between" vAlign="center">
-                          <Text type="large" weight="bold">
-                            Sign in to check out
-                          </Text>
-                          <Button
-                            label="Sign In"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that signs the shopper in.
-                              showToast({
-                                body: 'Demo: sign-in would start here',
-                                uniqueID: 'sign-in',
-                              })
-                            }
-                          />
-                        </HStack>
+                        <Text type="large" weight="bold">
+                          Delivery
+                        </Text>
                         <Text type="supporting" color="secondary">
-                          Sign in to track your order and save your information
-                          for faster checkout.
+                          Please allow 1–3 business days processing time before
+                          your order ships.
                         </Text>
                       </VStack>
+                      <RadioList
+                        label="Delivery method"
+                        value={deliveryMethod}
+                        onChange={setDeliveryMethod}>
+                        <RadioListItem
+                          value="standard"
+                          label="Standard (3–7 business days)"
+                          endContent={
+                            <Text type="body" weight="medium">
+                              $4.95
+                            </Text>
+                          }
+                        />
+                        <RadioListItem
+                          value="expedited"
+                          label="Expedited (1–2 business days)"
+                          endContent={
+                            <Text type="body" weight="medium">
+                              $9.95
+                            </Text>
+                          }
+                        />
+                      </RadioList>
+                    </VStack>
 
-                      {/* Contact Information */}
-                      <VStack gap={3}>
+                    {/* Payment Method */}
+                    <VStack gap={3}>
+                      <VStack gap={1}>
                         <Text type="large" weight="bold">
-                          Contact Information
+                          Payment Method
                         </Text>
-                        <TextInput
-                          size="lg"
-                          label="Email"
-                          placeholder="you@example.com"
-                          value={email}
-                          onChange={setEmail}
-                          status={
-                            errors.email
-                              ? {type: 'error', message: errors.email}
-                              : undefined
-                          }
-                        />
-                        <CheckboxInput
-                          label="Email me with news and offers"
-                          value={emailOffers}
-                          onChange={setEmailOffers}
-                        />
-                      </VStack>
-
-                      {/* Shipping Information */}
-                      <VStack gap={3}>
-                        <Text type="large" weight="bold">
-                          Shipping Information
+                        <Text type="supporting" color="secondary">
+                          All transactions are secure and encrypted.
                         </Text>
-                        <Grid columns={2} gap={3}>
-                          <TextInput
-                            size="lg"
-                            label="First Name"
-                            placeholder="John"
-                            value={firstName}
-                            onChange={setFirstName}
-                            status={
-                              errors.firstName
-                                ? {type: 'error', message: errors.firstName}
-                                : undefined
-                            }
-                          />
-                          <TextInput
-                            size="lg"
-                            label="Last Name"
-                            placeholder="Doe"
-                            value={lastName}
-                            onChange={setLastName}
-                            status={
-                              errors.lastName
-                                ? {type: 'error', message: errors.lastName}
-                                : undefined
-                            }
-                          />
-                        </Grid>
-                        <TextInput
-                          size="lg"
-                          label="Address"
-                          placeholder="123 Main Street"
-                          value={address}
-                          onChange={setAddress}
-                          status={
-                            errors.address
-                              ? {type: 'error', message: errors.address}
-                              : undefined
-                          }
-                        />
-                        <Grid columns={2} gap={3}>
-                          <TextInput
-                            size="lg"
-                            label="City"
-                            placeholder="New York"
-                            value={city}
-                            onChange={setCity}
-                            status={
-                              errors.city
-                                ? {type: 'error', message: errors.city}
-                                : undefined
-                            }
-                          />
-                          <TextInput
-                            size="lg"
-                            label="ZIP Code"
-                            placeholder="10001"
-                            value={zip}
-                            onChange={setZip}
-                            status={
-                              errors.zip
-                                ? {type: 'error', message: errors.zip}
-                                : undefined
-                            }
-                          />
-                        </Grid>
-                        <Selector
-                          size="lg"
-                          label="State"
-                          placeholder="Select state"
-                          options={US_STATES}
-                          value={state}
-                          onChange={setState}
-                          status={
-                            errors.state
-                              ? {type: 'error', message: errors.state}
-                              : undefined
-                          }
-                        />
-                        <TextInput
-                          size="lg"
-                          label="Phone Number"
-                          placeholder="+1 (555) 123-4567"
-                          value={phone}
-                          onChange={setPhone}
-                          labelTooltip="We use your phone number to provide shipping updates and contact you about your delivery if needed."
-                          status={
-                            errors.phone
-                              ? {type: 'error', message: errors.phone}
-                              : undefined
-                          }
-                        />
-                        <CheckboxInput
-                          label="Save my information for a faster checkout"
-                          value={saveInfo}
-                          onChange={setSaveInfo}
-                        />
                       </VStack>
 
-                      {/* Delivery */}
+                      {/* Express checkout */}
                       <VStack gap={3}>
-                        <VStack gap={1}>
-                          <Text type="large" weight="bold">
-                            Delivery
-                          </Text>
-                          <Text type="supporting" color="secondary">
-                            Please allow 1–3 business days processing time
-                            before your order ships.
-                          </Text>
-                        </VStack>
-                        <RadioList
-                          label="Delivery method"
-                          value={deliveryMethod}
-                          onChange={setDeliveryMethod}>
-                          <RadioListItem
-                            value="standard"
-                            label="Standard (3–7 business days)"
-                            endContent={
-                              <Text type="body" weight="medium">
-                                $4.95
-                              </Text>
-                            }
-                          />
-                          <RadioListItem
-                            value="expedited"
-                            label="Expedited (1–2 business days)"
-                            endContent={
-                              <Text type="body" weight="medium">
-                                $9.95
-                              </Text>
-                            }
-                          />
-                        </RadioList>
-                      </VStack>
-
-                      {/* Payment Method */}
-                      <VStack gap={3}>
-                        <VStack gap={1}>
-                          <Text type="large" weight="bold">
-                            Payment Method
-                          </Text>
-                          <Text type="supporting" color="secondary">
-                            All transactions are secure and encrypted.
-                          </Text>
-                        </VStack>
-
-                        {/* Express checkout */}
-                        <VStack gap={3}>
-                          <Grid columns={{minWidth: 140, max: 2}} gap={3}>
-                            <Button
-                              label="PayPal"
-                              variant="secondary"
-                              size="lg"
-                              icon={<Icon icon={WalletIcon} />}
-                              onClick={() =>
-                                // Demo only: replace this toast with the call that starts PayPal.
-                                showToast({
-                                  body: 'Demo: PayPal checkout would start here',
-                                  uniqueID: 'paypal',
-                                })
-                              }
-                            />
-                            <Button
-                              label="Google Pay"
-                              variant="secondary"
-                              size="lg"
-                              icon={<Icon icon={DevicePhoneMobileIcon} />}
-                              onClick={() =>
-                                // Demo only: replace this toast with the call that starts Google Pay.
-                                showToast({
-                                  body: 'Demo: Google Pay checkout would start here',
-                                  uniqueID: 'google-pay',
-                                })
-                              }
-                            />
-                          </Grid>
-                        </VStack>
-
-                        {/* OR divider */}
-                        <HStack gap={3} vAlign="center">
-                          <StackItem size="fill">
-                            <Divider />
-                          </StackItem>
-                          <Text type="supporting" color="secondary">
-                            OR
-                          </Text>
-                          <StackItem size="fill">
-                            <Divider />
-                          </StackItem>
-                        </HStack>
-
-                        {/* Credit card fields */}
-                        <VStack gap={3}>
-                          {/* Accepted card networks */}
-                          <HStack gap={1.5} vAlign="center" wrap="wrap">
-                            <Icon icon={CreditCardIcon} color="secondary" />
-                            <Badge label="Visa" />
-                            <Badge label="Mastercard" />
-                            <Badge label="Amex" />
-                          </HStack>
-                          <TextInput
-                            size="lg"
-                            label="Card Number"
-                            placeholder="1234 5678 9012 3456"
-                            value={cardNumber}
-                            onChange={setCardNumber}
-                            status={
-                              errors.cardNumber
-                                ? {type: 'error', message: errors.cardNumber}
-                                : undefined
-                            }
-                          />
-                          <Grid columns={3} gap={3}>
-                            <Selector
-                              size="lg"
-                              label="Expiry Month"
-                              placeholder="MM"
-                              options={MONTHS}
-                              value={expiry}
-                              onChange={setExpiry}
-                              status={
-                                errors.expiry
-                                  ? {type: 'error', message: errors.expiry}
-                                  : undefined
-                              }
-                            />
-                            <Selector
-                              size="lg"
-                              label="Expiry Year"
-                              placeholder="YY"
-                              options={YEARS}
-                              value={expYear}
-                              onChange={setExpYear}
-                              status={
-                                errors.expYear
-                                  ? {type: 'error', message: errors.expYear}
-                                  : undefined
-                              }
-                            />
-                            <TextInput
-                              size="lg"
-                              label="CVC"
-                              placeholder="123"
-                              value={cvc}
-                              onChange={setCvc}
-                              labelTooltip="3-digit security code usually found on the back of your card. American Express cards have a 4-digit code located on the front."
-                              status={
-                                errors.cvc
-                                  ? {type: 'error', message: errors.cvc}
-                                  : undefined
-                              }
-                            />
-                          </Grid>
-                          <TextInput
-                            size="lg"
-                            label="Name on Card"
-                            placeholder="John Doe"
-                            value={cardName}
-                            onChange={setCardName}
-                            status={
-                              errors.cardName
-                                ? {type: 'error', message: errors.cardName}
-                                : undefined
-                            }
-                          />
-                          <CheckboxInput
-                            label="Use shipping address as billing address"
-                            value={billingMatchesShipping}
-                            onChange={setBillingMatchesShipping}
-                          />
-                          {!billingMatchesShipping && (
-                            <VStack gap={3}>
-                              <TextInput
-                                size="lg"
-                                label="Address"
-                                placeholder="123 Main Street"
-                                value={billingAddress}
-                                onChange={setBillingAddress}
-                                status={
-                                  errors.billingAddress
-                                    ? {
-                                        type: 'error',
-                                        message: errors.billingAddress,
-                                      }
-                                    : undefined
-                                }
-                              />
-                              <Grid columns={2} gap={3}>
-                                <TextInput
-                                  size="lg"
-                                  label="City"
-                                  placeholder="New York"
-                                  value={billingCity}
-                                  onChange={setBillingCity}
-                                  status={
-                                    errors.billingCity
-                                      ? {
-                                          type: 'error',
-                                          message: errors.billingCity,
-                                        }
-                                      : undefined
-                                  }
-                                />
-                                <TextInput
-                                  size="lg"
-                                  label="ZIP Code"
-                                  placeholder="10001"
-                                  value={billingZip}
-                                  onChange={setBillingZip}
-                                  status={
-                                    errors.billingZip
-                                      ? {
-                                          type: 'error',
-                                          message: errors.billingZip,
-                                        }
-                                      : undefined
-                                  }
-                                />
-                              </Grid>
-                              <Selector
-                                size="lg"
-                                label="State"
-                                placeholder="Select state"
-                                options={US_STATES}
-                                value={billingState}
-                                onChange={setBillingState}
-                                status={
-                                  errors.billingState
-                                    ? {
-                                        type: 'error',
-                                        message: errors.billingState,
-                                      }
-                                    : undefined
-                                }
-                              />
-                            </VStack>
-                          )}
-                        </VStack>
-                      </VStack>
-
-                      {/* Promo Code */}
-                      <VStack gap={3}>
-                        <Text type="large" weight="bold">
-                          Promo Code
-                        </Text>
-                        <HStack gap={2} vAlign="center">
-                          <StackItem size="fill">
-                            <TextInput
-                              size="lg"
-                              label="Promo code"
-                              isLabelHidden
-                              placeholder="Enter promo code"
-                              value={promo}
-                              onChange={setPromo}
-                              controlStyle={fullWidth}
-                            />
-                          </StackItem>
+                        <Grid columns={{minWidth: 140, max: 2}} gap={3}>
                           <Button
-                            label="Apply"
+                            label="PayPal"
                             variant="secondary"
                             size="lg"
+                            icon={<Icon icon={WalletIcon} />}
                             onClick={() =>
-                              // Demo only: replace this toast with the call that applies the promo code.
+                              // Demo only: replace this toast with the call that starts PayPal.
                               showToast({
-                                body: 'Demo: the promo code would be applied here',
-                                uniqueID: 'apply-promo',
+                                body: 'Demo: PayPal checkout would start here',
+                                uniqueID: 'paypal',
                               })
                             }
                           />
-                        </HStack>
+                          <Button
+                            label="Google Pay"
+                            variant="secondary"
+                            size="lg"
+                            icon={<Icon icon={DevicePhoneMobileIcon} />}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that starts Google Pay.
+                              showToast({
+                                body: 'Demo: Google Pay checkout would start here',
+                                uniqueID: 'google-pay',
+                              })
+                            }
+                          />
+                        </Grid>
                       </VStack>
 
-                      {/* Gift Options */}
-                      <VStack gap={3}>
-                        <Text type="large" weight="bold">
-                          Gift Options
+                      {/* OR divider */}
+                      <HStack gap={3} vAlign="center">
+                        <StackItem size="fill">
+                          <Divider />
+                        </StackItem>
+                        <Text type="supporting" color="secondary">
+                          OR
                         </Text>
-                        <CheckboxInput
-                          label="Add a gift message"
-                          value={addGiftMessage}
-                          onChange={setAddGiftMessage}
+                        <StackItem size="fill">
+                          <Divider />
+                        </StackItem>
+                      </HStack>
+
+                      {/* Credit card fields */}
+                      <VStack gap={3}>
+                        {/* Accepted card networks */}
+                        <HStack gap={1.5} vAlign="center" wrap="wrap">
+                          <Icon icon={CreditCardIcon} color="secondary" />
+                          <Badge label="Visa" />
+                          <Badge label="Mastercard" />
+                          <Badge label="Amex" />
+                        </HStack>
+                        <TextInput
+                          size="lg"
+                          label="Card Number"
+                          placeholder="1234 5678 9012 3456"
+                          value={cardNumber}
+                          onChange={setCardNumber}
+                          status={
+                            errors.cardNumber
+                              ? {type: 'error', message: errors.cardNumber}
+                              : undefined
+                          }
                         />
-                        {addGiftMessage && (
+                        <Grid columns={3} gap={3}>
+                          <Selector
+                            size="lg"
+                            label="Expiry Month"
+                            placeholder="MM"
+                            options={MONTHS}
+                            value={expiry}
+                            onChange={setExpiry}
+                            status={
+                              errors.expiry
+                                ? {type: 'error', message: errors.expiry}
+                                : undefined
+                            }
+                          />
+                          <Selector
+                            size="lg"
+                            label="Expiry Year"
+                            placeholder="YY"
+                            options={YEARS}
+                            value={expYear}
+                            onChange={setExpYear}
+                            status={
+                              errors.expYear
+                                ? {type: 'error', message: errors.expYear}
+                                : undefined
+                            }
+                          />
+                          <TextInput
+                            size="lg"
+                            label="CVC"
+                            placeholder="123"
+                            value={cvc}
+                            onChange={setCvc}
+                            labelTooltip="3-digit security code usually found on the back of your card. American Express cards have a 4-digit code located on the front."
+                            status={
+                              errors.cvc
+                                ? {type: 'error', message: errors.cvc}
+                                : undefined
+                            }
+                          />
+                        </Grid>
+                        <TextInput
+                          size="lg"
+                          label="Name on Card"
+                          placeholder="John Doe"
+                          value={cardName}
+                          onChange={setCardName}
+                          status={
+                            errors.cardName
+                              ? {type: 'error', message: errors.cardName}
+                              : undefined
+                          }
+                        />
+                        <CheckboxInput
+                          label="Use shipping address as billing address"
+                          value={billingMatchesShipping}
+                          onChange={setBillingMatchesShipping}
+                        />
+                        {!billingMatchesShipping && (
                           <VStack gap={3}>
+                            <TextInput
+                              size="lg"
+                              label="Address"
+                              placeholder="123 Main Street"
+                              value={billingAddress}
+                              onChange={setBillingAddress}
+                              status={
+                                errors.billingAddress
+                                  ? {
+                                      type: 'error',
+                                      message: errors.billingAddress,
+                                    }
+                                  : undefined
+                              }
+                            />
                             <Grid columns={2} gap={3}>
                               <TextInput
                                 size="lg"
-                                label="To"
-                                isLabelHidden
-                                placeholder="To"
-                                value={giftTo}
-                                onChange={setGiftTo}
+                                label="City"
+                                placeholder="New York"
+                                value={billingCity}
+                                onChange={setBillingCity}
+                                status={
+                                  errors.billingCity
+                                    ? {
+                                        type: 'error',
+                                        message: errors.billingCity,
+                                      }
+                                    : undefined
+                                }
                               />
                               <TextInput
                                 size="lg"
-                                label="From"
-                                isLabelHidden
-                                placeholder="From"
-                                value={giftFrom}
-                                onChange={setGiftFrom}
+                                label="ZIP Code"
+                                placeholder="10001"
+                                value={billingZip}
+                                onChange={setBillingZip}
+                                status={
+                                  errors.billingZip
+                                    ? {
+                                        type: 'error',
+                                        message: errors.billingZip,
+                                      }
+                                    : undefined
+                                }
                               />
                             </Grid>
-                            <TextArea
-                              label="Gift message"
-                              isLabelHidden
-                              placeholder="Write something here"
-                              value={giftMessage}
-                              onChange={setGiftMessage}
+                            <Selector
+                              size="lg"
+                              label="State"
+                              placeholder="Select state"
+                              options={US_STATES}
+                              value={billingState}
+                              onChange={setBillingState}
+                              status={
+                                errors.billingState
+                                  ? {
+                                      type: 'error',
+                                      message: errors.billingState,
+                                    }
+                                  : undefined
+                              }
                             />
                           </VStack>
                         )}
                       </VStack>
+                    </VStack>
 
-                      {/* Trust bar + CTAs + policy links */}
-                      <VStack gap={4}>
-                        <HStack gap={5} hAlign="center" wrap="wrap">
-                          <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={ShieldCheckIcon}
-                              size="sm"
-                              color="secondary"
-                            />
-                            <Text type="supporting" color="secondary">
-                              Secure Payment
-                            </Text>
-                          </HStack>
-                          <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={LockClosedIcon}
-                              size="sm"
-                              color="secondary"
-                            />
-                            <Text type="supporting" color="secondary">
-                              SSL Encrypted
-                            </Text>
-                          </HStack>
-                          <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={CheckCircleIcon}
-                              size="sm"
-                              color="secondary"
-                            />
-                            <Text type="supporting" color="secondary">
-                              Free Returns
-                            </Text>
-                          </HStack>
-                        </HStack>
-                        <VStack gap={2}>
-                          <Button
-                            label="Place Order"
-                            variant="primary"
+                    {/* Promo Code */}
+                    <VStack gap={3}>
+                      <Text type="large" weight="bold">
+                        Promo Code
+                      </Text>
+                      <HStack gap={2} vAlign="center">
+                        <StackItem size="fill">
+                          <TextInput
                             size="lg"
-                            style={fullWidth}
-                            onClick={() => {
-                              setSubmitted(true);
-                              if (Object.values(problems).some(Boolean)) {
-                                return;
-                              }
-                              // Demo only: replace this toast with the call that performs the action.
-                              showToast({
-                                body: 'Demo: your order would be placed here',
-                                uniqueID: 'place-order',
-                              });
-                            }}
+                            label="Promo code"
+                            isLabelHidden
+                            placeholder="Enter promo code"
+                            value={promo}
+                            onChange={setPromo}
+                            controlStyle={fullWidth}
                           />
-                          <Button
-                            label="Continue Shopping"
-                            variant="secondary"
-                            size="lg"
-                            style={fullWidth}
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that performs the action.
-                              showToast({
-                                body: 'Demo: the store would open here',
-                                uniqueID: 'continue-shopping',
-                              })
-                            }
+                        </StackItem>
+                        <Button
+                          label="Apply"
+                          variant="secondary"
+                          size="lg"
+                          onClick={() =>
+                            // Demo only: replace this toast with the call that applies the promo code.
+                            showToast({
+                              body: 'Demo: the promo code would be applied here',
+                              uniqueID: 'apply-promo',
+                            })
+                          }
+                        />
+                      </HStack>
+                    </VStack>
+
+                    {/* Gift Options */}
+                    <VStack gap={3}>
+                      <Text type="large" weight="bold">
+                        Gift Options
+                      </Text>
+                      <CheckboxInput
+                        label="Add a gift message"
+                        value={addGiftMessage}
+                        onChange={setAddGiftMessage}
+                      />
+                      {addGiftMessage && (
+                        <VStack gap={3}>
+                          <Grid columns={2} gap={3}>
+                            <TextInput
+                              size="lg"
+                              label="To"
+                              isLabelHidden
+                              placeholder="To"
+                              value={giftTo}
+                              onChange={setGiftTo}
+                            />
+                            <TextInput
+                              size="lg"
+                              label="From"
+                              isLabelHidden
+                              placeholder="From"
+                              value={giftFrom}
+                              onChange={setGiftFrom}
+                            />
+                          </Grid>
+                          <TextArea
+                            label="Gift message"
+                            isLabelHidden
+                            placeholder="Write something here"
+                            value={giftMessage}
+                            onChange={setGiftMessage}
                           />
                         </VStack>
-                        <Divider />
-                        <HStack gap={4} vAlign="center">
-                          <Link href="#" type="supporting">
-                            Refund policy
-                          </Link>
-                          <Link href="#" type="supporting">
-                            Privacy policy
-                          </Link>
-                          <Link href="#" type="supporting">
-                            Terms of service
-                          </Link>
-                          <Link href="#" type="supporting">
-                            Cancellations
-                          </Link>
-                        </HStack>
-                      </VStack>
+                      )}
                     </VStack>
-                  </StackItem>
 
-                  <StackItem
-                    size="fill"
+                    {/* Trust bar + CTAs + policy links */}
+                    <VStack gap={4}>
+                      <HStack gap={5} hAlign="center" wrap="wrap">
+                        <HStack gap={1} vAlign="center">
+                          <Icon
+                            icon={ShieldCheckIcon}
+                            size="sm"
+                            color="secondary"
+                          />
+                          <Text type="supporting" color="secondary">
+                            Secure Payment
+                          </Text>
+                        </HStack>
+                        <HStack gap={1} vAlign="center">
+                          <Icon
+                            icon={LockClosedIcon}
+                            size="sm"
+                            color="secondary"
+                          />
+                          <Text type="supporting" color="secondary">
+                            SSL Encrypted
+                          </Text>
+                        </HStack>
+                        <HStack gap={1} vAlign="center">
+                          <Icon
+                            icon={CheckCircleIcon}
+                            size="sm"
+                            color="secondary"
+                          />
+                          <Text type="supporting" color="secondary">
+                            Free Returns
+                          </Text>
+                        </HStack>
+                      </HStack>
+                      <VStack gap={2}>
+                        <Button
+                          label="Place Order"
+                          variant="primary"
+                          size="lg"
+                          style={fullWidth}
+                          onClick={() => {
+                            setSubmitted(true);
+                            if (Object.values(problems).some(Boolean)) {
+                              return;
+                            }
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: 'Demo: your order would be placed here',
+                              uniqueID: 'place-order',
+                            });
+                          }}
+                        />
+                        <Button
+                          label="Continue Shopping"
+                          variant="secondary"
+                          size="lg"
+                          style={fullWidth}
+                          onClick={() =>
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: 'Demo: the store would open here',
+                              uniqueID: 'continue-shopping',
+                            })
+                          }
+                        />
+                      </VStack>
+                      <Divider />
+                      <HStack gap={4} vAlign="center">
+                        <Link href="#" type="supporting">
+                          Refund policy
+                        </Link>
+                        <Link href="#" type="supporting">
+                          Privacy policy
+                        </Link>
+                        <Link href="#" type="supporting">
+                          Terms of service
+                        </Link>
+                        <Link href="#" type="supporting">
+                          Cancellations
+                        </Link>
+                      </HStack>
+                    </VStack>
+                  </VStack>
+
+                  <Card
+                    padding={5}
                     style={isMobile ? summaryMobileOrder : summarySticky}>
-                    <Card padding={5}>
-                      <VStack gap={4}>
-                        {/* Accordion header — clickable on mobile only */}
-                        <Collapsible
-                          trigger="Order Summary"
-                          defaultIsOpen={true}>
-                          <VStack gap={4} style={summaryContent}>
-                            {/* Line items */}
-                            {ORDER_ITEMS.map(item => (
-                              <VStack key={item.id} gap={3}>
-                                <HStack gap={3} vAlign="start">
-                                  <Thumbnail
-                                    src={ITEM_IMAGES[item.id].src}
-                                    alt={item.name}
-                                  />
-                                  <StackItem size="fill">
-                                    <VStack gap={1}>
-                                      <HStack
-                                        gap={2}
-                                        hAlign="between"
-                                        vAlign="start">
-                                        <HStack gap={2} vAlign="center">
-                                          <Text type="body" weight="medium">
-                                            {item.name}
-                                          </Text>
-                                          {item.limited && (
-                                            <Badge
-                                              variant="green"
-                                              label="LIMITED EDITION"
-                                            />
-                                          )}
-                                        </HStack>
-                                        <Text type="body" weight="bold">
-                                          {fmt(item.price)}
-                                        </Text>
-                                      </HStack>
-                                      <Text type="supporting" color="secondary">
-                                        {item.variant}
-                                      </Text>
+                    <VStack gap={4}>
+                      {/* Accordion header — clickable on mobile only */}
+                      <Collapsible trigger="Order Summary" defaultIsOpen={true}>
+                        <VStack gap={4} style={summaryContent}>
+                          {/* Line items */}
+                          {ORDER_ITEMS.map(item => (
+                            <VStack key={item.id} gap={3}>
+                              <HStack gap={3} vAlign="start">
+                                <Thumbnail
+                                  src={ITEM_IMAGES[item.id].src}
+                                  alt={item.name}
+                                />
+                                <StackItem size="fill">
+                                  <VStack gap={1}>
+                                    <HStack
+                                      gap={2}
+                                      hAlign="between"
+                                      vAlign="start">
                                       <HStack gap={2} vAlign="center">
-                                        <NumberInput
-                                          label="Qty"
-                                          isLabelHidden
-                                          value={
-                                            quantities[item.id] ?? item.qty
-                                          }
-                                          onChange={v =>
-                                            setQuantities(q => ({
-                                              ...q,
-                                              [item.id]: v,
-                                            }))
-                                          }
-                                          min={1}
-                                          max={10}
-                                          isIntegerOnly
-                                        />
-                                        <Link
-                                          type="supporting"
-                                          onClick={() =>
-                                            confirm.show({
-                                              title: `Remove ${item.name} from your cart?`,
-                                              description:
-                                                "This demo won't change your cart.",
-                                              actionLabel: 'Remove',
-                                              onAction: () => {
-                                                confirm.hide();
-                                                // Demo only: replace this toast with the call that performs the action.
-                                                showToast({
-                                                  body: `Demo: ${item.name} would be removed from your cart here`,
-                                                  uniqueID: 'remove-item',
-                                                });
-                                              },
-                                            })
-                                          }>
-                                          Remove
-                                        </Link>
-                                        <Link
-                                          type="supporting"
-                                          onClick={() =>
-                                            // Demo only: replace this toast with the call that performs the action.
-                                            showToast({
-                                              body: 'Demo: this item would be saved for later here',
-                                              uniqueID: 'save-for-later',
-                                            })
-                                          }>
-                                          Save
-                                        </Link>
+                                        <Text type="body" weight="medium">
+                                          {item.name}
+                                        </Text>
+                                        {item.limited && (
+                                          <Badge
+                                            variant="green"
+                                            label="LIMITED EDITION"
+                                          />
+                                        )}
                                       </HStack>
-                                    </VStack>
-                                  </StackItem>
-                                </HStack>
-                                <Divider />
-                              </VStack>
-                            ))}
-                            {confirm.element}
-
-                            {/* Order total subsection */}
-                            <VStack gap={3}>
-                              <Text type="large" weight="bold">
-                                Order Total
-                              </Text>
-                              <VStack gap={2}>
-                                <HStack hAlign="between" vAlign="center">
-                                  <Text type="body" color="secondary">
-                                    Subtotal
-                                  </Text>
-                                  <Text type="body">{fmt(SUBTOTAL)}</Text>
-                                </HStack>
-                                <HStack hAlign="between" vAlign="center">
-                                  <Text type="body" color="secondary">
-                                    Shipping
-                                  </Text>
-                                  <Text type="body">
-                                    {fmt(
-                                      deliveryMethod === 'expedited'
-                                        ? 9.95
-                                        : 4.95,
-                                    )}
-                                  </Text>
-                                </HStack>
-                                <HStack hAlign="between" vAlign="center">
-                                  <Text type="body" color="secondary">
-                                    Tax
-                                  </Text>
-                                  <Text type="body">{fmt(TAX)}</Text>
-                                </HStack>
-                              </VStack>
+                                      <Text type="body" weight="bold">
+                                        {fmt(item.price)}
+                                      </Text>
+                                    </HStack>
+                                    <Text type="supporting" color="secondary">
+                                      {item.variant}
+                                    </Text>
+                                    <HStack gap={2} vAlign="center">
+                                      <NumberInput
+                                        label="Qty"
+                                        isLabelHidden
+                                        value={quantities[item.id] ?? item.qty}
+                                        onChange={v =>
+                                          setQuantities(q => ({
+                                            ...q,
+                                            [item.id]: v,
+                                          }))
+                                        }
+                                        min={1}
+                                        max={10}
+                                        isIntegerOnly
+                                      />
+                                      <Link
+                                        type="supporting"
+                                        onClick={() =>
+                                          confirm.show({
+                                            title: `Remove ${item.name} from your cart?`,
+                                            description:
+                                              "This demo won't change your cart.",
+                                            actionLabel: 'Remove',
+                                            onAction: () => {
+                                              confirm.hide();
+                                              // Demo only: replace this toast with the call that performs the action.
+                                              showToast({
+                                                body: `Demo: ${item.name} would be removed from your cart here`,
+                                                uniqueID: 'remove-item',
+                                              });
+                                            },
+                                          })
+                                        }>
+                                        Remove
+                                      </Link>
+                                      <Link
+                                        type="supporting"
+                                        onClick={() =>
+                                          // Demo only: replace this toast with the call that performs the action.
+                                          showToast({
+                                            body: 'Demo: this item would be saved for later here',
+                                            uniqueID: 'save-for-later',
+                                          })
+                                        }>
+                                        Save
+                                      </Link>
+                                    </HStack>
+                                  </VStack>
+                                </StackItem>
+                              </HStack>
                               <Divider />
+                            </VStack>
+                          ))}
+                          {confirm.element}
+
+                          {/* Order total subsection */}
+                          <VStack gap={3}>
+                            <Text type="large" weight="bold">
+                              Order Total
+                            </Text>
+                            <VStack gap={2}>
                               <HStack hAlign="between" vAlign="center">
-                                <Text type="large" weight="bold">
-                                  Total
+                                <Text type="body" color="secondary">
+                                  Subtotal
                                 </Text>
-                                <Text type="large" weight="bold">
+                                <Text type="body">{fmt(SUBTOTAL)}</Text>
+                              </HStack>
+                              <HStack hAlign="between" vAlign="center">
+                                <Text type="body" color="secondary">
+                                  Shipping
+                                </Text>
+                                <Text type="body">
                                   {fmt(
-                                    SUBTOTAL +
-                                      (deliveryMethod === 'expedited'
-                                        ? 9.95
-                                        : 4.95) +
-                                      TAX,
+                                    deliveryMethod === 'expedited'
+                                      ? 9.95
+                                      : 4.95,
                                   )}
                                 </Text>
                               </HStack>
-                              <Banner
-                                status="info"
-                                icon={<Icon icon={TruckIcon} size="sm" />}
-                                title="Free shipping on orders over $300"
-                              />
+                              <HStack hAlign="between" vAlign="center">
+                                <Text type="body" color="secondary">
+                                  Tax
+                                </Text>
+                                <Text type="body">{fmt(TAX)}</Text>
+                              </HStack>
                             </VStack>
+                            <Divider />
+                            <HStack hAlign="between" vAlign="center">
+                              <Text type="large" weight="bold">
+                                Total
+                              </Text>
+                              <Text type="large" weight="bold">
+                                {fmt(
+                                  SUBTOTAL +
+                                    (deliveryMethod === 'expedited'
+                                      ? 9.95
+                                      : 4.95) +
+                                    TAX,
+                                )}
+                              </Text>
+                            </HStack>
+                            <Banner
+                              status="info"
+                              icon={<Icon icon={TruckIcon} size="sm" />}
+                              title="Free shipping on orders over $300"
+                            />
                           </VStack>
-                        </Collapsible>
-                      </VStack>
-                      {/* end outer card VStack gap={4} */}
-                    </Card>
-                  </StackItem>
-                </Stack>
+                        </VStack>
+                      </Collapsible>
+                    </VStack>
+                    {/* end outer card VStack gap={4} */}
+                  </Card>
+                </Grid>
               </VStack>
             </Section>
           </Center>
