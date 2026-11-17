@@ -264,6 +264,31 @@ export const docs = {
               "#0A1317"
             ],
             [
+              "--color-neutral-on-accent",
+              "#0536591A",
+              "#0536591A"
+            ],
+            [
+              "--color-neutral-on-info",
+              "#0536591A",
+              "#0536591A"
+            ],
+            [
+              "--color-neutral-on-success",
+              "#0536591A",
+              "#0536591A"
+            ],
+            [
+              "--color-neutral-on-warning",
+              "#DFE2E533",
+              "#DFE2E533"
+            ],
+            [
+              "--color-neutral-on-error",
+              "#0536591A",
+              "#DFE2E533"
+            ],
+            [
               "--color-text-info",
               "var(--color-text-blue)",
               "var(--color-text-blue)"

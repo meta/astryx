@@ -256,6 +256,49 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toBe(button);
   });
 
+  it.each([
+    ['primary', 'accent'],
+    ['destructive', 'error'],
+  ] as const)(
+    'scopes the text and neutral roles to the %s fill pair for its content',
+    (variant, fill) => {
+      render(
+        <Button
+          label="Checkout"
+          variant={variant}
+          tooltip="Opens checkout"
+          endContent={<Badge label={3} />}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Checkout 3'});
+      const style = getComputedStyle(button);
+      expect(style.getPropertyValue('--color-text-primary')).toBe(
+        `var(--color-on-${fill})`,
+      );
+      expect(style.getPropertyValue('--color-neutral')).toBe(
+        `var(--color-neutral-on-${fill})`,
+      );
+      // The tooltip renders beside the Button and keeps the page roles.
+      const tooltip = document.getElementById(
+        button.getAttribute('aria-describedby')!,
+      );
+      expect(tooltip).not.toBeNull();
+      expect(
+        getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
+      ).not.toBe(`var(--color-on-${fill})`);
+    },
+  );
+
+  it.each(['secondary', 'ghost'] as const)(
+    'keeps the page text and neutral roles in a %s Button',
+    variant => {
+      render(<Button label="Inbox" variant={variant} />);
+      const style = getComputedStyle(screen.getByRole('button'));
+      expect(style.getPropertyValue('--color-text-primary')).toBe('');
+      expect(style.getPropertyValue('--color-neutral')).toBe('');
+    },
+  );
+
   // endContent tests
   it('renders endContent after label', () => {
     render(

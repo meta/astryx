@@ -320,9 +320,14 @@ const elevationStyles = stylex.create({
  * Focus outline is shared across variants for consistent keyboard affordance.
  */
 const variants = stylex.create({
+  // A solid fill scopes the text and neutral roles to its own pair, so content
+  // that paints them (a Badge, a Text) reads on the fill. The tooltip renders
+  // beside the Button, so it keeps the page roles.
   primary: {
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],
+    '--color-text-primary': colorVars['--color-on-accent'],
+    '--color-neutral': colorVars['--color-neutral-on-accent'],
   },
   secondary: {
     backgroundColor: colorVars['--color-neutral'],
@@ -335,6 +340,8 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    '--color-text-primary': colorVars['--color-on-error'],
+    '--color-neutral': colorVars['--color-neutral-on-error'],
     // Forced colors replace the fill with ButtonFace; the solid-variant edge
     // (`forcedColorsEdge`) keeps the destructive fill's shape visible
     // (architecture:theme-tokens INV11), in this color. A border, not an

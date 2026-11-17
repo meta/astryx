@@ -124,6 +124,12 @@ describe('status roles meet the INV11 floors', () => {
         contrastRatio(color(t, `--color-on-${s}`), fill),
         4.5,
       );
+      const tinted = opaque(color(t, `--color-neutral-on-${s}`), fill);
+      check(
+        `on-${s} on neutral-on-${s} over ${s}`,
+        contrastRatio(opaque(color(t, `--color-on-${s}`), tinted), tinted),
+        4.5,
+      );
       const pale = opaque(color(t, `--color-${s}-muted`), surface);
       check(
         `on-${s}-muted on ${s}-muted`,
@@ -139,6 +145,16 @@ describe('status roles meet the INV11 floors', () => {
           failures.push(`${role} is not chromatic: ${t[role]}`);
       }
     }
+    const accent = opaque(color(t, '--color-accent'), surface);
+    const accentTinted = opaque(color(t, '--color-neutral-on-accent'), accent);
+    check(
+      'on-accent on neutral-on-accent over accent',
+      contrastRatio(
+        opaque(color(t, '--color-on-accent'), accentTinted),
+        accentTinted,
+      ),
+      4.5,
+    );
     expect(failures).toEqual([]);
   });
 });
@@ -258,6 +274,10 @@ describe('theme generation derives a complete status set (INV17)', () => {
       const fill = opaque(color(t, `--color-${s}`), surface);
       expect(
         contrastRatio(opaque(color(t, `--color-on-${s}`), fill), fill),
+      ).toBeGreaterThanOrEqual(4.5);
+      const tinted = opaque(color(t, `--color-neutral-on-${s}`), fill);
+      expect(
+        contrastRatio(opaque(color(t, `--color-on-${s}`), tinted), tinted),
       ).toBeGreaterThanOrEqual(4.5);
       expect(isChromatic(color(t, `--color-text-${s}`))).toBe(true);
     }

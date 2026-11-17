@@ -10,6 +10,12 @@ import {
 } from './tokens';
 import {colorDefaults} from './tokens.stylex';
 import {domainTokenDefaults} from './domainTokens';
+import {
+  TINTED_FILL_NAMES,
+  neutralOnFillToken,
+  neutralOnFillValue,
+  resolveThemeModes,
+} from './statusRoleDerivation';
 
 const testTheme = defineTheme({
   name: 'test',
@@ -382,6 +388,65 @@ describe('resolveThemeTokens and derived status roles', () => {
   });
 });
 
+describe('neutral tint on a strong fill (theme-compilation INV17)', () => {
+  it("Core's defaults are the values the derivation gives Core's tokens", () => {
+    const core = resolveThemeModes({});
+    for (const fill of TINTED_FILL_NAMES) {
+      expect(
+        (colorDefaults as Record<string, string>)[neutralOnFillToken(fill)],
+      ).toBe(neutralOnFillValue(fill, core));
+    }
+  });
+
+  it('moves a fill away from dark content with the light tint', () => {
+    const theme = defineTheme({
+      name: 'tint-light-accent',
+      tokens: {
+        '--color-accent': '#F2C00B',
+        '--color-on-accent': '#0A1317',
+      },
+    });
+    for (const mode of ['light', 'dark'] as const) {
+      expect(
+        resolveThemeToken(theme, '--color-neutral-on-accent', {mode}),
+      ).toBe('#DFE2E533');
+    }
+  });
+
+  it('follows the content the theme derives for a status fill', () => {
+    const theme = defineTheme({
+      name: 'tint-light-error',
+      tokens: {'--color-error': '#F2C00B'},
+    });
+    expect(
+      resolveThemeToken(theme, '--color-neutral-on-error', {mode: 'light'}),
+    ).toBe('#DFE2E533');
+  });
+
+  it('is transparent when no tint keeps the content at 4.5:1', () => {
+    const theme = defineTheme({
+      name: 'tint-weak-pair',
+      tokens: {'--color-accent': '#808080', '--color-on-accent': '#FFFFFF'},
+    });
+    expect(
+      resolveThemeToken(theme, '--color-neutral-on-accent', {mode: 'light'}),
+    ).toMatch(/^#[0-9A-F]{6}00$/);
+  });
+
+  it('keeps a tint the theme sets', () => {
+    const theme = defineTheme({
+      name: 'tint-set',
+      tokens: {
+        '--color-accent': '#F2C00B',
+        '--color-neutral-on-accent': '#12345633',
+      },
+    });
+    expect(
+      resolveThemeToken(theme, '--color-neutral-on-accent', {mode: 'light'}),
+    ).toBe('#12345633');
+  });
+});
+
 // INV10 governs only the colour tokens Astryx defines. The check reads Astryx's
 // own defaults, never consumer, application, or theme-author variables.
 describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
@@ -398,7 +463,9 @@ describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
     `^--color-${intent}${variant}$`,
     // 4: content on a fill.
     `^--color-on-(?:${intent}${variant}|dark|light)$`,
-    // 5: domain layers.
+    // 5: the neutral tint on a strong fill, under that fill's content.
+    `^--color-neutral-on-(?:accent|info|success|warning|error)$`,
+    // 6: domain layers.
     '^--color-(?:data|syntax)-[a-z0-9-]+$',
   ].map(source => new RegExp(source));
   const utilityNames = new Set([
@@ -420,7 +487,7 @@ describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
     expect(colourNames.length).toBeGreaterThan(50);
   });
 
-  it('gives every colour token Astryx defines one of the five shapes', () => {
+  it('gives every colour token Astryx defines one of the six shapes', () => {
     const misfits = colourNames.filter(
       name =>
         !utilityNames.has(name) && !shapes.some(shape => shape.test(name)),

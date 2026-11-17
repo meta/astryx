@@ -74,6 +74,15 @@ export const colorDefaults = {
   '--color-warning-muted': 'light-dark(#E2A40033, #E2A4003F)',
   '--color-on-warning': 'light-dark(#0A1317, #0A1317)',
 
+  // The neutral tint on a strong fill, under that fill's content at 4.5:1 or
+  // more. It is the light- or dark-mode `--color-neutral` that moves the fill
+  // away from its content (architecture:theme-compilation INV17).
+  '--color-neutral-on-accent': 'light-dark(#0536591A, #0536591A)',
+  '--color-neutral-on-info': 'light-dark(#0536591A, #0536591A)',
+  '--color-neutral-on-success': 'light-dark(#0536591A, #0536591A)',
+  '--color-neutral-on-warning': 'light-dark(#DFE2E533, #DFE2E533)',
+  '--color-neutral-on-error': 'light-dark(#0536591A, #DFE2E533)',
+
   // Status text on the default page and card surfaces, 4.5:1 or more.
   '--color-text-info': 'var(--color-text-blue)',
   '--color-text-success': 'var(--color-text-green)',
