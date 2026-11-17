@@ -147,7 +147,9 @@ export function cutShortText() {
     if (!ownText(el) || !inFlow(el) || !el.parentElement) return false;
     const box = el.getBoundingClientRect();
     const own = textBoxes(el);
-    if (!own.some(t => t.left < box.left - 1 || t.right > box.right + 1))
+    // Any reach past the box counts: letters a fraction of a pixel into the
+    // next box already touch its text.
+    if (!own.some(t => t.left < box.left - 0.1 || t.right > box.right + 0.1))
       return false;
     for (const sib of el.parentElement.children) {
       if (sib === el || !inFlow(sib) || !drawn(sib)) continue;
@@ -155,7 +157,7 @@ export function cutShortText() {
         for (const t of own) {
           const w = Math.min(t.right, s.right) - Math.max(t.left, s.left);
           const h = Math.min(t.bottom, s.bottom) - Math.max(t.top, s.top);
-          if (w > 1 && h > 1) return true;
+          if (w > 0.1 && h > 1) return true;
         }
     }
     return false;
