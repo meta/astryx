@@ -6,7 +6,7 @@
  * @output The marker of a control whose press paints on a child layer
  * @position A press recipe module: the owner carries this marker and
  *   `interactionOverlayStyles.pressedAlpha`; its layer carries
- *   `controlPressLayerStyles.ownerLayer` (press.stylex.ts). No package entry
+ *   `ownerLayerPressStyles.layer` (press.stylex.ts). No package entry
  *   exports it.
  */
 

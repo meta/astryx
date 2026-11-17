@@ -33,7 +33,7 @@ import type {BaseProps} from '../BaseProps';
 import {useTabListContext} from './TabListContext';
 import type {TabListSize} from './TabListContext';
 import {controlPressOwner} from '../privateAttributes/pressOwner.stylex';
-import {controlPressLayerStyles} from '../privateAttributes/press.stylex';
+import {ownerLayerPressStyles} from '../privateAttributes/press.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -382,7 +382,7 @@ export function Tab({
       aria-hidden="true"
       {...stylex.props(
         styles.hoverBg,
-        controlPressLayerStyles.ownerLayer,
+        ownerLayerPressStyles.layer,
         hoverSizeStyles[size],
       )}
     />

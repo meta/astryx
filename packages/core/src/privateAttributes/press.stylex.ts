@@ -389,45 +389,6 @@ export const controlPressLayerStyles = stylex.create({
       [COARSE]: {default: null, [PRESSED_ANY]: 'transform'},
     },
   },
-  /**
-   * The press layer of a control that paints on a child element (Tab's
-   * hover span), read off the owner's `controlPressOwner` marker. The owner
-   * carries `interactionOverlayStyles.pressedAlpha`, so the layer paints the
-   * touch press at the owner's strength. A fine pointer paints the hover,
-   * then the pressed overlay at `:active`; under a coarse pointer the colour
-   * stays transparent and the controller's press paints as an image. The
-   * pressed arm repeats inside the hover branch so it outranks the hover
-   * rule there (a media-nested rule carries extra generated priority).
-   */
-  ownerLayer: {
-    backgroundColor: {
-      default: 'transparent',
-      [stylex.when.ancestor(':hover', controlPressOwner)]: {
-        [HOVER_HOVER]: colorVars['--color-overlay-hover'],
-      },
-      [stylex.when.ancestor(':active', controlPressOwner)]: {
-        default: colorVars['--color-overlay-pressed'],
-        [HOVER_HOVER]: colorVars['--color-overlay-pressed'],
-        [COARSE]: 'transparent',
-      },
-    },
-    // An image change is discrete, so the colour transition cannot fade the
-    // onset in; the owner's strength is what moves over the release.
-    backgroundImage: {
-      default: null,
-      [stylex.when.ancestor(PRESSED_ON, controlPressOwner)]: {
-        default: null,
-        [COARSE]: pressedOverlayImage,
-      },
-      [stylex.when.ancestor(PRESSED_FADING, controlPressOwner)]: {
-        default: null,
-        [COARSE]: pressedOverlayImage,
-      },
-    },
-    transitionProperty: 'background-color',
-    transitionDuration: durationVars['--duration-fast'],
-    transitionTimingFunction: easeVars['--ease-standard'],
-  },
 });
 
 export const rowPressPaintStyles = stylex.create({
@@ -514,12 +475,56 @@ export const indicatorPressPaintStyles = stylex.create({
   },
 });
 
+// Each recipe option below is its own `stylex.create`, so a page that does
+// not use it does not load it.
+export const ownerLayerPressStyles = stylex.create({
+  /**
+   * The press layer of a control that paints on a child element (Tab's
+   * hover span), read off the owner's `controlPressOwner` marker. The owner
+   * carries `interactionOverlayStyles.pressedAlpha`, so the layer paints the
+   * touch press at the owner's strength. A fine pointer paints the hover,
+   * then the pressed overlay at `:active`. Under a coarse pointer the colour
+   * stays transparent, and the controller's press paints as an image. The
+   * pressed arm repeats inside the hover branch so it outranks the hover
+   * rule there (a media-nested rule carries extra generated priority).
+   */
+  layer: {
+    backgroundColor: {
+      default: 'transparent',
+      [stylex.when.ancestor(':hover', controlPressOwner)]: {
+        [HOVER_HOVER]: colorVars['--color-overlay-hover'],
+      },
+      [stylex.when.ancestor(':active', controlPressOwner)]: {
+        default: colorVars['--color-overlay-pressed'],
+        [HOVER_HOVER]: colorVars['--color-overlay-pressed'],
+        [COARSE]: 'transparent',
+      },
+    },
+    // An image change is discrete, so the colour transition cannot fade the
+    // onset in; the owner's strength is what moves over the release.
+    backgroundImage: {
+      default: null,
+      [stylex.when.ancestor(PRESSED_ON, controlPressOwner)]: {
+        default: null,
+        [COARSE]: pressedOverlayImage,
+      },
+      [stylex.when.ancestor(PRESSED_FADING, controlPressOwner)]: {
+        default: null,
+        [COARSE]: pressedOverlayImage,
+      },
+    },
+    transitionProperty: 'background-color',
+    transitionDuration: durationVars['--duration-fast'],
+    transitionTimingFunction: easeVars['--ease-standard'],
+  },
+});
+
 export const persistentSelectedPressStyles = stylex.create({
   /**
    * A selected control on the neutral fill (TopNavItem in the bar). It
-   * keeps that fill under hover and through every phase of a press, and
-   * paints no pressed overlay, for a mouse and a finger alike. Compose it
-   * after `interactionOverlayStyles.backgroundColor`.
+   * keeps that fill under hover and through every phase of a press. It
+   * paints no pressed overlay, for a mouse or a finger. Compose it after
+   * `interactionOverlayStyles.backgroundColor`.
    */
   neutral: {
     backgroundColor: {

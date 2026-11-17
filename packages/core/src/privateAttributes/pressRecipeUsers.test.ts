@@ -12,9 +12,8 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 
-/** The press attribute, or `:active`, as a style key. */
-const PRESS_SELECTOR =
-  /data-astryx-press|['"`]:active['"`]|ancestor\(\s*['"`]:active/;
+/** The press attribute, or a style key that holds `:active`. */
+const PRESS_SELECTOR = /data-astryx-press|['"`][^'"`\n]*:active/;
 
 /** Components that paint their press only through a recipe export. */
 const RECIPE_USERS = ['TabList/Tab.tsx', 'TopNav/TopNavItem.tsx'];
