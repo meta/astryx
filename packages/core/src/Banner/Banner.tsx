@@ -694,11 +694,10 @@ export function Banner({
                 : styles.headerCardStandalone),
           ),
         )}>
-        {/* The 'banner-icon' target rides on the element that paints: the
-            default <Icon>, or a wrapper around a custom `icon` node (core
-            never injects props into consumer elements, so overrides reach it
-            via inheritance). The default <Icon> is a direct flex item, so a
-            theme that hides 'banner-icon' also removes its column gap. */}
+        {/* The default Icon is a direct flex item. A theme that hides
+            'banner-icon' also removes its column gap. A custom `icon` node
+            gets a wrapper, because core never adds props to consumer
+            elements; overrides reach the node through inheritance. */}
         {isRenderable(icon) ? (
           <div
             {...mergeProps(
