@@ -163,7 +163,7 @@ export const docs = {
         states: ['state'],
       },
       {className: 'astryx-selector-check', sitsOn: 'icon'},
-      {className: 'astryx-selector-popup'},
+      {className: 'astryx-selector-popup', sitsOn: 'popover'},
     ],
   },
   description: 'Dropdown selector for choosing from a list of options.',

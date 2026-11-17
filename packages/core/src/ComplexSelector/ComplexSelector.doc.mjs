@@ -77,7 +77,7 @@ export const docs = {
         sitsOn: 'icon',
         states: ['state'],
       },
-      {className: 'astryx-complex-selector-popup'},
+      {className: 'astryx-complex-selector-popup', sitsOn: 'popover'},
     ],
   },
   components: [
