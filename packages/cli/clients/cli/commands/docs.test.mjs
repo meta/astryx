@@ -11,7 +11,7 @@ import {displayWidth} from '../formatters/index.mjs';
 import {
   DOC_OUTPUT_BUDGET_BYTES,
   docPayloadBytes,
-} from '../../../foundation/discovery/docs-output-budget.mjs';
+} from '../../../foundation/response/docs-read-budget.mjs';
 
 let tmpDir;
 

@@ -52,7 +52,7 @@ import {docs as docsApi} from '../../../api/docs/docs.mjs';
 import {
   DOC_OUTPUT_BUDGET_BYTES,
   docPayloadBytes,
-} from '../../../foundation/discovery/docs-output-budget.mjs';
+} from '../../../foundation/response/docs-read-budget.mjs';
 import {doc as docsCommand} from './docs.doc.mjs';
 import {doc as docsFn} from '../../../api/docs/docs.doc.mjs';
 
