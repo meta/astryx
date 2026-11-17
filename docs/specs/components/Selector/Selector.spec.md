@@ -49,6 +49,7 @@ connection between the closed trigger and its selection surface.
 
 ## Compatibility and migration
 
+- The active-option announcement lives in a folder-local hook in each component (Selector and MultiSelector), kept in step by SYNC pointers; a shared hook would be a new internal module under `architecture:knowledge-contracts` DEC-22, and that is a pending owner decision.
 - Released defaults and behavior are unchanged except the `presentation`
   default, which DEC-1 sets, and `adaptive`'s compact test (below).
 - `indicatorPosition` defaults to `end`; a rendered selection mark occupies
