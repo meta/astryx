@@ -83,7 +83,7 @@ export const doc = {
       param: 'options.agentDocsPath',
       description:
         'Write the block to these files instead, inside the project; takes precedence over --agent. ' +
-        'A path outside the project writes nothing and exits 1. Used only when agent docs are installed',
+        'A path outside the project writes no agent docs and exits 1. Used only when agent docs are installed',
     },
   ],
   examples: [
