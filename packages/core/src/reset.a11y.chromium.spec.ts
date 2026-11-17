@@ -27,7 +27,7 @@ const RESET_CSS = fs.readFileSync(
 // placeholder takes the reset's fallback: the token's own light-dark() default.
 const PLACEHOLDER_FALLBACK = {
   light: 'rgb(78, 96, 111)',
-  dark: 'rgb(170, 175, 181)',
+  dark: 'rgb(176, 181, 187)',
 };
 
 /** Every style rule's selector, in source order, comments stripped. */
