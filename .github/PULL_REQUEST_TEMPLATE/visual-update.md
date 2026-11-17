@@ -13,7 +13,7 @@ Choose one and link it:
 - [ ] Correction already settled by current family, design, theme, or objective accessibility authority.
 - [ ] New shared or cross-component direction settled in `docs/design/`.
 
-<!-- External contributors are not expected to author or update specifications. Maintainers record missing authority. A human request supplies intent; current authority still requires exact-head owner approval. -->
+<!-- External contributors are not expected to author or update specifications. Maintainers record missing authority. A human request supplies intent; current authority still requires owner approval of its content. -->
 
 ## Before and after
 
@@ -24,6 +24,8 @@ Choose one and link it:
 <!-- Cover relevant themes, light/dark modes, viewport/container sizes, LTR/RTL, input states, and the unchanged legacy/default path. -->
 
 ## Scope
+
+Components: <!-- the components and modules this PR changes, comma-separated -->
 
 - [ ] Appearance is the primary intent.
 - [ ] Behavior, API, interaction model, and unrelated layout changes were removed or split.

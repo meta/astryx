@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {afterEach, describe, expect, it} from 'vitest';
 import jscodeshift from 'jscodeshift';
 import manifest from '../index.mjs';
 import transform, {
@@ -14,6 +17,38 @@ const IMPORT = "import {defineTheme} from '@astryxdesign/core/theme';\n";
 
 function apply(source, filePath = 'theme.ts') {
   return transform({source, path: filePath}, api) ?? source;
+}
+
+/** A proven theme: an object passed to Astryx's imported defineTheme(). */
+function defined(components) {
+  return `${IMPORT}export default defineTheme({name: 'brand', components: ${components}});`;
+}
+
+const THEME_DOC = `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */
+export default {
+  type: 'theme',
+  name: 'brand',
+  displayName: 'Brand',
+  description: 'A brand theme.',
+  maintained: false,
+};
+`;
+
+const tempDirs = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+/** Write `files` into a fresh directory and return its path. */
+function folder(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-surface-'));
+  tempDirs.push(dir);
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), content);
+  }
+  return dir;
 }
 
 const EXPECTED_TARGETS = {
@@ -60,7 +95,7 @@ describe('migrate-deprecated-theme-surface', () => {
     'renames static target key %s to %s inside a components map',
     (oldKey, newKey) => {
       const output = apply(
-        `export default {name: 'brand', components: {${JSON.stringify(oldKey)}: {base: {color: 'red'}}}};`,
+        defined(`{${JSON.stringify(oldKey)}: {base: {color: 'red'}}}`),
       );
 
       expect(output).not.toContain(`${JSON.stringify(oldKey)}:`);
@@ -103,9 +138,111 @@ export const theme = defineTheme({name: 'brand', components});`);
     }
   });
 
+  it('does not rewrite a look-alike theme object from another library', () => {
+    const input = `export const muiTheme = {
+  name: 'brand',
+  components: {checkbox: {root: {color: 'red'}}, radio: {root: {}}, textarea: {root: {}}},
+};`;
+    expect(apply(input, 'src/muiTheme.ts')).toBe(input);
+  });
+
+  it('does not take a file-level Astryx import as proof for a look-alike object', () => {
+    const input = `import {Button} from '@astryxdesign/core';
+export const editorTheme = {name: 'editor', components: {textarea: {root: {}}}};`;
+    expect(apply(input, 'src/editorTheme.ts')).toBe(input);
+  });
+
+  it('renames a direct theme object in a source its theme descriptor declares', () => {
+    const dir = folder({'brandTheme.doc.mjs': THEME_DOC});
+    const output = apply(
+      `export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};`,
+      path.join(dir, 'brandTheme.ts'),
+    );
+    expect(output).toContain("'nav-icon':");
+    expect(output).not.toMatch(/navicon\s*:/);
+  });
+
+  it('renames only the declared theme binding in a described theme source', () => {
+    const dir = folder({'brandTheme.doc.mjs': THEME_DOC});
+    const output = apply(
+      `export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};
+export const otherLibraryTheme = {
+  name: 'other',
+  components: {checkbox: {root: {}}, textarea: {root: {}}},
+};`,
+      path.join(dir, 'brandTheme.ts'),
+    );
+    expect(output).toContain("'nav-icon':");
+    expect(output).toContain(
+      'components: {checkbox: {root: {}}, textarea: {root: {}}}',
+    );
+    expect(output).not.toContain('checkbox-indicator');
+    expect(output).not.toContain('text-area');
+  });
+
+  it('follows a local binding exported under the descriptor name', () => {
+    const dir = folder({'brandTheme.doc.mjs': THEME_DOC});
+    const output = apply(
+      `const theme = {name: 'brand', components: {navicon: {base: {}}}} as const;
+export {theme as brandTheme};`,
+      path.join(dir, 'brandTheme.ts'),
+    );
+    expect(output).toContain("'nav-icon':");
+  });
+
+  it('does not treat an unexported or nested same-named object as the declared theme', () => {
+    const dir = folder({'brandTheme.doc.mjs': THEME_DOC});
+    for (const input of [
+      `const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};`,
+      `export function make() {
+  const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};
+  return brandTheme;
+}`,
+    ]) {
+      expect(apply(input, path.join(dir, 'brandTheme.ts'))).toBe(input);
+    }
+  });
+
+  it('does not treat a descriptor for another stem or kind as theme proof', () => {
+    const input = `export const brandTheme = {name: 'brand', components: {navicon: {base: {}}}};`;
+    const otherStem = folder({'otherTheme.doc.mjs': THEME_DOC});
+    expect(apply(input, path.join(otherStem, 'brandTheme.ts'))).toBe(input);
+    const otherKind = folder({
+      'brandTheme.doc.mjs': 'export default {name: "brand", props: []};\n',
+    });
+    expect(apply(input, path.join(otherKind, 'brandTheme.ts'))).toBe(input);
+  });
+
   it('does not treat a defineTheme from another library as an Astryx theme', () => {
     const input = `import {defineTheme} from 'other-ui';
 export default defineTheme({components: {checkbox: {base: {color: 'red'}}}});`;
+    expect(apply(input)).toBe(input);
+  });
+
+  it.each([
+    [
+      'named defineTheme',
+      `import {defineTheme} from '@astryxdesign/core';
+function unrelated(defineTheme) {
+  return defineTheme({name: 'fake', components: {checkbox: {root: {}}}});
+}`,
+    ],
+    [
+      'aliased defineTheme',
+      `import {defineTheme as makeTheme} from '@astryxdesign/core';
+function unrelated() {
+  const makeTheme = otherLibrary.createTheme;
+  return makeTheme({name: 'fake', components: {checkbox: {root: {}}}});
+}`,
+    ],
+    [
+      'namespace defineTheme',
+      `import * as Astryx from '@astryxdesign/core';
+function unrelated(Astryx) {
+  return Astryx.defineTheme({name: 'fake', components: {checkbox: {root: {}}}});
+}`,
+    ],
+  ])('does not treat a shadowed %s as an Astryx call', (_name, input) => {
     expect(apply(input)).toBe(input);
   });
 
@@ -141,9 +278,54 @@ const brand: DefineThemeInput = {name: 'brand', components: {navicon: {base: {}}
     expect(output).not.toMatch(/navicon\s*:/);
   });
 
+  it.each([
+    [
+      'a locally redeclared named type',
+      `import type {DefineThemeInput} from '@astryxdesign/core';
+function unrelated() {
+  type DefineThemeInput = OtherTheme;
+  return {name: 'fake', components: {checkbox: {root: {}}}} satisfies DefineThemeInput;
+}`,
+    ],
+    [
+      'an aliased type shadowed by a type parameter',
+      `import type {DefineThemeInput as Theme} from '@astryxdesign/core';
+function unrelated<Theme>(value: unknown) {
+  const theme: Theme = {name: 'fake', components: {checkbox: {root: {}}}};
+  return theme;
+}`,
+    ],
+    [
+      'a namespace shadowed by a type parameter',
+      `import type * as Astryx from '@astryxdesign/core';
+function unrelated<Astryx>() {
+  return {name: 'fake', components: {checkbox: {root: {}}}} satisfies Astryx.DefineThemeInput;
+}`,
+    ],
+    [
+      'a namespace shadowed by a local namespace',
+      `import * as Astryx from '@astryxdesign/core';
+function unrelated() {
+  namespace Astryx { export type DefineThemeInput = OtherTheme; }
+  return ({name: 'fake', components: {checkbox: {root: {}}}}) as Astryx.DefineThemeInput;
+}`,
+    ],
+  ])('does not treat %s as an Astryx theme type', (_name, input) => {
+    expect(apply(input)).toBe(input);
+  });
+
+  it('still recognizes an unshadowed theme type inside a function', () => {
+    const output =
+      apply(`import type {DefineThemeInput} from '@astryxdesign/core';
+function makeTheme<T>() {
+  return {components: {navicon: {base: {}}}} satisfies DefineThemeInput;
+}`);
+    expect(output).toContain("'nav-icon':");
+  });
+
   it('renames a clear-icon alias with a TODO naming the owner scope it loses', () => {
     const output = apply(
-      `export default {name: 'brand', components: {'selector-clear-icon': {base: {color: 'red'}}}};`,
+      defined(`{'selector-clear-icon': {base: {color: 'red'}}}`),
     );
     expect(output).toContain("'input-clear-icon':");
     expect(output).toContain(
@@ -155,10 +337,12 @@ const brand: DefineThemeInput = {name: 'brand', components: {navicon: {base: {}}
   });
 
   it('flags two clear-icon aliases that collapse onto the shared target', () => {
-    const output = apply(`export default {name: 'brand', components: {
+    const output = apply(
+      defined(`{
   'selector-clear-icon': {base: {color: 'red'}},
   'date-input-clear-icon': {base: {color: 'blue'}},
-}};`);
+}`),
+    );
     expect(output).toContain("'input-clear-icon':");
     expect(output).toContain(
       'merge deprecated theme target `date-input-clear-icon` into `input-clear-icon`',
@@ -291,6 +475,21 @@ const theme = {name: 'brand', components: {[oldTarget]: {base: {color: 'red'}}}}
     expect(apply(output, 'theme.css')).toBe(output);
   });
 
+  it('maps only the column values MetadataList emitted, not app classes', () => {
+    const output = apply(
+      `.astryx-metadata-list.app-compact-list { gap: 4px; }
+.astryx-metadata-list.columns-3, .astryx-metadata-list.multi { gap: 8px; }`,
+      'theme.css',
+    );
+    expect(output).toContain('.astryx-metadata-list.app-compact-list');
+    expect(output).not.toContain('data-columns="app-compact-list"');
+    expect(output).toContain('.astryx-metadata-list:is([data-columns="3"])');
+    expect(output).not.toContain('data-columns="columns-3"');
+    expect(output).toContain(
+      '.astryx-metadata-list:is([data-columns="multi"])',
+    );
+  });
+
   it('leaves unqualified and unknown consumer classes unchanged', () => {
     const input = `.primary { color: red; }
 .astryx-button.brand { color: blue; }`;
@@ -312,7 +511,9 @@ const theme = {name: 'brand', components: {[oldTarget]: {base: {color: 'red'}}}}
   });
 
   it('is byte-idempotent after JavaScript and CSS migration', () => {
-    const js = `export default {name: 'brand', components: {statusdot: {base: {color: 'red'}}, 'selector-clear-icon': {base: {color: 'red'}}}};`;
+    const js = defined(
+      `{statusdot: {base: {color: 'red'}}, 'selector-clear-icon': {base: {color: 'red'}}}`,
+    );
     const css = '.astryx-textarea.sm {}';
     const jsOnce = apply(js);
     const cssOnce = apply(css, 'theme.css');

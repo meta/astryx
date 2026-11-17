@@ -16,9 +16,15 @@ describe('pointersIn', () => {
   it('leaves a walkthrough alone: more words, a flag, or a route', () => {
     expect(
       pointersIn(
-        'Run `astryx docs theme overview`, `astryx docs --json`, `astryx docs cli/integrations`, or `astryx docs`.',
+        'Run `astryx docs theme overview`, `astryx docs --json`, `astryx docs authoring/quick-start`, or `astryx docs`.',
       ),
     ).toEqual([]);
+  });
+
+  it('finds the {@command docs <name>} token too, with or without ticks', () => {
+    expect(
+      pointersIn('Read {@command docs theme}, then `{@command docs layout}`.'),
+    ).toEqual(['theme', 'layout']);
   });
 
   it('leaves the bare name and a runner-written command alone', () => {

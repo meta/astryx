@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/ship/checks`: what each package check
+ * @file `astryx docs authoring/ship/checks`: what each package check
  * proves, what fails and what only warns, and one command to run them all.
  */
 
@@ -29,37 +29,37 @@ export const docs = {
           headers: ['Command', 'Proves', 'Exits 1 when', 'Only warns when'],
           rows: [
             [
-              '`astryx doctor integration validate`',
-              'The manifest loads, each root holds contributions the CLI can read, and each doc matches its authoring type',
+              '`{@command doctor integration validate}`',
+              "The manifest loads, each root holds contributions the CLI can read, and each doc matches its authoring type. Notes list a manifest key this CLI does not know (`unknown_manifest_key`; usually a key from a newer CLI, so it fails nothing, while a key one letter from a known one is a `next` note with its fix), a malformed `cliCommand` (`invalid_cli_command`) and, for each topic, a command written with a package runner (`runner_command`), bare (`plain_command`) or for one package manager (`package_manager_command`), and a token that does not parse (`doc_token`; see {@link generic:doc-syntax}). A `next` note names each relative import of a module or stylesheet an app loads from the package, `@import` and `url()` included, that no file npm packs answers the way a bundler resolves it (`relative_import_not_shipped`), and each one from a theme module `theme build` wrote that answers to TypeScript source, which an app's bundler does not compile from an installed package (`built_module_imports_typescript`); the next minor release makes them warnings, which fail `--strict`. Two notes, which fail nothing under any flag, say what a catalog needs to list the package: no logo (`package_without_logo`) and no example block (`package_without_example`; see the section below). Notes fail nothing by default; `integration check --strict --next` fails on the ones marked `next`, and the next minor release counts them",
               'A declared root is missing (`missing_root`), a contribution does not load (`invalid_doc`, `invalid_component`, `invalid_theme`), or two templates in the package replace one Core id (`ambiguous_template_replacement`)',
-              "The manifest has a key this CLI does not know (`unknown_manifest_key`), or a doc field does not match the doc's authoring type: a field the type does not have, a missing required field, or a value outside the field's type. It also warns on what no reader can serve: a prop listed twice (`duplicate_prop`), a `propDescriptions` key that names no documented prop (`unknown_translated_prop`), a section with no content (`empty_section`), two sections of a topic with one key (`duplicate_section_key`), or a `.doc.zh.mjs` or `.doc.dense.mjs` overlay beside no topic file (`orphan_doc_overlay`). It checks docs with your installed `typescript`, or, where that is missing or has no JavaScript compiler API (TypeScript 7), with an installed `@typescript/typescript6`; without either, it prints `[skip] Docs not type-checked`. With no `astryx.integration.mjs` it prints a hint and exits 0",
+              "The manifest has a field this CLI drops because it cannot use it, such as a `themeProvider` prop that names no prop (`ignored_manifest_field`), or a doc field does not match the doc's authoring type: a field the type does not have, a missing required field, or a value outside the field's type. It also warns on what no reader can serve: a prop listed twice (`duplicate_prop`), a `propDescriptions` key that names no documented prop (`unknown_translated_prop`), a section with no content (`empty_section`), two sections of a topic with one key (`duplicate_section_key`), or a `.doc.zh.mjs` or `.doc.dense.mjs` overlay beside no topic file (`orphan_doc_overlay`). Since 0.7.3 it also lists, from source and without failing, what the package tells apps to import that they cannot: a component's import (the doc's `import`, or the one the CLI derives) or a template's public import whose subpath package.json `exports` does not declare (`component_import_not_exported`, `template_import_not_exported`) or that names another package (`component_import_other_package`); an example that imports an undeclared subpath (`example_import_not_exported`); a template that imports a path outside the templates root (`template_import_outside_root`) or a path its package or Core does not export (`template_private_import`). It lists the same way a component's import whose module does not export the component (`component_import_missing_name`), an example or a template that imports a name its package does not export (`example_import_missing_name`, `template_import_missing_name`), and a template source with no default export (`template_no_default_export`). It lists the same way each component example that is not `kind: 'setup'` but cannot run on its own, as a live preview runs it: code that does not compile (`example_does_not_compile`), renders nothing (`example_renders_nothing`), uses a name it never defines or imports (`example_undefined_name`), imports or renders code that runs only on a server, or reads `process.env` (`example_server_only`), or imports a relative path or a package the package does not declare (`example_import_unresolvable`). Each is a note, printed with its fix, that fails `--strict` from the next minor; an import it cannot judge, such as an `exports` target not built yet or a deep path into a `dist/` not built yet, is listed under `publicImports` as not checked, and an example it cannot judge, such as one whose names it cannot judge without Core or React installed, under `exampleCode`. It checks docs with your installed `typescript`, or, where that is missing or has no JavaScript compiler API (TypeScript 7), with an installed `@typescript/typescript6`; without either, it prints `[skip] Docs not type-checked`. With no `astryx.integration.mjs` it prints a hint and exits 0",
             ],
             [
-              '`astryx doctor integration components`',
+              '`{@command doctor integration components}`',
               "No component name clashes with a Core component, each `replaces` names one Core component, and each component doc's props match the component's TypeScript props",
               'Core is not installed (`core_not_found`). In a package that declares the CLI range that turns replacement on, a `replaces` target is missing (`missing_component_replacement_target`) or invalid (`invalid_component_replacement`), or two components replace one Core component (`ambiguous_component_replacement`)',
               'A name clashes with Core, a component sets `replaces` in a package without that range (`inactive_component_replacement`, plus any missing, invalid, or duplicate `replaces` reported as a warning), or a documented prop differs from the code: it is missing there (`not_in_code`), the doc omits a prop the package declares (`not_in_doc`), or its `required` (`required_mismatch`), type (`type_mismatch`), or literal `default` (`default_mismatch`) disagrees, or a `{@link}` in a component doc names no doc (`invalid_doc_graph`). It reads props with your installed `typescript`; without it, it prints `[skip] Props not compared`',
             ],
             [
-              '`astryx doctor integration templates`',
+              '`{@command doctor integration templates}`',
               'Each `replaces` names a Core template of the same type',
               'A `replaces` target is missing (`missing_template_replacement_target`) or of the other type (`invalid_template_replacement`), or two templates replace one id (`ambiguous_template_replacement`)',
               'A template id matches a Core id without `replaces`',
             ],
             [
-              '`astryx doctor integration docs`',
+              '`{@command doctor integration docs}`',
               'Your docs tree, every link, topic names against Core, passages two topics repeat word for word, padding phrases and low-density topics, and written pointers to docs',
               'A topic takes a Core topic name without `replaces` or `extends`, a doc is invalid (`invalid_doc`), or a namespace or placement fails, which hides the doc (`invalid_doc_graph`)',
-              'A link names no doc (`invalid_doc_graph`), two topics repeat a passage word for word (`copied_passage`), prose pads with a listed phrase or falls under the density floor (`doc_fluff`), or prose, a description or summary, or the text of a component doc writes `astryx docs <name>` where a link would be checked (`stray_doc_pointer`)',
+              'A link names no doc (`invalid_doc_graph`), two topics repeat a passage word for word (`copied_passage`), prose pads with a listed phrase or falls under the density floor (`doc_fluff`), or prose, a description or summary, or the text of a component doc writes `{@command docs <name>}` where a link would be checked (`stray_doc_pointer`)',
             ],
             [
-              '`astryx integration check`',
+              '`{@command integration check}`',
               'Everything the four `doctor integration` checks prove, in one command, for your build',
               'Any of the four would exit 1 on its own. With `--strict`, also any warning, and any check that did not run, such as a package with no `astryx.integration.*`',
               'Anything the four warn about, unless you pass `--strict`',
             ],
             [
-              '`astryx integration verify`',
+              '`{@command integration verify}`',
               'The packed package holds every file, shows the same contributions, resolves every public import, and declares the CLI it needs',
               'Anything `validate` fails on, no manifest, a file left out of the `.tgz` file, an import that does not resolve, or a missing CLI peer',
               'Anything `validate` warns about, or a component sets `replaces` and the package does not declare the CLI range that turns it on (`component_replaces_needs_cli`)',
@@ -68,7 +68,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Pass a package name, such as `astryx doctor integration validate @acme/astryx-widgets`, to check an installed copy from an app instead. To fix a props finding, see {@link generic:check-the-props}.',
+          text: 'Pass a package name, such as `{@command doctor integration validate @acme/astryx-widgets}`, to check an installed copy from an app instead. To fix a props finding, see {@link generic:check-the-props}.',
         },
       ],
     },
@@ -93,7 +93,28 @@ export const docs = {
             '`--strict` also exits 1 on any warning and on any check that did not run. Without it, warnings keep exit code 0: use that while you fix the warnings a package already has.',
             'Its exit codes and JSON are a contract for your build: a new check, or a new failure code, joins only in a minor release that names it in the release notes. A patch can still ship a Core component, template, or CLI topic whose name conflicts with one of yours.',
             '`integration verify` runs `validate` but none of the other three: a Core name clash, a `replaces` that names no Core template, a topic that takes a Core name, or a hidden guide still passes it. Run both before you publish: `astryx integration check --strict && astryx integration verify`.',
-            'Bare `astryx doctor` in the package also warns about a doc section over 32 KB, which no check above measures.',
+            'Bare `{@command doctor}` in the package also warns about a doc section over 32 KB, which no check above measures.',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'get-ready-to-list',
+      title: 'Get your package ready to list',
+      content: [
+        {
+          type: 'prose',
+          text: 'A catalog that lists your package shows its logo beside its name and previews one of its examples. Two notes in `{@command integration check}` say when either is missing: `package_without_logo` and `package_without_example`. They are information only: they fail no check, with or without `--strict` or `--next`.',
+        },
+        {
+          type: 'list',
+          style: 'ordered',
+          items: [
+            'Add a square logo inside the package, such as `marketplace/logo.svg`: an SVG drawn only with shapes (no script, style, link, embedded image or outside URL), or a PNG, JPEG or WebP, at most 512 KB. Keep it simple enough to read at 32 pixels.',
+            "Put the logo in the integration file, beside `docsiteUrl`, and add a dark-background version if the light one disappears on dark: `logo: {light: './marketplace/logo.svg', dark: './marketplace/logo-dark.svg'}`. Paths are relative to the package root. A logo set in package.json `marketplace.logo` is also read when the integration file has none, but the integration file is the place to set it.",
+            'Make sure npm packs it: if package.json has `files`, add `"marketplace"`. `{@command integration verify}` and `{@pm-only npm "it lists exactly what the registry receives" pack --dry-run}` show what ships.',
+            'If the package contributes components, add at least one example: a block template that renders a component, with `exampleFor` naming it and `isShowcase: true` in its `.doc.mjs`. Each `component_without_example` note gives the two files to add. A package of themes, docs or codemods alone needs no example: a catalog previews a theme from the theme itself.',
+            'Run `{@command integration check}` until neither note is left.',
           ],
         },
       ],
@@ -110,7 +131,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'It runs `npm pack` the way `npm publish` would, including your `prepack` script.',
+            'It runs `{@pm-only npm "the tarball the registry receives" pack}` the way `{@pm-only npm "npm is the client the registry publishes from" publish}` would, including your `prepack` script.',
             'It checks that every contribution file is in the `.tgz` file. A root missing from `files` fails with `Add "templates" to "files" in package.json.`',
             'It lists the components, templates, themes, docs, and codemods the temporary app sees, and compares them with your source.',
             "It resolves each component's `import`, and each template's public import, the way Node does, and checks that the module exports the component under the name its doc documents, or a default export for a template. A type-only export does not count.",

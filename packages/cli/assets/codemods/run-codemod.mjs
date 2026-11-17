@@ -28,6 +28,7 @@
  */
 
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import * as p from './term-log.mjs';
 import {findConfigPath} from '../../foundation/config/project.mjs';
@@ -35,8 +36,10 @@ import {
   fixDirectiveCorruption,
   validateOutput,
   isIgnoredDirectory,
+  isIgnoredLinkedDirectory,
 } from './runner.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
+import {isCodemodParseError, markingSourceParseErrors} from './parse.mjs';
 
 export const DEFAULT_CODE_EXTENSIONS = [
   '.tsx',
@@ -47,6 +50,59 @@ export const DEFAULT_CODE_EXTENSIONS = [
   '.cjs',
 ];
 const PARSEABLE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs'];
+
+/**
+ * The grammar a source file is written in, from its name. TypeScript allows
+ * JSX only in a `.tsx` file, so a `.ts` file can hold a type assertion
+ * (`<Item>value`) that the TSX grammar reads as JSX. A declaration file holds
+ * declarations without values (`export const limit: number;`), which code may
+ * not. A declaration file is named as TypeScript names one: it ends in
+ * `.d.ts`, `.d.mts` or `.d.cts`, or it is a `.ts` file whose name holds `.d.`
+ * (an arbitrary-extension declaration file, such as `styles.d.css.ts`).
+ * @param {string} filePath
+ * @returns {'tsx' | 'ts' | 'dts' | 'babel'}
+ */
+export function grammarOf(filePath) {
+  const name = path.basename(filePath);
+  if (
+    /\.d\.[cm]ts$/.test(name) ||
+    (name.endsWith('.ts') && name.includes('.d.'))
+  )
+    return 'dts';
+  const ext = path.extname(filePath);
+  if (ext === '.tsx') return 'tsx';
+  if (ext === '.ts' || ext === '.mts' || ext === '.cts') return 'ts';
+  return 'babel';
+}
+
+/** @type {{parse: (source: string) => unknown} | undefined} */
+let declarationParser;
+
+/**
+ * The parser jscodeshift binds for a grammar: its own `tsx`, `ts` or
+ * `babel`, or, for a declaration file, its `ts` parser's Babel and options
+ * with the TypeScript plugin in declaration mode.
+ * @param {'tsx' | 'ts' | 'dts' | 'babel'} grammar
+ * @returns {string | {parse: (source: string) => unknown}}
+ */
+function parserFor(grammar) {
+  if (grammar !== 'dts') return grammar;
+  if (declarationParser) return declarationParser;
+  const require = createRequire(import.meta.url);
+  const fromJscodeshift = createRequire(
+    require.resolve('jscodeshift/package.json'),
+  );
+  const babel = fromJscodeshift('@babel/parser');
+  const tsOptions = fromJscodeshift('./parser/tsOptions.js');
+  const options = {
+    ...tsOptions,
+    plugins: tsOptions.plugins.map((/** @type {unknown} */ plugin) =>
+      plugin === 'typescript' ? ['typescript', {dts: true}] : plugin,
+    ),
+  };
+  declarationParser = {parse: source => babel.parse(source, options)};
+  return declarationParser;
+}
 
 /**
  * @typedef {{file: string, codemod: string, reason: string, declaration: string, generated: boolean, command?: string}} ProtectedFile
@@ -72,6 +128,69 @@ function protectedResult(filePath, name, protection) {
 }
 
 /**
+ * @typedef {{file: string, codemod: string, location?: string, reason: string}} DeclinedCandidate
+ */
+
+/**
+ * Where a parse error points, as 1-based `line:column`, and its message
+ * without the position Babel appends. Babel reports a 0-based column on
+ * `loc`; PostCSS reports 1-based `line` and `column`.
+ * @param {any} err
+ * @returns {{message: string, location?: string}}
+ */
+function describeParseError(err) {
+  if (err?.name === 'CssSyntaxError') {
+    return {
+      message: String(err.reason ?? err.message),
+      ...(typeof err.line === 'number'
+        ? {location: `${err.line}:${err.column ?? 1}`}
+        : {}),
+    };
+  }
+  const loc = err?.loc;
+  return {
+    message: String(err?.message ?? err).replace(/\s*\(\d+:\d+\)$/, ''),
+    ...(loc && typeof loc.line === 'number'
+      ? {location: `${loc.line}:${(loc.column ?? 0) + 1}`}
+      : {}),
+  };
+}
+
+/**
+ * Decline a protected file a codemod could not parse. A codemod can prove
+ * nothing in bytes it cannot parse, and the file is never written anyway, so
+ * it is listed for manual review instead of failing the run. Only an error a
+ * parse entry point marked (see `parse.mjs`) counts: owned source that does
+ * not parse, and every other error a codemod throws, still fail.
+ * @param {unknown} err
+ * @param {string} filePath
+ * @param {string} relativePath
+ * @param {string} name
+ * @param {{root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}} protection
+ * @returns {DeclinedCandidate|null}
+ */
+function declineUnparseableProtected(
+  err,
+  filePath,
+  relativePath,
+  name,
+  protection,
+) {
+  if (!isCodemodParseError(err)) return null;
+  const protections = protection.classify(filePath);
+  if (protections.length === 0) return null;
+  const {message, location} = describeParseError(err);
+  return {
+    file: relativePath,
+    codemod: name,
+    ...(location ? {location} : {}),
+    // The category, not the declaration: a declaration names its source
+    // file from the project root, and `file` may be rebased elsewhere.
+    reason: `unparseable protected file (${[...new Set(protections.map(item => item.reason))].join(', ')}): ${message}`,
+  };
+}
+
+/**
  * Print one blocked candidate without implying that the protected bytes changed.
  * @param {import('../../authoring/codemod/type').CliLog} log
  * @param {ProtectedFile[]} protections
@@ -86,9 +205,10 @@ function logProtected(log, protections) {
 /**
  * Recursively find candidate source files in a directory.
  * @param {string} dir
+ * @param {string} [root] the operation's project root (default: `dir`)
  * @returns {string[]}
  */
-export function findSourceFiles(dir) {
+export function findSourceFiles(dir, root = dir) {
   /** @type {string[]} */
   const results = [];
   /** @param {string} currentDir @param {Set<string>} [ancestors] */
@@ -111,12 +231,24 @@ export function findSourceFiles(dir) {
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
       // Symlinked files and descendants remain read-only candidates so a
-      // required change can be reported. Real-path ancestors prevent cycles.
+      // required change can be reported. Real-path ancestors prevent cycles,
+      // and a link into a dependency or VCS tree is not descended.
       if (entry.isSymbolicLink()) {
         try {
           const target = fs.statSync(fullPath);
           if (target.isFile()) results.push(fullPath);
-          else if (target.isDirectory()) walk(fullPath, nextAncestors);
+          else if (
+            target.isDirectory() &&
+            !isIgnoredLinkedDirectory(
+              dir,
+              fullPath,
+              entry.name,
+              fs.realpathSync(fullPath),
+              root,
+            )
+          ) {
+            walk(fullPath, nextAncestors);
+          }
         } catch {
           // Broken links have no source bytes to evaluate.
         }
@@ -149,7 +281,7 @@ export function makeLog(silent) {
  * Apply a config codemod to the consumer's astryx.config.* file.
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
- * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: import('../../authoring/codemod/type').JscodeshiftFactory, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
+ * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: typeof import('jscodeshift').default, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
  * @returns {import('../../authoring/codemod/type').CodemodRunResult}
  */
 export function runConfigCodemod(
@@ -189,8 +321,7 @@ export function runConfigCodemod(
     const source =
       contents?.get(configPath) ?? fs.readFileSync(configPath, 'utf-8');
     const ext = path.extname(configPath);
-    const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-    const j = jscodeshift.withParser(parser);
+    const j = jscodeshift.withParser(parserFor(grammarOf(configPath)));
     const api = {jscodeshift: j, stats: () => {}, report: () => {}};
     let result = codemod.transform({source, path: configPath}, api);
 
@@ -259,11 +390,131 @@ export function runConfigCodemod(
 }
 
 /**
+ * A codemod as `upgrade` runs it. Core codemods may also declare `mentions`,
+ * internal to the CLI and not part of the codemod authoring type: the words a
+ * file must say for the transform to change or report it. A file that says
+ * none of them and parses is skipped, unless it holds a backslash and its
+ * escapes or numeric character references spell one of them.
+ * @typedef {import('../../authoring/codemod/type').CodemodEntry['codemod'] & {mentions?: string[]}} CoreCodemod
+ */
+
+/**
+ * Whether a file parses as its codemod's transform would parse it, by grammar
+ * and file, while its text is the same: each file is parsed once for every
+ * codemod that skips it.
+ * @type {Map<string, {source: string, parses: boolean}>}
+ */
+const parsedOnce = new Map();
+
+/**
+ * What the escapes of a file with a backslash can spell, by file, while its
+ * text is the same: each file is decoded once for every codemod that reads it.
+ * @type {Map<string, {source: string, spelled: string[]}>}
+ */
+const spelledOnce = new Map();
+
+/**
+ * One JavaScript escape: `\u{…}`, `\uXXXX`, `\xXX`, a legacy octal escape, a
+ * line continuation, or any other escaped character.
+ */
+const JS_ESCAPE =
+  /\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([0-3][0-7]{0,2}|[4-7][0-7]?)|(\r\n|[\n\r\u2028\u2029])|([\s\S]))/g;
+
+/** One numeric character reference, which JSX text and attributes decode. */
+const NUMERIC_REFERENCE = /&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?/g;
+
+/** @type {Record<string, string>} */
+const CONTROL_ESCAPES = {b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v'};
+
+/** @param {number} code */
+const fromCode = code => (code <= 0x10ffff ? String.fromCodePoint(code) : '');
+
+/**
+ * The texts that a file's escapes spell: the source with every JavaScript
+ * escape decoded (in strings, templates and identifiers, and line
+ * continuations), and the source with every numeric character reference
+ * decoded (in JSX). A word that the file spells with an escape is in one of
+ * them.
+ * @param {string} source
+ * @param {string} filePath
+ * @returns {string[]}
+ */
+function spelledTexts(source, filePath) {
+  let known = spelledOnce.get(filePath);
+  if (known?.source !== source) {
+    const escapes = source.replace(
+      JS_ESCAPE,
+      (_, brace, u4, x2, octal, lineEnd, other) => {
+        if (brace !== undefined) return fromCode(parseInt(brace, 16));
+        if (u4 !== undefined) return String.fromCharCode(parseInt(u4, 16));
+        if (x2 !== undefined) return String.fromCharCode(parseInt(x2, 16));
+        if (octal !== undefined) return String.fromCharCode(parseInt(octal, 8));
+        if (lineEnd !== undefined) return '';
+        return CONTROL_ESCAPES[other] ?? other;
+      },
+    );
+    const references = source.replace(NUMERIC_REFERENCE, (_, hex, decimal) =>
+      fromCode(hex !== undefined ? parseInt(hex, 16) : parseInt(decimal, 10)),
+    );
+    known = {source, spelled: [escapes, references]};
+    spelledOnce.set(filePath, known);
+  }
+  return known.spelled;
+}
+
+/**
+ * Whether a codemod cannot change a source file, so its transform need not
+ * run (stylesheets always run, whatever they parse as): the
+ * codemod declares every word a file must say for it to act (`mentions`), the
+ * file says none of them (a file with a backslash, not even through its
+ * escapes or numeric character references), and the file parses, so the
+ * transform would neither
+ * change it nor report it unparseable. A codemod that declares no words runs
+ * on every file.
+ * @param {CoreCodemod} codemod
+ * @param {string} source
+ * @param {string} filePath
+ * @param {string} grammar the file's grammar, from {@link grammarOf}
+ * @param {any} j jscodeshift bound to the file's grammar
+ * @returns {boolean}
+ */
+function cannotChange(codemod, source, filePath, grammar, j) {
+  const {mentions} = codemod;
+  if (!Array.isArray(mentions) || mentions.length === 0) return false;
+  if (mentions.some(word => source.includes(word))) return false;
+  // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation) can
+  // spell a word without its letters. A file with a backslash runs when the
+  // text its escapes or numeric character references spell says one of the
+  // words.
+  if (
+    source.includes('\\') &&
+    spelledTexts(source, filePath).some(text =>
+      mentions.some(word => text.includes(word)),
+    )
+  ) {
+    return false;
+  }
+  const key = `${grammar}\0${filePath}`;
+  let known = parsedOnce.get(key);
+  if (known?.source !== source) {
+    let parses = true;
+    try {
+      j(source);
+    } catch {
+      parses = false;
+    }
+    known = {source, parses};
+    parsedOnce.set(key, known);
+  }
+  return known.parses;
+}
+
+/**
  * Apply a code codemod to discovered source files.
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
  * @param {string[]} files
- * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: import('../../authoring/codemod/type').JscodeshiftFactory, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
+ * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: typeof import('jscodeshift').default, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
  * @returns {import('../../authoring/codemod/type').CodemodRunResult}
  */
 export function runCodeCodemod(
@@ -285,8 +536,23 @@ export function runCodeCodemod(
   const protectedFiles = [];
   /** @type {Array<{file: string, codemod: string, error: string}>} */
   const errors = [];
+  /** @type {DeclinedCandidate[]} */
+  const declinedCandidates = [];
   /** @type {Array<{filePath: string, relativePath: string, result: string}>} */
   const candidates = [];
+  // One jscodeshift per grammar for all the files: binding a parser builds a
+  // new copy of jscodeshift's helpers, and the copies are all alike.
+  /** @type {Map<string, any>} */
+  const bound = new Map();
+  /** @param {'tsx' | 'ts' | 'dts' | 'babel'} grammar */
+  const boundTo = grammar => {
+    let j = bound.get(grammar);
+    if (j == null) {
+      j = jscodeshift.withParser(parserFor(grammar));
+      bound.set(grammar, j);
+    }
+    return j;
+  };
 
   // Transform and validate every candidate before any write. This lets a
   // protection source changed by this entry govern every other staged output.
@@ -298,9 +564,21 @@ export function runCodeCodemod(
     try {
       const source =
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
-      const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-      const j = jscodeshift.withParser(parser);
-      const api = {jscodeshift: j, stats: () => {}, report: () => {}};
+      const grammar = grammarOf(filePath);
+      const j = boundTo(grammar);
+      // Only source files: a stylesheet can happen to parse as JavaScript
+      // (`a.b` then `{ color: white; }`), yet its transform still changes it.
+      if (
+        PARSEABLE_EXTENSIONS.includes(ext) &&
+        cannotChange(codemod, source, filePath, grammar, j)
+      ) {
+        continue;
+      }
+      const api = {
+        jscodeshift: markingSourceParseErrors(j, source),
+        stats: () => {},
+        report: () => {},
+      };
       let result = codemod.transform({source, path: filePath}, api);
 
       if (result == null || result === source) continue;
@@ -320,6 +598,19 @@ export function runCodeCodemod(
       }
       candidates.push({filePath, relativePath, result});
     } catch (err) {
+      const declined = declineUnparseableProtected(
+        err,
+        filePath,
+        relativePath,
+        name,
+        resolver,
+      );
+      if (declined) {
+        // Printed by the caller once every codemod has run: a later codemod
+        // can still make this file a protected one, listed only as such.
+        declinedCandidates.push(declined);
+        continue;
+      }
       const message = /** @type {any} */ (err).message;
       log.error(`    ✗ ${relativePath} — ${message}`);
       errors.push({file: relativePath, codemod: name, error: message});
@@ -372,5 +663,12 @@ export function runCodeCodemod(
     }
   }
 
-  return {filesChanged, changedFiles, writtenFiles, protectedFiles, errors};
+  return {
+    filesChanged,
+    changedFiles,
+    writtenFiles,
+    protectedFiles,
+    declinedCandidates,
+    errors,
+  };
 }

@@ -9,7 +9,7 @@
  * SYNC: When useGridFocus.ts changes, update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {useGridFocus} from './useGridFocus';
 
@@ -161,5 +161,23 @@ describe('useGridFocus RTL auto-detection (WCAG 1.3.2)', () => {
     screen.getByTestId('cell-0').focus();
     fireEvent.keyDown(grid, {key: 'ArrowDown'});
     expect(screen.getByTestId('cell-3')).toHaveFocus();
+  });
+});
+
+describe('useGridFocus page keys', () => {
+  it('passes the key event to onPageUp and onPageDown', () => {
+    const onPageUp = vi.fn();
+    const onPageDown = vi.fn();
+    render(<Grid seed={4} onPageUp={onPageUp} onPageDown={onPageDown} />);
+    const cell = screen.getByTestId('cell-4');
+    cell.focus();
+    fireEvent.keyDown(cell, {key: 'PageUp', shiftKey: true});
+    fireEvent.keyDown(cell, {key: 'PageDown'});
+    expect(onPageUp).toHaveBeenCalledWith(
+      expect.objectContaining({key: 'PageUp', shiftKey: true}),
+    );
+    expect(onPageDown).toHaveBeenCalledWith(
+      expect.objectContaining({key: 'PageDown', shiftKey: false}),
+    );
   });
 });

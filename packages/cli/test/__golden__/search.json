@@ -22,9 +22,9 @@
         "score": 50,
         "reason": "description mentions \"zorblax\"",
         "description": "How zorblax cards fit together.",
-        "title": "Unorganized › Acme guide",
+        "title": "Guides › Acme guide",
         "command": "astryx docs acme-guide --index",
-        "parent": "astryx docs unorganized"
+        "parent": "astryx docs guides"
       },
       {
         "domain": "template",
@@ -35,7 +35,8 @@
         "description": "A zorblax hero block.",
         "displayName": "Zorblax hero",
         "kind": "block",
-        "command": "astryx template hero --type block"
+        "command": "astryx template hero --type block",
+        "isReady": true
       },
       {
         "domain": "theme",

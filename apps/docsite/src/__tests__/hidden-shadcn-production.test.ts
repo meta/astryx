@@ -25,36 +25,34 @@ const [
   {GET: getLlmsTxt},
   {GET: getRss},
   {POST: postMcp},
+  {GET: getSearch},
   {CURRENT_TARGET},
   {components},
   {blocks},
   {templates},
   {docTopics},
   {blogPosts},
-  {packages},
   {showcaseRegistry},
   {exampleRegistry},
   {shadcnRegistryIsPreview, shadcnRegistryOrigin},
   {flattenComponentSidebarEntries},
-  {buildSearchPaletteItems},
 ] = await Promise.all([
   import('../app/robots'),
   import('../app/sitemap'),
   import('../app/llms.txt/route'),
   import('../app/rss.xml/route'),
   import('../app/mcp/route'),
+  import('../app/api/search/route'),
   import('../lib/docsVersions'),
   import('../generated/componentRegistry'),
   import('../generated/blockRegistry'),
   import('../generated/templateRegistry'),
   import('../generated/docsRegistry'),
   import('../generated/blogRegistry'),
-  import('../generated/packageRegistry'),
   import('../generated/showcaseRegistry'),
   import('../generated/exampleRegistry'),
   import('../generated/shadcnRegistry'),
   import('../components/componentSidebarData'),
-  import('../components/searchPaletteData'),
 ]);
 
 const FORBIDDEN_DISCOVERY_PATTERNS = [
@@ -193,18 +191,6 @@ describeHiddenProduction('hidden production ShadCN discovery', () => {
       href: entry.href,
       label: entry.displayName,
     }));
-    const search = buildSearchPaletteItems({
-      components,
-      packages,
-      docTopics,
-      templates,
-    }).map(item => ({
-      id: item.id,
-      label: item.label,
-      group: item.auxiliaryData.group,
-      keywords: item.auxiliaryData.keywords,
-    }));
-
     expectNoShadcnPromotion(
       docTopics.map(topic => ({topic: topic.topic, title: topic.title})),
       'docs navigation',
@@ -214,8 +200,27 @@ describeHiddenProduction('hidden production ShadCN discovery', () => {
       'blog indexes',
     );
     expectNoShadcnPromotion(sidebar, 'component navigation');
-    expectNoShadcnPromotion(search, 'global search');
   });
+
+  it('keeps the site search (astryx search) free of registry promotion', async () => {
+    // Like the MCP search below, it may name ShadCN only inside the CLI's own
+    // docs (the migration guide); it never points at the registry.
+    const response = await getSearch(
+      new Request('http://site/api/search?q=shadcn%20registry%20install'),
+    );
+    const {data} = (await response.json()) as {
+      data: {results: Array<Record<string, unknown>>};
+    };
+    expectNoRegistryDiscovery(data, 'site search');
+    for (const result of data.results) {
+      if (/shadcn/i.test(JSON.stringify(result))) {
+        expect(result).toMatchObject({
+          domain: 'doc',
+          package: '@astryxdesign/cli',
+        });
+      }
+    }
+  }, 60_000);
 
   it('keeps sitemap, RSS, and llms.txt clean', async () => {
     const sitemapEntries = await sitemap();
@@ -228,41 +233,53 @@ describeHiddenProduction('hidden production ShadCN discovery', () => {
   });
 
   it('exercises the real MCP tools without exposing registry promotion', async () => {
+    // The endpoint runs the CLI's own commands: like the site search, it may
+    // name ShadCN only inside the CLI's own docs (the migration guide).
     const search = mcpPayload(
       await callMcpTool('search', {
-        query: 'shadcn registry install',
-        limit: 50,
+        query: ['shadcn', 'registry', 'install'],
+        limit: '50',
       }),
-    );
-    expect(Array.isArray(search)).toBe(true);
-    for (const result of search as Array<Record<string, unknown>>) {
+    ) as {data: {results: Array<Record<string, unknown>>}};
+    expectNoRegistryDiscovery(search, 'MCP search');
+    for (const result of search.data.results) {
       if (/shadcn/i.test(JSON.stringify(result))) {
-        expect(result).toMatchObject({type: 'doc', topic: 'migration'});
-        expectNoRegistryDiscovery(result, 'allowed MCP migration result');
+        expect(result).toMatchObject({
+          domain: 'doc',
+          package: '@astryxdesign/cli',
+        });
       } else {
         expectNoShadcnPromotion(result, 'real MCP search result');
       }
     }
 
-    for (const name of ['Button', 'settings']) {
-      const result = mcpPayload(await callMcpTool('get', {name}));
-      expectNoShadcnPromotion(result, `real MCP get(${name}) response`);
-    }
+    const button = mcpPayload(
+      await callMcpTool('component', {names: ['Button']}),
+    );
+    expectNoShadcnPromotion(button, 'real MCP component(Button) response');
+    const settings = mcpPayload(
+      await callMcpTool('template', {name: 'settings'}),
+    );
+    expectNoShadcnPromotion(settings, 'real MCP template(settings) response');
 
-    const migration = mcpPayload(await callMcpTool('get', {name: 'migration'}));
+    const migration = mcpPayload(
+      await callMcpTool('docs', {topic: 'migration'}),
+    );
     expect(JSON.stringify(migration)).toMatch(/shadcn/i);
     expectNoRegistryDiscovery(migration, 'allowed MCP migration guide');
+  }, 120_000);
 
+  it('keeps the component, template and doc registries free of promotion', () => {
     expectNoShadcnPromotion(
       {components, blocks, templates},
-      'complete MCP component and template registries',
+      'complete component and template registries',
     );
     const migrationTopic = docTopics.find(topic => topic.topic === 'migration');
     expect(migrationTopic).toBeDefined();
     expectNoRegistryDiscovery(migrationTopic, 'allowed migration topic');
     expectNoShadcnPromotion(
       docTopics.filter(topic => topic.topic !== 'migration'),
-      'all other MCP doc topics',
+      'all other doc topics',
     );
   });
 

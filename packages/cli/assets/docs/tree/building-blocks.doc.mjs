@@ -1,16 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file astryx docs cli/integrations/building-blocks — the kinds you can add. */
+/** @file astryx docs authoring/building-blocks — the kinds you can add. */
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {
   type: 'namespace',
   name: 'building-blocks',
-  placement: {parent: 'namespace:integrations', slot: 'guides', order: 20},
+  placement: {parent: 'namespace:authoring', slot: 'guides', order: 20},
   title: 'Building Blocks',
   summary:
     'Add components, templates, themes, docs, and codemods, and configure how it behaves.',
   keywords: [
+    'authoring',
     'building blocks',
     'contribute',
     'add to an integration',

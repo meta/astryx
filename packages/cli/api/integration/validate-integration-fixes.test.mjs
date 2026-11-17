@@ -14,12 +14,13 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {validateLocalIntegration} from './validate-integration.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let copies = 0;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-fix-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-fix-'));
 });
 
 afterEach(() => {
@@ -37,6 +38,7 @@ const componentDoc = name =>
   `export default {type: 'component', name: '${name}', displayName: '${name}', usage: {description: '${name}.'}, props: []};\n`;
 /** @param {string} name */
 const componentSource = name => `export function ${name}() { return null; }\n`;
+/** @param {string} name */
 const templateSource = name =>
   `export default function ${name}() { return null; }\n`;
 /** @param {string} name */
@@ -398,9 +400,9 @@ describe('unreachable_contribution fixes hold when followed', () => {
     const dir = writePackage({
       [MANIFEST]: manifest({templates: './templates'}),
       'templates/hero.doc.mjs': `export default {type: 'page', name: 'hero', displayName: 'Hero'};\n`,
-      'templates/hero.tsx': componentSource('Hero'),
+      'templates/hero.tsx': templateSource('Hero'),
       'src/blocks/Carousel.doc.mjs': `export default {type: 'block', name: 'Carousel', displayName: 'Carousel', aspectRatio: 1};\n`,
-      'src/blocks/Carousel.tsx': componentSource('Carousel'),
+      'src/blocks/Carousel.tsx': templateSource('Carousel'),
     });
 
     const message = only(await issuesOf(dir), 'unreachable_contribution');
@@ -423,7 +425,7 @@ describe('unreachable_contribution fixes hold when followed', () => {
       [MANIFEST]: manifest({templates: './templates'}),
       'templates/.keep': '',
       'src/blocks/Carousel.doc.mjs': `export default {type: 'block', name: 'Carousel', displayName: 'Carousel', aspectRatio: 1};\n`,
-      'src/blocks/Carousel.tsx': componentSource('Carousel'),
+      'src/blocks/Carousel.tsx': templateSource('Carousel'),
     });
 
     const message = only(await issuesOf(dir), 'unreachable_contribution');
@@ -687,9 +689,9 @@ describe('fixes never move a contribution onto a name its root already has', () 
     const dir = writePackage({
       [MANIFEST]: manifest({templates: './templates'}),
       'templates/hero.doc.mjs': `export default {type: 'page', name: 'hero', displayName: 'Hero'};\n`,
-      'templates/hero.tsx': componentSource('Hero'),
+      'templates/hero.tsx': templateSource('Hero'),
       'extra/hero.doc.mjs': `export default {type: 'page', name: 'hero', displayName: 'Hero'};\n`,
-      'extra/hero.tsx': componentSource('Hero'),
+      'extra/hero.tsx': templateSource('Hero'),
     });
 
     const message = only(await issuesOf(dir), 'unreachable_contribution');

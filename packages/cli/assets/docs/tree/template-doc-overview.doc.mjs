@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/document-the-template/template-doc-overview`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template/template-doc-overview`:
  * the source and doc file pair, the fields every template doc shares, and how
  * to check what Astryx lists.
  */
@@ -67,7 +67,7 @@ export const docs = {
             'Set `type` to the kind you chose in {@link generic:start-a-template}. It decides which other fields the doc accepts.',
             'The file name sets the template id ({@link generic:start-a-template}). Labels live in the doc: the terminal list prints `name`, and JSON listings print `displayName`. Changing either never changes the id.',
             'Write the description for someone choosing between templates. The Doc metadata category in {@link generic:template-grading-rubric} defines what a complete description covers.',
-            "Name the ideas the template serves in `keywords`: the domains, tasks, and other names a builder might use for it, in lowercase, such as `['monitoring', 'uptime', 'on-call']` for a service-health dashboard. How search and build use them is in {@link generic:authoring}, so the description can stay about the layout.",
+            "Name the ideas the template serves in `keywords`: the domains, tasks, and other names a builder might use for it, in lowercase, such as `['monitoring', 'uptime', 'on-call']` for a service-health dashboard. Describe the page in the words its users would use for it: name what the page is and what it is for, taken from its source and purpose. Give each keyword one concept. {@link generic:field-reference} says how to write a phrase and how search and build use keywords, so the description can stay about the layout.",
             'Add `isReady: false` as soon as you generate the doc, because a doc without `isReady` is listed as ready. Keep it until the template passes {@link generic:test-template-in-app} and the quality review.',
           ],
         },

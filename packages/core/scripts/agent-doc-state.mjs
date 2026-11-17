@@ -39,9 +39,30 @@ import * as path from 'node:path';
 export const AGENTS_MD = 'AGENTS.md';
 export const CLAUDE_MD = 'CLAUDE.md';
 export const CLAUDE_DIR_MD = '.claude/CLAUDE.md'; // cross-platform literal
+export const GEMINI_MD = 'GEMINI.md';
 export const CURSOR_RULES = '.cursorrules';
 export const HERMES_DOT_MD = '.hermes.md';
 export const HERMES_MD = 'HERMES.md';
+
+/**
+ * The page workflow every Astryx agent text gives, written with the command
+ * name `astryx`: the project agent docs and the computer-level skill both
+ * render these lines, so the two never drift.
+ */
+export const WORKFLOW_TITLE =
+  'WORKFLOW — start every page from a template, never from scratch:';
+export const WORKFLOW_STEPS = Object.freeze([
+  '1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.',
+  '2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.',
+  '3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one.',
+]);
+
+/**
+ * The self-check's fix for a project with no StyleX or Tailwind compiler,
+ * and for an agent outside a project.
+ */
+export const SELF_CHECK_CSS =
+  'replace any raw <div>/<span>, imported .css/@apply, or hardcoded #hex/px with the component or a token';
 
 export const MARKER_START = '<!-- ASTRYX:START -->';
 export const MARKER_END = '<!-- ASTRYX:END -->';
@@ -51,15 +72,18 @@ export const LEGACY_MARKER_END = '<!-- XDS:END -->';
 
 /**
  * The canonical set of EVERY location an --agent preset (or the default) can
- * write the Astryx block. SINGLE SOURCE OF TRUTH: discovery, removal, and the
- * `isAstryxInitialized` predicate all derive from this list, so "where init
- * writes" and "where we look" can never drift. (Explicit --agent-docs-path
- * targets are user-chosen and not enumerable here.)
+ * write a managed Astryx block — the full block, or the one-line import of
+ * AGENTS.md that the default writes to GEMINI.md. SINGLE
+ * SOURCE OF TRUTH: discovery, removal, and the `isAstryxInitialized` predicate
+ * all derive from this list, so "where init writes" and "where we look" can
+ * never drift. (Explicit --agent-docs-path targets are user-chosen and not
+ * enumerable here.)
  */
 export const AGENT_DOC_PATHS = [
   AGENTS_MD, // Codex / ChatGPT / Muse / generic
   CLAUDE_MD, // Claude Code (root)
   CLAUDE_DIR_MD, // Claude Code (.claude/CLAUDE.md)
+  GEMINI_MD, // Gemini CLI
   CURSOR_RULES, // Cursor
   HERMES_DOT_MD, // Hermes
   HERMES_MD, // Hermes
@@ -74,7 +98,7 @@ export const INIT_MARKERS = [MARKER_START, LEGACY_MARKER_START];
 /**
  * Find all existing agent doc files in a directory, across EVERY location any
  * preset can write (see {@link AGENT_DOC_PATHS}: AGENTS.md, CLAUDE.md,
- * .claude/CLAUDE.md, .cursorrules, .hermes.md, HERMES.md).
+ * .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md, HERMES.md).
  * @param {string} targetDir
  * @returns {string[]} Relative paths of existing agent doc files
  */
@@ -83,9 +107,34 @@ export function discoverAgentDocs(targetDir) {
 }
 
 /**
+ * Whether `content` holds an Astryx block. A managed block that only imports
+ * another file (the one-line `@./AGENTS.md` that init writes to GEMINI.md) does
+ * not count: it holds nothing once that file has lost its block. A malformed
+ * block still counts, so a half-written file reads as set up.
+ *
+ * @param {string} content
+ * @returns {boolean}
+ */
+export function holdsAstryxBlock(content) {
+  for (const marker of INIT_MARKERS) {
+    let at = content.indexOf(marker);
+    while (at !== -1) {
+      const from = at + marker.length;
+      const end = content.indexOf('<!--', from);
+      const inner = (
+        end === -1 ? content.slice(from) : content.slice(from, end)
+      ).trim();
+      if (!/^@\S+$/.test(inner)) return true;
+      at = content.indexOf(marker, from);
+    }
+  }
+  return false;
+}
+
+/**
  * Single source of truth for "is Astryx set up in this project?" — true when any
- * agent-doc file already carries the Astryx marker, i.e. `init` / `agent-docs`
- * has run. Reused by the init & upgrade commands, the per-command setup nudge
+ * agent-doc file already holds an Astryx block, i.e. `init` / `agent-docs` has
+ * run. Reused by the init & upgrade commands, the per-command setup nudge
  * (enforcement layer 3), and the cli postinstall nudge (layer 2). Core's
  * postinstall (separate package, layer 1) mirrors the same marker contract.
  *
@@ -96,7 +145,7 @@ export function isAstryxInitialized(targetDir = process.cwd()) {
   for (const rel of discoverAgentDocs(targetDir)) {
     try {
       const content = fs.readFileSync(path.join(targetDir, rel), 'utf-8');
-      if (INIT_MARKERS.some(m => content.includes(m))) {
+      if (holdsAstryxBlock(content)) {
         return true;
       }
     } catch {
@@ -136,7 +185,7 @@ export function isAstryxPromptInReach(startDir = process.cwd()) {
  * @returns {string | null}
  */
 function findRepositoryRoot(start) {
-  for (let dir = start; ; ) {
+  for (let dir = start; ;) {
     if (fs.existsSync(path.join(dir, '.git'))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;

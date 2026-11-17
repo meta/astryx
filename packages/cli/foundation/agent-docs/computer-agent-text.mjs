@@ -43,13 +43,100 @@ import {createHash} from 'node:crypto';
 import {cliDoor} from '../env/cli-command.mjs';
 import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {samePath} from '../fs/path-compare.mjs';
-import {MARKER_START, MARKER_END} from './agent-doc-state.mjs';
+import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_PACKAGE} from '../env/package-manager.mjs';
+import {isGlobalCopy} from '../release/choose.mjs';
+import {globalUpgradeCommand} from '../release/notices.mjs';
+import {
+  MARKER_START,
+  MARKER_END,
+  SELF_CHECK_CSS,
+  WORKFLOW_STEPS,
+  WORKFLOW_TITLE,
+} from './agent-doc-state.mjs';
 
 /** The command the computer-level text uses when no host door is set. */
 export const COMPUTER_COMMAND = 'astryx';
 
 /** The install step for the CLI copy the computer-level text relies on. */
 export const COMPUTER_INSTALL_STEP = 'npm i -g @astryxdesign/cli';
+
+/**
+ * What to do when the `astryx` command the text names is not found, as on a
+ * machine whose home folder outlives its system folders: the skill file
+ * survives a restart while the CLI installed for the computer does not.
+ * @param {string} install the install step
+ * @returns {string}
+ */
+export function computerRestoreLine(install) {
+  return `If \`${COMPUTER_COMMAND}\` is not found, run \`${install}\` first.`;
+}
+
+/**
+ * The step the CLI installed for the computer names for itself: the command
+ * that installs it again with the same package manager into the same folder,
+ * as the update notice names it but with no version. Null for any other copy.
+ * @param {string} [cliRoot]
+ * @returns {string | null}
+ */
+function ownInstallStep(cliRoot = CLI_ROOT) {
+  try {
+    if (isGlobalCopy(cliRoot)) {
+      return globalUpgradeCommand(cliRoot).replace(
+        `${CLI_PACKAGE}@latest`,
+        CLI_PACKAGE,
+      );
+    }
+  } catch {
+    // A copy whose install cannot be read names none of its own.
+  }
+  return null;
+}
+
+/**
+ * The step the skill file in `home` records, or null.
+ * @param {string} home
+ * @returns {string | null}
+ */
+function recordedInstallStep(home) {
+  try {
+    return skillInstallStepOf(fs.readFileSync(computerSkillFile(home), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The install step the text names. `judge`: the step a file is judged by, the
+ * one it records first, so every copy of one release, two global installs
+ * included, finds the same text current. `write`: the step a write records,
+ * the global copy's own first, since only the CLI installed for the computer
+ * chooses it. Either way npm's when there is no other.
+ * @param {{cliRoot?: string, home?: string, for?: 'judge' | 'write'}} [options]
+ * @returns {string}
+ */
+export function computerInstallStep({
+  cliRoot = CLI_ROOT,
+  home = os.homedir(),
+  for: use = 'write',
+} = {}) {
+  const own = ownInstallStep(cliRoot);
+  const recorded = recordedInstallStep(home);
+  return (
+    (use === 'judge' ? (recorded ?? own) : (own ?? recorded)) ??
+    COMPUTER_INSTALL_STEP
+  );
+}
+
+/**
+ * The install step a skill file's text records, or null when it records
+ * none.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function skillInstallStepOf(content) {
+  return /is not found, run `(.+?)` first\./u.exec(content)?.[1] ?? null;
+}
 
 /** The skill folder, relative to the home folder, that holds the one file. */
 const SKILL_FOLDER = path.join('.agents', 'skills', 'astryx');
@@ -164,27 +251,52 @@ export function computerAgentCommand() {
 }
 
 /**
- * The body lines, with `run` as the command.
+ * The body lines, with `run` as the command and `install` as the step that
+ * installs it.
  * @param {string} run
+ * @param {string} install
  * @returns {string[]}
  */
-function bodyLines(run) {
+function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
     'Use it when you build or change UI, pick components, or style or theme an app.',
-    `Its docs, components, templates, and themes are all reachable through \`${run}\`. Start with \`${run} search '<what you need>'\`.`,
+    `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
     "In a project, the project's version of Astryx answers automatically.",
+    // How to build, which discovery alone leaves to the agent's own page
+    // route: in a project, from the template, with the project agent docs'
+    // own workflow lines.
+    // A project that already installs Core gets the CLI at that version, as
+    // the CLI's own hint for that state says, never a newer CLI beside it.
+    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). Run \`${run} init\` there and follow the agent docs it writes.`,
+    WORKFLOW_TITLE,
+    ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
+    `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
+    // A host's door is the host's to restore; only the global command has an
+    // install step to name.
+    ...(run === COMPUTER_COMMAND ? [computerRestoreLine(install)] : []),
   ];
 }
 
 /**
+ * The command a skill file's text names: the one in its "Start with" line,
+ * or null when the text has none.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function skillCommandOf(content) {
+  return /Start with `(.+?) search '/u.exec(content)?.[1] ?? null;
+}
+
+/**
  * The full skill file.
- * @param {{command?: string}} [options]
+ * @param {{command?: string, install?: string}} [options]
  * @returns {string}
  */
 export function renderComputerAgentText({
   command = computerAgentCommand(),
+  install = COMPUTER_INSTALL_STEP,
 } = {}) {
   return withHash(
     [
@@ -196,7 +308,7 @@ export function renderComputerAgentText({
       '---',
       '',
       MARKER_START,
-      ...bodyLines(command),
+      ...bodyLines(command, install),
       MARKER_END,
       '',
     ].join('\n'),
@@ -404,7 +516,10 @@ export function inspectComputerAgentText({
   command,
   links = [],
 } = {}) {
-  const expected = renderComputerAgentText({command});
+  const expected = renderComputerAgentText({
+    command,
+    install: computerInstallStep({home, for: 'judge'}),
+  });
   const folder = path.join(home, SKILL_FOLDER);
   const made = new Set(links);
   return [
@@ -517,12 +632,24 @@ function writeCopy(at, expected) {
  * @returns {{rows: import('../../api/init/init.type.mjs').InitUserFile[], links: string[]}}
  */
 export function writeComputerAgentText({home = os.homedir(), command} = {}) {
-  const expected = renderComputerAgentText({command});
+  // Judged by the step the file records, so a file another copy of this
+  // release wrote stays as it is; a write records this copy's own step.
+  const judged = renderComputerAgentText({
+    command,
+    install: computerInstallStep({home, for: 'judge'}),
+  });
   const file = computerSkillFile(home);
   const folder = path.dirname(file);
   /** @type {import('../../api/init/init.type.mjs').InitUserFile[]} */
   const rows = [];
-  const state = stateOf(file, expected);
+  const state = stateOf(file, judged);
+  const expected =
+    state === 'current'
+      ? judged
+      : renderComputerAgentText({
+          command,
+          install: computerInstallStep({home, for: 'write'}),
+        });
   if (state === 'foreign' || state === 'edited') {
     rows.push({path: file, action: 'kept', reason: keptReason(state)});
   } else if (state === 'current') {

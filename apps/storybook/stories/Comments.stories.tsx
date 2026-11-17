@@ -256,6 +256,21 @@ export const Narrow: Story = {
   ),
 };
 
+/** Saving an edit that has not finished: the editor stays busy. */
+export const SavingAnEdit: Story = {
+  render: () => (
+    <VStack width={480} height={520}>
+      <Comments
+        comments={COMMENTS}
+        currentUser={VIEWER}
+        onSubmit={() => {}}
+        onSaveEdit={() => new Promise<void>(() => {})}
+        onDelete={() => {}}
+      />
+    </VStack>
+  ),
+};
+
 /** Embedded at its content height inside a popover: no scroll area or dock. */
 export const EmbeddedInAPopover: Story = {
   render: () => (

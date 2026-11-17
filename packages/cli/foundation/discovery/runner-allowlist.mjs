@@ -13,10 +13,8 @@
  *   command, except in `runnerExamples`, where `npx @astryxdesign/cli …` and a
  *   project's runner may (still never the unscoped name through npx).
  *
- * TODO(doctor-runner-check): the Doctor lane's integration-docs runner check
- * (foundation/discovery/runner-commands.mjs) becomes the single rule; then the
- * repo test runs that check over Core's and the CLI's own docs with this
- * allowlist.
+ * The matcher is runnerCommandsIn (foundation/discovery/runner-commands.mjs),
+ * the rule `doctor integration validate` holds integrations to.
  *
  * @input  nothing
  * @output the allowlist
@@ -45,9 +43,17 @@ export const RUNNER_COMMAND_ALLOWLIST = Object.freeze({
       'explains how printed commands start, the pinned `npx @astryxdesign/cli@<version>` among them',
     'packages/cli/assets/docs/tree/project-global-or-both.doc.mjs':
       'compares running the CLI with npx to installing it, and is found by searching for that command',
+    'packages/cli/assets/docs/tree/render-pages.doc.mjs':
+      'quotes the note a rendered file opens with, whose commands are pinned to `npx @astryxdesign/cli@<version>`',
     'packages/cli/assets/docs/tree/install-once.doc.mjs':
       'names a pinned release, `npx @astryxdesign/cli@<version>`, which answers as that version',
+    'packages/cli/assets/docs/tree/doc-syntax.doc.mjs':
+      'shows what each doc token renders as, in every package manager',
+    'packages/cli/assets/docs/tree/add-a-topic.doc.mjs':
+      'shows what a reader sees for a command token, with their runner',
     'packages/cli/clients/cli/commands/upgrade.doc.mjs':
       'quotes the command upgrade prints when the CLI is older than Core, pinned to the matching release',
+    'packages/cli/assets/docs/working-with-ai.doc.mjs':
+      'shows the MCP client entries, which start the CLI server with `npx @astryxdesign/cli mcp`',
   }),
 });

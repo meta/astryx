@@ -61,15 +61,15 @@ astryx gap-report                   # report a missing capability
 
 ## Related Packages
 
-| Package                                                                                               | Description                                                   |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [`@astryxdesign/cli`](https://github.com/facebook/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
-| [`@astryxdesign/theme-neutral`](https://github.com/facebook/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
+| Package                                                                                           | Description                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
+| [`@astryxdesign/theme-neutral`](https://github.com/meta/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
 
 ## Resources
 
 - [Component Storybook](https://astryx.atmeta.com/storybook/)
-- [GitHub Repository](https://github.com/facebook/astryx)
+- [GitHub Repository](https://github.com/meta/astryx)
 
 ---
 
@@ -139,6 +139,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 
 No build plugins needed; Astryx ships pre-built CSS that works alongside Tailwind.
 
+This `globals.css` is the whole file for a new app. For an app that already uses Tailwind, keep its own `@import "tailwindcss"` and put the `@layer` line above it, as `astryx docs styling-libraries/tailwind` shows under "Add Astryx to an app that already uses Tailwind". A `@layer` line below the Tailwind import silently inverts the cascade.
+
 **`src/app/globals.css`**
 
 ```css
@@ -165,15 +167,18 @@ The `tailwind-theme.css` import maps system tokens to Tailwind utilities via `@t
 
 Some useful mappings:
 
-| Tailwind class                                            | Astryx token                                      |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| `text-primary` / `text-secondary`                         | `--color-text-primary` / `--color-text-secondary` |
-| `bg-surface` / `bg-card` / `bg-body`                      | `--color-background-surface` / `card` / `body`    |
-| `border-border` / `border-strong`                         | `--color-border` / `--color-border-emphasized`    |
-| `bg-success` / `text-error` / `text-warning`              | Status tokens                                     |
-| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid` | Hue palette (×10 hues)                            |
-| `rounded-sm` / `rounded-md` / `rounded-lg`                | `--radius-inner` / `element` / `container`        |
-| `shadow-sm` / `shadow-md` / `shadow-lg`                   | `--shadow-low` / `med` / `high`                   |
+| Tailwind class                                               | Astryx token                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `text-primary` / `text-secondary`                            | `--color-text-primary` / `--color-text-secondary`                |
+| `bg-surface` / `bg-card` / `bg-body`                         | `--color-background-surface` / `card` / `body`                   |
+| `border-border` / `border-strong`                            | `--color-border` / `--color-border-emphasized`                   |
+| `bg-info` / `bg-success` / `bg-warning` / `bg-error`         | Strong status fills (`--color-<status>`)                         |
+| `text-on-info` / `bg-info-muted` / `text-on-info-muted`      | Strong-fill content, pale fill, pale-fill content                |
+| `text-success` / `text-warning` / `text-error` / `text-info` | Status text on the page (`--color-text-*`; also `text-status-*`) |
+| `border-success` / `border-warning` / `border-error`         | Status borders (`--color-border-*`)                              |
+| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid`    | Hue palette (×10 hues)                                           |
+| `rounded-sm` / `rounded-md` / `rounded-lg`                   | `--radius-inner` / `element` / `container`                       |
+| `shadow-sm` / `shadow-md` / `shadow-lg`                      | `--shadow-low` / `med` / `high`                                  |
 
 Spacing references `var(--spacing-1)` as the base unit, so `p-4` = 16px, matching Astryx's `--spacing-4`. Arbitrary values still work as an escape hatch: `bg-[var(--color-background-surface)]`.
 

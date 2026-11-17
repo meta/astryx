@@ -137,7 +137,7 @@ const styles = stylex.create({
   // `currentColor`, so the two can never drift out of contrast.
   success: {
     backgroundColor: colorVars['--color-success'],
-    color: colorVars['--color-background-surface'],
+    color: colorVars['--color-on-success'],
   },
   // The ring variant inverts: a hollow shape only reads as hollow if its
   // interior is not the variant colour, so the plate is surface and the
@@ -149,7 +149,7 @@ const styles = stylex.create({
   },
   error: {
     backgroundColor: colorVars['--color-error'],
-    color: colorVars['--color-background-surface'],
+    color: colorVars['--color-on-error'],
   },
   icon: {
     display: 'flex',

@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import type {ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -86,6 +87,31 @@ describe('MetadataList', () => {
 
     await user.click(screen.getByText('Show less'));
     expect(screen.queryByText('B')).not.toBeInTheDocument();
+  });
+
+  it('exposes the toggle state and the list it controls, and keeps focus on it', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MetadataList maxNumOfItems={1}>
+        <MetadataListItem label="A">1</MetadataListItem>
+        <MetadataListItem label="B">2</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const toggle = screen.getByRole('button', {name: 'Show more'});
+    const list = screen.getByRole('term').closest('dl') as HTMLElement;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', list.id);
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAccessibleName('Show less');
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
   });
 
   it('localizes the show more / show less labels through the i18n catalog', async () => {
@@ -199,6 +225,40 @@ describe('MetadataList', () => {
         .getByRole('term')
         .closest('.astryx-metadata-list-item');
       expect(item).toContainElement(screen.getByRole('definition'));
+    });
+
+    it('defaults to top labels for columns="multi"', () => {
+      render(
+        <MetadataList columns="multi">
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      const item = screen
+        .getByRole('term')
+        .closest('.astryx-metadata-list-item');
+      expect(item).toContainElement(screen.getByRole('definition'));
+    });
+
+    it('keeps start labels for a column count below 1', () => {
+      render(
+        <MetadataList columns={0}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      // With start labels the term itself carries the item target.
+      expect(screen.getByRole('term')).toHaveClass('astryx-metadata-list-item');
+    });
+
+    it('gives one label and value pair per row for a start-label width on columns="multi"', () => {
+      const {container} = render(
+        <MetadataList columns="multi" label={{position: 'start', width: 140}}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      expect(gridTemplateOf(container)).toContain('140px minmax(0, 1fr)');
     });
 
     it('ignores numeric columns in horizontal orientation', () => {
@@ -354,6 +414,24 @@ describe('MetadataList pass-through props', () => {
     expect(rootEl).toHaveAttribute('data-source', 'crm');
   });
 
+  it('forwards ref, className and style to the root element', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <MetadataList
+        ref={ref}
+        className="facts"
+        style={{maxWidth: '480px'}}
+        data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+    const rootEl = screen.getByTestId('list');
+    expect(ref.current).toBe(rootEl);
+    expect(rootEl).toHaveClass('facts');
+    expect(rootEl).toHaveClass('astryx-metadata-list');
+    expect(rootEl.style.maxWidth).toBe('480px');
+  });
+
   it('forwards event handlers to the root element', () => {
     const handleClick = vi.fn();
     render(
@@ -379,5 +457,55 @@ describe('MetadataList pass-through props', () => {
     const rootEl = screen.getByTestId('list');
     expect(rootEl).toHaveAttribute('data-columns', '2');
     expect(rootEl).toHaveAttribute('data-orientation', 'horizontal');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no title wrapper for %s', (_name, title) => {
+    const {container: withTitle} = render(
+      <MetadataList title={title as ReactNode}>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    const {container: without} = render(
+      <MetadataList>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    // The list's generated id differs between the two renders.
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/id="[^"]*"/g, 'id');
+    expect(html(withTitle)).toBe(html(without));
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no item icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <MetadataListItem label="Owner" icon={icon as ReactNode}>
+        Ana
+      </MetadataListItem>,
+    );
+    const {container: without} = render(
+      <MetadataListItem label="Owner">Ana</MetadataListItem>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as a title and as an item icon, as React does', () => {
+    render(
+      <MetadataList title={0}>
+        <MetadataListItem label="Owner" icon={0}>
+          Ana
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(2);
   });
 });

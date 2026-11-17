@@ -76,6 +76,37 @@ describe('SankeyChart scroll container', () => {
   });
 });
 
+describe('SankeyChart container observation', () => {
+  it('observes its container while mounted and stops on unmount', () => {
+    const observed = new Set<Element>();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      },
+    );
+    const {container, unmount} = render(
+      <SankeyChart nodes={nodes} links={links}>
+        <SankeyNode />
+      </SankeyChart>,
+    );
+    const chartContainer = container.firstElementChild;
+    expect(chartContainer).not.toBeNull();
+    expect(observed.has(chartContainer!)).toBe(true);
+
+    unmount();
+    expect(observed.size).toBe(0);
+  });
+});
+
 describe('SankeyChart accessible name', () => {
   it('names the svg when the chart does not scroll', () => {
     render(

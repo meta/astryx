@@ -9,4 +9,10 @@ export const doc = {
     'Several tables on one page, each in a collapsible card with its own columns — for groups that do not share a schema, where one table would stand full of empty cells. One time range drives them all, and rows expand into a history chart. Accounts, integrations, sections, sort, expand, or collapse.',
   isReady: true,
   category: 'Table - Grouped',
+  icons: {
+    ArrowsRightLeftIcon: 'transfer',
+    BuildingLibraryIcon: 'bank',
+    CreditCardIcon: 'creditCard',
+    PresentationChartLineIcon: 'activity',
+  },
 };

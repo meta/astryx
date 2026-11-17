@@ -122,5 +122,24 @@ export interface AstryxConfig {
        */
       components?: Record<string, XleComponent>;
     };
+    /**
+     * Experimental icon sets (spec:AST-084): the project's main icon set, a
+     * set name (`"outline"`) or `"<package>/<set>"`. A list
+     * (`["outline", "@acme/icons/brand"]`) names the main set first, then
+     * backup sets in order: a copied template takes each icon from the first
+     * set that has its meaning. Copied templates use these icons only when it
+     * is set. `astryx discover` and `astryx doctor` report icon sets when it is
+     * set or when an icon-set package is installed.
+     * @experimental May change or be removed in a patch release.
+     */
+    iconSet?: string | string[];
+    /**
+     * Experimental icon variant: the look every icon of the project draws,
+     * by the name the sets declare (`"filled"`). Each set in `iconSet` that
+     * declares a variant of that name draws it; a set that does not draws
+     * its default look. The main set must declare it. Needs `iconSet`.
+     * @experimental May change or be removed in a patch release.
+     */
+    iconVariant?: string;
   };
 }

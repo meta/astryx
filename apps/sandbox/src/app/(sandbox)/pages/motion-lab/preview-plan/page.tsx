@@ -307,7 +307,7 @@ export default function PreviewPlanPage() {
                   <Heading level={2}>{group}</Heading>
                   <Badge label={`${rows.length}`} />
                 </HStack>
-                <Grid columns={{minWidth: 420}} gap={3}>
+                <Grid columns={{minWidth: 420, max: 2}} gap={3}>
                   {rows.map(row => (
                     <RowCard key={row.id} row={row} />
                   ))}

@@ -8,15 +8,15 @@
  * @output `tabbablesIn`, `focusRegionControl`, `moveRegionsTab`: the Tab stops
  *   of a header or footer region and the walk through a menu with regions,
  *   with a named radio group as one stop
- * @position Internal; DropdownMenu's walk through its header and footer, in a
- *   module of its own so another menu level with regions can share it.
+ * @position Internal; used by DropdownMenu (the root menu's header and footer)
+ *   and DropdownMenuSubMenu (a sub-menu's header and footer).
  *
  * A menu with a header or footer is a dialog: Tab and Shift+Tab walk the
  * header's controls, the menu as one stop, then the footer's controls, and
  * wrap at either end.
  */
 import type React from 'react';
-import {getFocusableElements} from '../hooks/useFocusTrap';
+import {collapseRadioGroups, getFocusableElements} from '../hooks/useFocusTrap';
 
 /**
  * The elements Tab reaches inside a header or footer region, in order. Hidden
@@ -58,53 +58,6 @@ function isInsideHiddenWrapper(
 }
 
 /**
- * Collapse each named radio group to the one Tab stop a browser gives it: the
- * focused radio, else the checked one, else the first radio moving forward or
- * the last moving backward. The stop takes the group's first position.
- */
-function collapseRadioGroups(
-  elements: HTMLElement[],
-  active: Element | null,
-  isBackward: boolean,
-): HTMLElement[] {
-  const groups = new Map<string, HTMLInputElement[]>();
-  const groupKey = (el: HTMLElement): string | null =>
-    el instanceof HTMLInputElement &&
-    el.getAttribute('type') === 'radio' &&
-    el.name !== ''
-      ? `${el.form?.id ?? ''}\u0000${el.name}`
-      : null;
-  for (const el of elements) {
-    const key = groupKey(el);
-    if (key != null) {
-      const members = groups.get(key) ?? [];
-      members.push(el as HTMLInputElement);
-      groups.set(key, members);
-    }
-  }
-  const placed = new Set<string>();
-  const result: HTMLElement[] = [];
-  for (const el of elements) {
-    const key = groupKey(el);
-    if (key == null) {
-      result.push(el);
-      continue;
-    }
-    if (placed.has(key)) {
-      continue;
-    }
-    placed.add(key);
-    const members = groups.get(key) ?? [];
-    const stop =
-      members.find(radio => radio === active) ??
-      members.find(radio => radio.checked) ??
-      (isBackward ? members[members.length - 1] : members[0]);
-    result.push(stop);
-  }
-  return result;
-}
-
-/**
  * Move focus to a Tab stop in the dialog. Reports whether focus actually
  * arrived, so a caller can fall back to the menu instead of stranding focus on
  * the page.
@@ -140,7 +93,6 @@ export function moveRegionsTab(
   const cycle = collapseRadioGroups(
     [...tabbablesIn(header), menu, ...tabbablesIn(footer)],
     active,
-    event.shiftKey,
   );
   if (cycle.length === 1) {
     // Nothing else to reach: focus stays in the menu. From a flyout that has

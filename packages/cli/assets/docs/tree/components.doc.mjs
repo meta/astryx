@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/components`: guides for adding and
+ * @file `astryx docs authoring/building-blocks/components`: guides for adding and
  * documenting components in an integration package.
  */
 

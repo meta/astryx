@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/docs/sections-and-placement`:
+ * @file `astryx docs authoring/building-blocks/docs/sections-and-placement`:
  * give an integration package its own section in the docs tree, place guides
  * in it, and fix a placement that fails.
  */
@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add doc deploying --parent acme\n# Open your section\nastryx docs acme',
+          code: '{@command integration add doc deploying --parent acme}\n# Open your section\n{@command docs acme}',
         },
         {
           type: 'code',
@@ -69,7 +69,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx docs acme/deploying',
+          code: '{@command docs acme/deploying}',
         },
       ],
     },
@@ -84,7 +84,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration docs',
+          code: '{@command doctor integration docs}',
         },
         {
           type: 'code',

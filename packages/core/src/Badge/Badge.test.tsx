@@ -1,8 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import {createElement, Fragment, type ReactNode} from 'react';
 import {render, screen} from '@testing-library/react';
 import {Badge} from './Badge';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Badge', () => {
   it('renders with default variant', () => {
@@ -103,10 +105,43 @@ describe('Badge', () => {
     });
   });
 
+  it('grows with its label only when the label renders something', () => {
+    const classOf = (label: ReactNode) =>
+      render(<Badge label={label} />).container.firstElementChild!.className;
+    const empty = classOf('');
+    const labelled = classOf('New');
+    expect(labelled).not.toBe(empty);
+    // React renders nothing for these, so the badge keeps its fixed height.
+    for (const [index, label] of [null, undefined, true, false, ''].entries()) {
+      expect(classOf(label), `nothing ${index}`).toBe(empty);
+    }
+    // These render (0 shows "0"); a container counts without looking inside.
+    for (const [index, label] of [
+      0,
+      'x',
+      [],
+      createElement(Fragment),
+    ].entries()) {
+      expect(classOf(label), `renders ${index}`).toBe(labelled);
+    }
+  });
+
   it('renders astryx-* class names for theme targeting', () => {
     const {container} = render(<Badge variant="success" label="Active" />);
     const root = container.firstElementChild!;
     expect(root.className).toContain('astryx-badge');
     expect(root).toHaveAttribute('data-variant', 'success');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('Badge forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<Badge variant="error" label="Failed" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

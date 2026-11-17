@@ -8,7 +8,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Check the package the way npm will publish it, before you publish',
   description:
-    'Packs the package with npm, unpacks the tarball into a temporary app without installing its dependencies, and checks that the app sees the same components, templates, themes, docs, and codemods as the package, that every public import resolves, and that the package declares a CLI new enough to read it. It publishes nothing and leaves no tarball behind. It runs the package\'s own pack lifecycle scripts, as `npm pack` does. Outside a package it writes nothing and reports one failed check, no_package, naming the integration package it needs (exit 1).',
+    'Packs the package with npm, unpacks the tarball into a temporary app without installing its dependencies, and checks that the app sees the same components, templates, themes, docs, and codemods as the package, that every public import resolves, and that the package declares a CLI new enough to read it. It publishes nothing and leaves no tarball behind. It runs the package\'s own pack lifecycle scripts, as `{@pm-only npm "the tarball the registry receives" pack}` does. Outside a package it writes nothing and reports one failed check, no_package, naming the integration package it needs (exit 1).',
   fn: 'integrationPackCheck',
   examples: [
     {label: 'Check before publishing', cli: 'astryx integration verify'},

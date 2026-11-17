@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/generate-a-palette`:
+ * @file `astryx docs authoring/building-blocks/themes/generate-a-palette`:
  * turn a few seed colors into a full light and dark color palette.
  */
 
@@ -29,18 +29,18 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'The smallest config is one color family: an `id` to name it and a `seed` color to grow it from. Save it as `themes/ocean/palette.config.json`:',
+          text: "The smallest config is one color family: an `id` to name it and a `seed` color to grow it from, plus the recipe that grows it. A new palette names `astryx-oklch-v2`, whose pale shades follow each seed's own strength; a config that names none runs `astryx-oklch-v1`, so one written before v2 keeps its colors, and naming a recipe pins it. Save it as `themes/ocean/palette.config.json`:",
         },
         {
           type: 'code',
           lang: 'json',
-          code: '{"families": [{"id": "ocean", "seed": "#0074e2"}]}',
+          code: '{"recipe": "astryx-oklch-v2", "families": [{"id": "ocean", "seed": "#0074e2"}]}',
         },
         {
           type: 'code',
           lang: 'bash',
           code: `# Print the palette without writing files
-astryx theme palette generate themes/ocean/palette.config.json
+{@command theme palette generate themes/ocean/palette.config.json}
 # Write the palette and its receipt
 astryx theme palette generate themes/ocean/palette.config.json \\
   --out themes/ocean/tokens/ocean.palette.ts`,

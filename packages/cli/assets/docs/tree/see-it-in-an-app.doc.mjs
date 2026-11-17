@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/components/see-it-in-an-app`: inspect an
+ * @file `astryx docs authoring/building-blocks/components/see-it-in-an-app`: inspect an
  * integration component from an app that installs the package.
  */
 
@@ -26,9 +26,9 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: `astryx component AcmeCarousel
-astryx component --list
-astryx search carousel`,
+          code: `{@command component AcmeCarousel}
+{@command component --list}
+{@command search carousel}`,
         },
         {
           type: 'code',

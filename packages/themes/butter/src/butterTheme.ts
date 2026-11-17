@@ -6,40 +6,193 @@
  * Warm, golden buttery theme with blue accents.
  * Sarina for display, Outfit for headings and body.
  *
- * Source palette (per design):
- *   Accent  #225BFF   Gray    #868B99   Red     #FF7553
- *   Orange  #FFA347   Yellow  #fdee8c   Green   #5DCE5F
- *   Cyan    #60CFD3   Teal    #6CD9A8   Blue    #5681FF
- *   Purple  #B780F6   Pink    #F680E8   Error   #FF5947
- *   Warning #F8C726   Success #91D143
- *
- * All tonal ramps derived in CIELab (matches the algorithm used by
- * ThemePalettePreview so card / badge / banner / strip render the
- * same values). Regen via scripts/butter-palette-gen.mjs if sources
- * change.
+ * All colors resolve through named stops from Butter's reviewed palette.
+ * The signature blue and butter yellow remain exact anchors.
  */
 
+import {parseStyleKey} from '@astryxdesign/core/utils';
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {butterIconRegistry} from './icons';
+import {butterPaletteRefs} from './butterPaletteRefs.generated';
 
-/** Butter syntax palette — T25 / T80 of each color's ramp. */
+const {
+  accent,
+  blue,
+  cyan,
+  green,
+  neutral,
+  orange,
+  pink,
+  purple,
+  red,
+  teal,
+  yellow,
+} = butterPaletteRefs;
+
+const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
+const lightDark = (light: string, dark: string): string =>
+  `light-dark(${light}, ${dark})`;
+
+/**
+ * Secondary text on the accent tint (a selected row, a dropzone's hint, a
+ * numbered citation): the nearest stop that reads on the tint over the page,
+ * a card and the muted fill. Inside a coloured card, a selected row and a
+ * numbered citation take a dark stop like the rest of the card's ink.
+ */
+const LIFTED_ON_PAGE = lightDark(neutral.light[40], neutral.dark[85]);
+const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[45]);
+
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
+const SURFACE_TEXT = {
+  '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+  '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
+  '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+};
+
+/**
+ * The selector Core's TableRow gives a striped table's painted rows (its
+ * even rows, not counting expansion panels); the striped-row rule repeats it.
+ */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill) and draw text on it, each as
+ * `[part, rule, selector?]`. A coloured card's ink must not reach them, so
+ * each sets the theme's own text and link colours again. A transparent card
+ * is left out: it paints nothing, so it keeps its parent's ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['app-shell', 'variant:surface'],
+  ['app-shell', 'variant:section'],
+  ['app-shell-header', 'variant:surface'],
+  ['app-shell-sidenav', 'variant:surface'],
+  ['layout-panel', 'base'],
+  ['layout-content', 'base'],
+  ['code', 'base'],
+  ['avatar', 'base'],
+  ['avatar-group-overflow', 'base'],
+  ['segmented-control-item', 'selected'],
+  ['step-indicator', 'progress:not-started'],
+  ['table-row', 'base', STRIPED_ROW],
+  ['banner-content', 'base'],
+  ['input-group-text', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['dropdown-menu-radio', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+  ['chat-composer-drawer', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key, selector] of OWN_FILL_RULES) {
+    const rule = out[part]?.[key] ?? {};
+    out[part] = {
+      ...out[part],
+      [key]: selector
+        ? {
+            ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
+            [selector]: {
+              ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
+              ...((rule as Record<string, object>)[selector] ?? {}),
+            },
+          }
+        : {...SURFACE_TEXT, ...rule},
+    };
+  }
+  return out;
+}
+
+/** The coloured card variants: a pastel fill with dark ink in both modes. */
+const COLOURED_CARDS = [
+  'blue',
+  'cyan',
+  'gray',
+  'green',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'teal',
+  'yellow',
+];
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part: string, key: string): string {
+  return `.astryx-${part}${parseStyleKey(key)}`;
+}
+
+/**
+ * Inside a coloured card and not inside a part with a fill of its own
+ * between that card and the element: where a part draws on the card's
+ * pastel fill. A part with its own fill above the card does not count.
+ */
+const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"]`,
+).join(', ')})`;
+const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
+  .map(([part, key]) => ruleSelector(part, key))
+  .join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
+/**
+ * The same one level down: a coloured card inside a part with its own fill
+ * that itself sits in a coloured card. The dark stop holds two coloured
+ * cards deep.
+ */
+const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
+
+/** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
   name: 'astryx-butter',
   tokens: {
-    keyword: ['#52237b', '#ddb9f6'], // Purple
-    string: ['#004800', '#a5d29d'], // Green
-    comment: ['#605f52', '#adac9e'],
-    number: ['#622e00', '#f2bd81'], // Orange
-    function: ['#203a6c', '#bdc5eb'], // Blue
-    type: ['#52237b', '#ddb9f6'], // Purple
-    variable: ['#605f52', '#adac9e'],
-    operator: ['#605f52', '#adac9e'],
-    constant: ['#622e00', '#f2bd81'],
-    tag: ['#6d211c', '#f4b8ae'], // Red
-    attribute: ['#413e00', '#d6c957'], // Yellow
-    property: ['#00482d', '#94d3bb'], // Teal
-    punctuation: ['#605f52', '#adac9e'],
-    background: ['#FDFBE4', '#131107'],
+    keyword: [purple.light[25], purple.dark[80]], // Purple
+    string: [green.light[25], green.dark[80]], // Green
+    comment: [neutral.light[45], neutral.dark[70]],
+    number: [orange.light[25], orange.dark[80]], // Orange
+    function: [blue.light[25], blue.dark[80]], // Blue
+    type: [purple.light[25], purple.dark[80]], // Purple
+    variable: [neutral.light[45], neutral.dark[70]],
+    operator: [neutral.light[45], neutral.dark[70]],
+    constant: [orange.light[25], orange.dark[80]],
+    tag: [red.light[25], red.dark[80]], // Red
+    attribute: [yellow.light[25], yellow.dark[70]], // Yellow
+    property: [teal.light[25], teal.dark[80]], // Teal
+    punctuation: [neutral.light[45], neutral.dark[70]],
+    background: [neutral.light[95], neutral.dark[5]],
   },
 });
 
@@ -54,10 +207,13 @@ const SECONDARY_BUTTON = {
   backgroundColor: 'transparent',
   borderWidth: '1.5px',
   borderStyle: 'solid',
-  borderColor: 'light-dark(#225BFF, #FDEE8C)',
-  color: 'light-dark(#225BFF, #FDEE8C)',
+  borderColor: lightDark(accent.light[40], yellow.dark[90]),
+  color: lightDark(accent.light[40], yellow.dark[90]),
   ':hover': {
-    backgroundColor: 'light-dark(#225BFF14, #FDEE8C14)',
+    backgroundColor: lightDark(
+      withAlpha(accent.light[40], '14'),
+      withAlpha(yellow.dark[90], '14'),
+    ),
   },
 } as const;
 
@@ -81,7 +237,8 @@ const SECONDARY_SELECTOR = {
 
 /**
  * The secondary Button treatment on ComplexSelector triggers (AST-079 FR2), with
- * the hover kept off a disabled trigger, whose inner button is disabled.
+ * the hover kept off a disabled trigger, whose inner button is disabled
+ * (natively or, keeping its tab stop, with `aria-disabled`).
  */
 const SECONDARY_COMPLEX_SELECTOR = {
   backgroundColor: SECONDARY_BUTTON.backgroundColor,
@@ -89,7 +246,27 @@ const SECONDARY_COMPLEX_SELECTOR = {
   borderStyle: SECONDARY_BUTTON.borderStyle,
   borderColor: SECONDARY_BUTTON.borderColor,
   color: SECONDARY_BUTTON.color,
-  ':hover:not(:has(> :disabled))': SECONDARY_BUTTON[':hover'],
+  ':hover:not(:has(> :is(:disabled, [aria-disabled="true"])))':
+    SECONDARY_BUTTON[':hover'],
+} as const;
+
+/**
+ * Butter's bright status rims and glyphs in input status scopes. Light mode
+ * uses mid-ramp stops so a rim reaches 3:1 on the field (theme-tokens INV11).
+ */
+const INPUT_STATUS_VARS = {
+  'status:success': {
+    '--color-border-success': lightDark(green.light[55], green.light[70]),
+    '--color-icon-success': lightDark(green.light[55], green.light[70]),
+  },
+  'status:warning': {
+    '--color-border-warning': lightDark(yellow.light[55], yellow.light[80]),
+    '--color-icon-warning': lightDark(yellow.light[55], yellow.light[80]),
+  },
+  'status:error': {
+    '--color-border-error': red.light[60],
+    '--color-icon-error': red.light[60],
+  },
 } as const;
 
 export const butterTheme = defineTheme({
@@ -132,61 +309,101 @@ export const butterTheme = defineTheme({
 
   tokens: {
     // =========================================================================
-    // Core semantic — accent is the exact brand #225BFF
+    // Core semantic — accent uses the exact signature brand stop
     // =========================================================================
-    '--color-accent': ['#225BFF', '#FDEE8C'],
-    '--color-accent-muted': ['#225BFF33', '#FDEE8C40'],
-    '--color-neutral': ['#1d1c110F', '#f3f2e21A'],
-    '--color-background-surface': ['#FFFFFF', '#2E2117'],
-    '--color-background-body': ['#FDFBE4', '#261A13'],
-    '--color-overlay': ['#1d1c1180', '#261A13cc'],
-    '--color-overlay-hover': ['#1d1c110D', '#f3f2e20D'],
-    '--color-overlay-pressed': ['#1d1c111A', '#f3f2e21A'],
-    '--color-background-muted': ['#f3f2e2', '#3A2A1F'],
+    '--color-accent': [accent.light[40], yellow.dark[90]],
+    '--color-accent-muted': [
+      withAlpha(accent.light[40], '33'),
+      withAlpha(yellow.dark[90], '40'),
+    ],
+    '--color-neutral': [
+      withAlpha(neutral.light[15], '0f'),
+      withAlpha(neutral.dark[90], '1a'),
+    ],
+    '--color-background-surface': [neutral.light[100], neutral.dark[15]],
+    '--color-background-body': [neutral.light[95], neutral.dark[10]],
+    '--color-overlay': [
+      withAlpha(neutral.light[15], '80'),
+      withAlpha(neutral.dark[10], 'cc'),
+    ],
+    '--color-overlay-hover': [
+      withAlpha(neutral.light[15], '0d'),
+      withAlpha(neutral.dark[90], '0d'),
+    ],
+    '--color-overlay-pressed': [
+      withAlpha(neutral.light[15], '1a'),
+      withAlpha(neutral.dark[90], '1a'),
+    ],
+    '--color-background-muted': [neutral.light[90], neutral.dark[20]],
 
     // Text — warm neutral
-    '--color-text-primary': ['#1d1c11', '#f3f2e2'],
-    '--color-text-secondary': ['#605f52', '#adac9e'],
-    '--color-text-disabled': ['#adac9e', '#605f52'],
-    '--color-text-accent': ['#225BFF', '#FDEE8C'],
-    '--color-on-dark': '#ffffff',
-    '--color-on-light': '#1d1c11',
-    '--color-on-accent': ['#ffffff', '#1d1c11'],
-    // T95 of each ramp for use on the vivid semantic surfaces.
-    '--color-on-success': ['#ccff88', '#0b2e00'],
-    '--color-on-error': ['#ffe3de', '#600000'],
-    '--color-on-warning': ['#ffeec3', '#3b2200'],
+    '--color-text-primary': [neutral.light[15], neutral.dark[90]],
+    '--color-text-secondary': [neutral.light[45], neutral.dark[70]],
+    '--color-text-disabled': [neutral.light[70], neutral.dark[45]],
+    '--color-text-accent': [accent.light[40], yellow.dark[90]],
+    '--color-on-dark': neutral.light[100],
+    '--color-on-light': neutral.light[15],
+    '--color-on-accent': [neutral.light[100], neutral.light[15]],
+    // Light foregrounds used on vivid semantic surfaces.
+    '--color-on-success': [green.light[85], green.dark[15]],
+    '--color-on-error': [red.light[95], red.dark[15]],
+    '--color-on-warning': [yellow.light[95], yellow.dark[15]],
+
+    // Info is its own blue status, independent of the accent.
+    '--color-info': [accent.light[40], accent.dark[70]],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': [accent.light[40], accent.dark[70]],
+    '--color-text-success': [green.light[25], green.dark[80]],
+    '--color-text-warning': [yellow.light[25], yellow.dark[85]],
+    '--color-text-error': [red.light[25], red.dark[80]],
+    '--color-on-info-muted': 'var(--color-text-blue)',
+    '--color-on-success-muted': [green.light[25], green.dark[80]],
+    '--color-on-warning-muted': [yellow.light[25], yellow.dark[85]],
+    '--color-on-error-muted': [red.light[25], red.dark[90]],
 
     // Icon
-    '--color-icon-accent': ['#225BFF', '#FDEE8C'],
-    '--color-icon-primary': ['#1d1c11', '#f3f2e2'],
-    '--color-icon-secondary': ['#605f52', '#adac9e'],
-    '--color-icon-disabled': ['#adac9e', '#605f52'],
+    '--color-icon-accent': [accent.light[40], yellow.dark[90]],
+    '--color-icon-primary': [neutral.light[15], neutral.dark[90]],
+    '--color-icon-secondary': [neutral.light[45], neutral.dark[70]],
+    '--color-icon-disabled': [neutral.light[70], neutral.dark[45]],
 
     // Surface variants
-    '--color-background-card': ['#FFFFFF', '#3A2A1F'],
-    '--color-background-popover': ['#FFFFFF', '#3A2A1F'],
-    '--color-background-inverted': ['#1d1c11', '#FDFBE4'],
+    '--color-background-card': [neutral.light[100], neutral.dark[20]],
+    '--color-background-popover': [neutral.light[100], neutral.dark[20]],
+    '--color-background-inverted': [neutral.light[15], neutral.dark[95]],
 
-    // Status semantics — T25 light / T80 dark from each status palette.
-    '--color-error': ['#771210', '#ffb4a6'],
-    '--color-error-muted': ['#77121033', '#ffb4a640'],
-    '--color-warning': ['#543700', '#f7be00'],
-    '--color-warning-muted': ['#54370033', '#f7be0040'],
-    '--color-success': ['#004700', '#99d94b'],
-    '--color-success-muted': ['#00470033', '#99d94b40'],
+    // Status semantics share the Red, Yellow, and Green families.
+    '--color-error': [red.light[30], red.dark[85]],
+    '--color-error-muted': [
+      withAlpha(red.light[30], '33'),
+      withAlpha(red.dark[85], '40'),
+    ],
+    '--color-warning': [yellow.light[30], yellow.dark[75]],
+    '--color-warning-muted': [
+      withAlpha(yellow.light[30], '33'),
+      withAlpha(yellow.dark[75], '40'),
+    ],
+    '--color-success': [green.light[25], green.dark[70]],
+    '--color-success-muted': [
+      withAlpha(green.light[25], '33'),
+      withAlpha(green.dark[70], '40'),
+    ],
 
     // Border — softer taupe card outline (emphasized) in light mode.
-    '--color-border': ['#e5e3d4', '#f3f2e21A'],
-    '--color-border-emphasized': ['#C7C4B2', '#939184'],
+    '--color-border': [neutral.light[85], withAlpha(neutral.dark[90], '1a')],
+    '--color-border-emphasized': [neutral.light[75], neutral.dark[60]],
 
     // Effects
-    '--color-skeleton': ['#e5e3d4', '#49473b'],
-    '--color-shadow': ['#1d1c111A', '#0000004D'],
-    '--color-tint-hover': ['black', 'white'],
+    '--color-skeleton': [neutral.light[85], neutral.dark[35]],
+    '--color-shadow': [
+      withAlpha(neutral.light[15], '1a'),
+      withAlpha(neutral.dark[0], '4d'),
+    ],
+    '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Element sizes — slightly taller defaults so the new input padding
     // (--spacing-2 block) has room to breathe.
@@ -195,69 +412,68 @@ export const butterTheme = defineTheme({
     '--size-element-lg': '48px',
 
     // =========================================================================
-    // Categorical — same values in light and dark mode (curated dark mode
-    // keeps the same pastel backgrounds + dark text as light mode).
+    // Categorical — reviewed light and dark stops for each family.
     // =========================================================================
 
     // Blue
-    '--color-background-blue': ['#dbe1ff', '#dbe1ff'],
-    '--color-border-blue': ['#bdc5eb', '#bdc5eb'],
-    '--color-icon-blue': ['#203a6c', '#203a6c'],
-    '--color-text-blue': ['#203a6c', '#203a6c'],
+    '--color-background-blue': [blue.light[90], blue.dark[90]],
+    '--color-border-blue': [blue.light[80], blue.dark[80]],
+    '--color-icon-blue': [blue.light[25], blue.dark[25]],
+    '--color-text-blue': [blue.light[25], blue.dark[25]],
 
     // Cyan
-    '--color-background-cyan': ['#a9eff0', '#a9eff0'],
-    '--color-border-cyan': ['#8dd2d3', '#8dd2d3'],
-    '--color-icon-cyan': ['#004649', '#004649'],
-    '--color-text-cyan': ['#004649', '#004649'],
+    '--color-background-cyan': [cyan.light[90], cyan.dark[90]],
+    '--color-border-cyan': [cyan.light[80], cyan.dark[80]],
+    '--color-icon-cyan': [cyan.light[25], cyan.dark[25]],
+    '--color-text-cyan': [cyan.light[25], cyan.dark[25]],
 
     // Gray (uses the neutral palette)
-    '--color-background-gray': ['#f0edd4', '#f0edd4'],
-    '--color-border-gray': ['#d6d3b8', '#d6d3b8'],
-    '--color-icon-gray': ['#4a4732', '#4a4732'],
-    '--color-text-gray': ['#4a4732', '#4a4732'],
+    '--color-background-gray': [neutral.dark[85], neutral.dark[85]],
+    '--color-border-gray': [neutral.light[80], neutral.dark[80]],
+    '--color-icon-gray': [neutral.light[30], neutral.dark[30]],
+    '--color-text-gray': [neutral.light[30], neutral.dark[30]],
 
     // Green
-    '--color-background-green': ['#c1efb8', '#c1efb8'],
-    '--color-border-green': ['#a5d29d', '#a5d29d'],
-    '--color-icon-green': ['#004800', '#004800'],
-    '--color-text-green': ['#004800', '#004800'],
+    '--color-background-green': [green.light[90], green.dark[90]],
+    '--color-border-green': [green.light[80], green.dark[80]],
+    '--color-icon-green': [green.light[25], green.dark[20]],
+    '--color-text-green': [green.light[25], green.dark[20]],
 
     // Orange
-    '--color-background-orange': ['#ffdcb6', '#ffdcb6'],
-    '--color-border-orange': ['#f2bd81', '#f2bd81'],
-    '--color-icon-orange': ['#622e00', '#622e00'],
-    '--color-text-orange': ['#622e00', '#622e00'],
+    '--color-background-orange': [orange.light[90], orange.dark[90]],
+    '--color-border-orange': [orange.light[80], orange.dark[80]],
+    '--color-icon-orange': [orange.light[25], orange.dark[25]],
+    '--color-text-orange': [orange.light[25], orange.dark[25]],
 
     // Pink
-    '--color-background-pink': ['#ffd5fb', '#ffd5fb'],
-    '--color-border-pink': ['#f0b3e8', '#f0b3e8'],
-    '--color-icon-pink': ['#6c0a68', '#6c0a68'],
-    '--color-text-pink': ['#6c0a68', '#6c0a68'],
+    '--color-background-pink': [pink.light[90], pink.dark[90]],
+    '--color-border-pink': [pink.light[80], pink.dark[80]],
+    '--color-icon-pink': [pink.light[25], pink.dark[25]],
+    '--color-text-pink': [pink.light[25], pink.dark[25]],
 
     // Purple
-    '--color-background-purple': ['#f2daff', '#f2daff'],
-    '--color-border-purple': ['#ddb9f6', '#ddb9f6'],
-    '--color-icon-purple': ['#52237b', '#52237b'],
-    '--color-text-purple': ['#52237b', '#52237b'],
+    '--color-background-purple': [purple.light[90], purple.dark[90]],
+    '--color-border-purple': [purple.light[80], purple.dark[80]],
+    '--color-icon-purple': [purple.light[25], purple.dark[25]],
+    '--color-text-purple': [purple.light[25], purple.dark[25]],
 
     // Red
-    '--color-background-red': ['#ffdad3', '#ffdad3'],
-    '--color-border-red': ['#f4b8ae', '#f4b8ae'],
-    '--color-icon-red': ['#6d211c', '#6d211c'],
-    '--color-text-red': ['#6d211c', '#6d211c'],
+    '--color-background-red': [red.light[90], red.dark[90]],
+    '--color-border-red': [red.light[80], red.dark[80]],
+    '--color-icon-red': [red.light[25], red.dark[25]],
+    '--color-text-red': [red.light[25], red.dark[25]],
 
     // Teal
-    '--color-background-teal': ['#b0f0d7', '#b0f0d7'],
-    '--color-border-teal': ['#94d3bb', '#94d3bb'],
-    '--color-icon-teal': ['#00482d', '#00482d'],
-    '--color-text-teal': ['#00482d', '#00482d'],
+    '--color-background-teal': [teal.light[90], teal.dark[90]],
+    '--color-border-teal': [teal.light[80], teal.dark[80]],
+    '--color-icon-teal': [teal.light[25], teal.dark[25]],
+    '--color-text-teal': [teal.light[25], teal.dark[25]],
 
     // Yellow
-    '--color-background-yellow': ['#feee7b', '#feee7b'],
-    '--color-border-yellow': ['#d6c957', '#d6c957'],
-    '--color-icon-yellow': ['#413e00', '#413e00'],
-    '--color-text-yellow': ['#413e00', '#413e00'],
+    '--color-background-yellow': [yellow.light[85], yellow.dark[85]],
+    '--color-border-yellow': [yellow.light[70], yellow.dark[70]],
+    '--color-icon-yellow': [yellow.light[25], yellow.dark[25]],
+    '--color-text-yellow': [yellow.light[25], yellow.dark[25]],
 
     // =========================================================================
     // Radius
@@ -277,17 +493,53 @@ export const butterTheme = defineTheme({
     // =========================================================================
     // Shadows — warm neutral tint
     // =========================================================================
-    '--shadow-low': '0 2px 4px #1d1c110D, 0 4px 8px #1d1c111A',
-    '--shadow-med': '0 2px 4px #1d1c110D, 0 4px 12px #1d1c111A',
-    '--shadow-high': '0 4px 6px #1d1c111A, 0 12px 24px #1d1c1126',
-    '--shadow-inset-hover': 'inset 0px 0px 0px 2px #79786a30',
-    '--shadow-inset-selected': 'inset 0px 0px 0px 2px #79786a50',
-    '--shadow-inset-success': 'inset 0px 0px 0px 2px #00470030',
-    '--shadow-inset-warning': 'inset 0px 0px 0px 2px #54370030',
-    '--shadow-inset-error': 'inset 0px 0px 0px 2px #77121030',
+    '--shadow-low': `0 2px 4px ${withAlpha(neutral.light[15], '0d')}, 0 4px 8px ${withAlpha(neutral.light[15], '1a')}`,
+    '--shadow-med': `0 2px 4px ${withAlpha(neutral.light[15], '0d')}, 0 4px 12px ${withAlpha(neutral.light[15], '1a')}`,
+    '--shadow-high': `0 4px 6px ${withAlpha(neutral.light[15], '1a')}, 0 12px 24px ${withAlpha(neutral.light[15], '26')}`,
+    '--shadow-inset-hover': `inset 0px 0px 0px 2px ${withAlpha(neutral.light[55], '30')}`,
+    '--shadow-inset-selected': `inset 0px 0px 0px 2px ${withAlpha(neutral.light[55], '50')}`,
+    '--shadow-inset-success': `inset 0px 0px 0px 2px ${withAlpha(green.light[25], '30')}`,
+    '--shadow-inset-warning': `inset 0px 0px 0px 2px ${withAlpha(yellow.light[30], '30')}`,
+    '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[30], '30')}`,
   },
 
-  components: {
+  components: withOwnFillText({
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+      },
+    },
     // TopNav uses Butter's blue accent: the heading and the selected item are
     // the full brand blue; unselected items (default + hover) use a lighter
     // blue. Dark mode keeps the theme's butter-yellow accent.
@@ -296,18 +548,18 @@ export const butterTheme = defineTheme({
       // redirect that token (not just `color`) to the brand blue so the text
       // itself turns blue, not only the container.
       base: {
-        color: 'light-dark(#225BFF, #FDEE8C)',
-        '--color-text-primary': 'light-dark(#225BFF, #FDEE8C)',
+        color: lightDark(accent.light[40], yellow.dark[90]),
+        '--color-text-primary': lightDark(accent.light[40], yellow.dark[90]),
       },
     },
     'top-nav-item': {
       base: {
-        color: 'light-dark(#6E92FF, #FDEE8CCC)',
+        color: lightDark(accent.light[40], withAlpha(yellow.dark[90], 'cc')),
       },
-      // Selected item: full brand blue, no pill background — rely on weight +
-      // color for emphasis. Hover/active keep the neutral overlay.
+      // Selected item: a darker Blue stop in light mode and full Butter Yellow
+      // in dark mode, with no pill background. Weight + color carry emphasis.
       selected: {
-        color: 'light-dark(#225BFF, #FDEE8C)',
+        color: lightDark(accent.light[35], yellow.dark[90]),
         backgroundColor: 'transparent',
         ':hover': {
           backgroundColor: 'var(--color-overlay-hover)',
@@ -321,18 +573,18 @@ export const butterTheme = defineTheme({
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
       // while the chat composer (which sets --_button-radius) rounds them fully.
+      // Inline padding only. Button sets its own block padding and height.
       base: {
-        paddingBlock: 'var(--spacing-3)',
         paddingInline: 'var(--spacing-4)',
       },
       'variant:secondary': SECONDARY_BUTTON,
       // Ghost: same accent color as secondary, no background.
       'variant:ghost': {
-        color: 'light-dark(#225BFF, #FDEE8C)',
+        color: lightDark(accent.light[40], yellow.dark[90]),
       },
       'variant:destructive': {
-        backgroundColor: 'light-dark(#ffdad3, #f4b8ae)',
-        color: 'light-dark(#550000, #6d211c)',
+        backgroundColor: lightDark(red.light[90], red.dark[80]),
+        color: lightDark(red.light[10], red.dark[25]),
       },
     },
 
@@ -345,58 +597,47 @@ export const butterTheme = defineTheme({
         paddingBlock: '0',
         paddingInline: 'var(--spacing-3)',
       },
-      // Vivid semantic badges — pinned to the brand colors from the spec.
-      // Info uses the Blue palette source (NOT the brand accent #225BFF).
+      // Vivid semantic badges — pinned to the reviewed semantic stops.
+      // Info uses Butter’s lighter accent stop rather than its signature stop.
       'variant:info': {
-        backgroundColor: '#4883fd',
-        color: '#ffffff',
+        backgroundColor: accent.light[55],
+        color: neutral.light[15],
       },
       'variant:neutral': {
-        backgroundColor: '#ffee7b',
-        color: '#225BFF',
+        backgroundColor: yellow.light[90],
+        color: accent.light[35],
       },
       'variant:success': {
-        backgroundColor: '#91D143',
-        color: '#1d1c11',
+        backgroundColor: green.light[70],
+        color: neutral.light[15],
       },
       'variant:warning': {
-        backgroundColor: '#ffc502',
-        color: '#1d1c11',
+        backgroundColor: yellow.light[80],
+        color: neutral.light[15],
       },
       'variant:error': {
-        backgroundColor: '#fc473b',
-        color: '#ffffff',
+        backgroundColor: red.light[60],
+        color: neutral.light[15],
       },
     },
 
-    // Banner backgrounds match the semantic badge fills.
-    // Banner status colors — override the muted tokens locally so the
-    // header (which reads --color-*-muted via StyleX) renders vivid fills
-    // matching the badge palette. Scoped to the banner root, doesn't leak.
+    // Banner status surfaces and content use the reviewed vivid pair.
     banner: {
       'status:info': {
-        '--color-accent-muted': '#4883fd',
-        '--color-text-primary': '#ffffff',
-        '--color-text-secondary': '#ffffff',
-        '--color-accent': '#ffffff',
+        '--color-info-muted': accent.light[55],
+        '--color-on-info-muted': neutral.light[15],
       },
       'status:success': {
-        '--color-success-muted': '#91D143',
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#1d1c11',
-        '--color-success': '#1d1c11',
+        '--color-success-muted': green.light[70],
+        '--color-on-success-muted': neutral.light[15],
       },
       'status:warning': {
-        '--color-warning-muted': '#ffc502',
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#1d1c11',
-        '--color-warning': '#1d1c11',
+        '--color-warning-muted': yellow.light[80],
+        '--color-on-warning-muted': neutral.light[15],
       },
       'status:error': {
-        '--color-error-muted': '#fc473b',
-        '--color-text-primary': '#ffffff',
-        '--color-text-secondary': '#ffffff',
-        '--color-error': '#ffffff',
+        '--color-error-muted': red.light[60],
+        '--color-on-error-muted': neutral.light[15],
       },
     },
 
@@ -406,64 +647,78 @@ export const butterTheme = defineTheme({
         padding: 'var(--spacing-4)',
       },
       'variant:info': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:success': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:warning': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:error': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:blue': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:cyan': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:gray': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:green': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:orange': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:pink': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:purple': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:red': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:teal': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
       'variant:yellow': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-accent': accent.light[35],
+        '--color-text-primary': neutral.light[15],
+        '--color-text-secondary': neutral.light[45],
       },
+      // The muted fill turns dark in dark mode: its text follows the mode.
       'variant:muted': {
-        '--color-text-primary': '#1d1c11',
-        '--color-text-secondary': '#605f52',
+        '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+        '--color-text-secondary': lightDark(
+          neutral.light[45],
+          neutral.dark[70],
+        ),
       },
     },
 
@@ -473,22 +728,22 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — white track in light, warm brown in dark. Vivid
+    // Progress bar — pale track in light, warm brown in dark. Vivid
     // semantic fills match the banner colors (Success / Warning / Error).
     'progress-bar-track': {
       base: {
-        backgroundColor: 'light-dark(#e5e3d4, #725538)',
+        backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
       },
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: '#91D143',
+        backgroundColor: green.light[70],
       },
       'variant:warning': {
-        backgroundColor: '#ffc502',
+        backgroundColor: yellow.light[80],
       },
       'variant:error': {
-        backgroundColor: '#fc473b',
+        backgroundColor: red.light[60],
       },
     },
 
@@ -497,16 +752,16 @@ export const butterTheme = defineTheme({
     // error / success" surface as the standalone banner.
     'field-status': {
       'type:success': {
-        backgroundColor: '#91D143',
-        color: '#1d1c11',
+        backgroundColor: green.light[70],
+        color: neutral.light[15],
       },
       'type:warning': {
-        backgroundColor: '#ffc502',
-        color: '#1d1c11',
+        backgroundColor: yellow.light[80],
+        color: neutral.light[15],
       },
       'type:error': {
-        backgroundColor: '#fc473b',
-        color: '#ffffff',
+        backgroundColor: red.light[60],
+        color: neutral.light[15],
       },
     },
 
@@ -520,9 +775,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     'text-area': {
       base: {
@@ -530,9 +783,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     'number-input': {
       base: {
@@ -540,9 +791,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     'date-input': {
       base: {
@@ -550,9 +799,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     'time-input': {
       base: {
@@ -560,9 +807,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     selector: {
       base: {
@@ -570,9 +815,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
@@ -581,9 +824,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
@@ -593,9 +834,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
     tokenizer: {
       base: {
@@ -603,9 +842,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': '#91D143'},
-      'status:warning': {'--color-warning': '#ffc502'},
-      'status:error': {'--color-error': '#fc473b'},
+      ...INPUT_STATUS_VARS,
     },
 
     // Display sizes use Sarina — the signature buttery display
@@ -624,28 +861,29 @@ export const butterTheme = defineTheme({
         fontFamily: 'Sarina, "Brush Script MT", "Snell Roundhand", cursive',
       },
     },
-  },
+  }),
 
   icons: butterIconRegistry,
 });
 
 /**
- * Raw tonal palettes — generated from design-spec source hexes via the
- * same CIELab algorithm `ThemePalettePreview` uses for the displayed
- * strip, so the rendered ramp and the consumed token values are 1:1.
+ * Frozen released compatibility palettes. These ramps preserve the public
+ * `butterPalettes` shape and values for existing consumers; the maintained
+ * theme renders selected stops from `butterPalettes.generated.ts` instead.
+ * Do not regenerate this object from the private mode-aware palette.
  *
- * Source colors:
+ * Historical source labels for this compatibility snapshot:
  *   accent  #225BFF   neutral #868B99
  *   red     #ffc3b8   orange  #ffc98d   yellow  #feee7b
  *   green   #bdebb4   cyan    #abf1f1   teal    #aeefd6
  *   blue    #cdd5fc   purple  #e6c2ff   pink    #fec0f5
  *   error   #fc473b   warning #ffc502   success #91D143
  *
- * Categorical sources are the pastel pill hexes from the design spec so
- * each ramp's T85 lands directly on the card / badge background color.
- * Semantic sources are vivid so the ramp anchors near the badge fill.
+ * The original snapshot used pastel categorical source labels and vivid semantic
+ * source labels. The current maintained theme does not derive from this object.
  *
- * Regenerate with: node packages/themes/butter/scripts/generate-palettes.mjs
+ * These notes describe the released snapshot and are not regeneration
+ * instructions for the maintained theme.
  */
 export const butterPalettes = {
   blue: {

@@ -14,7 +14,7 @@
  * menuitemradio rows.
  */
 
-import {useMemo, type ReactNode} from 'react';
+import {useMemo, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
@@ -51,9 +51,9 @@ export interface DropdownMenuRadioGroupProps extends Omit<
   /**
    * Accessible name for the group, announced by screen readers so the radios
    * read as a named set (e.g. "Sort by"). Applied as the group's `aria-label`.
-   * Required -- an unnamed radio group is an accessibility defect. Pass
-   * `aria-labelledby` (via base props) instead if the name already exists as a
-   * visible element on the page.
+   * Required even when `aria-labelledby` (via base props) points to visible
+   * text; that visible reference becomes the computed name while `label`
+   * remains the fallback.
    */
   label: string;
   /**
@@ -63,6 +63,10 @@ export interface DropdownMenuRadioGroupProps extends Omit<
    * @default true
    */
   hasCloseOnSelect?: boolean;
+  /**
+   * Ref forwarded to the role="group" root.
+   */
+  ref?: Ref<HTMLDivElement>;
   /**
    * The `DropdownMenuRadioItem`s that make up the group.
    */
@@ -92,6 +96,7 @@ export function DropdownMenuRadioGroup({
   label,
   hasCloseOnSelect = true,
   children,
+  ref,
   xstyle,
   className,
   style,
@@ -105,6 +110,7 @@ export function DropdownMenuRadioGroup({
   return (
     <div
       {...rest}
+      ref={ref}
       role="group"
       aria-label={label}
       {...mergeProps(stylex.props(styles.group, xstyle), {className, style})}>

@@ -3,7 +3,8 @@
 /**
  * @file A topic split into a namespace of guides indexes each term once, a
  * policy of the docs split itself (no spec clause states it). Below the CLI's own
- * root namespaces (every one but `cli`, its command and API reference), a
+ * root namespaces (every one but `cli`, its command and API reference, and
+ * `authoring`, the integration guides `cli` held before this rule), a
  * guide's search keywords are its own: none repeats a keyword its namespace,
  * a sibling, or a guide of another split topic declares. A term several
  * guides share belongs to their namespace, or to none.
@@ -45,7 +46,7 @@ describe('the keywords of a split topic', () => {
       return doc?.name;
     };
     const roots = [...docs.values()]
-      .filter(doc => doc.type === 'namespace' && !parentOf(doc) && doc.name !== 'cli')
+      .filter(doc => doc.type === 'namespace' && !parentOf(doc) && !['cli', 'authoring'].includes(doc.name))
       .map(doc => doc.name);
     expect(roots).toContain('layout');
 

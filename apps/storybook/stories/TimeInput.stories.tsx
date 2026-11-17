@@ -47,7 +47,7 @@ const meta: Meta<typeof TimeInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the input (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -224,6 +224,44 @@ export const WithMinMax: Story = {
   },
 };
 
+/**
+ * The bottom-sheet wheels with bounds: hours outside 9 AM - 5 PM stay on the
+ * wheel, greyed out, and a wheel that stops on one goes on to the nearest
+ * hour inside the bounds.
+ */
+export const BottomSheetWithMinMax: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '10:00' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Appointment time',
+    presentation: 'bottom-sheet',
+    min: '09:00' as ISOTimeString,
+    max: '17:00' as ISOTimeString,
+    description: 'Business hours: 9 AM - 5 PM',
+  },
+};
+
+/**
+ * The bottom-sheet wheels as iOS's date picker turns them: from 11:58 AM, one
+ * row down on the hour gives 12:58 PM and the AM/PM column turns with it.
+ */
+export const BottomSheetWheels: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '11:58' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Alarm',
+    presentation: 'bottom-sheet',
+  },
+};
+
 export const WithIncrement: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(
@@ -277,9 +315,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled TimeInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby (activation is still blocked). Use disabledMessage instead
+// of wrapping a disabled TimeInput in Tooltip, so the reason is tied to the
+// field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(undefined);

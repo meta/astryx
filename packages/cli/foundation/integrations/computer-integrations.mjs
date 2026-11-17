@@ -225,12 +225,19 @@ export function peerProblem(pkg, release) {
 
 /**
  * The computer-level integrations installed beside the CLI at `cliRoot`, in
- * name order (declaration order when the root declares them). Reads
+ * name order (declaration order when the root declares them), then each
+ * integration a host approves (`approved`, architecture:cli-surface INV30),
+ * resolved by name from the package set that holds that CLI alone. Reads
  * package.json files only.
- * @param {{cliRoot: string, release: string, cacheDir?: string}} options
+ * @param {{cliRoot: string, release: string, cacheDir?: string, approved?: readonly string[]}} options
  * @returns {ComputerIntegrationCandidate[]}
  */
-export function scanComputerIntegrations({cliRoot, release, cacheDir}) {
+export function scanComputerIntegrations({
+  cliRoot,
+  release,
+  cacheDir,
+  approved = [],
+}) {
   const self = real(cliRoot);
   /** @type {ComputerIntegrationCandidate[]} */
   const found = [];
@@ -238,21 +245,43 @@ export function scanComputerIntegrations({cliRoot, release, cacheDir}) {
   for (const root of computerInstallRoots(cliRoot, {cacheDir})) {
     scanRoot(root, {self, release, found, seen});
   }
+  const owner = approved.length > 0 ? installPlaceOf(self).owner : null;
+  if (owner) scanRoot(owner, {self, release, found, seen}, approved);
   return found;
 }
 
 /**
- * Add the integrations installed in one install root.
+ * `name` as installed in `root`'s own `node_modules`, never in a folder above.
+ * @param {string} name
+ * @param {string} root
+ * @returns {{packageDir: string, hostDir: string} | null}
+ */
+function ownPackageDir(name, root) {
+  const packageDir = path.join(root, 'node_modules', ...name.split('/'));
+  return fs.existsSync(path.join(packageDir, 'package.json'))
+    ? {packageDir, hostDir: root}
+    : null;
+}
+
+/**
+ * Add the integrations installed in one install root: those it declares or
+ * installs, or, given `approved`, those names installed in its own
+ * `node_modules`.
  * @param {string} root
  * @param {{self: string, release: string, found: ComputerIntegrationCandidate[], seen: Set<string>}} into
+ * @param {readonly string[] | null} [approved]
  */
-function scanRoot(root, {self, release, found, seen}) {
-  const declared = readPackage(root)
-    ? readDeclaredDependencies(root).map(d => d.name)
-    : installedNames(root);
+function scanRoot(root, {self, release, found, seen}, approved = null) {
+  const declared =
+    approved ??
+    (readPackage(root)
+      ? readDeclaredDependencies(root).map(d => d.name)
+      : installedNames(root));
   for (const name of declared) {
     if (NOT_INTEGRATIONS.has(name)) continue;
-    const resolved = resolveInstalledPackageDir(name, root);
+    const resolved = approved
+      ? ownPackageDir(name, root)
+      : resolveInstalledPackageDir(name, root);
     if (!resolved) continue;
     const identity = real(resolved.packageDir);
     if (identity === self || seen.has(identity)) continue;

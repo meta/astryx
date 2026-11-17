@@ -7,14 +7,14 @@
  * this file into the resolved version folder.
  */
 
-import migrateListEdgeCompensationToEdge, {
-  meta as migrateListEdgeCompensationToEdgeMeta,
-} from './migrate-list-edge-compensation-to-edge.mjs';
+import migrateItemSwipeActionsToSwipe, {
+  meta as migrateItemSwipeActionsToSwipeMeta,
+} from './migrate-item-swipe-actions-to-swipe.mjs';
 
 export default [
   {
-    name: 'migrate-list-edge-compensation-to-edge',
-    transform: migrateListEdgeCompensationToEdge,
-    meta: migrateListEdgeCompensationToEdgeMeta,
+    name: 'migrate-item-swipe-actions-to-swipe',
+    transform: migrateItemSwipeActionsToSwipe,
+    meta: migrateItemSwipeActionsToSwipeMeta,
   },
 ];

@@ -40,6 +40,11 @@ export const docs = {
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
       },
       {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
+      },
+      {
         guidance: false,
         description:
           'Use a calendar for dates far in the past or future like a birth date. A text input is faster for open-ended entry.',
@@ -169,13 +174,15 @@ export const docs = {
     {
       name: 'hasWeekNumbers',
       type: 'boolean',
-      description: 'Show ISO week numbers.',
+      description:
+        'Show ISO 8601 week numbers. They are ISO 8601 week numbers in every calendar system.',
       default: 'false',
     },
     {
       name: 'hasVariableRowCount',
       type: 'boolean',
-      description: 'Variable vs fixed 6-row grid.',
+      description:
+        'Give each month only the rows it needs. The default fixed 6-row grid keeps the same height from month to month; a variable row count trades that fixed height for a more compact grid.',
       default: 'false',
     },
     {
@@ -184,6 +191,48 @@ export const docs = {
       description:
         'First day of week. Accepts a number (0=Sunday) or a three-letter day name (e.g. "mon").',
       default: '0',
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when server and browser markup must match, use one implementation on both sides, such as installImplementation() from temporal-polyfill/full/shim, which replaces a native Temporal.",
+      default: 'the InternationalizationProvider calendar, else gregory',
+    },
+  ],
+  examples: [
+    {
+      label: 'A custom month view in the Persian calendar',
+      code: `import {Button} from '@astryxdesign/core/Button';
+import {
+  useCalendarDays,
+  useCalendarNavigation,
+} from '@astryxdesign/core/Calendar';
+
+function PersianMonth() {
+  const {monthYearLabel, visibleCalendarMonths, navigateMonth} =
+    useCalendarNavigation({initialValue: '2026-10-30', calendar: 'persian'});
+  // visibleCalendarMonths[0] is {year: 1405, month: 8}: Aban 1405.
+  const {weeks} = useCalendarDays({
+    ...visibleCalendarMonths[0],
+    calendar: 'persian',
+  });
+  return (
+    <section aria-label={monthYearLabel}>
+      <Button label="Previous month" onClick={() => navigateMonth(-1)} />
+      <Button label="Next month" onClick={() => navigateMonth(1)} />
+      {weeks.map(week => (
+        <div key={week[0].iso}>
+          {week.map(day => (
+            <span key={day.iso} data-date={day.iso}>
+              {day.isOutside ? '' : day.dayNumber}
+            </span>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}`,
     },
   ],
   theming: {
@@ -229,6 +278,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
       },
       {
         guidance: false,
@@ -311,13 +365,14 @@ export const docsZh = {
     {
       name: 'hasWeekNumbers',
       type: 'boolean',
-      description: '显示 ISO 周数。',
+      description: '显示 ISO 8601 周数。在任何历法中都是 ISO 8601 周数。',
       default: 'false',
     },
     {
       name: 'hasVariableRowCount',
       type: 'boolean',
-      description: '可变行数与固定 6 行网格。',
+      description:
+        '每个月只显示所需的行数。默认的固定 6 行网格使每个月高度相同；可变行数以固定高度换取更紧凑的网格。',
       default: 'false',
     },
     {
@@ -326,6 +381,13 @@ export const docsZh = {
       description:
         '每周起始日。可为数字（0=周日）或三字母星期缩写（如 "mon"）。',
       default: '0',
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和檀纪历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染且需要两端标记一致时，请在两端使用同一种实现，例如 temporal-polyfill/full/shim 的 installImplementation()，它会替换原生 Temporal。",
+      default: 'InternationalizationProvider 的历法，否则为 gregory',
     },
   ],
   theming: {
@@ -375,6 +437,11 @@ export const docsDense = {
           'Show two months side by side when user frequently selects dates spanning a month boundary.',
       },
       {
+        guidance: true,
+        description:
+          'Custom month view: useCalendarNavigation + useCalendarDays; pass the same calendar to both, feed visibleCalendarMonths into useCalendarDays. Default gregory; never read the provider calendar.',
+      },
+      {
         guidance: false,
         description:
           'Use for dates far in the past/future; text input is faster.',
@@ -400,8 +467,11 @@ export const docsDense = {
     onFocusDateChange: 'navigation callback',
     handleRef: 'imperative navigation handle',
     hasOutsideDays: 'show days from adjacent months',
-    hasWeekNumbers: 'show ISO week numbers',
-    hasVariableRowCount: 'variable vs fixed 6-row grid',
+    hasWeekNumbers: 'show ISO 8601 week numbers, in every calendar system',
+    hasVariableRowCount:
+      'only the rows each month needs; trades the fixed 6-row height for a compact grid',
     weekStartsOn: 'first day of week (0=Sunday, or name e.g. "mon")',
+    calendar:
+      'calendar system shown (default: provider calendar, else gregory); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
   },
 };

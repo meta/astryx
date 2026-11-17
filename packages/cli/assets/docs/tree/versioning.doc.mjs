@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/ship/versioning`: version an integration
+ * @file `astryx docs authoring/ship/versioning`: version an integration
  * package, know which changes break apps, declare peer ranges, keep apps on
  * older CLIs working, and match codemod folders to versions.
  */
@@ -28,7 +28,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# 1.0.0 -> 2.0.0: a breaking change\nnpm version major\n# 1.0.0 -> 1.1.0: a new feature\nnpm version minor\n# 1.0.0 -> 1.0.1: a fix\nnpm version patch',
+          code: '# 1.0.0 -> 2.0.0: a breaking change\n{@pm-only npm "npm, which every Node install carries, sets the version" version major}\n# 1.0.0 -> 1.1.0: a new feature\n{@pm-only npm "npm, which every Node install carries, sets the version" version minor}\n# 1.0.0 -> 1.0.1: a fix\n{@pm-only npm "npm, which every Node install carries, sets the version" version patch}',
         },
         {
           type: 'list',
@@ -54,13 +54,13 @@ export const docs = {
           rows: [
             [
               'A component name, such as `AcmeCarousel`',
-              'Imports, and `astryx component AcmeCarousel`',
+              'Imports, and `{@command component AcmeCarousel}`',
             ],
             [
               'A template id, such as `acme-dashboard`',
-              '`astryx template acme-dashboard`',
+              '`{@command template acme-dashboard}`',
             ],
-            ['A theme slug, such as `ocean`', '`astryx theme add ocean`'],
+            ['A theme slug, such as `ocean`', '`{@command theme add ocean}`'],
             [
               'A topic name or route, such as `acme/deploying`',
               'Reads of the old name, and links to it from other docs',
@@ -120,6 +120,10 @@ export const docs = {
           type: 'prose',
           text: '`integration verify` fails a package that needs the CLI peer and lacks it, or whose range admits a stable CLI too old for what it ships. `integration add doc --parent` and `integration add theme` write the peer for you.',
         },
+        {
+          type: 'prose',
+          text: "When the CLI is outside that range, `doctor integration validate` and `integration check` list a `cli_peer_version` note naming your package. A note fails nothing, `--strict` included, and `integration verify` does not report it. Below the range the note gives the commands that install a newer Core and CLI together, as dev dependencies in your own package folder, and then run `upgrade --apply`. Above it, in an app the note asks for a release of your package that supports that CLI, and in your own package folder it asks you to test your package with that CLI and widen the range.",
+        },
       ],
     },
     {
@@ -134,7 +138,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'An unknown field in `astryx.integration.mjs` is ignored with an `unknown_manifest_key` warning, and the rest of the manifest still loads.',
+            'An unknown field in `astryx.integration.mjs` is ignored, and the rest of the manifest still loads. `{@command doctor integration validate}` lists it as an `unknown_manifest_key` note; it is not an issue, so everyday commands do not warn about it. CLIs before 0.7.17 report it as a warning.',
             'A named export that the CLI does not know is ignored with no warning, so `debug` and `gapReport` are safe to add.',
             'Published 0.6.3 and earlier print each `{@link ...}` as written.',
             'Published 0.6.3 and earlier reject a template that sets `replaces` or `keywords`, drop that template, and hide every doc topic your package ships. Published 0.6.4 and 0.6.5 still drop a template that sets `keywords`.',

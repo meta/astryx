@@ -17,4 +17,12 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Comparison',
+  icons: {
+    ArrowDownIcon: 'arrowDown',
+    ArrowDownTrayIcon: 'download',
+    ArrowUpIcon: 'arrowUp',
+    CursorArrowRaysIcon: 'click',
+    StopIcon: 'stop',
+    UsersIcon: 'users',
+  },
 };

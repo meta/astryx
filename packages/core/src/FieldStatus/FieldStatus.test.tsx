@@ -14,6 +14,7 @@ import {render, screen, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {FieldStatus} from './FieldStatus';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 const testStyles = stylex.create({
   custom: {color: 'rebeccapurple'},
@@ -466,5 +467,16 @@ describe('FieldStatus', () => {
 
   it('exposes a displayName for devtools', () => {
     expect(FieldStatus.displayName).toBe('FieldStatus');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11).
+describe('FieldStatus forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<FieldStatus type="error" message="Required" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

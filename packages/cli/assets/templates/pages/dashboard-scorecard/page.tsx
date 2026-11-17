@@ -27,6 +27,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   AreaChart,
   Area,
@@ -468,7 +469,9 @@ function ScorecardTile({kpi, period}: {kpi: Kpi; period: Period}) {
           {kpi.label}
         </Text>
         <HStack gap={4} vAlign="center">
-          <Heading level={2}>{kpi.value}</Heading>
+          <Heading level={2} accessibilityLevel={3}>
+            {kpi.value}
+          </Heading>
           <DeltaIndicator deltaPct={deltaPct} rag={rag} />
         </HStack>
       </VStack>
@@ -487,7 +490,9 @@ function OkrRow({okr}: {okr: Okr}) {
     <VStack gap={2}>
       <HStack hAlign="between" vAlign="center" gap={3}>
         <StackItem size="fill">
-          <Heading level={4}>{okr.objective}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {okr.objective}
+          </Heading>
         </StackItem>
         <Text type="supporting" color="secondary">
           {pct}%
@@ -698,7 +703,9 @@ function NarrativeCard({callout}: {callout: Callout}) {
         />
         <StackItem size="fill">
           <VStack gap={1}>
-            <Heading level={4}>{callout.title}</Heading>
+            <Heading level={4} accessibilityLevel={3}>
+              {callout.title}
+            </Heading>
             <Text type="body" color="secondary">
               {callout.detail}
             </Text>
@@ -750,6 +757,7 @@ const pageStyles = stylex.create({
 // ============= MAIN =============
 
 export default function ExecutiveReviewPage() {
+  const showToast = useToast();
   const [period, setPeriod] = useState<Period>('WoW');
   // The narrative rail needs ~400px of its own; below that the content column
   // would be too cramped for the 2-up trend grid, so the rail folds inline.
@@ -798,13 +806,23 @@ export default function ExecutiveReviewPage() {
                 label="Export"
                 variant="secondary"
                 icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: this review would export here',
+                    uniqueID: 'export-review',
+                  })
+                }
               />
             </HStack>
           </HStack>
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6} xstyle={pageStyles.contentBottomPad}>
+        <LayoutContent
+          role="main"
+          padding={6}
+          xstyle={pageStyles.contentBottomPad}>
           <VStack gap={10}>
             {/* Narrative lives in the end rail; it folds in here when narrow. */}
             {isNarrow && (

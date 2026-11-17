@@ -17,11 +17,13 @@ export const doc = {
     'Unified ranked search across components, hooks, docs, templates, and themes.',
   description:
     'The single "I\'m looking for X" entry point across every content domain. ' +
-    'Ranking is keyword + fuzzy (not embeddings); name and keyword signals outrank ' +
-    'incidental prose mentions, so an exact match always sorts first. A component\'s ' +
-    'usage guidance (its best practices) is indexed one tier below its description, ' +
-    'so the words a reader types still find it — but a component that IS the answer ' +
-    'always outranks one whose advice merely mentions the term.' +
+    'Matching and scores are keyword + fuzzy (not embeddings). Between score bands ' +
+    'results keep the lexical order, whose domain priority can put a weaker ' +
+    'component, hook, template, or theme above a stronger doc, and a query that is an entry\'s exact name answers ' +
+    'with that entry first. Inside a band, fixed weights order the matches, so a ' +
+    'description match can lead a keyword match in the same band (55–99 holds both). ' +
+    'A component\'s usage guidance (its best practices) is indexed one tier below ' +
+    'its description, so the words a reader types still find it.' +
     " In global mode: with `cwd` outside a project, items from integrations installed next to this CLI package globally are searched too, and theme results name no step that adds a theme to an app; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
@@ -56,7 +58,7 @@ export const doc = {
     {
       type: 'search',
       description:
-        'The query echoed back, `matchCount` (how many candidates matched in total, before `limit`), plus a ranked SearchResultEntry[] bounded by `limit`: each has domain, name, score, reason, description, and follow-up command, plus `import` for components and hooks, `title` for docs, `displayName` and `kind` for templates, and `displayName` for themes. A doc result is the smallest part that answers: one section (with `section`, and a command that reads only it), one docs-tree route, or a topic, whose command lists its sections. `parent` is the command that opens the level above it: the section list of its topic, the namespace a tree node sits in, the Unorganized level for a flat topic, or the topic list for a top-level namespace. Every doc result also carries `package`, the npm package that authored it (for a section, the package its file came from). A theme result is one theme you can import: `name` is its slug, its command is `astryx theme add <slug>` (outside a project, where there is no app to add it to, `astryx theme eject <slug>`), and `package` is the npm package that ships it (`@astryxdesign/cli` for the CLI\'s own themes). When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is `{skipped, reason}`: the domains it skipped (`component`, `hook`, `template`) and why; the results are the docs and themes, and text mode prints one line on standard error.',
+        "The query echoed back, `matchCount` (how many candidates matched in total, before `limit`), plus a ranked SearchResultEntry[] bounded by `limit`: each has domain, name, score, reason, description, and follow-up command, plus `import` for components and hooks, `title` for docs, `displayName`, `kind` and `isReady` for templates, and `displayName` for themes. `isReady` is false for a template whose doc sets `isReady: false`, and its text record marks its kind `(not ready)`. A deprecated component's result also carries `deprecated`, `{replacement, description}` from its doc: the name of the component to use instead and the modernization route. A doc result is the smallest part that answers: one section (with `section`, and a command that reads only it), one docs-tree route, or a topic, whose command lists its sections. `parent` is the command that opens the level above it: the section list of its topic, the namespace a tree node sits in, the topic level (Guides or Foundations) for a flat topic, or the topic list for a top-level namespace. Every doc result also carries `package`, the npm package that authored it (for a section, the package its file came from). A theme result is one theme you can import: `name` is its slug, its command is `{@command theme add <slug>}` (outside a project, where there is no app to add it to, `{@command theme eject <slug>}`), and `package` is the npm package that ships it (`@astryxdesign/cli` for the CLI's own themes). When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is `{skipped, reason}`: the domains it skipped (`component`, `hook`, `template`) and why; the results are the docs and themes, and text mode prints one line on standard error.",
     },
   ],
   throws: [

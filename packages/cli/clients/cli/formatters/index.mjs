@@ -23,6 +23,10 @@
  */
 
 import {humanLog} from '../../../foundation/response/json.mjs';
+import {
+  getCliInvocation,
+  prefixCliCommands,
+} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Shared ASCII vocabulary — used here and by stderr diagnostics (cli-error.mjs)
@@ -86,13 +90,25 @@ function truncateToWidth(line, width) {
 export class Block {
   /** @type {string} */
   #text;
-  /** @param {string} text */
-  constructor(text) {
+  /** @type {boolean} */
+  #commands;
+  /**
+   * @param {string} text
+   * @param {{commands?: boolean}} [options] whether the text is doc Markdown,
+   *   whose bare `astryx` commands {@link emit} shows with the project's
+   *   runner; any other block keeps its bytes
+   */
+  constructor(text, {commands = false} = {}) {
     this.#text = text;
+    this.#commands = commands;
   }
   /** @returns {string} */
   toString() {
     return this.#text;
+  }
+  /** @returns {boolean} */
+  get commands() {
+    return this.#commands;
   }
 }
 
@@ -119,6 +135,9 @@ export class Block {
  * @property {'wrap' | 'truncate'} [overflow] - What an inline record longer
  *   than {@link WRAP_WIDTH} does: `wrap` (the default) continues under the
  *   first column; `truncate` cuts it to one line.
+ * @property {(item: any) => boolean} [sizesColumn] - Which inline records the
+ *   first column is sized from (default: all). A record left out keeps its
+ *   place and overhangs a narrower column, so adding it changes no other line.
  */
 
 /** @param {unknown} v @returns {boolean} */
@@ -233,7 +252,9 @@ function wrapLine(line, width, indent) {
  * @returns {Block}
  */
 export function section(heading, subtitle) {
-  return new Block(toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)));
+  return new Block(
+    toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)),
+  );
 }
 
 /**
@@ -308,9 +329,10 @@ export function records(items, options = {}) {
  * @returns {Block}
  */
 function inlineRecords(items, options) {
-  const [lead, ...rest] = (options.fields ?? Object.keys(items[0] ?? {})).filter(
-    k => !options.omit?.includes(k),
-  );
+  // Columns from every row: an optional field is on some rows only.
+  const [lead, ...rest] = (
+    options.fields ?? [...new Set(items.flatMap(o => Object.keys(o ?? {})))]
+  ).filter(k => !options.omit?.includes(k));
   if (lead == null) return new Block('');
   /** @param {any} o @param {string} k */
   const value = (o, k) => {
@@ -318,8 +340,12 @@ function inlineRecords(items, options) {
     return fmt ? fmt(o[k]) : renderValue(o[k]);
   };
   const leads = items.map(o => (isEmpty(o[lead]) ? '' : value(o, lead)));
+  const sizes = options.sizesColumn ?? (() => true);
   const column = Math.min(
-    Math.max(0, ...leads.map(l => displayWidth(l))),
+    Math.max(
+      0,
+      ...leads.filter((_, i) => sizes(items[i])).map(l => displayWidth(l)),
+    ),
     INLINE_LEAD_MAX,
   );
   const indent = ' '.repeat(column + 2);
@@ -344,16 +370,24 @@ function inlineRecords(items, options) {
   return new Block(lines.join('\n'));
 }
 
+/** The `code` languages a reader reads as Markdown: doc text, not source. */
+const MARKDOWN_LANGS = new Set(['markdown', 'md']);
+
 /**
  * A verbatim block — source dumps, layout skeletons, or a markdown doc. Output
  * is byte-for-byte (NOT ASCII-normalized), so it survives piping
  * (`astryx template X > file.tsx`) and preserves doc/source content exactly.
+ * A block marked `lang: 'markdown'` is doc text: {@link emit} shows the bare
+ * `astryx` commands its doc tokens rendered with the project's runner, the
+ * way `astryx docs` shows them. JSON keeps them bare.
  * @param {string} source
- * @param {{lang?: string}} [_options] - Reserved (intent label); output verbatim.
+ * @param {{lang?: string}} [options]
  * @returns {Block}
  */
-export function code(source, _options = {}) {
-  return new Block(String(source));
+export function code(source, options = {}) {
+  return new Block(String(source), {
+    commands: MARKDOWN_LANGS.has(String(options.lang ?? '').toLowerCase()),
+  });
 }
 
 /**
@@ -365,6 +399,32 @@ function isBlock(b) {
 }
 
 /**
+ * The text value of a deprecated component's `deprecated` field: the component
+ * to use instead, then the modernization route. Every command that prints a
+ * component result's fields prints it this way.
+ * @param {{replacement: string, description: string}} deprecation
+ * @returns {string}
+ */
+export function formatDeprecation(deprecation) {
+  return `use ${deprecation.replacement}: ${deprecation.description}`;
+}
+
+/**
+ * A doc text field the way a text reader sees it: each bare `astryx` command
+ * it names starts with the project's command, by the rule {@link emit} applies
+ * to doc Markdown. The API already rendered the doc's tokens; JSON keeps the
+ * bare command.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function docText(value) {
+  const text = String(value ?? '');
+  return text.includes('astryx')
+    ? prefixCliCommands(text, getCliInvocation())
+    : text;
+}
+
+/**
  * The one sanctioned way to write human output to stdout. Joins blocks with a
  * single blank line and hands the result to `humanLog`, which is a no-op in
  * `--json` mode (stdout carries only the envelope there). Accepts only Blocks
@@ -373,9 +433,16 @@ function isBlock(b) {
  * @returns {void}
  */
 export function emit(...blocks) {
+  /** @type {string | undefined} */
+  let stem;
   const body = blocks
     .filter(isBlock)
-    .map(b => b.toString())
+    .map(b => {
+      const text = b.toString();
+      if (!b.commands || !text.includes('astryx')) return text;
+      stem ??= getCliInvocation();
+      return prefixCliCommands(text, stem);
+    })
     .filter(s => s.length > 0)
     .join('\n\n');
   humanLog(body);

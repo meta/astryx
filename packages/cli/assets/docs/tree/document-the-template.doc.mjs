@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/document-the-template`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template`:
  * document page and block templates for discovery and correct reuse.
  */
 

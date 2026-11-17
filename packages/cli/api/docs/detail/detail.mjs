@@ -52,6 +52,14 @@ export async function detail(topic, options = {}) {
       ),
       // A guide the docs tree places is read by its route, not its doc name.
       ...(entry.tree ? {name: entry.name} : {}),
+      // Whose topic or guide it took the place of, beside `replaces` (INV28).
+      // What it took the place of, as the list, the index and the listing
+      // name it: a guide's route, even when the doc named a route the guide
+      // moved from, and a topic replaced twice by the earlier replacement.
+      ...(entry.replaces != null ? {replaces: entry.replaces} : {}),
+      ...(entry.replaces != null && entry.replacedPackage != null
+        ? {replacedPackage: entry.replacedPackage}
+        : {}),
       links: await topicLinks(catalog, entry),
     },
   };

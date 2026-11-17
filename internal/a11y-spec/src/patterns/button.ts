@@ -93,7 +93,7 @@ const WCAG_4_1_2: WcagCriterion = {
  * becomes, and the whole point of quoting it is that the quote stays true.
  */
 const FAMILY_BUTTONS =
-  'https://github.com/facebook/astryx/blob/cb13c1eaa89065cf7656a0d647be428447040d71/docs/families/buttons.md';
+  'https://github.com/meta/astryx/blob/cb13c1eaa89065cf7656a0d647be428447040d71/docs/families/buttons.md';
 
 /**
  * The clause that adopts operability and keyboard activation.

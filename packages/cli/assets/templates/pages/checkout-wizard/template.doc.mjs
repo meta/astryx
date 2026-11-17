@@ -10,4 +10,11 @@ export const doc = {
   keywords: ['checkout', 'cart', 'order', 'payment'],
   isReady: true,
   category: 'Form - Checkout',
+  icons: {
+    CreditCardIcon: 'creditCard',
+    LockClosedIcon: 'lock',
+    MapPinIcon: 'location',
+    ShoppingCartIcon: 'cart',
+    TruckIcon: 'shipping',
+  },
 };

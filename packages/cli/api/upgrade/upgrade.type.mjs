@@ -45,7 +45,7 @@
  * @property {'missing' | 'stale' | 'current'} status
  * @property {string} installedVersion Installed core version the block should reflect.
  * @property {string[]} fromVersions Distinct stale block versions found (the "from" side of the refresh).
- * @property {string[]} files Files rewritten (apply) or that would be rewritten (dry-run).
+ * @property {string[]} files Files rewritten (apply) or that would be rewritten (dry-run), relative to the folder the command ran in.
  * @property {boolean} refreshed True only when a block was actually rewritten (apply mode).
  * @property {'refreshed' | 'would-refresh' | 'nudge-init' | 'error' | 'none'} action
  */
@@ -70,7 +70,9 @@
  */
 
 /**
- * Aggregate receipt for ShadCN-copied composition reconciliation.
+ * Aggregate receipt for ShadCN-copied composition reconciliation. File paths
+ * are relative to the scanned source directory, or, when the upgrade ran in a
+ * folder below the project root, to that folder.
  * @typedef {object} RegistryCompositionSummary
  * @property {boolean} applied
  * @property {boolean} ok False when conflicts, missing files, invalid receipts, or failures remain.
@@ -99,11 +101,22 @@
 /**
  * A required codemod change blocked by effective working-tree protection.
  * @typedef {object} ProtectedCodemodFile
- * @property {string} file Project-relative path.
+ * @property {string} file Path relative to the folder the command ran in.
  * @property {string[]} codemods Codemods that still require a change.
  * @property {string[]} reasons Protection categories (generated, vendored, ignored, and hard boundaries).
  * @property {string[]} declarations Effective declarations that protect the file.
  * @property {string[]} commands Exact regeneration commands found in generated headers, when present.
+ */
+
+/**
+ * A generated file that must be rebuilt before the upgrade is complete: a
+ * protected generated file a codemod still needs to change (also listed in
+ * `protectedFiles`), or a generated output a codemod reported out of date.
+ * @typedef {object} RegenerateFile
+ * @property {string} file Path relative to the folder the command ran in.
+ * @property {string[]} codemods Codemods that need the rebuild.
+ * @property {string[]} commands Exact commands that rebuild the file, when known: the generated header's `Command:` line, or the command the codemod names (such as `astryx theme build`).
+ * @property {string[]} messages Why a codemod reported the file out of date; empty for a protected generated file that no codemod reported out of date, whose `protectedFiles` entry carries its declarations.
  */
 
 /**
@@ -129,15 +142,29 @@
  * @property {AgentDocsSummary} data.agentDocs
  * @property {boolean} data.sourcePathFound Whether the resolved source directory (`path`, default `./src`) exists. False means no source file was read, so a zero `filesChanged` says nothing about the project being migrated.
  * @property {RegistryCompositionSummary} [data.registryCompositions]
- * @property {boolean} [data.complete] False when protected required changes remain.
- * @property {'ERR_CODEMOD_PROTECTED'} [data.errorCode] Stable incomplete-result code when complete is false.
+ * @property {boolean} [data.complete] False when protected required changes remain, including a protected file in `regenerate`. Declined candidates alone never make it false. Also false on the receipt a failed run's error carries (`UpgradeFailureReceipt`).
+ * @property {RegenerateFile[]} [data.regenerate] Generated files to rebuild, with their commands; rebuild them, then run the same upgrade again. A listed file the project protects (for example with an `@generated` header) is also in `protectedFiles`, with the declaration that protects it and the same commands, and makes the run incomplete with `ERR_CODEMOD_PROTECTED`. A listed file nothing protects is a codemod error: it is also in `errors`, and the run fails with `ERR_CODEMOD_FAILED` (`UpgradeFailureReceipt`).
+ * @property {string} [data.errorCode] Stable incomplete-result code when complete is false: `ERR_CODEMOD_PROTECTED` on a returned receipt; on the receipt a failed run's error carries, the error's own code.
  * @property {number} [data.filesChanged] Distinct files changed across core + integration codemods (apply mode). One file that four codemods each changed counts once.
- * @property {string[]} [data.modifiedFiles] Project-relative files changed or previewed.
+ * @property {string[]} [data.modifiedFiles] Files changed or previewed, relative to the folder the command ran in.
  * @property {ProtectedCodemodFile[]} [data.protectedFiles] Protected files that still require a codemod change after regeneration.
- * @property {Array<{file: string, location?: string, reason: string}>} [data.declinedCandidates] Candidates left unchanged because proof was insufficient.
+ * @property {Array<{file: string, location?: string, reason: string}>} [data.declinedCandidates] Candidates left unchanged because proof was insufficient, one row per file, for manual review. A protected file whose own source does not parse is listed here, with the parse error's `line:column` as `location` and a `reason` that starts with `unparseable protected file`, instead of failing the run. Code a codemod identified but cannot migrate safely is listed here too, with its line as `location` when known and a `reason` that starts with `manual migration needed (<codemod>):` followed by what to change. A file with several declined findings, of either kind, keeps one row: each finding keeps its own prefix, they are joined by `; `, unparseable-file findings first, then manual migrations, each in the order found, and `location` is the first finding's own location (absent when it has none). A later finding whose location differs from the row's ends with ` (at <location>)`, or ` (location unknown)` when it has none; one without a suffix is at the row's location. Declined candidates do not make the run incomplete. Each `file` is relative to the folder the command ran in.
  * @property {number} [data.transformsApplied] Total codemod changes. A code or config codemod counts once for each file it changed, so one file changed by four of them counts four times; a project codemod counts once, however many files it writes.
- * @property {Array<{file: string, codemod: string, error: string}>} [data.errors] Per-codemod errors, when any codemod failed.
+ * @property {Array<{file: string, codemod: string, error: string}>} [data.errors] Per-codemod errors, when any codemod failed. On the receipt a failed run's error carries, also a post-codemod hook failure (`codemod: 'post-codemod-hook'`) or the error that stopped the run after codemods wrote files. A returned `ERR_CODEMOD_PROTECTED` result lists them too when a protected file wins over them: a post-codemod hook failure, or an `astryx.config` that fails validation (`{file: '.', codemod: 'config', error}`). Each `file` is relative to the folder the command ran in.
  * @property {CliBehindCore} [data.cliBehindCore] Present only when the installed Core is newer than this CLI: codemods for the releases after `cliBehindCore.cliVersion` did not run.
+ */
+
+/**
+ * What a failed upgrade had already done. When a run fails after its codemods
+ * ran (a codemod or post-codemod hook failed, or an error stopped it after
+ * codemods wrote files), the failure keeps its usual shape: the --json error
+ * envelope `{apiVersion, error, code}` and a rejected `upgrade()` with that
+ * `code`. The envelope adds `receipt`, and the thrown AstryxError a `receipt`
+ * property: the same `upgrade.run` data a completed run returns, with
+ * `complete: false` and `errorCode` equal to the error's `code`. Files in
+ * `modifiedFiles` stay changed.
+ *
+ * @typedef {UpgradeRunResponse['data']} UpgradeFailureReceipt
  */
 
 /**

@@ -17,11 +17,22 @@ export const doc = {
     'Non-interactive project setup: install agent docs and point at the theme + build workflows.',
   description:
     'Sets a project up with NO prompts, so it behaves identically for humans, ' +
-    'agents, CI, and piped I/O. By default it installs the AGENTS.md/CLAUDE.md ' +
-    'agent-docs cheat sheet, including guidance from configured integrations, and ' +
-    "prints getting-started guidance; `features` / `all` print only the chosen features' " +
+    'agents, CI, and piped I/O. By default it writes the agent-docs cheat sheet, ' +
+    'including guidance from configured integrations, at the project root (the nearest ' +
+    'package.json that declares an @astryxdesign package, else the nearest package.json, ' +
+    'searching no higher than the repository root): to AGENTS.md, ' +
+    "to the project's Claude Code file (CLAUDE.md, else .claude/CLAUDE.md; when CLAUDE.md " +
+    'exists, a block in .claude/CLAUDE.md is removed, unless the project ignores CLAUDE.md, in which case a ' +
+    '.claude/CLAUDE.md the project commits keeps a copy), and as a ' +
+    'one-line import of AGENTS.md in GEMINI.md unless GEMINI.md already imports it. ' +
+    'In the home folder, or in a settings folder in it outside a project, it writes none: every ' +
+    'folder of the home folder whose name starts with a dot is a settings folder, and such a folder itself never ' +
+    'counts as a project, even with a package.json; a folder below it with a package.json does. ' +
+    'The managed block is Astryx-owned: it is written, refreshed, and removed whatever ignore rules ' +
+    'or generated markers say, and the text around it is never changed. It then ' +
+    "prints getting-started guidance (the build and search commands instead when every agent-docs block was already current, since the app is set up; an outdated block is still refreshed); `features` / `all` print only the chosen features' " +
     'guidance instead (the theme feature also writes the annotated theme template). ' +
-    'With `removeAgents` it removes the managed agent-docs block instead of installing. ' +
+    'With `removeAgents` it removes the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. ' +
     'Outside a project it writes the same files but prints no getting-started steps and no step that adds a theme to an app, since those set up a project the folder does not have. ' +
         "With `user` it sets up the computer instead of the folder: it writes the computer-level agent text, one skill file at `~/.agents/skills/astryx/SKILL.md`, linked into the skill folders of agents that read only their own (`~/.claude/skills` always; Kiro, Windsurf, Letta, Xcode's coding assistant, and `~/.config/agents/skills` when that folder exists), with a managed copy for Continue, whose scanner skips links,, telling agents anywhere on the computer that Astryx is there and when to use it; with `user` and `removeAgents` it removes the file and the links it made and records that the text is turned off. " +
     'The CLI installed for the computer refreshes the file in the background after each upgrade; package install scripts, project setup, and upgrade never write it.' +
@@ -46,7 +57,7 @@ export const doc = {
       name: 'options.removeAgents',
       type: 'boolean',
       description:
-        'Remove the managed agent-docs block instead of installing. With `user`, remove the computer-level agent text instead.',
+        'Remove the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. With `user`, remove the computer-level agent text instead.',
     },
     {
       name: 'options.user',
@@ -62,7 +73,10 @@ export const doc = {
       name: 'options.agent',
       type: 'string',
       description:
-        'Agent preset: claude, cursor, codex, hermes, muse, all. Used only when the agents feature runs. Refused with `user`.',
+        'Agent preset: claude, cursor, codex, hermes, muse, all. `all` writes every existing agent doc except GEMINI.md, ' +
+        'which keeps its one-line import of AGENTS.md. With claude and all, when CLAUDE.md gets the block, a block in ' +
+        '.claude/CLAUDE.md is removed, unless the project ignores CLAUDE.md, in which case a .claude/CLAUDE.md the ' +
+        'project commits gets a copy too. Used only when the agents feature runs. Refused with `user`.',
     },
     {
       name: 'options.agentDocsPath',
@@ -86,7 +100,7 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead).',
     },
     {
       type: 'init.remove',
@@ -122,7 +136,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file resolves outside cwd through a symlink',
+      when: 'the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file in cwd, or at the project root when run there, resolves outside that folder through a symlink (run below the root, a project-root file is left as it is with a note)',
     },
   ],
   examples: [

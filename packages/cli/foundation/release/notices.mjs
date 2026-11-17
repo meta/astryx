@@ -43,11 +43,16 @@ import {userConfigDir} from '../env/user-dirs.mjs';
 import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {
   CLI_PACKAGE,
+  commandInFolder,
   detectPackageManager,
   getCliInvocation,
+  installDependenciesCommand,
 } from '../env/package-manager.mjs';
+import {CLI_ROOT, findAstryxProject, findPackageRoot} from '../fs/paths.mjs';
+import {readDeclaredDependencies} from '../integrations/declared-dependencies.mjs';
 import {satisfiesRange, semverCompare} from '../env/semver.mjs';
 import {isInReleaseCache, isReleaseVersion} from './cache.mjs';
+import {pinnedVersion, runningCopy} from './choose.mjs';
 import {
   knownLatest,
   readGlobalState,
@@ -55,8 +60,13 @@ import {
   tryStateLock,
   writeGlobalState,
 } from './global-state.mjs';
-import {globalFolderOf, isGlobalCopy, projectRootOf} from './choose.mjs';
-import {readReleaseFacts} from './project.mjs';
+import {
+  coreVersionOf,
+  globalFolderOf,
+  isGlobalCopy,
+  projectRootOf,
+} from './choose.mjs';
+import {installsPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 
@@ -73,6 +83,12 @@ const FORGET_AFTER_MS = 30 * 24 * 60 * 60_000;
  * module loads.
  */
 const LATEST = '@astryxdesign/cli@latest';
+
+/**
+ * The key prefix of the once-a-day setup reminder. It is no update notice, so
+ * no skip is recorded for it and doctor's update line never names it.
+ */
+export const SETUP_REMINDER_KEY = 'setup:';
 
 /**
  * Whether notice `key` may print now; when it may, its time is recorded
@@ -97,7 +113,9 @@ export function takeNotice(
     const shown = state.notifiedAt ?? {};
     const last = shown[key];
     if (typeof last === 'number' && now - last < NOTICE_INTERVAL_MS) {
-      const skips = withSkip(state.noticeSkips, key, 'already-shown', now);
+      const skips = key.startsWith(SETUP_REMINDER_KEY)
+        ? null
+        : withSkip(state.noticeSkips, key, 'already-shown', now);
       if (skips) writeGlobalState({...state, noticeSkips: skips}, stateDir);
       return /** @type {const} */ ('already-shown');
     }
@@ -191,6 +209,7 @@ export function lastNoticeSkip({stateDir = userConfigDir()} = {}) {
     readGlobalState(stateDir).noticeSkips ?? {},
   )) {
     if (
+      !key.startsWith(SETUP_REMINDER_KEY) &&
       skip &&
       typeof skip.at === 'number' &&
       (!newest || skip.at > newest.at)
@@ -376,43 +395,294 @@ const ADD = {
 };
 
 /**
+ * The command that adds Astryx packages at `version` to the project at
+ * `root`, with its package manager. A project that pins its Core (or, with no
+ * Core, its CLI) to one version, as a starter does, keeps its packages
+ * pinned: npm saves a version it adds as a range unless it is told to save it
+ * exactly, so the command carries that flag when `version` is one version. A
+ * range is saved as the range.
+ * @param {string} root
+ * @param {string | null} [version]
+ * @returns {string}
+ */
+export function addVerbFor(root, version = null) {
+  const pm = detectPackageManager(root);
+  const add = ADD[pm] ?? ADD.npm;
+  if (!pinnedVersion(version)) return add;
+  const facts = readReleaseFacts(root);
+  if (!pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange)) {
+    return add;
+  }
+  return `${add} ${pm === 'bun' ? '--exact' : '-E'}`;
+}
+
+/**
+ * The packages Astryx releases with Core, such as its themes, as the official
+ * package list this CLI carries marks them. Each names Core's exact release
+ * as its peer. Empty when the CLI carries no readable list.
+ * @returns {Set<string>}
+ */
+function releasedWithCorePackages() {
+  /** @type {any} */
+  let list;
+  try {
+    // The official package list this CLI carries, which `discover` reads.
+    // Built here, not at load: paths.mjs and this module load each other.
+    const file = path.join(
+      CLI_ROOT,
+      'assets',
+      'discover',
+      'official-packages.json',
+    );
+    list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return new Set();
+  }
+  return new Set(
+    (Array.isArray(list?.packages) ? list.packages : [])
+      .filter((/** @type {any} */ pkg) => pkg?.releasedWithCore === true)
+      .map((/** @type {any} */ pkg) => pkg.package),
+  );
+}
+
+/**
+ * The packages beside Core and the CLI that the project at `root` lists for
+ * its install and that Astryx releases with Core, such as its themes, in the
+ * order the project lists them, so they move to a new release with Core
+ * ({@link releasedWithCorePackages}).
+ * @param {string} root
+ * @returns {string[]}
+ */
+function releasedWithCoreIn(root) {
+  const withCore = releasedWithCorePackages();
+  return readDeclaredDependencies(root)
+    .map(entry => entry.name)
+    .filter(name => withCore.has(name));
+}
+
+/**
+ * The command that adds the package `name` to the project a run in `cwd`
+ * belongs to, with its package manager. A package Astryx releases with Core
+ * ({@link releasedWithCorePackages}) names Core's exact release as its peer,
+ * so it is added at the project's Core release: the Core it installed or
+ * locked, else the one its package.json pins, else the Core range it
+ * declares, else, with no Core at all, the release of the CLI that answers,
+ * whose Core the package then brings; it is saved exactly in a project that
+ * pins Core (see {@link addVerbFor}). Any other package is added at the
+ * version the package manager picks.
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string}
+ */
+export function addMatchingCore(cwd, name) {
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  const facts = readReleaseFacts(root);
+  const release = releasedWithCorePackages().has(name)
+    ? (coreVersionOf(facts) ??
+      facts.declaredCoreRange ??
+      runningCopy(CLI_ROOT).version)
+    : null;
+  const verb = addVerbFor(root, release);
+  if (!release) return `${verb} ${name}`;
+  // A range is quoted: `^`, `<`, `>`, `|` and spaces mean something to a
+  // shell.
+  return pinnedVersion(release)
+    ? `${verb} ${name}@${release}`
+    : `${verb} "${name}@${release}"`;
+}
+
+/**
+ * The packages that move to `version` with Core in the project at `root`:
+ * Core, the CLI unless `cli` is false, then every other package
+ * {@link releasedWithCoreIn} names, each at `version`.
+ * @param {string} root
+ * @param {string} version
+ * @param {{cli?: boolean}} [options]
+ * @returns {string}
+ */
+function withCoreAt(root, version, {cli = true} = {}) {
+  return [
+    '@astryxdesign/core',
+    ...(cli ? [CLI_PACKAGE] : []),
+    ...releasedWithCoreIn(root),
+  ]
+    .map(name => `${name}@${version}`)
+    .join(' ');
+}
+
+/**
+ * The command that adds a package to the project of a run in `cwd`, with the
+ * project's package manager (spec AST-081 FR12). Null when `cwd` belongs to
+ * no project `spec:AST-040` FR9 defines, and in a folder inside the project
+ * whose package.json is not the project's (see {@link installFolder}): a run
+ * there loads integrations from that package.json, so a package added to the
+ * project would stay unused there, and the advice is
+ * {@link RUN_FROM_PROJECT}.
+ * @param {string} cwd
+ * @returns {((name: string) => string) | null}
+ */
+export function projectAddCommand(cwd) {
+  const target = installFolder(cwd);
+  if (target == null || target.moved) return null;
+  const add = ADD[detectPackageManager(cwd)] ?? ADD.npm;
+  return name => `${add} ${name}`;
+}
+
+/**
  * The commands that bring a project's own CLI and Core to one release, with
  * the project's package manager: when the CLI is newer, Core up to it and then
  * the codemods from Core's release; otherwise the CLI to Core's release.
+ * Null in a folder that belongs to no project, or whose package.json is not
+ * the project's (see {@link installFolder}).
  * @param {{cwd: string, cli: string, core: string}} options
- * @returns {string}
+ * @returns {string | null}
  */
 export function alignCliAndCore({cwd, cli, core}) {
-  const facts = readReleaseFacts(cwd);
-  const root = projectRootOf(facts) ?? cwd;
-  const add = ADD[detectPackageManager(root)] ?? ADD.npm;
+  const target = installFolder(cwd);
+  if (target == null || target.moved) return null;
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  return alignIn(root, cli, core);
+}
+
+/**
+ * The commands that bring the CLI and Core of the project at `root` to one
+ * release, run in `root`.
+ * @param {string} root
+ * @param {string} cli
+ * @param {string} core
+ * @returns {string}
+ */
+function alignIn(root, cli, core) {
+  const add = addVerbFor(root, semverCompare(cli, core) > 0 ? cli : core);
   if (semverCompare(cli, core) > 0) {
-    return `${add} @astryxdesign/core@${cli}, then ${getCliInvocation(root, {installed: true})} upgrade --from ${core} --apply`;
+    return `${add} ${withCoreAt(root, cli, {cli: false})}, then ${getCliInvocation(root, {installed: true})} upgrade --from ${core} --apply`;
   }
   return `${add} ${CLI_PACKAGE}@${core}`;
 }
 
 /**
+ * Where a command that adds an Astryx package runs, for a run in `cwd`: in
+ * the project `spec:AST-040` FR9 defines, which stops at a repository root
+ * and never counts the home folder (spec AST-081 FR2, FR10). Null when `cwd`
+ * belongs to no such project, so no command adds anything. When `cwd`'s
+ * nearest package.json is not the project's, as in a tool folder that
+ * installs its own Core, a package manager would add to the tool's
+ * package.json, so `moved` says the command runs in the project's folder.
+ * @param {string} cwd
+ * @returns {{dir: string, moved: boolean} | null}
+ */
+export function installFolder(cwd) {
+  const project = findAstryxProject(cwd);
+  if (project == null) return null;
+  const nearest = findPackageRoot(cwd);
+  if (nearest == null || nearest === project) return {dir: cwd, moved: false};
+  return {dir: project, moved: true};
+}
+
+/**
+ * The command that installs the project's dependencies, when the project a
+ * run in `cwd` belongs to lists `name` among the packages its install gets:
+ * a `name` that is not installed then comes from that install, at the version
+ * the project lists, as in a fresh clone, and adding it again would replace
+ * that version. Null when the project lists no `name`, when `cwd` belongs to
+ * no project, and in a folder inside the project whose package.json is not
+ * the project's (see {@link installFolder}), where an install would install
+ * that folder's own packages.
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function listedPackageInstall(cwd, name) {
+  const target = installFolder(cwd);
+  if (target == null || target.moved) return null;
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  return installsPackage(root, name) ? installDependenciesCommand(root) : null;
+}
+
+/**
+ * What to tell a run in a folder inside a project whose package.json is not
+ * the project's: run from the project's folder, since adding there would make
+ * the folder a project of its own (spec AST-081 FR2).
+ */
+export const RUN_FROM_PROJECT =
+  "Run this from the Astryx project's folder, or declare an Astryx package in this folder's package.json to make it a project of its own.";
+
+/**
+ * The release of the project at `dir`, for a command that runs in its folder
+ * from a folder below it: its own CLI's version when it installs one, else
+ * the Core it records; null when it records neither.
+ * @param {string} dir
+ * @returns {{version: string, own: boolean} | null}
+ */
+export function projectRelease(dir) {
+  const facts = readReleaseFacts(dir);
+  const version = facts.cli?.version ?? coreVersionOf(facts);
+  return version ? {version, own: Boolean(facts.cli)} : null;
+}
+
+/**
+ * The command that gives a project with no CLI installed its CLI, for a run in
+ * `cwd` whose Core is `core`, with the project's package manager in the
+ * project root: the command that adds the CLI at Core's version, or, when the
+ * project's package.json lists the CLI among the packages its install gets,
+ * as a fresh clone's does, the command that installs the project's
+ * dependencies (`declared`). Adding the CLI again would replace the version
+ * the project lists. A CLI listed only as a peer dependency keeps the add
+ * command: some package managers never install peers. `command` is
+ * null in a folder inside the project whose package.json is not the
+ * project's (see {@link installFolder}), where the advice is
+ * {@link RUN_FROM_PROJECT}. Null when the folder belongs to no project.
+ * @param {{cwd: string, core: string}} options
+ * @returns {{root: string, core: string, command: string | null, declared: boolean} | null}
+ */
+export function cliInstallAdvice({cwd, core}) {
+  const target = installFolder(cwd);
+  if (target == null) return null;
+  if (target.moved) {
+    return {root: target.dir, core, command: null, declared: false};
+  }
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  const install = listedPackageInstall(cwd, CLI_PACKAGE);
+  if (install) return {root, core, command: install, declared: true};
+  return {root, core, command: addCliCommand(root, core), declared: false};
+}
+
+/**
  * The hint for a project with no CLI of its own, answered by `answered` while
- * its Core is `core`: the command that adds the CLI at Core's version, with
- * the project's package manager.
+ * its Core is `core`, with the command {@link cliInstallAdvice} names: the one
+ * that adds the CLI at Core's version, or the one that installs the
+ * project's dependencies when the project lists the CLI already. Null when no
+ * command fits, or when the project the command adds to already matches.
  * @param {{cwd: string, answered: string, core: string}} options
- * @returns {{root: string, line: string}}
+ * @returns {{root: string, line: string} | null}
  */
 export function noCliHint({cwd, answered, core}) {
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  return {root, line: noCliHintLine(answered, core, addCliCommand(root, core))};
+  if (core === answered) return null;
+  const advice = cliInstallAdvice({cwd, core});
+  if (advice == null) return null;
+  return {
+    root: advice.root,
+    line: noCliHintLine(answered, core, advice.command, advice.declared),
+  };
 }
 
 /**
  * The hint's text.
  * @param {string} answered
  * @param {string} core
- * @param {string} command the command that adds the CLI at Core's version
+ * @param {string | null} command the command that adds the CLI at Core's
+ *   version, or that installs the project's dependencies (`declared`); null
+ *   in a folder whose package.json is not the project's
+ * @param {boolean} [declared] the project lists the CLI already, so the
+ *   command installs the version it lists, which need not match its Core
  * @returns {string}
  */
-export function noCliHintLine(answered, core, command) {
-  return `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}. To match, run: ${command}`;
+export function noCliHintLine(answered, core, command, declared = false) {
+  const head = `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}.`;
+  if (!command) return `${head} ${RUN_FROM_PROJECT}`;
+  return declared
+    ? `${head} To install the CLI this project declares, run: ${command}`
+    : `${head} To match, run: ${command}`;
 }
 
 /**
@@ -423,7 +693,7 @@ export function noCliHintLine(answered, core, command) {
  * @returns {string}
  */
 export function addCliCommand(root, version) {
-  return `${ADD[detectPackageManager(root)] ?? ADD.npm} ${CLI_PACKAGE}@${version}`;
+  return `${addVerbFor(root, version)} ${CLI_PACKAGE}@${version}`;
 }
 
 /**
@@ -432,17 +702,29 @@ export function addCliCommand(root, version) {
  * @param {{cwd: string, current: string, stateDir?: string}} options
  * @returns {ProjectLag | null}
  */
-export function projectLag({cwd, current, stateDir = userConfigDir()}) {
+export function projectLag({cwd, current: given, stateDir = userConfigDir()}) {
   const latest = knownLatest(stateDir);
-  if (!latest || !isBehind(current, latest.version)) return null;
-  const newest = latest.version;
+  if (!latest) return null;
   const facts = readReleaseFacts(cwd);
   if (!facts.inProject) return null;
-  const root = projectRootOf(facts) ?? cwd;
-  const pm = detectPackageManager(root);
+  const target = installFolder(cwd);
+  if (target == null) return null;
+  const root = target.moved ? target.dir : (projectRootOf(facts) ?? cwd);
+  // From a folder inside the project, the project's own release, as the
+  // setup reminder names it, so the project gets one notice and one --from.
+  const current = target.moved
+    ? (projectRelease(root)?.version ?? given)
+    : given;
+  if (!isBehind(current, latest.version)) return null;
+  const newest = latest.version;
   // The CLI is always installed beside Core: a project that installed only
   // Core gets it too, as recommended, so its version is pinned with Core's.
-  const install = `${ADD[pm] ?? ADD.npm} @astryxdesign/core@${newest} ${CLI_PACKAGE}@${newest}`;
+  // Its themes move too: each names Core's exact release (see
+  // releasedWithCoreIn). From a folder inside the project whose package.json
+  // is not the project's, the install runs in the project's folder (see
+  // installFolder).
+  const add = `${addVerbFor(root, newest)} ${withCoreAt(root, newest)}`;
+  const install = target.moved ? commandInFolder(root, add) : add;
   // The command runs after the install above, so the picker's guess is the
   // project's own CLI (spec AST-081 FR5).
   const stem = getCliInvocation(root, {installed: true});
@@ -452,7 +734,9 @@ export function projectLag({cwd, current, stateDir = userConfigDir()}) {
     newest,
     node: latest.node,
     install,
-    upgrade: `${stem} upgrade --from ${current} --apply`,
+    upgrade: target.moved
+      ? commandInFolder(root, `${stem} upgrade --from ${current} --apply`)
+      : `${stem} upgrade --from ${current} --apply`,
   };
 }
 
@@ -536,18 +820,13 @@ export function noticeLines({
   try {
     // A project with no CLI of its own, answered by a release other than its
     // Core's: once a day per project, how to match them (FR2).
-    if (
-      choice.inProject &&
-      choice.copy === 'starting' &&
-      choice.coreVersion &&
-      choice.coreVersion !== choice.version
-    ) {
+    if (choice.inProject && choice.copy === 'starting' && choice.coreVersion) {
       const hint = noCliHint({
         cwd,
         answered: choice.version,
         core: choice.coreVersion,
       });
-      if (take(`no-cli:${hint.root}`)) lines.push(hint.line);
+      if (hint && take(`no-cli:${hint.root}`)) lines.push(hint.line);
     }
   } catch {
     // A hint never fails a run.
@@ -559,8 +838,16 @@ export function noticeLines({
         choice.copy === 'starting' && choice.coreVersion
           ? choice.coreVersion
           : choice.version;
-      const lag = projectLag({cwd, current, stateDir});
-      if (!lag) recordNoticeSkip('project', 'no-newer', {stateDir, now});
+      // A folder that belongs to no project (spec AST-040 FR9) gets no
+      // project notice; the skip says why.
+      const noProject = installFolder(cwd) == null;
+      const lag = noProject ? null : projectLag({cwd, current, stateDir});
+      if (!lag) {
+        recordNoticeSkip('project', noProject ? 'no-project' : 'no-newer', {
+          stateDir,
+          now,
+        });
+      }
       if (lag && take(`project:${lag.root}`)) {
         lines.push(
           availableLine(lag.current, lag.newest),

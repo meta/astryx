@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes`: author a theme
+ * @file `astryx docs authoring/building-blocks/themes`: author a theme
  * in an integration; apps install, apply, and extend it like any theme.
  */
 

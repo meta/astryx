@@ -5,8 +5,10 @@
  * run the unscoped name through npx (RUNNER_COMMAND_ALLOWLIST says where a
  * runner is allowed, and why).
  *
- * TODO(doctor-runner-check): replace the matcher below with the Doctor lane's
- * runnerCommandsIn() once it lands, keeping RUNNER_COMMAND_ALLOWLIST.
+ * The matcher is the one `doctor integration validate` holds integrations to
+ * (runnerCommandsIn). Core's own docs are held one step further: outside the
+ * named runner examples they do not write the scoped `npx @astryxdesign/cli`
+ * either, because the docsite and the CLI add the runner.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -15,21 +17,15 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {RUNNER_COMMAND_ALLOWLIST} from '../foundation/discovery/runner-allowlist.mjs';
+import {runnerCommandsIn} from '../foundation/discovery/runner-commands.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../..',
 );
-const DOWNLOAD = String.raw`(?:npx|pnpm\s+dlx|yarn\s+dlx|bunx|bun\s+x|npm\s+exec)`;
-const PROJECT = String.raw`(?:pnpm\s+exec|pnpm|yarn)`;
-/** npx (or another download runner) with the unscoped name. */
-const UNSCOPED = new RegExp(
-  String.raw`(?<![\w@/-])${DOWNLOAD}\s+astryx(?![\w@/-])`,
-  'gu',
-);
-/** Any runner in front of an Astryx command. */
-const RUNNER = new RegExp(
-  String.raw`(?<![\w@/-])(?:${DOWNLOAD}\s+(?:astryx|@astryxdesign/cli(?:@[\w.-]+)?)(?![\w/-])|${PROJECT}\s+astryx\s+[a-z][\w-]*)`,
+/** A download runner with the scoped package name, which Core's docs leave to the docsite. */
+const SCOPED = new RegExp(
+  String.raw`(?<![\w@/-])(?:npx|pnpm\s+dlx|yarn\s+dlx|bunx|bun\s+x|npm\s+exec)\s+@astryxdesign/cli(?:@[\w.-]+)?(?![\w/-])`,
   'gu',
 );
 
@@ -42,20 +38,33 @@ const files = execFileSync(
   .filter(file => /\.(?:[cm]?[jt]sx?|md)$/u.test(file))
   .filter(file => !RUNNER_COMMAND_ALLOWLIST.skip.some(re => re.test(file)));
 
-/** @param {string} file @param {RegExp} re */
-function hits(file, re) {
+/**
+ * @param {string} file
+ * @param {(line: string) => string[]} find the commands a line writes
+ */
+function hits(file, find) {
   const text = fs.readFileSync(path.join(REPO, file), 'utf8');
   return text
     .split('\n')
-    .flatMap((line, i) =>
-      [...line.matchAll(re)].map(m => `${file}:${i + 1}: ${m[0]}`),
-    );
+    .flatMap((line, i) => find(line).map(each => `${file}:${i + 1}: ${each}`));
 }
+
+/** @param {string} line */
+const unscoped = line =>
+  runnerCommandsIn(line)
+    .filter(each => each.download)
+    .map(each => each.written);
+
+/** @param {string} line */
+const withRunner = line => [
+  ...runnerCommandsIn(line).map(each => each.written),
+  ...[...line.matchAll(SCOPED)].map(match => match[0]),
+];
 
 describe('runner commands in Astryx docs', () => {
   it('never runs the unscoped name through npx', () => {
     expect(files.length).toBeGreaterThan(100);
-    expect(files.flatMap(file => hits(file, UNSCOPED))).toEqual([]);
+    expect(files.flatMap(file => hits(file, unscoped))).toEqual([]);
   });
 
   it('writes commands bare in docs, except the named runner examples', () => {
@@ -65,7 +74,7 @@ describe('runner commands in Astryx docs', () => {
         !(file in RUNNER_COMMAND_ALLOWLIST.runnerExamples),
     );
     expect(docs.length).toBeGreaterThan(100);
-    expect(docs.flatMap(file => hits(file, RUNNER))).toEqual([]);
+    expect(docs.flatMap(file => hits(file, withRunner))).toEqual([]);
   });
 
   it('names only files that exist', () => {

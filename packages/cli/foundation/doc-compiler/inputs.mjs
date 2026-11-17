@@ -23,9 +23,11 @@ import {
 } from '../discovery/component-discovery.mjs';
 import {discoverHooks, findHookDoc} from '../discovery/hook-discovery.mjs';
 import {themeImportPackage} from '../discovery/theme-discovery.mjs';
+import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {CLI_ROOT, findCoreDir} from '../fs/paths.mjs';
 import {packageSource} from './source.mjs';
 import {treeDocFiles} from './tree.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 export {packageSource};
 
@@ -44,7 +46,7 @@ const NON_DESCRIPTOR_DIRS = new Set([
 ]);
 
 /**
- * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'docs' | 'self-docs' | 'tree'} DocRoot
+ * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'icon-definitions' | 'docs' | 'self-docs' | 'tree'} DocRoot
  */
 
 /**
@@ -140,6 +142,21 @@ export async function collectDocInputs(project) {
     list.add('themes', theme.slug, themeImportPackage(theme), theme.docPath);
   }
 
+  // Icon definitions: Astryx's, then each installed set's own.
+  for (const {doc, file} of astryxIconDefinitions().definitions) {
+    list.add('icon-definitions', doc.name, CLI_PACKAGE, file);
+  }
+  for (const set of (await project.iconSets()).sets) {
+    for (const {doc, file} of set.definitions) {
+      list.add(
+        'icon-definitions',
+        `${set.name}/${doc.name}`,
+        set.package,
+        file,
+      );
+    }
+  }
+
   for (const topic of (await project.docs()).entries()) {
     list.add('docs', topic.name, topic.package, topic.path, 'base');
     for (const extension of topic.extensions) {
@@ -187,7 +204,7 @@ function unlistedCoreComponentDocs(coreDir, list) {
   const walk = dir => {
     const entries = fs
       .readdirSync(dir, {withFileTypes: true})
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -219,7 +236,7 @@ export function selfDocFiles() {
   const walk = dir => {
     const entries = fs
       .readdirSync(dir, {withFileTypes: true})
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {

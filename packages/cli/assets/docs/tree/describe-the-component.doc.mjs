@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/components/describe-the-component`:
+ * @file `astryx docs authoring/building-blocks/components/describe-the-component`:
  * choose and maintain the ComponentDoc shape that matches a component's public
  * source.
  */
@@ -51,7 +51,7 @@ export const docs = {
     {
       type: 'code',
       lang: 'bash',
-      code: 'astryx component AcmeCarousel',
+      code: '{@command component AcmeCarousel}',
     },
   ],
 };

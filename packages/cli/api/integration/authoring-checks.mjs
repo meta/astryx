@@ -22,10 +22,12 @@ import path from 'node:path';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   packageComponentLinkProblems,
+  packageDocTargets,
   packageDocsProblems,
   packageReferenceProblems,
 } from '../docs/_adapter.mjs';
 import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverIntegrationComponents,
   discoverOwnedComponents,
@@ -38,8 +40,10 @@ import {
   integrationStrayPointers,
 } from './_adapter.mjs';
 import {
+  BUILTIN_DOCS_PACKAGE,
   discoverBuiltinTopics,
   discoverIntegrationDocs,
+  isGuideRoute,
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {
   applyTemplateReplacements,
@@ -51,11 +55,28 @@ import {
   validateInstalledIntegration,
   validateLocalIntegration,
 } from './validate-integration.mjs';
+import {rootProblem} from '../../foundation/integrations/validate-contributions.mjs';
+import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
-/** @param {string} value */
-export function shellArg(value) {
-  if (/^[A-Za-z0-9@/._-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+/**
+ * The provider ID a package without a name is checked under: a valid bare
+ * package name no published package can hold (npm names are lowercase).
+ */
+const UNNAMED_PROVIDER = 'astryx-unnamed-local-package';
+
+/**
+ * A message as the package sees it: the stand-in provider ID gone, its docs
+ * named by their path in the package.
+ * @param {string} message
+ */
+function unnamedShown(message) {
+  return message
+    .split(`${UNNAMED_PROVIDER}/`)
+    .join('')
+    .split(UNNAMED_PROVIDER)
+    .join('this package');
 }
 
 /**
@@ -64,9 +85,39 @@ export function shellArg(value) {
  * @param {string} cwd
  */
 async function resolveIntegration(pkg, cwd) {
-  return pkg
-    ? validateInstalledIntegration(pkg, cwd)
-    : validateLocalIntegration(cwd);
+  // The checks read the integration and its issues, never the notes the
+  // shipped-import check adds, so it is left out: it parses every module the
+  // package ships and may ask npm what it packs.
+  const resolved = pkg
+    ? await validateInstalledIntegration(pkg, cwd, {shippedImports: false})
+    : await validateLocalIntegration(cwd, {shippedImports: false});
+  const integration = resolved.found ? resolved.integration : undefined;
+  if (!integration) return resolved;
+  // A root that is not a readable folder is reported in the issues; the
+  // checks read nothing from it rather than fail on it.
+  /** @type {typeof integration & {__unnamed?: boolean}} */
+  const usable = {...integration};
+  // The provider ID readers key the package on: the manifest's providerId,
+  // else its name. A package with neither (validate warned about it) is
+  // still checked; the docs check names its docs under a stand-in ID.
+  try {
+    usable.providerId = normalizeProviderId(
+      integration.__declaredProviderId ?? integration.name,
+    );
+  } catch {
+    usable.__unnamed = true;
+  }
+  for (const kind of /** @type {const} */ ([
+    'components',
+    'templates',
+    'codemods',
+    'docs',
+    'themes',
+  ])) {
+    const root = usable[kind];
+    if (root != null && rootProblem(root)) usable[kind] = undefined;
+  }
+  return {...resolved, integration: usable};
 }
 
 /**
@@ -103,6 +154,16 @@ function addErrors(issues, errors, code) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
  */
 export async function integrationTemplateConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => templateConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
+ */
+async function templateConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -158,7 +219,7 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
   }
   for (const matches of coreById.values()) {
     matches.sort((a, b) =>
-      `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`),
+      compareText(`${a.type}:${a.name}`, `${b.type}:${b.name}`),
     );
   }
 
@@ -222,7 +283,8 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
     }
   }
   conflicts.sort((a, b) =>
-    `${a.id}:${'relationship' in a ? a.relationship : ''}`.localeCompare(
+    compareText(
+      `${a.id}:${'relationship' in a ? a.relationship : ''}`,
       `${b.id}:${'relationship' in b ? b.relationship : ''}`,
     ),
   );
@@ -240,6 +302,16 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
  */
 export async function integrationComponentConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => componentConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
+ */
+async function componentConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -321,7 +393,7 @@ export async function integrationComponentConflicts(pkg, options = {}) {
         'If you keep it, always select it with --package.',
       command: `${run} component ${shellArg(component.name)} --package ${shellArg(name)}`,
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   return {
     type: 'integration.component-conflicts',
@@ -336,6 +408,16 @@ export async function integrationComponentConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
  */
 export async function integrationDocConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => docConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
+ */
+async function docConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -387,8 +469,20 @@ export async function integrationDocConflicts(pkg, options = {}) {
     };
   }
 
+  // The docs tree names a package's docs by its provider ID, which a
+  // package.json without a name does not give: its docs are checked under a
+  // stand-in ID, which no message names.
+  const unnamed = /** @type {{__unnamed?: boolean}} */ (resolved.integration)
+    .__unnamed;
+  const docsIntegration = unnamed
+    ? {
+        ...resolved.integration,
+        name: UNNAMED_PROVIDER,
+        providerId: UNNAMED_PROVIDER,
+      }
+    : resolved.integration;
   const [discovered, builtinTopics] = await Promise.all([
-    discoverIntegrationDocs(resolved.integration),
+    discoverIntegrationDocs(docsIntegration),
     Promise.resolve(discoverBuiltinTopics()),
   ]);
   const {records, errors} = discovered;
@@ -429,11 +523,14 @@ export async function integrationDocConflicts(pkg, options = {}) {
       });
     }
 
-    // An extension never owns its own name. A replacement does, so it may only
-    // reuse a Core name when that is the Core topic it explicitly replaces.
+    // An extension never owns its own name, and neither does a doc that
+    // replaces a guide by its route: readers open the route. A topic
+    // replacement does, so it may only reuse a Core name when that is the
+    // Core topic it explicitly replaces.
     if (
       sameNameCore != null &&
       record.extendsTopic == null &&
+      !isGuideRoute(record.replaces) &&
       replacedCore !== sameNameCore
     ) {
       findings.push({
@@ -447,10 +544,29 @@ export async function integrationDocConflicts(pkg, options = {}) {
       });
     }
   }
+  // A doc that replaces or extends one of the CLI's guides by its route is
+  // as intentional as one that names a Core topic.
+  if (errors.length === 0) {
+    for (const target of await packageDocTargets(
+      /** @type {{name: string}} */ (docsIntegration),
+      discovered,
+    )) {
+      if (target.kind !== 'guide' || target.owner !== BUILTIN_DOCS_PACKAGE) {
+        continue;
+      }
+      // A route the guide moved from names the guide at its route now.
+      const route = target.guide ?? target.target;
+      findings.push({
+        topic: target.topic,
+        severity: 'info',
+        relationship: target.relationship,
+        coreTopic: route,
+        message: `Intentional ${target.relationship === 'replaces' ? 'override' : 'extension'}: "${target.topic}" ${target.relationship} the CLI guide "${route}".`,
+      });
+    }
+  }
   findings.sort((a, b) =>
-    `${a.topic}:${a.relationship}`.localeCompare(
-      `${b.topic}:${b.relationship}`,
-    ),
+    compareText(`${a.topic}:${a.relationship}`, `${b.topic}:${b.relationship}`),
   );
 
   // The same graph checks `astryx doctor` runs in a project: the namespaces
@@ -458,27 +574,40 @@ export async function integrationDocConflicts(pkg, options = {}) {
   // its docs (spec:AST-046, spec:AST-047).
   if (errors.length === 0) {
     for (const {severity, message} of await packageDocsProblems(
-      /** @type {{name: string}} */ (resolved.integration),
+      /** @type {{name: string}} */ (docsIntegration),
       discovered,
     )) {
-      issues.push({code: 'invalid_doc_graph', severity, message});
+      issues.push({
+        code: 'invalid_doc_graph',
+        severity,
+        message: unnamedShown(message),
+      });
     }
 
     // A reference block includes content rather than linking to it, so one
     // that cannot include what it names loses that content for every reader:
     // an error, where a link that names no doc still prints as written.
     for (const message of await packageReferenceProblems(
-      /** @type {{name: string}} */ (resolved.integration),
+      /** @type {{name: string}} */ (docsIntegration),
       discovered,
     )) {
-      issues.push({code: 'invalid_doc_reference', severity: 'error', message});
+      issues.push({
+        code: 'invalid_doc_reference',
+        severity: 'error',
+        message: unnamedShown(message),
+      });
     }
 
     // One fact has one owner: a passage two topics repeat goes stale in one
     // of them. Each is listed and is a warning (architecture:cli-surface
     // DEC-8), so `integration check --strict` fails until it is fixed;
     // `doctor integration docs` keeps its exit code, as it fails on errors.
-    copiedPassages.push(...(await integrationCopiedPassages(discovered)));
+    copiedPassages.push(
+      ...(await integrationCopiedPassages(discovered)).map(passage => ({
+        ...passage,
+        message: unnamedShown(passage.message),
+      })),
+    );
     for (const {message} of copiedPassages) {
       issues.push({code: 'copied_passage', severity: 'warning', message});
     }
@@ -488,6 +617,7 @@ export async function integrationDocConflicts(pkg, options = {}) {
       ...(await integrationFluff(discovered)).map(each => ({
         ...each,
         file: fromPackage(each.file),
+        message: unnamedShown(each.message),
       })),
     );
     for (const {message} of fluff) {

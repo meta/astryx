@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/docs/extend-or-replace`:
- * take over an existing topic with `replaces`, merge sections into one with
- * `extends`, and check overlaps with Core topics.
+ * @file `astryx docs authoring/building-blocks/docs/extend-or-replace`:
+ * take over an existing topic or guide with `replaces`, merge sections into
+ * one with `extends` (placing each with `before` or `after`), and check
+ * overlaps with Core topics.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -13,7 +14,7 @@ export const docs = {
   placement: {parent: 'namespace:docs', slot: 'guides', order: 40},
   title: 'Extend or replace a topic',
   category: 'guide',
-  description: 'Take over a topic, or merge sections into it.',
+  description: 'Take over a topic or guide, or merge sections into it.',
   sections: [
     {
       id: 'replace-a-topic',
@@ -26,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add doc acme-getting-started --replaces getting-started\n# The old name now opens your topic\nastryx docs getting-started',
+          code: '{@command integration add doc acme-getting-started --replaces getting-started}\n# The old name now opens your topic\n{@command docs getting-started}',
         },
         {
           type: 'code',
@@ -51,7 +52,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add doc acme-theming --extends theme\nastryx docs theme --index',
+          code: '{@command integration add doc acme-theming --extends theme}\n{@command docs theme --index}',
         },
         {
           type: 'code',
@@ -63,11 +64,42 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            "Read the base topic's keys with `--index`, and give a section that replaces one that key as its `id`. A section without an `id` matches only a base section with exactly its title, or one whose `id` is the key its title makes, so `Integration Themes` is added beside a base `Integration themes` that has no `id`.",
+            "Read the base topic's keys with `--index`, and give a section that replaces one that key as its `id`. A section that replaces one keeps its place. A section without an `id` matches only a base section with exactly its title, or one whose `id` is the key its title makes, so `Integration Themes` is added beside a base `Integration themes` that has no `id`.",
+            "Set `before` or `after` to a base section's key to add a new section there instead of at the end. A key that names no section adds it at the end, and `astryx doctor integration validate` lists a note. An older CLI rejects these fields, so declare an `@astryxdesign/cli` peer range that starts at the release that reads them; `astryx integration verify` warns without it.",
             "The topic keeps the base's title and description, and readers open it by the base's name.",
             'Replace the `Overview` placeholder that `integration add` writes, or it is added to the base topic.',
             "Extend a topic to correct or add to it. A copy made with `replaces` stops getting the owner's fixes.",
           ],
+        },
+      ],
+    },
+    {
+      id: 'replace-or-extend-a-cli-guide',
+      title: 'Replace or extend a CLI guide',
+      content: [
+        {
+          type: 'prose',
+          text: "A guide in the CLI's docs tree has a route rather than a topic name. Set `replaces` or `extends` to that route to change the guide for every app that installs your package: say what differs for your users on the page agents already read.",
+        },
+        {
+          type: 'code',
+          lang: 'javascript',
+          label: 'docs/acme-quick-start.doc.mjs',
+          code: "export default {\n  type: 'generic',\n  name: 'acme-quick-start',\n  extends: 'authoring/quick-start',\n  title: 'Acme quick start',\n  description: 'What differs when you build integrations at Acme.',\n  sections: [\n    {id: 'use-the-acme-registry', title: 'Use the Acme registry', before: 'fill-in-package-json', content: [/* ... */]},\n  ],\n};",
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'Your doc stays a flat topic: do not give it a `placement`. Readers open the guide by its route, never by your `name`.',
+            'With `replaces`, readers of the route get your doc, under your package. With `extends`, each section you add or replace names your package.',
+            'A name that holds no topic or guide, such as a namespace, changes nothing; `astryx doctor integration validate` lists it as a note, with the guides below a namespace.',
+          ],
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: '# Every guide route, by namespace\nastryx docs authoring --depth all\nastryx docs cli --depth all\n# The keys to place sections by\nastryx docs authoring/quick-start --index',
         },
       ],
     },
@@ -82,7 +114,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration docs',
+          code: '{@command doctor integration docs}',
         },
         {
           type: 'code',

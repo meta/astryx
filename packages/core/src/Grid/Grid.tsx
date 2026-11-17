@@ -129,14 +129,16 @@ export interface GridProps extends BaseProps<HTMLDivElement> {
   rowHeight?: number;
 
   /**
-   * Vertical alignment of grid items (align-items).
-   * @default 'stretch'
+   * Vertical alignment of grid items (align-items). Unset leaves the browser
+   * default, `normal`, which stretches items that have no natural size or
+   * aspect ratio.
    */
   align?: GridAlignment;
 
   /**
-   * Horizontal alignment of grid items (justify-items).
-   * @default 'stretch'
+   * Horizontal alignment of grid items (justify-items). Unset leaves the browser
+   * default, `normal`, which stretches items that have no natural size or
+   * aspect ratio.
    */
   justify?: GridAlignment;
 

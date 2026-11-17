@@ -9,10 +9,25 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import {doc} from './response-types.doc.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-response-types-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 /** @param {string} type */
 const describedAs = type =>
@@ -104,12 +119,24 @@ describe('response-types EnumDoc names every field', () => {
   it('search, across component, hook, template, and doc results', async () => {
     const mixed = await data(['search', 'dashboard', '--limit', '50']);
     const docsOnly = await data(['search', 'tokens', '--type', 'doc']);
+    // Reaches a deprecated component, whose result carries `deprecated`.
+    const deprecated = await data([
+      'search',
+      'switcher',
+      '--type',
+      'component',
+    ]);
     expect(new Set(mixed.data.results.map(r => r.domain))).toContain(
       'template',
     );
+    expect(deprecated.data.results.some(r => r.deprecated)).toBe(true);
     expectNamed(
       'search',
-      new Set([...fieldsOf(mixed.data), ...fieldsOf(docsOnly.data)]),
+      new Set([
+        ...fieldsOf(mixed.data),
+        ...fieldsOf(docsOnly.data),
+        ...fieldsOf(deprecated.data),
+      ]),
     );
   });
 
@@ -172,6 +199,35 @@ describe('response-types EnumDoc names every field', () => {
     expectNamed('theme.targets', fieldsOf(res.data));
   });
 
+  it('theme.palette.generate, including receipt provenance', async () => {
+    const cwd = fs.mkdtempSync(
+      path.join(TEMP_ROOT, 'astryx-response-types-palette-'),
+    );
+    fs.writeFileSync(
+      path.join(cwd, 'palette.config.json'),
+      JSON.stringify({
+        modeStrategy: 'light-only',
+        stops: [20, 50, 80],
+        families: [{id: 'blue', seed: '#0074e2'}],
+      }),
+    );
+    const res = await data(
+      ['theme', 'palette', 'generate', 'palette.config.json'],
+      cwd,
+    );
+    expect(res.type).toBe('theme.palette.generate');
+    expectNamed('theme.palette.generate', [
+      ...Object.keys(res.data),
+      ...Object.keys(res.data.generationReceipt),
+    ]);
+    expect(describedAs('theme.palette.generate')).toMatch(
+      /generatorVersion.*palette-generator-v1/,
+    );
+    expect(describedAs('theme.palette.generate')).toMatch(
+      /candidateFormatVersion.*palette-typescript-v1.*palette-json-v1/,
+    );
+  });
+
   it('gap-report.file, including each delivery', async () => {
     const res = await data([
       'gap-report',
@@ -187,9 +243,7 @@ describe('response-types EnumDoc names every field', () => {
   });
 
   it('theme.build, including notices', async () => {
-    const cwd = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'astryx-response-types-'),
-    );
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-response-types-'));
     fs.writeFileSync(
       path.join(cwd, 'package.json'),
       '{"name":"app","version":"1.0.0"}',
@@ -245,5 +299,28 @@ describe('response-types EnumDoc names every field', () => {
       'severity',
       'message',
     ]);
+  });
+
+  it('themeEdit.set and themeEdit.undo (fields from api/theme-edit/theme-edit.type.mjs)', () => {
+    const type = fs.readFileSync(
+      new URL('../../api/theme-edit/theme-edit.type.mjs', import.meta.url),
+      'utf8',
+    );
+    /** The properties a typedef declares, optional ones included. @param {string} name */
+    const props = name =>
+      [
+        ...(type.split(`@typedef {object} ${name}`)[1] ?? '')
+          .split('*/')[0]
+          .matchAll(/@property \{[^}]*\} \[?(\w+)/g),
+      ].map(m => m[1]);
+    const change = props('ThemeEditChangeData');
+    expect(change).toEqual(
+      expect.arrayContaining(['missed', 'missedParts', 'alsoRemoved']),
+    );
+    // The set fields, and the undo of one setting, which has the same.
+    expectNamed('themeEdit.set', ['missed', 'missedParts']);
+    expectNamed('themeEdit.undo', ['alsoRemoved']);
+    // `missed` counts misses, never parts.
+    expect(describedAs('themeEdit.set')).not.toMatch(/count of parts/);
   });
 });

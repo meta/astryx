@@ -21,7 +21,12 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use non-interactive child content such as icons, descriptions, and shortcut hints; activate the option itself instead of nesting buttons or links.',
+          'Inside CommandPalette, each item is an option in the listbox popup of the WAI-ARIA combobox pattern: keyboard focus stays in the query field, arrow keys move the highlight through aria-activedescendant, and Enter selects the highlighted item.',
+      },
+      {
+        guidance: false,
+        description:
+          'Nest buttons, links, or other interactive controls inside an item. Option semantics make descendants presentational, so use non-interactive content such as icons, descriptions, and shortcut hints, and activate the option itself.',
       },
       {
         guidance: false,
@@ -45,7 +50,12 @@ export const docs = {
     ],
   },
   theming: {
-    targets: [{className: 'astryx-command-palette-item'}],
+    targets: [
+      {
+        className: 'astryx-command-palette-item',
+        states: ['highlighted', 'selected', 'disabled'],
+      },
+    ],
   },
   props: [
     {
@@ -79,7 +89,7 @@ export const docs = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        'Whether this item represents the selected value in picker mode.',
+        'Whether this item represents the selected value in picker mode. Derived from the CommandPalette value when omitted inside CommandPalette.',
       default: 'false',
     },
     {
@@ -117,7 +127,8 @@ export const docsZh = {
       '通过指针激活此条目后调用。CommandPalette 中的键盘选择通过根组件的 onValueChange 报告。',
     isHighlighted:
       '此条目是否为当前键盘结果。在 CommandPalette 内省略时从上下文派生。',
-    isSelected: '此条目是否代表选择器模式中的已选值。',
+    isSelected:
+      '此条目是否代表选择器模式中的已选值。在 CommandPalette 内省略时从面板的值派生。',
     isDisabled: '条目是否不可用并禁止指针激活。',
     xstyle: 'StyleX 布局自定义样式。必须是 stylex.create() 的值。',
   },
@@ -135,7 +146,8 @@ export const docsDense = {
     onSelect:
       'called after pointer activation; palette keyboard selection uses root onValueChange',
     isHighlighted: 'active keyboard result; derived from context when omitted',
-    isSelected: 'selected value in picker mode',
+    isSelected:
+      'selected value in picker mode; derived from palette value when omitted',
     isDisabled: 'unavailable; suppresses pointer activation',
     xstyle: 'StyleX layout styles; must be stylex.create() value',
   },

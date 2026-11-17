@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/write-good-templates/grade-template-with-agent`:
+ * @file `astryx docs authoring/building-blocks/templates/write-good-templates/grade-template-with-agent`:
  * give an agent the canonical rubric and require a reproducible template grade.
  */
 
@@ -36,11 +36,11 @@ export const docs = {
           code: `Grade integration template <id> from <package> at <revision>.
 
 Before scoring:
-1. Read \`astryx docs cli/integrations/building-blocks/templates/write-good-templates --full\`.
-2. Read \`astryx docs cli/integrations/building-blocks/templates/write-good-templates/template-grading-rubric --full\` and every guide it links.
+1. Read \`astryx docs authoring/building-blocks/templates/write-good-templates --full\`.
+2. Read \`astryx docs authoring/building-blocks/templates/write-good-templates/template-grading-rubric --full\` and every guide it links.
 3. Inspect the template source, its matching .doc.mjs file, package.json exports and files, and astryx.integration.mjs.
 4. Run \`astryx integration verify\` in the package.
-5. Follow \`astryx docs cli/integrations/building-blocks/templates/build-the-template/package-and-test/test-template-in-app --full\`: install the packed package in the clean app, copy the template, build the app, and render the behavior matrix.
+5. Follow \`astryx docs authoring/building-blocks/templates/build-the-template/package-and-test/test-template-in-app --full\`: install the packed package in the clean app, copy the template, build the app, and render the behavior matrix.
 
 Score all seven rubric categories. Cite file and line evidence for every deduction. Do not award points for a state you did not inspect. If browser or build evidence is unavailable, say so and mark the template not publishable.
 

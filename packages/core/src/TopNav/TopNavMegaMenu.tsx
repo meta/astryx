@@ -38,6 +38,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isRenderable} from '../utils/isRenderable';
 import {
   colorVars,
   spacingVars,
@@ -56,7 +57,7 @@ import {Icon} from '../Icon';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -64,6 +65,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -120,7 +122,11 @@ const styles = stylex.create({
   chevronOpen: {
     transform: 'rotate(180deg)',
   },
-  // Animation styles applied to the layer's popover element.
+  // Animation styles applied to the layer's popover element. Under
+  // `prefers-reduced-motion: reduce` the panel never rises (design:reduced-motion
+  // DR1): on a touch screen it cross-fades, 200 ms on easeInOut whatever the
+  // theme's duration (DR2, DR4), and with a mouse it opens and closes at once
+  // (DR3).
   panelAnimation: {
     opacity: {
       default: 0,
@@ -129,10 +135,23 @@ const styles = stylex.create({
     transform: {
       default: 'translateY(-4px)',
       ':popover-open': 'translateY(0)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
     },
-    transitionProperty: 'opacity, transform, overlay, display',
-    transitionDuration: durationVars['--duration-medium-min'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionProperty: {
+      default: 'opacity, transform, overlay, display',
+      '@media (prefers-reduced-motion: reduce)': 'opacity, overlay, display',
+    },
+    transitionDuration: {
+      default: durationVars['--duration-medium-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'cubic-bezier(0.42, 0, 0.58, 1)',
+    },
     transitionBehavior: 'allow-discrete',
     '@starting-style': {
       opacity: 0,
@@ -361,6 +380,7 @@ export function TopNavMegaMenu({
   if (renderMode === 'drawer') {
     return (
       <DrawerMegaMenu
+        ref={ref}
         label={label}
         items={items}
         featured={featured}
@@ -460,6 +480,7 @@ function DefaultMegaMenu({
     contentProps,
     menuRef,
     setTriggerEl,
+    close,
   } = useMenuHover<HTMLDivElement>({
     show: popover.show,
     hide: popover.hide,
@@ -472,6 +493,9 @@ function DefaultMegaMenu({
     // from light dismiss.
     popoverId: popover.id,
   });
+  // Items read the shared modality at a pick. This call turns that tracking on.
+  const modality = useInteractionModalityTracking();
+  const panelRef = useMergedRefs(menuRef, modality.ref);
 
   return (
     <>
@@ -513,24 +537,28 @@ function DefaultMegaMenu({
           // role="group" — a mega menu is a browsing grid of links, not an
           // ARIA menu of menuitems (per the WAI-ARIA APG, the menu role is
           // for action menus; link mega menus are the documented anti-case).
-          ref={menuRef}
+          ref={panelRef}
           role="group"
           aria-label={label}
           {...contentProps}
           {...stylex.props(styles.panelContainer)}>
-          <div {...stylex.props(styles.panelContent)}>
-            {/* Menu items section */}
-            {items != null && (
-              <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
-                {items}
-              </Grid>
-            )}
+          {/* Items close the panel on a keyboard, finger or pen pick, as
+              TopNavMenu items do. */}
+          <TopNavMegaMenuCloseContext value={close}>
+            <div {...stylex.props(styles.panelContent)}>
+              {/* Menu items section */}
+              {isRenderable(items) && (
+                <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
+                  {items}
+                </Grid>
+              )}
 
-            {/* Featured section */}
-            {featured != null && (
-              <div {...stylex.props(styles.featured)}>{featured}</div>
-            )}
-          </div>
+              {/* Featured section */}
+              {isRenderable(featured) && (
+                <div {...stylex.props(styles.featured)}>{featured}</div>
+              )}
+            </div>
+          </TopNavMegaMenuCloseContext>
         </div>,
         {
           placement: 'below',
@@ -547,6 +575,7 @@ function DefaultMegaMenu({
 // =============================================================================
 
 function DrawerMegaMenu({
+  ref,
   label,
   items,
   featured,
@@ -555,7 +584,7 @@ function DrawerMegaMenu({
   style,
   onClick: onClickProp,
   ...rest
-}: Pick<TopNavMegaMenuProps, 'label' | 'items' | 'featured'> &
+}: Pick<TopNavMegaMenuProps, 'ref' | 'label' | 'items' | 'featured'> &
   BaseProps<HTMLButtonElement>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const pressable = usePressFeedback();
@@ -565,6 +594,7 @@ function DrawerMegaMenu({
     <div {...stylex.props(styles.drawerSection)}>
       {/* Header toggle — same pattern as TopNavMenu drawer */}
       <button
+        ref={ref}
         type="button"
         {...rest}
         onClick={composeEventHandlers(onClickProp, () =>
@@ -610,7 +640,7 @@ function DrawerMegaMenu({
           {items}
 
           {/* Featured card */}
-          {featured != null && (
+          {isRenderable(featured) && (
             <div {...stylex.props(styles.drawerFeatured)}>{featured}</div>
           )}
         </div>

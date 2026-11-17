@@ -52,6 +52,9 @@ const styles = stylex.create({
   stateLabel: {
     minWidth: 140,
   },
+  sizeColumn: {
+    minWidth: 120,
+  },
   canvas: {
     position: 'relative',
     width: 520,
@@ -91,6 +94,65 @@ const styles = stylex.create({
   },
 });
 
+const SIZES = ['sm', 'md', 'lg'] as const;
+
+const EVERYONE = [
+  PEOPLE.ada,
+  PEOPLE.lin,
+  PEOPLE.mira,
+  PEOPLE.noah,
+  PEOPLE.sam,
+] as const;
+
+const SIZE_ROWS = [
+  {
+    name: 'Single',
+    props: {label: 'Open annotation from Ada', participants: [PEOPLE.ada]},
+  },
+  {
+    name: 'Grouped',
+    props: {
+      label: 'Open 4 grouped annotations from Ada and Lin',
+      participants: [PEOPLE.ada, PEOPLE.lin],
+      threadCount: 4,
+    },
+  },
+  {
+    name: 'Group overflow',
+    props: {
+      label: 'Open 8 grouped annotations from Ada, Lin, and 3 others',
+      participants: EVERYONE,
+      threadCount: 8,
+    },
+  },
+  {
+    name: 'Unread single',
+    props: {
+      label: 'Open unread annotation from Mira',
+      participants: [PEOPLE.mira],
+      unreadCount: 1,
+    },
+  },
+  {
+    name: 'Unread group',
+    props: {
+      label: 'Open 8 grouped annotations from Ada, Lin, and 3 others, 3 unread',
+      participants: EVERYONE,
+      threadCount: 8,
+      unreadCount: 3,
+    },
+  },
+  {
+    name: 'Selected group',
+    props: {
+      label: 'Current group of 12 annotations from Ada, Lin, and 3 others',
+      participants: EVERYONE,
+      threadCount: 12,
+      isSelected: true,
+    },
+  },
+] as const;
+
 function FocusedSelectedPin() {
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -129,6 +191,35 @@ export const Grouped: Story = {
     participants: [PEOPLE.ada, PEOPLE.lin],
     threadCount: 4,
   },
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <VStack gap={3} xstyle={styles.story}>
+      <HStack gap={4} xstyle={styles.row}>
+        <Text type="supporting" xstyle={styles.stateLabel}>
+          Size
+        </Text>
+        {SIZES.map(size => (
+          <Text key={size} type="supporting" xstyle={styles.sizeColumn}>
+            {size}
+          </Text>
+        ))}
+      </HStack>
+      {SIZE_ROWS.map(row => (
+        <HStack key={row.name} gap={4} xstyle={styles.row}>
+          <Text type="supporting" xstyle={styles.stateLabel}>
+            {row.name}
+          </Text>
+          {SIZES.map(size => (
+            <HStack key={size} xstyle={styles.sizeColumn}>
+              <CommentPin {...row.props} size={size} onClick={() => {}} />
+            </HStack>
+          ))}
+        </HStack>
+      ))}
+    </VStack>
+  ),
 };
 
 export const StateMatrix: Story = {
@@ -235,12 +326,14 @@ export const StateMatrix: Story = {
       </HStack>
       <HStack gap={4} xstyle={styles.row}>
         <Text type="supporting" xstyle={styles.stateLabel}>
-          Resolved
+          Resolved, selected
         </Text>
+        {/* An unselected resolved pin renders nothing. */}
         <CommentPin
-          label="Open resolved annotation from Mira"
+          label="Current resolved annotation from Mira"
           participants={[PEOPLE.mira]}
           isResolved
+          isSelected
         />
       </HStack>
       <HStack gap={4} xstyle={styles.row}>

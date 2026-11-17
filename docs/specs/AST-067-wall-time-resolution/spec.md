@@ -18,6 +18,17 @@ affects_consumer_docs: []
 
 # Wall-clock time resolution system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/core/src/utils/plainDate.ts",
+    "packages/lab/src/Schedule/**"
+  ]
+}
+```
+
 ## Intent
 
 People who see dates and times in a chosen time zone, such as a Schedule week or

@@ -67,16 +67,16 @@ export const docs = {
     },
     {
       name: 'options.onPageUp',
-      type: '() => void',
+      type: '(event: React.KeyboardEvent) => void',
       description:
-        'Callback for Page Up key (e.g., navigate to previous month in calendars).',
+        'Callback for Page Up key (e.g., navigate to previous month in calendars). Receives the key event, so `event.shiftKey` can select a larger step, such as a year.',
       required: false,
     },
     {
       name: 'options.onPageDown',
-      type: '() => void',
+      type: '(event: React.KeyboardEvent) => void',
       description:
-        'Callback for Page Down key (e.g., navigate to next month in calendars).',
+        'Callback for Page Down key (e.g., navigate to next month in calendars). Receives the key event, so `event.shiftKey` can select a larger step, such as a year.',
       required: false,
     },
     {
@@ -172,9 +172,9 @@ export const docsDense = {
     'options.onNavigateAfter':
       'callback when navigation would go after last cell. Receives column index + offset.',
     'options.onPageUp':
-      'callback for Page Up key (e.g. navigate to previous month in calendars).',
+      'callback for Page Up key (e.g. previous month in calendars); receives the key event (shiftKey → e.g. a year).',
     'options.onPageDown':
-      'callback for Page Down key (e.g. navigate to next month in calendars).',
+      'callback for Page Down key (e.g. next month in calendars); receives the key event (shiftKey → e.g. a year).',
     'options.hasRovingTabIndex':
       'own a single roving tab stop across the grid (one focus target tabindex=0, rest -1); repaired on render + moved with arrows. Attach handleFocus to onFocus. default false.',
   },

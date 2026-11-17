@@ -10,13 +10,16 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {releaseTree} from '../foundation/release/cache.mjs';
+import {scopedList} from './fixture-scope.mjs';
 
 /** @type {string[]} */
 const made = [];
 
 /**
- * A fresh temporary folder, removed by {@link cleanupFixtures}.
+ * A fresh temporary folder, removed by {@link cleanupFixtures}, or inside a
+ * fixture scope by the scope's own {@link removeFixtureDirs}.
  * @param {string} [label]
  * @returns {string}
  */
@@ -24,13 +27,21 @@ export function tempDir(label = 'release') {
   const dir = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), `astryx-${label}-`)),
   );
-  made.push(dir);
+  scopedList('made', made).push(dir);
   return dir;
 }
 
-/** Remove every folder {@link tempDir} made. */
+/** Remove every folder {@link tempDir} made outside a fixture scope. */
 export function cleanupFixtures() {
-  for (const dir of made.splice(0)) {
+  removeFixtureDirs(made);
+}
+
+/**
+ * Remove the folders in `dirs`, a fixture scope's own list, and empty it.
+ * @param {string[]} dirs
+ */
+export function removeFixtureDirs(dirs) {
+  for (const dir of dirs.splice(0)) {
     // A global copy's background Core step, started as a run ends, may still
     // be writing its record into a test's cache folder: retry until it is done.
     fs.rmSync(dir, {
@@ -173,9 +184,14 @@ export const CLI_VERSION = JSON.parse(
   fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
 ).version;
 
-/** This CLI package's folder. */
+/**
+ * This CLI package's folder. Derived with `fileURLToPath`, because
+ * `URL.pathname` is a URI path rather than a filesystem one: it keeps the
+ * percent-encoding of a checkout under a space, `%`, `#` or non-ASCII
+ * directory, and puts a leading slash before a Windows drive letter.
+ */
 const THIS_CLI = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
 
@@ -187,6 +203,14 @@ const THIS_CLI = path.resolve(
  * @returns {string} dir
  */
 export function linkThisCliAsProjectCli(dir) {
+  if (!fs.existsSync(THIS_CLI)) {
+    // Fail here rather than leave a dangling link: a project whose `cli` entry
+    // does not resolve answers as the carried Core instead of as its own CLI,
+    // which surfaces as an unrelated assertion in whichever test ran next.
+    throw new Error(
+      `linkThisCliAsProjectCli: this CLI package is not at ${THIS_CLI}`,
+    );
+  }
   const pkgFile = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgFile)) {
     writeJson(pkgFile, {

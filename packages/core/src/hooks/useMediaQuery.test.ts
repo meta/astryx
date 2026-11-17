@@ -162,4 +162,99 @@ describe('useMediaQuery', () => {
     const html = renderToString(createElement(TestComponent));
     expect(html).toContain('data-mobile="false"');
   });
+
+  it('answers its server default where the window has no matchMedia, as a test DOM may', () => {
+    vi.stubGlobal('matchMedia', undefined);
+    const off = renderHook(() => useMediaQuery('(pointer: coarse)'));
+    expect(off.result.current).toBe(false);
+    const on = renderHook(() => useMediaQuery('(pointer: coarse)', true));
+    expect(on.result.current).toBe(true);
+    off.unmount();
+    on.unmount();
+  });
+});
+
+describe('useMediaQuery shared watch', () => {
+  /** A matchMedia whose lists count their live listeners per query. */
+  function stubCountingMatchMedia(options: {legacy?: boolean} = {}) {
+    const live = new Map<string, number>();
+    const handlers = new Map<string, Set<() => void>>();
+    let matches = false;
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => {
+        const add = (handler: () => void): void => {
+          live.set(query, (live.get(query) ?? 0) + 1);
+          const set = handlers.get(query) ?? new Set<() => void>();
+          set.add(handler);
+          handlers.set(query, set);
+        };
+        const remove = (handler: () => void): void => {
+          live.set(query, (live.get(query) ?? 0) - 1);
+          handlers.get(query)?.delete(handler);
+        };
+        const list = {
+          media: query,
+          get matches() {
+            return matches;
+          },
+        };
+        return options.legacy === true
+          ? {...list, addListener: add, removeListener: remove}
+          : {
+              ...list,
+              addEventListener: (_type: string, handler: () => void) =>
+                add(handler),
+              removeEventListener: (_type: string, handler: () => void) =>
+                remove(handler),
+            };
+      }),
+    );
+    return {
+      live: (query: string) => live.get(query) ?? 0,
+      change(next: boolean) {
+        matches = next;
+        for (const set of handlers.values()) {
+          for (const handler of Array.from(set)) {
+            handler();
+          }
+        }
+      },
+    };
+  }
+
+  it('holds one listener per query for all its callers, and none after the last unmounts', () => {
+    const media = stubCountingMatchMedia();
+    const callers = [
+      ...[0, 1, 2].map(() =>
+        renderHook(() => useMediaQuery('(max-width: 768px)')),
+      ),
+      ...[0, 1].map(() => renderHook(() => useMediaQuery('(pointer: coarse)'))),
+    ];
+    expect(media.live('(max-width: 768px)')).toBe(1);
+    expect(media.live('(pointer: coarse)')).toBe(1);
+    for (const caller of callers) {
+      caller.unmount();
+    }
+    expect(media.live('(max-width: 768px)')).toBe(0);
+    expect(media.live('(pointer: coarse)')).toBe(0);
+  });
+
+  it('moves every caller of a query when it changes', () => {
+    const media = stubCountingMatchMedia();
+    const a = renderHook(() => useMediaQuery('(max-width: 768px)'));
+    const b = renderHook(() => useMediaQuery('(max-width: 768px)'));
+    act(() => media.change(true));
+    expect([a.result.current, b.result.current]).toEqual([true, true]);
+  });
+
+  it('listens through the older pair on Safari before 14, which has no addEventListener', () => {
+    const media = stubCountingMatchMedia({legacy: true});
+    const caller = renderHook(() => useMediaQuery('(max-width: 768px)'));
+    expect(media.live('(max-width: 768px)')).toBe(1);
+    act(() => media.change(true));
+    expect(caller.result.current).toBe(true);
+    caller.unmount();
+    expect(media.live('(max-width: 768px)')).toBe(0);
+  });
 });

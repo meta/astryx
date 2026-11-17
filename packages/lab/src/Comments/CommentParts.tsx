@@ -6,14 +6,21 @@
  * @file CommentParts.tsx
  * @input Uses React, StyleX, theme tokens, and Astryx primitives (Avatar,
  *   Badge, Banner, Blockquote, Button, Card, Dialog, EmptyState, Item, Link,
- *   Section, Skeleton, Spinner, Text, Thumbnail, Timestamp, Tooltip)
+ *   Section, Skeleton, Text, Thumbnail, Timestamp, Tooltip), plus Lab's
+ *   loading-message and shared status-announcement helpers
  * @output Exports the presentational parts of a comment row: author name and
  *   avatar, metadata, quoted passages, progress, clamped body, error banner,
  *   reply rail, activity event row, edit history dialog, and loading skeletons
  * @position Internal building blocks of the Comments family
  */
 
-import {useState, type CSSProperties, type ReactNode, type Ref} from 'react';
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
@@ -35,7 +42,6 @@ import {
 import {Link} from '@astryxdesign/core/Link';
 import {Section} from '@astryxdesign/core/Section';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
-import {Spinner} from '@astryxdesign/core/Spinner';
 import {Text} from '@astryxdesign/core/Text';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
@@ -60,6 +66,8 @@ import type {
   CommentVersion,
   CommentActivityEvent,
 } from './types';
+import {LoadingMessage} from '../LoadingMessage';
+import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 /** The 28px avatar column every comment row, reply, and event aligns to. */
 export const AVATAR_SIZE = `calc(${spacingVars['--spacing-6']} + ${spacingVars['--spacing-1']})`;
@@ -260,11 +268,18 @@ export type ErrorBannerContent = {
   actionLabel?: string;
   onAction?: () => void;
   isActionDisabled?: boolean;
+  /** Its own retry is running: say nothing until the outcome (FR6). */
+  isRetrying?: boolean;
+  /** The failure was already announced elsewhere; this Banner stays silent. */
+  isAnnounced?: boolean;
 };
 
 /**
- * An inline failure as an error Banner. It sets role="alert" itself (Banner
- * adds no live-region role from `status`), so mounting it announces it.
+ * An inline failure as an error Banner. The Banner carries no live role: it
+ * mounts already holding its text, which may not be announced. The failure is
+ * announced once, assertively, through the shared channel instead, unless the
+ * Banner sits inside a live container such as the chat log, which delivers it
+ * (spec:AST-086 FR2, FR4, FR5).
  */
 export function ErrorBanner({
   actionRef,
@@ -279,10 +294,21 @@ export function ErrorBanner({
   [dataAttribute: `data-${string}`]: string | undefined;
 }) {
   const {actionLabel, description, isActionDisabled, onAction, title} = content;
+  const t = useTranslator();
+  const bannerRef = useRef<HTMLDivElement>(null);
+  useStatusAnnouncement(
+    content.isRetrying === true || content.isAnnounced === true
+      ? null
+      : description != null
+        ? t('@astryx.comments.errorAnnouncement', {title, description})
+        : title,
+    'assertive',
+    {ref: bannerRef},
+  );
   return (
     <Banner
+      ref={bannerRef}
       status="error"
-      role="alert"
       container="card"
       title={title}
       description={description}
@@ -382,8 +408,8 @@ export function MetadataActionLink({
       color="secondary"
       xstyle={partStyles.noWrap}
       data-metadata-action={actionRole}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : undefined}
+      // Link keeps a disabled link in the tab order (spec:AST-085 FR1).
+      isDisabled={isDisabled}
       onClick={event => {
         event.preventDefault();
         if (isDisabled !== true) {
@@ -466,6 +492,11 @@ export function CommentAnchorQuote({
 
 /** A comment its author is still writing: what it is doing, and where to watch. */
 export function CommentProgressStatus({progress}: {progress: CommentProgress}) {
+  const labelRef = useRef<HTMLElement>(null);
+  // The label carries no live role: it mounts already holding its text. It is
+  // announced politely through the shared channel, unless the chat log around
+  // it delivers it (spec:AST-086 FR2, FR4).
+  useStatusAnnouncement(progress.label, 'polite', {ref: labelRef});
   return (
     <HStack
       gap={1}
@@ -474,9 +505,9 @@ export function CommentProgressStatus({progress}: {progress: CommentProgress}) {
       width="100%"
       data-comment-progress="shimmer">
       <Text
+        ref={labelRef}
         type="body"
         color="secondary"
-        role="status"
         xstyle={partStyles.progressLabel}>
         {progress.label}
       </Text>
@@ -623,6 +654,14 @@ export function CommentAvatarFrame({user}: {user: CommentUser}) {
   );
 }
 
+/** Runs beneath Dialog so useAnnounce reaches its modal scope. */
+function BusyStatus({isBusy, message}: {isBusy: boolean; message: string}) {
+  useStatusAnnouncement(isBusy ? message : null, 'polite', {
+    skipPageLoad: true,
+  });
+  return null;
+}
+
 /** The empty 28px avatar column, for rows without an avatar. */
 export function AvatarSpacer() {
   return (
@@ -724,20 +763,32 @@ export function HistoryDialog({
         }
         content={
           <LayoutContent>
+            {/* Keep the announcement owner beneath Dialog: the shared channel
+                routes its busy start into this modal. */}
+            <BusyStatus
+              isBusy={history.isLoading}
+              message={t('@astryx.comments.historyLoading')}
+            />
+            {/* The shared channel is not exposed while a native modal is open
+                (spec:AST-086), so a failure here is delivered by a persistent
+                alert slot inside the dialog. The slot is mounted empty and the
+                Banner is added to it (FR3). */}
+            <div role="alert">
+              {!history.isLoading && history.error != null && (
+                <Banner
+                  status="error"
+                  title={t('@astryx.comments.historyFailed')}
+                  description={history.error}
+                  container="section"
+                />
+              )}
+            </div>
             {history.isLoading ? (
-              <Spinner
+              <LoadingMessage
                 size="lg"
                 label={t('@astryx.comments.historyLoading')}
               />
-            ) : history.error != null ? (
-              <Banner
-                status="error"
-                role="alert"
-                title={t('@astryx.comments.historyFailed')}
-                description={history.error}
-                container="section"
-              />
-            ) : history.versions.length === 0 ? (
+            ) : history.error != null ? null : history.versions.length === 0 ? (
               <EmptyState
                 title={t('@astryx.comments.historyEmptyTitle')}
                 description={t('@astryx.comments.historyEmptyDescription')}

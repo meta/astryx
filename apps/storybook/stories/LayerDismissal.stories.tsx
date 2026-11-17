@@ -2,8 +2,8 @@
 
 /**
  * @file LayerDismissal.stories.tsx
- * @input Uses Dialog, Popover, Tooltip, Lightbox, MobileNav, BottomSheet,
- *   Button, Layout from @astryxdesign/core; InfoTip from @astryxdesign/lab
+ * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
+ *   BottomSheet, DropdownMenu, TextInput, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -16,6 +16,7 @@ import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   Button,
+  ClickableCard,
   Dialog,
   DialogHeader,
   HoverCard,
@@ -25,14 +26,18 @@ import {
   LayoutFooter,
   Lightbox,
   MobileNav,
+  MoreMenu,
   Popover,
   Text,
   Tooltip,
   VStack,
 } from '@astryxdesign/core';
-import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
-import {InfoTip} from '@astryxdesign/lab/InfoTip';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import type {Meta, StoryObj} from '@storybook/react-vite';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const sheetStyles = stylex.create({
   body: {padding: 24},
@@ -375,7 +380,7 @@ function RequiredModalWithLightboxExample() {
                 isOpen={isLightboxOpen}
                 onOpenChange={setIsLightboxOpen}
                 media={{
-                  src: 'https://picsum.photos/id/1015/1200/800',
+                  src: SAMPLE_IMAGES.canyon1200x800,
                   alt: 'A river through a canyon',
                 }}
               />
@@ -492,7 +497,7 @@ function LightboxAloneExample() {
         isOpen={isOpen}
         onOpenChange={setIsOpen}
         media={{
-          src: 'https://picsum.photos/id/1015/1200/800',
+          src: SAMPLE_IMAGES.canyon1200x800,
           alt: 'A river through a canyon',
         }}
       />
@@ -527,31 +532,32 @@ export const MobileNavAlone: Story = {render: () => <MobileNavAloneExample />};
  * next Escape closes the sheet.
  */
 function SheetWithHoverTipExample() {
-  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
       <Button
         label="Open sheet"
         variant="secondary"
-        onClick={() => setActiveSheet('details')}
+        onClick={() => setIsOpen(true)}
       />
-      <BottomSheetSwitcher
-        activeSheet={activeSheet}
-        onActiveSheetChange={setActiveSheet}
-        hasScrim={false}>
-        <BottomSheet sheetId="details" label="Details" height="hug" padding={0}>
-          <VStack gap={3} xstyle={sheetStyles.body}>
-            <Text type="body">
-              Hover the button to show the tip, then press Escape. The first
-              press closes only the tip; the next press closes the sheet.
-            </Text>
-            <Tooltip content="A hover tip, showing">
-              <Button label="Hover me" variant="secondary" />
-            </Tooltip>
-          </VStack>
-        </BottomSheet>
-      </BottomSheetSwitcher>
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hasScrim={false}
+        label="Details"
+        height="hug"
+        padding={0}>
+        <VStack gap={3} xstyle={sheetStyles.body}>
+          <Text type="body">
+            Hover the button to show the tip, then press Escape. The first press
+            closes only the tip; the next press closes the sheet.
+          </Text>
+          <Tooltip content="A hover tip, showing">
+            <Button label="Hover me" variant="secondary" />
+          </Tooltip>
+        </VStack>
+      </BottomSheet>
     </>
   );
 }
@@ -726,7 +732,7 @@ export const PurposeFlipsWhileOpen: Story = {
 };
 
 /**
- * A lab InfoTip inside a modal, its tip showing. One Escape hides the tip and
+ * An InfoTip inside a modal, its tip showing. One Escape hides the tip and
  * leaves the modal open; a second closes the modal.
  *
  * The InfoTip used to `stopPropagation()` the press at its trigger, so the
@@ -1015,4 +1021,468 @@ function PinnedTooltipInModalExample() {
 
 export const PinnedTooltipInModal: Story = {
   render: () => <PinnedTooltipInModalExample />,
+};
+
+/**
+ * A menu and a popover written inside a clickable card. A press inside either
+ * open layer stays in the layer: choosing "Rename" counts a menu choice, and a
+ * click on the popover's text does nothing, but neither activates the card
+ * around them. A click on the card's own text still activates it.
+ */
+function PressInsideLayerExample() {
+  const [cardActivations, setCardActivations] = useState(0);
+  const [menuChoices, setMenuChoices] = useState(0);
+  return (
+    <VStack gap={3}>
+      <ClickableCard
+        label="Project Atlas"
+        onClick={() => setCardActivations(count => count + 1)}>
+        <HStack gap={2}>
+          <Text type="body">Project Atlas</Text>
+          <MoreMenu
+            items={[
+              {
+                label: 'Rename',
+                onClick: () => setMenuChoices(count => count + 1),
+              },
+            ]}
+          />
+          <Popover
+            label="Details"
+            content={<Text type="body">Owned by the design team.</Text>}>
+            <Button label="Details" variant="secondary" />
+          </Popover>
+        </HStack>
+      </ClickableCard>
+      <Text type="body">
+        Card activations: {cardActivations} · Menu choices: {menuChoices}
+      </Text>
+    </VStack>
+  );
+}
+
+export const PressInsideLayer: Story = {
+  render: () => <PressInsideLayerExample />,
+};
+
+/**
+ * Same closed-then-open Dialog shape as PinnedTooltipInModal, but the
+ * Tooltip's trigger is bare text — Tooltip wraps text-only children in an
+ * inline `<span>` rather than a block-level control, which is exactly the
+ * shape whose content box can stay empty in the delayed (ResizeObserver)
+ * anchor-readiness path (#5398): a browser regression against a
+ * button-shaped trigger cannot prove that fallback.
+ */
+function TextOnlyTriggerInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isTipOpen, setIsTipOpen] = useState(true);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setIsTipOpen(true);
+          setIsOpen(true);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a text-only pinned tooltip">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a text-only pinned tooltip"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Tooltip
+                isOpen={isTipOpen}
+                onOpenChange={setIsTipOpen}
+                content="Still anchors">
+                Text-only trigger
+              </Tooltip>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const TextOnlyTriggerInModal: Story = {
+  render: () => <TextOnlyTriggerInModalExample />,
+};
+
+/**
+ * The trigger only gains a real layout box a full 1.5s after the Dialog
+ * opens (a placeholder with no size stands in until then) — well past any
+ * fixed frame/time bound a readiness wait might give up after. The layer
+ * must still end up anchored to the trigger once it's actually ready, not
+ * opened early against a boxless placeholder (#5398): the current Layer
+ * contract is that layered UI stays positioned against its trigger, with no
+ * time limit on how long that trigger is allowed to take.
+ */
+function DelayedTriggerLayoutInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isTipOpen, setIsTipOpen] = useState(true);
+  const [triggerReady, setTriggerReady] = useState(false);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setTriggerReady(false);
+          setIsTipOpen(true);
+          setIsOpen(true);
+          setTimeout(() => setTriggerReady(true), 1500);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a delayed-layout tooltip trigger">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a delayed-layout tooltip trigger"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              {
+                // One stable element throughout (not swapped), so the
+                // ref Tooltip attaches to it never has to move mid-wait —
+                // display:none is what keeps it boxless for the first
+                // 1.5s, independent of the Dialog's own (much faster)
+                // open transition.
+              }
+              <Tooltip
+                isOpen={isTipOpen}
+                onOpenChange={setIsTipOpen}
+                content="Anchors once ready">
+                <Button
+                  label="Late trigger"
+                  variant="secondary"
+                  style={triggerReady ? undefined : {display: 'none'}}
+                />
+              </Tooltip>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const DelayedTriggerLayoutInModal: Story = {
+  render: () => <DelayedTriggerLayoutInModalExample />,
+};
+
+const pulse = stylex.keyframes({
+  '0%': {transform: 'scale(1)'},
+  '50%': {transform: 'scale(1.4)'},
+  '100%': {transform: 'scale(1)'},
+});
+
+const continuousAnimationStyles = stylex.create({
+  wrapper: {
+    display: 'inline-block',
+    animationName: pulse,
+    animationDuration: '600ms',
+    animationIterationCount: 'infinite',
+  },
+});
+
+/**
+ * A controlled Tooltip anchored to a trigger sitting inside a continuously
+ * (infinitely) animating ancestor. `waitForAncestorAnimations` must not wait
+ * on that animation's `finished` promise, which never resolves for one with
+ * `iterationCount: Infinity` — only a genuinely finite entry animation
+ * (Dialog's own open transition, e.g.) should hold the layer open.
+ */
+function ContinuouslyAnimatingTriggerExample() {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <div {...stylex.props(continuousAnimationStyles.wrapper)}>
+      <Tooltip isOpen={isOpen} onOpenChange={setIsOpen} content="Still opens">
+        <Button label="Pulsing trigger" variant="secondary" />
+      </Tooltip>
+    </div>
+  );
+}
+
+export const ContinuouslyAnimatingTrigger: Story = {
+  render: () => <ContinuouslyAnimatingTriggerExample />,
+};
+
+const inFlowDialogStyles = stylex.create({
+  // A closed `<dialog>` the page displays itself, in the document's flow. It
+  // never opens, so it never enters the top layer.
+  dialog: {
+    position: 'static',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+    margin: 0,
+    padding: 16,
+  },
+  hidden: {
+    display: 'none',
+  },
+});
+
+/**
+ * A native `<dialog>` that stays closed while the page displays it in flow, as
+ * a card. A Popover and a Tooltip anchored to controls inside it open on a
+ * press and on a hover. The Popover's field takes focus within the press.
+ */
+function LayersInClosedInFlowDialogExample() {
+  const [note, setNote] = useState('');
+
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Text type="body">A closed dialog the page shows in flow</Text>
+      <Popover
+        content={
+          <VStack gap={2}>
+            <Text type="body">In-flow popover</Text>
+            <TextInput label="In-flow note" value={note} onChange={setNote} />
+          </VStack>
+        }>
+        <Button label="Open in-flow popover" variant="secondary" />
+      </Popover>
+      <Tooltip content="In-flow tip">
+        <Button label="In-flow tip trigger" variant="secondary" />
+      </Tooltip>
+    </dialog>
+  );
+}
+
+export const LayersInClosedInFlowDialog: Story = {
+  render: () => <LayersInClosedInFlowDialogExample />,
+};
+
+/**
+ * The same closed, displayed `<dialog>`, whose card first expands in flow. The
+ * press that opens the Popover comes after it, on a control the expansion
+ * shows.
+ */
+function LayerAfterInlineExpandInClosedDialogExample() {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Button
+        label={isExpanded ? 'Collapse card' : 'Expand card'}
+        variant="secondary"
+        onClick={() => setIsExpanded(expanded => !expanded)}
+      />
+      {isExpanded ? (
+        <VStack gap={2}>
+          <Text type="body">Card details, shown in flow</Text>
+          <Popover content={<Text type="body">Pinned to the card</Text>}>
+            <Button label="Pin" variant="primary" />
+          </Popover>
+        </VStack>
+      ) : null}
+    </dialog>
+  );
+}
+
+export const LayerAfterInlineExpandInClosedDialog: Story = {
+  render: () => <LayerAfterInlineExpandInClosedDialogExample />,
+};
+
+/**
+ * A controlled Popover held open inside a Dialog that opens. Dialog displays
+ * its element in the render that opens it. It calls `showModal()` in an Effect
+ * after that, so the trigger has a box before the dialog is modal. The Popover
+ * opens after the dialog is in the top layer, anchored to its trigger and
+ * above the dialog.
+ */
+function PinnedPopoverInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setIsPopoverOpen(true);
+          setIsOpen(true);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a pinned popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a pinned popover"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover
+                isOpen={isPopoverOpen}
+                onOpenChange={setIsPopoverOpen}
+                content={<Text type="body">Pinned popover</Text>}>
+                <Button label="Popover trigger" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const PinnedPopoverInModal: Story = {
+  render: () => <PinnedPopoverInModalExample />,
+};
+
+/**
+ * A controlled Popover held open inside a closed `<dialog>` that stays hidden
+ * (`display: none`) until a press displays it in flow. While it is hidden, the
+ * trigger has no box, so the Popover waits. Once it is displayed, the Popover
+ * opens anchored to its trigger.
+ */
+function PinnedPopoverInHiddenClosedDialogExample() {
+  const [isShown, setIsShown] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <VStack gap={3}>
+      <Button
+        label="Show the dialog in flow"
+        variant="secondary"
+        onClick={() => setIsShown(true)}
+      />
+      <dialog
+        {...stylex.props(
+          inFlowDialogStyles.dialog,
+          !isShown && inFlowDialogStyles.hidden,
+        )}>
+        <Popover
+          isOpen={isPopoverOpen}
+          onOpenChange={setIsPopoverOpen}
+          content={<Text type="body">Waits for a box</Text>}>
+          <Button label="Hidden dialog trigger" variant="secondary" />
+        </Popover>
+      </dialog>
+    </VStack>
+  );
+}
+
+export const PinnedPopoverInHiddenClosedDialog: Story = {
+  render: () => <PinnedPopoverInHiddenClosedDialogExample />,
+};
+
+/**
+ * Fields for the focus stories below. The first sits in a closed `<dialog>`
+ * that the page does not display, so it is no Tab stop.
+ */
+function DetailsFields() {
+  const [hiddenValue, setHiddenValue] = useState('');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  return (
+    <VStack gap={2}>
+      <dialog>
+        <TextInput
+          label="Hidden field"
+          value={hiddenValue}
+          onChange={setHiddenValue}
+        />
+      </dialog>
+      <TextInput label="Name" value={name} onChange={setName} />
+      <TextInput label="Note" value={note} onChange={setNote} />
+    </VStack>
+  );
+}
+
+/**
+ * The closed `<dialog>` that the page displays in flow, with a Popover that
+ * holds two fields and a DropdownMenu with a header and a footer. Tab moves
+ * through each layer and wraps at its edges, as it does for the same Popover
+ * in an open Dialog.
+ */
+function FocusInClosedInFlowDialogExample() {
+  const [query, setQuery] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  return (
+    <VStack gap={4}>
+      <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+        <Popover content={<DetailsFields />}>
+          <Button label="Edit details" variant="secondary" />
+        </Popover>
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={
+            <TextInput
+              label="Filter labels"
+              isLabelHidden
+              placeholder="Filter labels"
+              value={query}
+              onChange={setQuery}
+            />
+          }
+          footer={
+            <Button label="Create label" variant="ghost" onClick={() => {}} />
+          }>
+          <DropdownMenuItem label="Bug" onClick={() => {}} />
+          <DropdownMenuItem label="Design" onClick={() => {}} />
+        </DropdownMenu>
+      </dialog>
+      <Button
+        label="Open dialog"
+        variant="secondary"
+        onClick={() => setIsDialogOpen(true)}
+      />
+      <Dialog
+        isOpen={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        width={520}
+        aria-label="Dialog with a popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Dialog with a popover"
+              onOpenChange={setIsDialogOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover content={<DetailsFields />}>
+                <Button label="Edit in dialog" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </VStack>
+  );
+}
+
+export const FocusInClosedInFlowDialog: Story = {
+  render: () => <FocusInClosedInFlowDialogExample />,
 };

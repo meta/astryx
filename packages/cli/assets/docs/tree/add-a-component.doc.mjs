@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/components/add-a-component`: choose a
+ * @file `astryx docs authoring/building-blocks/components/add-a-component`: choose a
  * component name and generate its first source and doc files.
  */
 
@@ -45,7 +45,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add component AcmeCarousel',
+          code: '{@command integration add component AcmeCarousel}',
         },
         {
           type: 'code',

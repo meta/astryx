@@ -18,10 +18,25 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {describe, it, expect} from 'vitest';
-import {program, JSON_SUPPORTED} from '../index.mjs';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
+import {JSON_SUPPORTED} from '../index.mjs';
+import {program} from '../program.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-test-'));
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,9 +67,21 @@ const CLI_LAYER_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
+  'experimental icon add': ['icon.search'],
+  'experimental icon map': ['icon.search'],
+  'experimental icon use': ['icon.search'],
+  'experimental icon new-set': ['icon.search'],
+  'experimental icon new-definition': ['icon.search'],
 };
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 
 /** Flatten the manifest command tree into fully-qualified names. */
 function flatten(cmds, out = []) {
@@ -116,10 +143,17 @@ describe('manifest: drift guards', () => {
 
   it('takes every command example from its CommandDoc', () => {
     for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
       const entry = allEntries.find((c) => c.name === name);
       expect(entry, `CommandDoc "${name}" has no manifest entry`).toBeDefined();
       expect(entry.examples ?? [], name).toEqual((doc.examples ?? []).map((e) => e.cli));
     }
+  });
+
+  it('documents the hidden postinstall hook and keeps it out of the manifest', () => {
+    expect([...HIDDEN]).toEqual(['postinstall']);
+    expect(commandDocs.has('postinstall')).toBe(true);
+    expect(allNames.has('postinstall')).toBe(false);
   });
 
   it('lists every response type the wrapped API function returns', () => {
@@ -133,7 +167,7 @@ describe('manifest: drift guards', () => {
   });
 
   it('lists upgrade.registry, which `upgrade --registry --json` emits', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-manifest-'));
     fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
     const {status, stdout} = await runCli(['--json', 'upgrade', '--registry'], {cwd});
     expect(status).toBe(0);
@@ -142,7 +176,7 @@ describe('manifest: drift guards', () => {
   });
 
   it('lists theme.list for theme add, which lists themes when given no slug', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-manifest-'));
     fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
     const {status, stdout} = await runCli(['--json', 'theme', 'add'], {cwd});
     expect(status).toBe(0);
@@ -152,6 +186,7 @@ describe('manifest: drift guards', () => {
 
   it('takes response types from the wrapped FunctionDoc, plus CLI-layer envelopes', () => {
     for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
       const entry = allEntries.find((c) => c.name === name);
       const returns = doc.fn ? functionDocs.get(doc.fn).returns.map((r) => r.type) : [];
       const expected = [...returns, ...(CLI_LAYER_TYPES[name] ?? [])];
@@ -194,7 +229,7 @@ describe('manifest: drift guards', () => {
       if (!entry.subcommands) continue;
       const names = entry.subcommands.map((s) => s.name);
       expect(names, `subcommands of "${entry.name}" are not sorted`).toEqual(
-        [...names].sort((a, b) => a.localeCompare(b)),
+        [...names].sort(compareText),
       );
     }
   });

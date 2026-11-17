@@ -4,10 +4,10 @@
  * @file Badge label contrast guard.
  *
  * The Badge label renders at 12px / weight 500, so WCAG 2.1 AA asks for 4.5:1
- * — the 3:1 large-text allowance does not apply. Each theme re-binds the badge
- * fill and label in its own `components.badge` block, so the pairing that
- * actually ships cannot be read off the global `--color-*` tokens; it has to be
- * resolved through the block, `light-dark()` and any `var()` indirection.
+ * — the 3:1 large-text allowance does not apply. Semantic Badge pairings are
+ * owned by Core. Each theme supplies the token values and may optionally re-bind
+ * a variant in `components.badge`, so this guard resolves Core's defaults through
+ * every first-party theme and then applies any theme-local component override.
  *
  * @input The seven first-party theme objects.
  * @output Fails when a badge variant's label/fill pair drops below 4.5:1 in
@@ -23,16 +23,21 @@ import {matchaTheme} from '../packages/themes/matcha/src/matchaTheme.ts';
 import {neutralTheme} from '../packages/themes/neutral/src/neutralTheme.ts';
 import {stoneTheme} from '../packages/themes/stone/src/stoneTheme.ts';
 import {y2kTheme} from '../packages/themes/y2k/src/y2kTheme.ts';
+import {withEmittedTokens} from './lib/theme-emitted-tokens.mjs';
 
-const THEMES = {
-  butter: butterTheme,
-  chocolate: chocolateTheme,
-  gothic: gothicTheme,
-  matcha: matchaTheme,
-  neutral: neutralTheme,
-  stone: stoneTheme,
-  y2k: y2kTheme,
-};
+// Each theme as its generated CSS sets it, so status roles it leaves to theme
+// generation (architecture:theme-compilation INV17) resolve too.
+const THEMES = Object.fromEntries(
+  Object.entries({
+    butter: butterTheme,
+    chocolate: chocolateTheme,
+    gothic: gothicTheme,
+    matcha: matchaTheme,
+    neutral: neutralTheme,
+    stone: stoneTheme,
+    y2k: y2kTheme,
+  }).map(([name, theme]) => [name, withEmittedTokens(theme)]),
+);
 
 const MODES = ['light', 'dark'];
 /** WCAG 2.1 AA, normal-size text. */
@@ -104,7 +109,12 @@ function parseHex(hex) {
 function flatten(top, base) {
   if (top.a >= 1) return top;
   const mix = (t, b) => Math.round(t * top.a + b * (1 - top.a));
-  return {r: mix(top.r, base.r), g: mix(top.g, base.g), b: mix(top.b, base.b), a: 1};
+  return {
+    r: mix(top.r, base.r),
+    g: mix(top.g, base.g),
+    b: mix(top.b, base.b),
+    a: 1,
+  };
 }
 
 function luminance({r, g, b}) {
@@ -135,6 +145,25 @@ function surfaceOf(theme, modeIndex) {
     : {r: 0, g: 0, b: 0, a: 1};
 }
 
+const CORE_SEMANTIC_BADGE = {
+  info: {
+    backgroundColor: 'var(--color-info)',
+    color: 'var(--color-on-info)',
+  },
+  success: {
+    backgroundColor: 'var(--color-success)',
+    color: 'var(--color-on-success)',
+  },
+  warning: {
+    backgroundColor: 'var(--color-warning)',
+    color: 'var(--color-on-warning)',
+  },
+  error: {
+    backgroundColor: 'var(--color-error)',
+    color: 'var(--color-on-error)',
+  },
+};
+
 /**
  * Every resolvable badge label/fill pair, as
  * `{theme, mode, variant, fg, bg, ratio}`.
@@ -142,19 +171,33 @@ function surfaceOf(theme, modeIndex) {
 function badgePairs() {
   const rows = [];
   for (const [themeName, theme] of Object.entries(THEMES)) {
-    const badge = theme.components?.badge;
-    if (!badge) continue;
+    const badge = theme.components?.badge ?? {};
     // A variant may inherit the block's own base colour/fill.
     const baseColor = badge.color;
     const baseBg = badge.backgroundColor;
+    const variants = new Set([
+      ...Object.keys(CORE_SEMANTIC_BADGE),
+      ...Object.keys(badge)
+        .filter(key => key.startsWith('variant:'))
+        .map(key => key.slice('variant:'.length)),
+    ]);
 
-    for (const [key, block] of Object.entries(badge)) {
-      if (!key.startsWith('variant:') || typeof block !== 'object') continue;
-      const variant = key.slice('variant:'.length);
+    for (const variant of variants) {
+      const block = badge[`variant:${variant}`];
+      if (block != null && typeof block !== 'object') continue;
+      const core = CORE_SEMANTIC_BADGE[variant];
 
       for (let modeIndex = 0; modeIndex < MODES.length; modeIndex++) {
-        const fgHex = resolve(block.color ?? baseColor, theme, modeIndex);
-        const bgHex = resolve(block.backgroundColor ?? baseBg, theme, modeIndex);
+        const fgHex = resolve(
+          block?.color ?? baseColor ?? core?.color,
+          theme,
+          modeIndex,
+        );
+        const bgHex = resolve(
+          block?.backgroundColor ?? baseBg ?? core?.backgroundColor,
+          theme,
+          modeIndex,
+        );
         if (!fgHex || !bgHex) continue; // not expressible as a flat pair
 
         const surface = surfaceOf(theme, modeIndex);
@@ -174,42 +217,25 @@ function badgePairs() {
   return rows;
 }
 
-/** Themes that re-bind the badge fill/label. The rest inherit core's defaults. */
-const THEMES_WITH_BADGE_BLOCK = ['butter', 'gothic', 'neutral', 'stone', 'y2k'];
+const FIRST_PARTY_THEMES = Object.keys(THEMES).sort();
 
-/**
- * Pre-existing shortfalls this guard records rather than silently tolerates.
- *
- * Both themes pin these fills to brand values ("pinned to the brand colors
- * from the spec"), so moving them is a design call, not a bug fix. The guard
- * asserts the set matches exactly, so a new shortfall fails the build and a
- * fixed one fails until it's deleted from this list.
- */
-const KNOWN_GAPS = [
-  'butter/dark variant:error',
-  'butter/dark variant:info',
-  'butter/dark variant:neutral',
-  'butter/light variant:error',
-  'butter/light variant:info',
-  'butter/light variant:neutral',
-  'gothic/dark variant:warning',
-  'gothic/light variant:warning',
-];
+/** Exact allowlist: every maintained Badge pair currently clears AA. */
+const KNOWN_GAPS = [];
 
 describe('Badge label contrast', () => {
   const rows = badgePairs();
   const label = r => `${r.theme}/${r.mode} variant:${r.variant}`;
 
-  it('resolves the badge pairs of every theme that defines a badge block', () => {
+  it('resolves Core semantic badge pairs through every first-party theme', () => {
     // Guards the resolver itself: a refactor that silently stops resolving
     // would otherwise turn this whole file into a no-op.
     const covered = [...new Set(rows.map(r => r.theme))].sort();
-    expect(covered).toEqual(THEMES_WITH_BADGE_BLOCK);
+    expect(covered).toEqual(FIRST_PARTY_THEMES);
 
-    // The four semantic variants must resolve in every theme and both schemes;
-    // those are the filled pairs this guard exists for.
+    // The four Core semantic variants must resolve in every theme and both
+    // schemes, whether or not that theme adds a component-local override.
     const missing = [];
-    for (const theme of THEMES_WITH_BADGE_BLOCK) {
+    for (const theme of FIRST_PARTY_THEMES) {
       for (const mode of MODES) {
         for (const variant of ['info', 'success', 'warning', 'error']) {
           const hit = rows.some(
@@ -234,17 +260,19 @@ describe('Badge label contrast', () => {
   it('meets WCAG AA (4.5:1) for every badge variant in both colour schemes', () => {
     const failures = rows
       .filter(r => r.ratio < AA_NORMAL)
-      .map(
-        r =>
-          `${label(r)} — ${r.fg} on ${r.bg} = ${r.ratio.toFixed(2)}:1`,
-      );
+      .map(r => `${label(r)} — ${r.fg} on ${r.bg} = ${r.ratio.toFixed(2)}:1`);
 
-    const unexpected = failures.filter(f => !KNOWN_GAPS.includes(f.split(' — ')[0]));
+    const unexpected = failures.filter(
+      f => !KNOWN_GAPS.includes(f.split(' — ')[0]),
+    );
     expect(unexpected).toEqual([]);
   });
 
   it('keeps the known-gap list exact, so a fixed pair cannot linger', () => {
-    const failing = rows.filter(r => r.ratio < AA_NORMAL).map(label).sort();
+    const failing = rows
+      .filter(r => r.ratio < AA_NORMAL)
+      .map(label)
+      .sort();
     expect(failing).toEqual(KNOWN_GAPS);
   });
 });

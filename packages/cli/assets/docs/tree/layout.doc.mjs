@@ -46,7 +46,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: 'This guide decides layout, not component APIs. Run `astryx build "<idea>"` to start from the closest template for your app type, and `astryx component <Name>` for a component\'s props.',
+      text: 'This guide decides layout, not component APIs. Run `{@command build "<idea>"}` to start from the closest template for your app type, and `{@command component <Name>}` for a component\'s props.',
     },
   ],
   slots: {

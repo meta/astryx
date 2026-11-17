@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/docs/check-your-docs`:
+ * @file `astryx docs authoring/building-blocks/docs/check-your-docs`:
  * what each check proves about an integration's docs: the docs check, each
  * doc's fields, the read size, and the CLI peer.
  */
@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration docs\n# In an app, check an installed package\nastryx doctor integration docs @acme/astryx-widgets',
+          code: '{@command doctor integration docs}\n# In an app, check an installed package\n{@command doctor integration docs @acme/astryx-widgets}',
         },
         {
           type: 'code',
@@ -44,7 +44,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Point at another doc with a link, never by writing `astryx docs <name>` in prose: `{@link generic:<name>}` for one of your package's topics, or `{@link @astryxdesign/cli:generic:<name>}` for a Core doc (`namespace:` for a Core namespace). The CLI prints the link as the command that opens the doc, and doctor checks that the doc exists. The check lists each written pointer to a doc that exists as a `stray_doc_pointer` warning, with the link to write instead. A command with more words, or one in a code block, is a walkthrough and is not listed.",
+          text: "Point at another doc with a link, never by writing `{@command docs <name>}` in prose: `{@link generic:<name>}` for one of your package's topics, or `{@link @astryxdesign/cli:generic:<name>}` for a Core doc (`namespace:` for a Core namespace). The CLI prints the link as the command that opens the doc, and doctor checks that the doc exists. The check lists each written pointer to a doc that exists as a `stray_doc_pointer` warning, with the link to write instead. A command with more words, or one in a code block, is a walkthrough and is not listed.",
         },
         {
           type: 'prose',
@@ -109,7 +109,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration validate',
+          code: '{@command doctor integration validate}',
         },
         {
           type: 'code',
@@ -133,7 +133,7 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
             "The folder decides the type: `ComponentDoc` in your components root, `IntegrationTemplateDoc` in your templates root, `ThemeDoc` in your themes root, and in your docs root the type the doc's `type` names. Keep the `@type` comment above each doc's export too, so your editor shows the same problems as you type.",
             'Every finding is a warning, so the exit code stays 0. With `--json`, they are in `data.docTypes.findings`.',
             'It uses the `typescript` your package installs. Where `typescript` is missing or has no JavaScript compiler API, as TypeScript 7 does, it uses `@typescript/typescript6`, the TypeScript 6 API package, if your package installs it. Without either, it prints `[skip] Docs not type-checked` and the reason.',
-            'Every field of every doc type is in {@link generic:authoring}.',
+            'Every field of every doc type is in {@link generic:field-reference}.',
           ],
         },
       ],
@@ -144,17 +144,17 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
       content: [
         {
           type: 'prose',
-          text: '`astryx doctor` also measures every read and warns on one over 32 KB. Run it in your package or in an app that installs it; `doctor integration docs` does not check size.',
+          text: '`{@command doctor}` also measures every read and warns on one over 32 KB. Run it in your package or in an app that installs it; `doctor integration docs` does not check size.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor',
+          code: '{@command doctor}',
         },
         {
           type: 'code',
           lang: 'text',
-          code: 'id:      docs-progressive-disclosure\nstatus:  [warn]\nlabel:   Documentation navigation and size\nmessage: acme/deploying build-before-you-ship: 46 KB, over the 32 KB one read may return',
+          code: '[warn]  docs-progressive-disclosure - Documentation navigation and size - acme/deploying build-before-you-ship: 46 KB,\n        over the 32 KB one read may return',
         },
         {
           type: 'prose',
@@ -173,7 +173,7 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration verify',
+          code: '{@command integration verify}',
         },
         {
           type: 'code',

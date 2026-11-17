@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/docs/short-and-findable`:
+ * @file `astryx docs authoring/building-blocks/docs/short-and-findable`:
  * keep each read short, lead each section with its summary, and write docs
  * that search finds.
  */
@@ -21,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Readers open one section at a time, so give each section one idea and keep it to about 30 lines. `astryx doctor` warns on any read over 32 KB.',
+          text: 'A long topic is read one section at a time, so give each section one idea and keep it to about 30 lines. `{@command doctor}` warns on any read over 32 KB.',
         },
         {
           type: 'list',
@@ -29,13 +29,13 @@ export const docs = {
           items: [
             'When a section needs a second idea, split it into two sections.',
             'Keep a topic to a few sections. When it grows past five, split it into more guides in your docs section.',
-            'A topic with more than one section reads as its section list. Readers open one section by its key, or the whole topic with `--full`.',
+            'A bare read prints the whole topic, and lists its sections instead only when the whole topic is over 16 KB of text. Readers list the sections with `--index` and open one section by its key.',
           ],
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '# The section list\nastryx docs acme/deploying\n# One section\nastryx docs acme/deploying check-before-you-ship\n# Everything\nastryx docs acme/deploying --full',
+          code: '# The whole topic\n{@command docs acme/deploying}\n# The section list\n{@command docs acme/deploying --index}\n# One section\n{@command docs acme/deploying check-before-you-ship}',
         },
       ],
     },
@@ -93,7 +93,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx search "place a doc" --type doc',
+          code: '{@command search "place a doc" --type doc}',
         },
         {
           type: 'list',

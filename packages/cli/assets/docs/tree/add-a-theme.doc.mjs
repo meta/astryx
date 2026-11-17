@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/add-a-theme`:
+ * @file `astryx docs authoring/building-blocks/themes/add-a-theme`:
  * scaffold a theme in a package — blank, or forked from an existing theme.
  */
 
@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add theme ocean',
+          code: '{@command integration add theme ocean}',
         },
         {
           type: 'code',
@@ -63,7 +63,7 @@ Declare theme root ./themes in astryx.integration.mjs.
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add theme ocean --from neutral',
+          code: '{@command integration add theme ocean --from neutral}',
         },
         {
           type: 'prose',

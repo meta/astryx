@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /** Chromium positive, exact-debt, and mutation proof for the shared Spinbutton contract. */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '../playwright';
 import {
   checkAccessibilitySpec,
   requiredLayers,

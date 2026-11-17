@@ -46,11 +46,11 @@ has a story. (Not full stable/a11y bar — that's later.)
 
 ## Utilities
 
-| Util                                                    | Readiness      | Notes                                                                         |
-| ------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
-| `useChartColors` / `getChartColors` (palette)           | **Ship-ready** | Solid; resolves the `--color-data-*` tokens (which are JS-only, not CSS vars) |
-| `currency` formatter                                    | **Ship-ready** | Verified on an axis                                                           |
-| `percent` / `compactNumber` / `shortDate` / `monthYear` | Minor polish   | Not yet verified in a story                                                   |
+| Util                                                    | Readiness      | Notes                                                                                                                                                                                                                                    |
+| ------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useChartColors` / `getChartColors` (palette)           | **Ship-ready** | Solid; resolves concrete palette colors for Canvas/non-CSS paths. CSS-capable `dataVars` consumers get `--color-data-*` variables from Core CSS in prebuilt mode. Concrete resolution uses `resolveThemeToken()` / `useTheme().token()`. |
+| `currency` formatter                                    | **Ship-ready** | Verified on an axis                                                                                                                                                                                                                      |
+| `percent` / `compactNumber` / `shortDate` / `monthYear` | Minor polish   | Not yet verified in a story                                                                                                                                                                                                              |
 
 ---
 

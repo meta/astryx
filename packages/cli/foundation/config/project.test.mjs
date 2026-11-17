@@ -7,8 +7,10 @@ import * as path from 'node:path';
 import {Project, DEFAULT_ISSUES_URL, findConfigPath} from './project.mjs';
 import {InMemoryConfigCache} from './config-cache.mjs';
 import {getCliInvocation} from '../env/package-manager.mjs';
+import {warnOnIntegrationIssues} from '../integrations/integration-warnings.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
 import {discoverCoreTemplates} from '../discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -200,7 +202,7 @@ function scaffoldLocalPackage({name = '@acme/local'} = {}) {
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-project-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-project-test-'));
   process.chdir(tmpDir);
 });
 
@@ -288,6 +290,28 @@ describe('Project.load', () => {
       `export default { integrations: [42] };\n`,
     );
     await expect(Project.load(tmpDir)).rejects.toThrow(/integrations/);
+  });
+});
+
+describe('Project.issues leaves out a near-miss manifest key', () => {
+  it.each([
+    [
+      'alone, while the loaded integration fills providerId from the package name',
+      {providerID: '@acme/widgets'},
+    ],
+    [
+      'beside the key it suggests',
+      {providerID: '@acme/widgets', providerId: '@acme/widgets'},
+    ],
+  ])('providerID %s', async (_label, unknownKeys) => {
+    // A key this CLI does not know is a note in validate, never a project
+    // issue the everyday nudge would count.
+    scaffold({unknownKeys});
+    const project = await Project.load(tmpDir);
+    const keys = (await project.issues()).filter(
+      issue => issue.code === 'unknown_manifest_key',
+    );
+    expect(keys).toEqual([]);
   });
 });
 
@@ -594,13 +618,18 @@ describe('Project forward compatibility', () => {
     const {integration} = await project.codemods('0.1.0', '0.2.0');
     expect(integration).toHaveLength(1);
 
+    // Keys from a newer CLI are version skew, not a problem with the
+    // package: no project issue, so the everyday nudge stays quiet.
     const issues = await project.issues();
-    expect(issues.every(i => i.severity !== 'error')).toBe(true);
-    const unknown = issues.filter(i => i.code === 'unknown_manifest_key');
-    expect(unknown).toHaveLength(1);
-    expect(unknown[0].severity).toBe('warning');
-    expect(unknown[0].message).toContain('"futureRoot"');
-    expect(unknown[0].message).toContain('"anotherOne"');
+    expect(issues.filter(i => i.code === 'unknown_manifest_key')).toEqual([]);
+    const lines = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation(line => lines.push(line));
+    try {
+      await warnOnIntegrationIssues(project);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toEqual([]);
   });
 
   it('still refuses a known key of the wrong type', async () => {
@@ -826,6 +855,36 @@ describe('Project loads each integration in isolation', () => {
     ]);
     expect(await project.issues()).not.toContainEqual(
       expect.objectContaining({package: '@acme/local', code: 'integration_error'}),
+    );
+  });
+});
+
+describe('Project finds configured integrations a workspace hoists', () => {
+  // npm, Yarn and Bun workspaces install a member's dependencies at the
+  // workspace root, so the member's own node_modules does not hold them.
+  it('loads an integration named in a member config from the workspace root', async () => {
+    scaffold();
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'root', private: true, workspaces: ['apps/*']}),
+    );
+    fs.rmSync(path.join(tmpDir, 'astryx.config.mjs'));
+    const member = path.join(tmpDir, 'apps', 'web');
+    fs.mkdirSync(member, {recursive: true});
+    fs.writeFileSync(path.join(member, 'package.json'), JSON.stringify({name: 'web'}));
+    fs.writeFileSync(
+      path.join(member, 'astryx.config.mjs'),
+      `export default ${JSON.stringify({integrations: ['@acme/widgets']})};\n`,
+    );
+
+    const project = await Project.load(member);
+
+    const widgets = (await project.components()).filter(
+      component => component.package === '@acme/widgets',
+    );
+    expect(widgets.map(component => component.name)).toEqual(['Widget']);
+    expect(await project.issues()).not.toContainEqual(
+      expect.objectContaining({package: '@acme/widgets', code: 'integration_error'}),
     );
   });
 });

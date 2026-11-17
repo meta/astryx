@@ -6,13 +6,13 @@
  * Unit: isAstryxInitialized() detects the Astryx marker across EVERY agent-doc
  * location (including the previously-missed Hermes files) and legacy XDS blocks.
  *
- * Integration: the CLI nudges (stderr) before a command when the project hasn't
- * run init — INCLUDING in --json mode (agents pass --json, and stderr never
- * corrupts the stdout JSON envelope). Quiet once set up, outside a project, and
- * for the installer command itself.
+ * Integration: the CLI reminds (stderr) after a successful command, at most
+ * once a day per project, when the project hasn't run init. Quiet in --json,
+ * under CI, after a failure, once set up, outside a project, and for the
+ * installer command itself.
  */
 
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -22,6 +22,7 @@ import {
   isAstryxPromptInReach,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {userConfigDir} from '../../../foundation/env/user-dirs.mjs';
 
 /** This source checkout: the tests run the CLI from it. */
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -38,12 +39,27 @@ const MARKER = '<!-- ASTRYX:START -->';
 const NUDGE = /finish setup and install the Astryx agent prompt/;
 
 let tmp;
+/** The per-user folder that records when the reminder last printed. */
+let stateHome;
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-nudge-'));
+  stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-state-'));
+  // Every platform's per-user folder lands under stateHome: macOS reads only
+  // the home folder, Linux XDG_CONFIG_HOME, Windows APPDATA.
+  vi.stubEnv('HOME', stateHome);
+  vi.stubEnv('USERPROFILE', stateHome);
+  vi.stubEnv('XDG_CONFIG_HOME', stateHome);
+  vi.stubEnv('APPDATA', stateHome);
+  vi.stubEnv('CI', '');
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   fs.rmSync(tmp, {recursive: true, force: true});
+  fs.rmSync(stateHome, {recursive: true, force: true});
 });
+
+/** The per-user state file the reminder records its day in. */
+const stateFile = () => path.join(userConfigDir(), 'state.json');
 
 function write(rel, body) {
   const p = path.join(tmp, rel);
@@ -121,6 +137,25 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     expect(r.stderr).toMatch(NUDGE);
   });
 
+  it.each([
+    ['in the home folder', ''],
+    ['at the top of a settings folder in it', '.dotfiles'],
+  ])('stays quiet %s, where init writes no agent docs', async (_label, rel) => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    process.env.HOME = tmp;
+    process.env.USERPROFILE = tmp;
+    try {
+      write(path.join(rel, 'package.json'), '{"name":"t"}');
+      const r = await runCli(['docs', 'tokens'], path.join(tmp, rel));
+      expect(r.stderr).not.toMatch(NUDGE);
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("in a project with only Core of another release, names adding the CLI at Core's version first, as the daily hint does", async () => {
     write(
       'package.json',
@@ -133,7 +168,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     write('package-lock.json', '{}');
     const r = await runCli(['docs', 'tokens'], tmp);
     expect(r.stderr).toContain(
-      'Next step: run `npm install @astryxdesign/cli@0.0.1`, then `npx astryx init` to finish setup and install the Astryx agent prompt.',
+      'Next step: run `npm install -E @astryxdesign/cli@0.0.1`, then `npx astryx init` to finish setup and install the Astryx agent prompt.',
     );
   });
 
@@ -144,6 +179,74 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     // nudge must NOT leak into it (json-shim: error envelopes have empty stderr).
     expect(r.stderr).not.toMatch(NUDGE);
     expect(() => JSON.parse(r.stdout)).not.toThrow();
+  });
+
+  // An agent that leaves `init` to its person must not see the reminder
+  // before every command: once a day per project, after a command that
+  // succeeds.
+  it('prints once a day per project: a second command the same day prints none', async () => {
+    asProject();
+    const first = await runCli(['docs', 'tokens'], tmp);
+    expect(first.stderr).toMatch(NUDGE);
+    // After the command's own output, never before it.
+    expect(first.stderr.trimEnd().endsWith('install the Astryx agent prompt.')).toBe(true);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+    expect((await runCli(['component', '--list'], tmp)).stderr).not.toMatch(NUDGE);
+  });
+
+  it('prints once again the next day', async () => {
+    asProject();
+    expect(stateFile().startsWith(stateHome)).toBe(true);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+    const state = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    const key = Object.keys(state.notifiedAt).find(k => k.startsWith('setup:'));
+    expect(key).toBeDefined();
+    state.notifiedAt[key] = Date.now() - 25 * 60 * 60 * 1000;
+    fs.writeFileSync(stateFile(), JSON.stringify(state));
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+  });
+
+  it('prints none under CI, and records nothing', async () => {
+    asProject();
+    vi.stubEnv('CI', 'true');
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+    vi.stubEnv('CI', '');
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+  });
+
+  it('prints none after a command that fails', async () => {
+    asProject();
+    const r = await runCli(['component', 'NoSuchComponentAnywhere'], tmp);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).not.toMatch(NUDGE);
+    // The day is not used up: the next command that succeeds prints it.
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+  });
+
+  it("a reminder kept to once a day is no update notice: doctor's update line never names it", async () => {
+    asProject();
+    await runCli(['docs', 'tokens'], tmp);
+    await runCli(['docs', 'tokens'], tmp);
+    const state = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    expect(Object.keys(state.noticeSkips ?? {}).filter(k => k.startsWith('setup:'))).toEqual([]);
+    const r = await runCli(['--json', 'doctor'], tmp);
+    const newest = JSON.parse(r.stdout).data.checks.find(
+      (/** @type {any} */ c) => c.id === 'newest-release',
+    );
+    expect(newest?.message ?? '').not.toContain('setup:');
+  });
+
+  it('doctor reports the missing setup in its own check, every time', async () => {
+    asProject();
+    for (let i = 0; i < 2; i++) {
+      const r = await runCli(['--json', 'doctor'], tmp);
+      const check = JSON.parse(r.stdout).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'agent-docs',
+      );
+      expect(check.message).toMatch(/^No agent docs found/u);
+      expect(check.fix).toMatch(/init --features agents/u);
+    }
   });
 
   it('is quiet once set up (marker present)', async () => {
@@ -165,6 +268,79 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     asProject();
     write('astryx.integration.mjs', 'export default {};\n');
     expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+  });
+
+  it('is quiet in a nested package once init has written the docs at the project root', async () => {
+    // init run in functions/ writes at the root that declares Astryx.
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '0.7.0'}}));
+    write('AGENTS.md', MARKER);
+    write('functions/package.json', '{"name":"functions"}');
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'functions'));
+    expect(r.stderr).not.toMatch(NUDGE);
+  });
+
+  it('nudges in a nested package while the project root has no docs', async () => {
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '0.7.0'}}));
+    write('functions/package.json', '{"name":"functions"}');
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'functions'));
+    expect(r.stderr).toMatch(NUDGE);
+  });
+
+  // A nested package.json that is not the project's (spec AST-040 FR9): the
+  // reminder sends the person to the project's folder, never adds the CLI to
+  // the nested package.json (spec AST-081 FR2).
+  it("in a nested package whose package.json is not the project's, says to run from the project's folder", async () => {
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '0.7.0'}}));
+    write('package-lock.json', '{}');
+    write('functions/package.json', '{"name":"functions"}');
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'functions'));
+    // Only `cd` comes first, so the app has no CLI of its own yet: the
+    // command is the scoped package at the project's release, never the bare
+    // `astryx` name a package runner would fetch from the registry.
+    expect(r.stderr.trim()).toBe(
+      `Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.0 init\` to finish setup and install the Astryx agent prompt.`,
+    );
+  });
+
+  // A tool folder that installs its own Core: the command runs in the
+  // project's folder at the project's release, never at the release of the
+  // CLI that answered the run.
+  it("in a tool folder with its own Core, names the project's Core, not the answering CLI's release", async () => {
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '^0.7.0'}}));
+    write('package-lock.json', '{}');
+    write('node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.3'}));
+    write('tools/codegen/package.json', '{"name":"codegen"}');
+    write('tools/codegen/node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.4'}));
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'tools', 'codegen'));
+    expect(r.stderr.trim()).toBe(
+      `Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.3 init\` to finish setup and install the Astryx agent prompt.`,
+    );
+  });
+
+  // Inside a git repository the project-root check above adds nothing to the
+  // walk up to the repository root: the same outcomes as without it.
+  it('inside a repository, is quiet in a nested package once init has written the docs at the project root', async () => {
+    fs.mkdirSync(path.join(tmp, '.git'));
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '0.7.0'}}));
+    write('AGENTS.md', MARKER);
+    write('functions/package.json', '{"name":"functions"}');
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'functions'));
+    expect(r.stderr).not.toMatch(NUDGE);
+  });
+
+  it('inside a repository, still nudges when the only docs lie above the repository root', async () => {
+    write('package.json', JSON.stringify({name: 'outer', dependencies: {'@astryxdesign/core': '0.7.0'}}));
+    write('AGENTS.md', MARKER);
+    fs.mkdirSync(path.join(tmp, 'repo', '.git'), {recursive: true});
+    write('repo/package.json', '{"name":"repo"}');
+    // It declares Astryx: a folder that declares nothing is outside a
+    // project, where no reminder prints (spec AST-081 FR3).
+    write(
+      'repo/functions/package.json',
+      JSON.stringify({name: 'functions', dependencies: {'@astryxdesign/core': '0.7.0'}}),
+    );
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'repo', 'functions'));
+    expect(r.stderr).toMatch(NUDGE);
   });
 
   it('does not nudge for the installer command itself', async () => {

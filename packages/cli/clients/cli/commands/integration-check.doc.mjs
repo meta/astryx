@@ -45,6 +45,12 @@ export const doc = {
       description:
         'Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` is reported as a note (`invalid_cli_command`) that fails nothing.',
     },
+    {
+      flag: '--next',
+      param: 'options.next',
+      description:
+        'Also count the findings the next minor release turns into warnings (the notes marked `next`) as warnings now, so `--strict --next` fails on them. Run it to fix them ahead of the release; every run says how many there are.',
+    },
   ],
   examples: [
     {
@@ -55,6 +61,11 @@ export const doc = {
     {
       label: 'Errors only, while you fix the warnings a package already has',
       cli: 'integration check',
+    },
+    {
+      label:
+        'Fix ahead: fail on the findings the next minor release will fail on',
+      cli: 'integration check --strict --next',
     },
     {
       label: 'Read the result as JSON',

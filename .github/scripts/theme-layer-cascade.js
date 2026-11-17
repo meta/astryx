@@ -2,7 +2,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @description Asserts a production build puts Astryx, theme and product styles in the right cascade order
+ * @description Asserts production source and prebuilt CSS put Astryx, theme and product styles in the right cascade order
  * @input [--port <n>]
  * @output One line per case; exit 1 if any layer loses to the wrong one
  *
@@ -26,6 +26,7 @@
  */
 
 const {chromium} = require('playwright');
+const {execFileSync} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -239,9 +240,29 @@ async function run() {
     );
     return 1;
   }
+  // This existing CI owner already installs Chromium. Also prove the prebuilt
+  // public entry's defaults and both load orders without consumer compilation.
+  // Keep the opt-in suite out of the ordinary Node lane, which has no browser.
+  execFileSync(
+    process.execPath,
+    [
+      path.join(REPO_ROOT, 'node_modules/vitest/vitest.mjs'),
+      'run',
+      '--project',
+      'node',
+      'scripts/build-css.data-tokens.browser.test.mjs',
+      '--maxWorkers=1',
+    ],
+    {
+      cwd: REPO_ROOT,
+      env: {...process.env, ASTRYX_PREBUILT_DATA_BROWSER: '1'},
+      stdio: 'inherit',
+      timeout: 240_000,
+    },
+  );
   console.log(
-    '\nAstryx < theme < product holds in a production build, and the ' +
-      'data token defaults sit under a theme override.',
+    '\nAstryx < theme < product holds in production source and prebuilt CSS, ' +
+      'and the data token defaults sit under a theme override.',
   );
   return 0;
 }

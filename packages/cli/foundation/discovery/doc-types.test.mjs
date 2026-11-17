@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {unusableTypeScriptReason} from './project-typescript.mjs';
+import {iconDefinitionSource} from './icon-set-writer.mjs';
 import {
   checkDocTypes,
   DOC_TYPES_TYPESCRIPT_MISSING_REASON,
@@ -683,6 +684,63 @@ describe('checkDocTypes', () => {
     ]);
     expect(new Set(core.findings.map(f => f.type))).toEqual(
       new Set(['TemplateDoc']),
+    );
+  });
+
+  it('checks an icon set descriptor against IconSetDoc', async () => {
+    withTypeScript();
+    write(
+      'icon-sets/outline/outline.doc.mjs',
+      "/** @type {import('@astryxdesign/cli/authoring').IconSetDoc} */\nexport default {type: 'icon-set', name: 'outline', displayName: 'Outline', description: 'D', maintained: true, license: 1, icons: []};\n",
+    );
+    write(
+      'icon-sets/solid/solid.doc.mjs',
+      "export default {type: 'icon-set', name: 'solid', displayName: 'Solid', description: 'D', maintained: true};\n",
+    );
+    write(
+      'icon-sets/ok/ok.doc.mjs',
+      "export default {type: 'icon-set', name: 'ok', displayName: 'Ok', description: 'D', maintained: true, license: 'MIT'};\n",
+    );
+    const report = await check([
+      ['icon-sets/outline/outline.doc.mjs', 'icon-sets'],
+      ['icon-sets/solid/solid.doc.mjs', 'icon-sets'],
+      ['icon-sets/ok/ok.doc.mjs', 'icon-sets'],
+    ]);
+    expect(report.docs).toBe(3);
+    expect(summary(report)).toEqual([
+      'icon-sets/outline/outline.doc.mjs default icons unknown_field',
+      'icon-sets/outline/outline.doc.mjs default license wrong_type',
+      'icon-sets/solid/solid.doc.mjs default license missing_field',
+    ]);
+    expect(new Set(report.findings.map(f => f.type))).toEqual(
+      new Set(['IconSetDoc']),
+    );
+  });
+
+  it("checks a set's own definition, as new-definition writes it, against IconDefinitionDoc", async () => {
+    withTypeScript();
+    write(
+      'icon-sets/brand/definitions/aiHelper.doc.mjs',
+      iconDefinitionSource({
+        name: 'aiHelper',
+        description: 'The AI helper.',
+        words: ['assistant', 'ai'],
+      }),
+    );
+    write(
+      'icon-sets/brand/definitions/broken.doc.mjs',
+      "export default {type: 'icon-definition', name: 'broken', description: 'D', words: 'one'};\n",
+    );
+    const report = await check([
+      ['icon-sets/brand/definitions/aiHelper.doc.mjs', 'icon-sets'],
+      ['icon-sets/brand/definitions/broken.doc.mjs', 'icon-sets'],
+    ]);
+    expect(report.docs).toBe(2);
+    expect(summary(report)).toEqual([
+      'icon-sets/brand/definitions/broken.doc.mjs default words wrong_type',
+    ]);
+    expect(new Set(report.findings.map(f => f.type))).toEqual(
+      new Set(['IconDefinitionDoc']),
     );
   });
 

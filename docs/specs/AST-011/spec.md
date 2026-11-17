@@ -133,8 +133,8 @@ pointer and keyboard opening are blocked. The implicit listbox popup describes
 the widget's selection capability; it does not promise that every state can open
 it.
 
-Rejected: mapping this state to `isDisabled`, because disabled values are dimmed,
-removed from the tab order by default, and excluded from form submission.
+Rejected: mapping this state to `isDisabled`, because disabled values are dimmed
+and excluded from form submission.
 
 ## Open questions
 

@@ -7,7 +7,8 @@ export const docs = {
   subComponentOf: 'CommandPalette',
   displayName: 'Command Palette Empty',
   isHiddenFromOverview: true,
-  description: 'Empty state display for the results area. Rendered automatically by CommandPalette for no-results and no-query states.',
+  description:
+    'Empty state display for the results area. CommandPalette renders it automatically when a search returns no results, or when there is no query and bootstrap() returns nothing.',
   props: [
     {
       name: 'children',
@@ -27,7 +28,8 @@ export const docsZh = {
   name: 'CommandPaletteEmpty',
   isHiddenFromOverview: true,
   displayName: 'Command Palette Empty',
-  description: '结果区域的空状态展示。由 CommandPalette 在无结果和无查询状态下自动渲染。',
+  description:
+    '结果区域的空状态展示。当搜索没有结果，或没有查询且 bootstrap() 未返回任何内容时，由 CommandPalette 自动渲染。',
   propDescriptions: {
     children: '要显示的消息或内容。',
   },
@@ -37,7 +39,8 @@ export const docsDense = {
   name: 'CommandPaletteEmpty',
   isHiddenFromOverview: true,
   displayName: 'Command Palette Empty',
-  description: 'empty state; auto-rendered by palette for no-results+no-query states',
+  description:
+    'empty state; auto-rendered by palette when a search has no results, or no query and bootstrap() returns nothing',
   propDescriptions: {
     children: 'message or content to display',
   },

@@ -8,12 +8,14 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock('../../foundation/discovery/template-conflict-release.mjs', () => ({
   expandedTemplateConflictSchemaActive: () => true,
 }));
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {validateIntegration} from './validate-integration.mjs';
 import {discoverCoreTemplates} from '../../foundation/discovery/template-adapter.mjs';
 import {discoverOwnedComponents} from '../../foundation/discovery/component-discovery.mjs';
 import {discoverBuiltinTopics} from '../../foundation/discovery/docs-discovery.mjs';
@@ -27,8 +29,12 @@ import {
   integrationComponentConflicts,
   integrationDocConflicts,
   integrationTemplateConflicts,
-  shellArg,
 } from './authoring-checks.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 
@@ -144,13 +150,27 @@ const PASSAGE =
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-template-conflicts-'),
+    path.join(REPO_ROOT, '.astryx-template-conflicts-'),
+  );
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
 });
 
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
+
+/** The listing notes a fixture with no logo draws; package-listing-check.test.mjs covers them. */
+const LISTING_CODES = new Set([
+  'package_without_logo',
+  'package_without_example',
+]);
 
 describe('integrationTemplateConflicts', () => {
   it('warns on an id shared with Core and gives the package-qualified command', async () => {
@@ -367,13 +387,6 @@ describe('integrationTemplateConflicts', () => {
     );
     expect(conflict?.message).toContain('Rename');
     expect(conflict?.message).not.toContain('set replaces');
-  });
-
-  it('shell-quotes unusual ids instead of allowing command substitution', () => {
-    expect(shellArg('safe/id')).toBe('safe/id');
-    expect(shellArg('my$thing')).toBe("'my$thing'");
-    expect(shellArg("a'b")).toBe("'a'\\''b'");
-    expect(shellArg('foo`id`')).toBe("'foo`id`'");
   });
 
   it('returns a malformed template once as an invalid_template issue', async () => {
@@ -1329,5 +1342,359 @@ describe('links in component docs and topic descriptions', () => {
         link: '{@link @astryxdesign/cli:generic:theme}',
       }),
     ]);
+  });
+});
+
+describe('validateIntegration runner-command notes', () => {
+  /** The runner-command notes, read back into their parts. */
+  async function runnerNotes() {
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const notes = (data.notes ?? [])
+      .filter((/** @type {any} */ note) => note.code === 'runner_command')
+      .map((/** @type {any} */ note) => {
+        const m =
+          /^(\S+): "([^"]+)"(?: \(section "([^"]+)"\))? writes `([^`]+)`(?: \(line (\d+)\))?\./.exec(
+            note.message,
+          );
+        return {
+          file: m?.[1],
+          topic: m?.[2],
+          section: m?.[3] ?? null,
+          command: m?.[4],
+          line: m?.[5] ? Number(m[5]) : null,
+          message: note.message,
+        };
+      });
+    return {data, notes};
+  }
+
+  function writeTopic(/** @type {string} */ text) {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {docs: './docs'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const doc = {
+      type: 'generic',
+      name: 'acme-setup',
+      title: 'Fixture',
+      description: 'Fixture topic.',
+      sections: [
+        {
+          title: 'Overview',
+          content: [
+            {type: 'prose', text},
+            {type: 'code', lang: 'bash', code: 'npx @astryxdesign/cli init'},
+          ],
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'),
+      `export default ${JSON.stringify(doc)};\n`,
+    );
+  }
+
+  it('lists a runner command with its line and fix, and raises no issue', async () => {
+    writeTopic('Check it with `pnpm exec astryx doctor` first.');
+
+    const {data, notes} = await runnerNotes();
+    const [hit, ...rest] = notes;
+
+    expect(rest).toEqual([]);
+    expect(hit).toMatchObject({
+      topic: 'acme-setup',
+      section: 'Overview',
+      file: 'docs/acme-setup.doc.mjs',
+      line: 1,
+      command: 'pnpm exec astryx doctor',
+    });
+    expect(hit.message).toContain('Write the token `{@command doctor}`');
+    // A note only: no issue, so no exit changes on it.
+    expect(
+      data.issues.map((/** @type {any} */ issue) => issue.code),
+    ).not.toContain('runner_command');
+  });
+
+  it('puts each copy of a repeated command on its own line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {docs: './docs'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const doc = {
+      type: 'generic',
+      name: 'acme-setup',
+      title: 'Fixture',
+      description: 'Fixture topic.',
+      sections: [
+        {
+          title: 'First',
+          content: [{type: 'prose', text: 'Run `npx astryx doctor`.'}],
+        },
+        {
+          title: 'Second',
+          content: [{type: 'prose', text: 'Run `npx astryx doctor` again.'}],
+        },
+        {
+          title: 'Third',
+          content: [{type: 'prose', text: 'Or plain `npx astryx`.'}],
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'),
+      `export default ${JSON.stringify(doc, null, 2)};\n`,
+    );
+    const lines = fs
+      .readFileSync(path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'), 'utf8')
+      .split('\n');
+    const lineHolding = (/** @type {string} */ text) =>
+      lines.findIndex(line => line.includes(text)) + 1;
+
+    const {notes} = await runnerNotes();
+
+    expect(
+      notes.map((/** @type {any} */ each) => [
+        each.section,
+        each.line,
+        each.command,
+      ]),
+    ).toEqual([
+      ['First', lineHolding('Run `npx astryx doctor`.'), 'npx astryx doctor'],
+      ['Second', lineHolding('again.'), 'npx astryx doctor'],
+      ['Third', lineHolding('Or plain'), 'npx astryx'],
+    ]);
+  });
+
+  it('puts each copy of an identical one-line string on its own line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {docs: './docs'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const block = {type: 'code', lang: 'bash', code: 'npx astryx doctor'};
+    const doc = {
+      type: 'generic',
+      name: 'acme-setup',
+      title: 'Fixture',
+      description: 'Fixture topic.',
+      sections: [
+        {title: 'First', content: [block]},
+        {title: 'Second', content: [block]},
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'),
+      `export default ${JSON.stringify(doc, null, 2)};\n`,
+    );
+    const lines = fs
+      .readFileSync(path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'), 'utf8')
+      .split('\n');
+    const copies = lines.flatMap((line, at) =>
+      line.includes('"npx astryx doctor"') ? [at + 1] : [],
+    );
+
+    const {notes} = await runnerNotes();
+
+    expect(copies).toHaveLength(2);
+    expect(
+      notes.map((/** @type {any} */ each) => [each.section, each.line]),
+    ).toEqual([
+      ['First', copies[0]],
+      ['Second', copies[1]],
+    ]);
+  });
+
+  it("places a section's command on its own line when the section sits in a constant above the doc", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {docs: './docs'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'),
+      [
+        "const install = {title: 'Install', content: [{type: 'prose', text: 'Run `npx astryx doctor`.'}]};",
+        '',
+        'export default {',
+        "  type: 'generic',",
+        "  name: 'acme-setup',",
+        "  title: 'Fixture',",
+        "  description: 'Install first: `npx astryx doctor`.',",
+        '  sections: [install],',
+        '};',
+        '',
+      ].join('\n'),
+    );
+
+    const {notes} = await runnerNotes();
+
+    expect(
+      notes.map((/** @type {any} */ each) => [each.section, each.line]),
+    ).toEqual(
+      expect.arrayContaining([
+        [null, 7],
+        ['Install', 1],
+      ]),
+    );
+  });
+
+  it('lists package-manager commands, bare commands and broken tokens with the token to write, all for the next minor', async () => {
+    writeTopic(
+      'Add it with `npm install -D @acme/widgets`, run `astryx search acme`, then {@pm add x} and {@cmd docs}. Only npm: `npm pkg set name=x`.',
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const notes = (data.notes ?? []).filter(
+      (/** @type {any} */ note) =>
+        note.code !== 'runner_command' && !LISTING_CODES.has(note.code),
+    );
+
+    expect(
+      notes.map((/** @type {any} */ note) => [note.code, note.next]),
+    ).toEqual([
+      ['package_manager_command', true],
+      ['plain_command', true],
+      ['doc_token', true],
+      ['doc_token', true],
+      ['package_manager_command', true],
+      // The fixture's install step, in its bash block.
+      ['package_manager_command', true],
+    ]);
+    const messages = notes.map((/** @type {any} */ note) => note.message);
+    expect(messages[0]).toContain('{@pm install @acme/widgets --dev}');
+    expect(messages[1]).toContain('{@command search acme}');
+    expect(messages[2]).toContain('{@pm}` starts with a verb');
+    expect(messages[3]).toContain('Doc tokens are');
+    expect(messages[4]).toContain(
+      '{@pm-only npm "<why only npm>" pkg set name=x}',
+    );
+    expect(messages[5]).toContain('{@pm dlx @astryxdesign/cli init}');
+    expect(data.issues.map((/** @type {any} */ issue) => issue.code)).toEqual(
+      [],
+    );
+  });
+
+  it('reads a verb named alone as a mention, and TSDoc tags in a TypeScript sample as code', async () => {
+    writeTopic(
+      'Scripts run with `npm run`, `pnpm dlx` fetches a package, and `npm i -g`, `yarn global add` and `npm pkg set` each take one.',
+    );
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace(
+        /\{"type":"code"[^}]*\}/,
+        JSON.stringify({
+          type: 'code',
+          lang: 'ts',
+          code: '/** {@inheritDoc Base.render} */\nexport const x = 1;',
+        }),
+      ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    expect(
+      (data.notes ?? []).filter((/** @type {any} */ note) =>
+        ['package_manager_command', 'doc_token'].includes(note.code),
+      ),
+    ).toEqual([]);
+  });
+
+  it('lists a token that never closes, in prose and in any code block', async () => {
+    writeTopic(
+      'Install with {@pm install @acme/widgets --dev before you start.',
+    );
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace(
+        /\{"type":"code"[^}]*\}/,
+        JSON.stringify({
+          type: 'code',
+          lang: 'tsx',
+          code: '// {@pm install @acme/widgets --dev\nexport const x = 1;',
+        }),
+      ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0].message).toContain('never closes');
+  });
+
+  it('lists a {@command} token that names no Astryx command', async () => {
+    writeTopic('Run {@command dcotor} before you ship.');
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].message).toContain('`dcotor` is not an Astryx command');
+  });
+
+  it('reads the command after leading global flags in a {@command} token', async () => {
+    writeTopic(
+      'Read it as data with {@command --json component Button} or {@command --detail full docs acme}, not {@command --json dcotor}, {@command --json nosuch docs} or {@command --detail full nosuch}. Check the version with {@command --version}; {@command --json} alone names nothing.',
+    );
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(
+      tokens.map(note => note.message.match(/`(\w+)` is not/)?.[1]),
+    ).toEqual(['dcotor', 'nosuch', 'nosuch', undefined]);
+    expect(tokens[3].message).toContain('names no Astryx command');
+  });
+
+  it('lists nothing for a topic written in the doc syntax', async () => {
+    writeTopic(
+      'Add it with {@pm install @acme/widgets --dev}, run {@command docs acme}, and {@pm-only npm "only npm has pkg" pkg set name=x}. Show the syntax: {@@pm install x}.',
+    );
+    // The fixture's bash block holds a scoped install step; write it as a token.
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          'npx @astryxdesign/cli init',
+          '{@pm dlx @astryxdesign/cli init}',
+        ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    expect(
+      (data.notes ?? []).filter(
+        (/** @type {any} */ note) => !LISTING_CODES.has(note.code),
+      ),
+    ).toEqual([]);
+  });
+
+  it('lists nothing for bare commands and the scoped install step', async () => {
+    writeTopic('Check it with `astryx doctor` first.');
+
+    const {notes} = await runnerNotes();
+    expect((await runnerNotes()).notes).toEqual([]);
   });
 });

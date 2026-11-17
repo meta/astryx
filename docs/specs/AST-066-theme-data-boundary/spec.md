@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-10-01
+approved_at: 2026-10-20
 phase: accepted
 owners: [cixzhang]
 affects_architecture:
@@ -23,13 +23,23 @@ affects_consumer_docs: [theme]
 
 # StyleX data-token ownership system spec
 
+## Prebuilt Core CSS carries the data-token defaults
+
+The public `dataVars` entry in prebuilt mode contains compiled `var()` references,
+not a `defineVars()` call. An application using that entry and the shipped Core
+CSS has no StyleX extraction step that can materialize the referenced defaults.
+Core's prebuilt stylesheet therefore carries the group as part of its public
+CSS contract; theme presence does not control its availability.
+
 ## Intent
 
 Astryx owns one canonical 56-token data palette in the same public StyleX token
 system as its other design tokens. Components import the public StyleX variable
 object instead of constructing literal `var(--color-data-*)` strings. The
-StyleX compiler emits the canonical group when a compiled consumer uses it and
-omits the group from builds that do not use it.
+StyleX compiler emits the canonical group when a source-compiled consumer uses it
+and omits the group from graph-based source builds that do not use it. Core's
+prebuilt `astryx.css` and the `@astryxdesign/build` PostCSS integration include
+the group whether or not a consumer imports it.
 
 A concrete theme emits only data-token values that the theme explicitly authors,
 inside its existing theme donut. It never carries the canonical defaults or a
@@ -41,10 +51,11 @@ JavaScript marker, and three existing global `color-scheme` rules remain stable.
 Runtime and built theme compilation produce the same sparse scoped override.
 
 StyleX 0.19 tree-shakes `defineVars` at the module/group boundary, not per
-property. The 56 data variables intentionally form one semantic group: a build
-emits zero data defaults when the module is unused and all 56 when any member is
-used. The contract does not claim token-granular pruning that the compiler does
-not provide.
+property. The 56 data variables intentionally form one semantic group: a
+graph-based source build emits zero data defaults when the module is unused and
+all 56 when any member is used. The prebuilt Core stylesheet and the
+`@astryxdesign/build` PostCSS integration always include the complete group. The
+contract does not claim token-granular pruning that the compiler does not provide.
 
 ## Non-goals
 
@@ -56,7 +67,8 @@ not provide.
   selectors.
 - Changing scoped prose defaults, non-data token declarations, component
   overrides, adaptations, MediaTheme rules, icon output, or type augmentation.
-- Defining the separate `@astryxdesign/build` source-build composition contract.
+- Defining the separate `@astryxdesign/build` source-build composition contract,
+  beyond FR3's data-group guarantee for its PostCSS integration.
 - Release scheduling and versioning beyond the breaking-minor requirement in
   FR17.
 - Equivalent internal implementations remain valid when they satisfy this
@@ -98,22 +110,38 @@ not provide.
   shape as `@astryxdesign/core/theme/tokens.stylex`; the existing StyleX
   `sideEffects` declaration continues to cover the source module. The focused
   subpath prevents ordinary Theme, token-resolution, or non-data component
-  imports from retaining the StyleX variable group as a side effect.
+  imports from retaining the StyleX variable group as a side effect in source
+  compilation. In prebuilt mode the same public entry provides compiled `var()`
+  references; loading `@astryxdesign/core/astryx.css` MUST supply their defaults
+  without requiring a consumer StyleX compilation step.
 
-- **FR3 — Tree-shaking is truthful at the group boundary.** A compiled graph
-  with no value import from the data StyleX subpath MUST emit no
-  `--color-data-*` default declarations. A graph that retains any `dataVars`
+- **FR3 — Tree-shaking is truthful at the group boundary.** A graph-based
+  source compilation, one that compiles the modules reachable from the
+  product's imports, with no value import from the data StyleX subpath MUST emit
+  no `--color-data-*` default declarations. A graph that retains any `dataVars`
   value import MUST emit one canonical StyleX variable group containing all 56
   defaults. Importing one member is not required to prune the other 55.
 
-  Distribution extraction MUST become dependency-aware as part of this
-  implementation. Starting from a package's public entries, it MUST exclude an
-  unreferenced variable-definition module and include a referenced cross-package
-  StyleX variable dependency exactly once. Therefore an all-component Core CSS
-  build with no data consumer omits the group, while a Lab package CSS build that
-  contains `ChartCandlestick` includes it. The existing isolated file scan is not
-  sufficient evidence for either result. Bundle evidence MUST report the raw and
-  compressed cost of the retained group.
+  The `@astryxdesign/build` PostCSS integration compiles every module Core
+  publishes rather than a reachable graph. Its output MUST contain exactly one
+  canonical 56-variable group, with every canonical name and value, whether or
+  not the product imports `dataVars`.
+
+  Core's prebuilt `@astryxdesign/core/astryx.css` MUST contain exactly one
+  canonical 56-variable group even when no Core component consumes it. The
+  package's compiled public `dataVars` entry exposes CSS references that this
+  stylesheet MUST define; consumer imports cannot trigger extraction from the
+  already-compiled entry. This exception applies only to the prebuilt Core
+  stylesheet and the PostCSS integration above, not to graph-based source
+  compilation or concrete themes.
+
+  Distribution output MUST remain dependency-aware: referenced cross-package
+  StyleX variable dependencies appear exactly once across a satellite stylesheet
+  and its required provider stylesheet. A data-consumer package whose provider
+  already declares the group MUST NOT repeat it; without that provider, a
+  retained group MUST be emitted. Unreferenced groups other than the explicit
+  Core distribution exception remain absent. Bundle evidence MUST report the raw
+  and compressed cost of the retained group.
 
   Supported source and distribution integrations MUST place the emitted variable
   group in `@layer astryx-base`, like other Astryx StyleX output. An unlayered
@@ -134,16 +162,21 @@ not provide.
   FR13. The generated compatibility view keeps that resolver derived from the
   same canonical `.stylex.ts` source.
 
-  Raw CSS and generated examples that cannot consume a TypeScript object MAY
-  reference the same stable custom-property names only when their setup already
-  guarantees that a compiled data-variable consumer retained the group, or when
-  they provide an explicit local fallback. Documentation MUST not imply that a
-  theme stylesheet itself materializes the defaults.
+  In prebuilt mode, raw CSS and consumer code MAY reference the stable
+  `var(--color-data-*)` names with no fallback: the prebuilt Core stylesheet
+  defines the complete group under FR3. A source-built product reads data colors
+  through `dataVars`, which retains the group in the source graph. The
+  `@astryxdesign/build` PostCSS integration always emits the group under FR3; a
+  graph-based source build that does not import `dataVars` leaves raw
+  references undefined, which is unsupported. An explicit local fallback remains valid in
+  every mode. Documentation MUST not imply that a theme stylesheet itself
+  materializes the defaults.
 
 - **FR5 — Direct SVG and DOM values paint correctly.** A `dataVars` value passed
   directly to an SVG presentation attribute or DOM style MUST compile to the
-  stable `var(--color-data-*)` reference and retain the variable-definition
-  module in the build graph. Default and theme-overridden values MUST paint the
+  stable `var(--color-data-*)` reference. In source compilation the import MUST
+  retain the variable-definition module; in prebuilt mode Core's stylesheet MUST
+  provide the group under FR3. Default and theme-overridden values MUST paint the
   expected fill and stroke. An undeclared data variable paints a candlestick
   body black and drops its wick stroke; that state MUST NOT recur.
 
@@ -172,8 +205,9 @@ not provide.
   `<Theme>` injection nor standalone, multi-file, or family `theme build` output
   may emit canonical data defaults on `:root`, `html`, `body`, or another
   out-of-donut selector. Theme compilation MUST not call, inline, or retain a
-  raw `generateDataTokenDefaultsCSS()` equivalent. The StyleX consumer graph is
-  the only CSS-default owner.
+  raw `generateDataTokenDefaultsCSS()` equivalent. The canonical StyleX group,
+  retained by source consumers or Core distribution under FR3, is the only
+  CSS-default owner.
 
   Removing the old defaults block MUST NOT remove its layer-order side effect.
   Every standalone, multi-file, family, and runtime theme output MUST retain an
@@ -216,13 +250,17 @@ not provide.
 
 ### Availability and JavaScript compatibility
 
-- **FR12 — Availability follows actual StyleX use, not Theme presence.** If no
-  compiled consumer retains `dataVars`, the output contains no data-variable
-  defaults. When one consumer retains the group, standard StyleX 0.19 output
-  declares the complete group on `:root` plus its variable-group class, exactly
-  like existing canonical StyleX token groups. This global declaration is an
-  accepted compiler consequence of the chosen canonical token system; it MUST
-  NOT be attributed to or duplicated by theme build.
+- **FR12 — Availability follows the compilation mode, not Theme presence.** A
+  graph-based source build without a compiled consumer retaining `dataVars`
+  contains no data-variable defaults. Core's prebuilt stylesheet always retains
+  the group under FR3, because the compiled public entry alone cannot emit
+  definitions, and the `@astryxdesign/build` PostCSS integration always retains
+  it because it compiles all published Core source. In every mode, standard
+  StyleX 0.19 output declares the complete group on
+  `:root` plus its variable-group class, exactly like existing canonical StyleX
+  token groups. This global declaration is an accepted compiler consequence of
+  the chosen canonical token system; it MUST NOT be attributed to or duplicated
+  by theme build.
 
   In supported Astryx source and distribution integrations, the emitted group
   MUST be wrapped in `@layer astryx-base`. A bare StyleX transform emits the same
@@ -293,10 +331,10 @@ not provide.
 - **FR18 — Migration prefers public imports, not compatibility CSS.** Astryx
   component, fixture, example, and test migrations MUST replace constructible
   literal strings with `dataVars` references when the source is StyleX-capable.
-  Upgrade tooling and regeneration MUST reject stale raw root defaults, identify
-  direct raw consumers, and recommend the public StyleX import when appropriate.
-  Raw CSS and generated templates that already carry explicit fallbacks remain
-  valid after review. Migration MUST NOT add a legacy global-data theme mode,
+  Upgrade tooling and regeneration MUST reject stale raw root defaults. Upgrade
+  tooling does not inspect direct raw consumers and MUST NOT require a fallback
+  for them. Raw CSS and generated templates that already carry explicit
+  fallbacks remain valid. Migration MUST NOT add a legacy global-data theme mode,
   provider prop, sidecar stylesheet, arbitrary Theme wrapper, or invented
   fallback color.
 
@@ -308,11 +346,12 @@ not provide.
   still contains the canonical root block or a theme-scoped un-authored default.
 
 - **FR20 — Consumer docs distinguish three paths.** Documentation MUST show:
-  (1) `dataVars` for StyleX-capable component code; (2) JavaScript token
-  resolution for APIs that need concrete mode-resolved values; and (3) raw CSS
-  custom-property use only with an explicit availability guarantee or fallback.
-  It MUST state whole-group tree-shaking honestly and keep `@astryxdesign/build`,
-  color-scheme compatibility, and release work outside this change.
+  (1) `dataVars` for StyleX-capable component code, the path a source build
+  uses; (2) JavaScript token resolution for APIs that need concrete
+  mode-resolved values; and (3) raw CSS custom-property use in prebuilt mode,
+  where `@astryxdesign/core/astryx.css` supplies the defaults, or with an
+  explicit fallback. It MUST state whole-group tree-shaking honestly and keep
+  color-scheme compatibility and release work outside this change.
 
 ### Platform support
 
@@ -324,46 +363,34 @@ not provide.
 
 ## Current-state impact
 
-Theme compilation currently owns the canonical data defaults. Runtime `<Theme>`
-injection and every `theme build` mode emit one unconditional
-`@layer astryx-base { :root { ...56 defaults... } }` block generated from the
-plain `dataTokenDefaults` JavaScript object, while authored data values already
-stay sparse inside the theme donut. Core StyleX CSS declares no data custom
-property, and Astryx components that need a data color construct literal
-`var(--color-data-*)` strings.
+The public StyleX data group owns canonical CSS defaults; the compatibility,
+type, validation, and documentation views derive from it. Graph-based source
+compilation retains whole-group tree-shaking. Core's prebuilt stylesheet supplies
+the same group for the compiled public `dataVars` entry, without a consumer
+compilation step or runtime Theme injection, and the `@astryxdesign/build`
+PostCSS integration always emits it.
 
-When this contract ships:
+Concrete standalone and family themes contain only authored scoped overrides.
+Nested themes inherit omissions, JavaScript resolution remains compatible, and
+the global `color-scheme` rules, built marker, filenames, and paired CSS/JS/type
+outputs are unchanged.
 
-- the canonical palette becomes one public StyleX `dataVars` group;
-- the compatibility defaults, types, validation, and docs derive from the same
-  canonical record;
-- unused compiled graphs emit zero data defaults and a retained group emits all
-  56, matching StyleX's real grouping behavior;
-- Astryx TSX consumers use the public object rather than literal strings;
-- concrete standalone and family themes emit only authored scoped overrides;
-- runtime and built theme paths emit no raw root data block;
-- nested themes inherit omitted values and siblings isolate authored overrides;
-- JavaScript resolution APIs and stable CSS names remain compatible;
-- the three global `color-scheme` rules remain unchanged where emitted;
-- generated JavaScript keeps `__built: true`; and
-- CLI output filenames and the CSS/JS/type trio remain unchanged.
-
-`architecture:theme-compilation` continues to own runtime/static sparse theme
-output. `architecture:theme-application` continues to own provider nesting and
-style lifetime. `architecture:theme-tokens` owns the shared token vocabulary and
-derived compatibility views; the public StyleX data-token module owns canonical
-CSS defaults. This record does not govern `@astryxdesign/build`.
+`architecture:theme-compilation` owns runtime/static sparse theme output.
+`architecture:theme-application` owns provider nesting and style lifetime.
+`architecture:theme-tokens` owns the shared vocabulary and derived compatibility
+views; this record's FR3 owns the prebuilt and PostCSS data-group availability
+guarantees. Beyond that guarantee, `spec:AST-080` governs `@astryxdesign/build`.
 
 ## Verification
 
-| Contract  | Verification                                                                | Representative states                                                                                                                           | Mutation or failure expectation                                                                                                                                          |
-| --------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1–FR3   | generator drift, public export, graph-aware compiler, and package CSS tests | all 56 names; unused graph; one retained member; cross-package dependency; source and precompiled builds; raw/gzip size                         | plain defaults drift; public key changes; unused build emits data vars; referenced package omits them; one use emits fewer/more than the complete group; duplicate group |
-| FR4–FR5   | source audit, compiler fixture, component tests, real Chromium              | direct SVG fill/stroke; DOM style; Canvas concrete resolution; explicit props; canonical green/red; authored override                           | literal construction remains; direct CSS value does not retain definitions; Canvas receives `var()`; body paints black or wick disappears                                |
-| FR6–FR7   | runtime/static/family structure and layer-order tests                       | zero/one/many authored names; all 56 canonical names; `:root`/html/body scan; theme CSS before/after component CSS                              | omitted default serialized; authored value outside donut; raw defaults remain; layer order flips                                                                         |
-| FR8–FR11  | real-browser cascade matrix                                                 | same/different nesting; parent/child subsets; siblings; dynamic switch; light/dark/system/MediaTheme; portals; layered and unlayered source CSS | omission resets; sibling leaks; order/mode changes winner; unlayered root silently claims override parity                                                                |
-| FR12–FR16 | compiler/runtime/build parity and environment-policy tests                  | no data consumer; retained layered group; runtime and built themes; standalone and family color-scheme composition                              | Theme presence emits defaults; built/runtime differ; family repeats defaults; global policy diverges                                                                     |
-| FR17–FR20 | Changeset, codemod, CLI check, docs, and regeneration fixtures              | literal component/fixture use; raw CSS with/without fallback; old root artifact; ordinary/family build                                          | no breaking note; unsafe auto-rewrite; stale artifact passes; docs claim theme CSS supplies defaults or token-granular pruning                                           |
+| Contract  | Verification                                                                                     | Representative states                                                                                                                                                                            | Mutation or failure expectation                                                                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR3   | generator drift, public export, graph-aware compiler, PostCSS integration, and package CSS tests | graph-based source graphs without imports; PostCSS build without a `dataVars` import, development and production; prebuilt Core; one retained member; cross-package provider pair; raw/gzip size | plain defaults drift; public key changes; unused graph-based source emits data vars; prebuilt Core or PostCSS build omits or changes any; one use emits fewer/more than 56; duplicate group |
+| FR4–FR5   | source audit, compiler fixture, component tests, real Chromium                                   | direct SVG fill/stroke; DOM style; Canvas concrete resolution; explicit props; canonical green/red; authored override                                                                            | literal construction remains; direct CSS value does not retain definitions; Canvas receives `var()`; body paints black or wick disappears                                                   |
+| FR6–FR7   | runtime/static/family structure and layer-order tests                                            | zero/one/many authored names; all 56 canonical names; `:root`/html/body scan; theme CSS before/after component CSS                                                                               | omitted default serialized; authored value outside donut; raw defaults remain; layer order flips                                                                                            |
+| FR8–FR11  | real-browser cascade matrix                                                                      | same/different nesting; parent/child subsets; siblings; dynamic switch; light/dark/system/MediaTheme; portals; layered and unlayered source CSS                                                  | omission resets; sibling leaks; order/mode changes winner; unlayered root silently claims override parity                                                                                   |
+| FR12–FR16 | compiler/runtime/build parity and environment-policy tests                                       | no data consumer; retained layered group; runtime and built themes; standalone and family color-scheme composition                                                                               | Theme presence emits defaults; built/runtime differ; family repeats defaults; global policy diverges                                                                                        |
+| FR17–FR20 | Changeset, codemod, CLI check, docs, and regeneration fixtures                                   | literal component/fixture use; raw CSS with/without fallback in prebuilt and source builds; old root artifact; ordinary/family build                                                             | no breaking note; unsafe auto-rewrite; stale artifact passes; raw use fails upgrade; docs claim theme CSS supplies defaults or token-granular pruning                                       |
 
 Real-browser verification MUST independently assert canonical and authored values,
 not reuse generator output as the oracle. It MUST reproduce the
@@ -377,13 +404,19 @@ Canvas assignment never receives a `var()` reference. An unlayered StyleX output
 MUST be a red arm: it must demonstrate why the supported integration wraps
 canonical defaults in `astryx-base` rather than being reported as equivalent.
 
-Compiler verification MUST compile an unused entry and a one-member consumer.
-The unused output contains zero `--color-data-*` defaults; the retained output
-contains every canonical name exactly once in the StyleX variable group. It MUST
-not claim per-property pruning. Distribution verification MUST start from real
-package entries, resolve the cross-package StyleX variable dependency, prove Core
-omits an unreferenced group and Lab retains a referenced group, and report raw and
-gzip deltas.
+Compiler verification MUST compile an unused entry and a one-member consumer
+through a graph-based pipeline. The unused output contains zero
+`--color-data-*` defaults; the retained output contains every canonical name
+exactly once in the StyleX variable group. It MUST not claim per-property
+pruning. PostCSS integration verification MUST run the documented configuration
+over a product that does not import `dataVars`, in development and production
+modes, and compare the output with the canonical source: every name and value
+exactly once, declared on `:root` inside `@layer astryx-base`. Distribution verification MUST prove Core's
+prebuilt stylesheet defines all 56 canonical values exactly once and a
+satellite/provider pair does not duplicate the group. A production application
+using only the prebuilt CSS and the compiled public `dataVars` entry MUST paint
+canonical and authored values in both light/dark modes and both stylesheet load
+orders. Report raw and gzip deltas for the retained group.
 
 Theme-output verification MUST enumerate all 56 canonical names and fail if an
 un-authored canonical value appears in standalone, multi-file, family, or runtime
@@ -396,13 +429,13 @@ family composition.
 
 ### Completion criteria
 
-This accepted specification remains incomplete until the implementation stack
-proves:
+Conformance requires:
 
 - one canonical `.stylex.ts` source, a public `dataVars` export, and generated
   compatibility/type/validation views;
-- truthful whole-group StyleX tree-shaking through graph-aware source and
-  precompiled extraction;
+- truthful whole-group tree-shaking in graph-based source builds, the complete
+  group in PostCSS integration output, and the explicit prebuilt-Core
+  availability guarantee, with dependency-aware satellite deduplication;
 - migrated Astryx consumers with no constructible raw data-var strings;
 - sparse donut overrides and zero theme-build raw defaults across runtime,
   standalone, multi-file, and family modes;
@@ -436,9 +469,10 @@ to disagree.
 StyleX 0.19 emits a complete `defineVars` group when its module is retained and
 cannot prune individual object properties. One data palette group matches the
 existing `colorVars` model, keeps the public API coherent, and gives an honest
-zero-or-56 boundary. Precompiled package CSS must become graph-aware so this
-module boundary remains truthful across packages rather than degenerating into a
-repository file scan.
+source-compiled zero-or-56 boundary. Precompiled package CSS remains graph-aware
+across packages, with the explicit Core distribution exception in FR3; it does
+not use a repository-wide file scan. DEC-10 scopes the boundary to graph-based
+source builds.
 
 Rejected: claiming token-granular pruning, or splitting the palette across many
 files solely to simulate it. Both would make the API and maintenance cost exceed
@@ -476,8 +510,9 @@ default.
 
 `stylex.defineVars(defaults)` emits its group on `:root` plus a variable-group
 class. This is the same canonical mechanism as existing token groups. The strict
-boundary in this decision is therefore ownership: unused graphs emit nothing and
-theme build never emits data defaults globally.
+boundary in this decision is therefore ownership: unused graph-based source
+graphs emit nothing, Core distribution and the PostCSS integration retain the
+group under FR3 (DEC-10), and theme build never emits data defaults globally.
 
 Rejected: promising that retained canonical StyleX variables are absent from
 unthemed DOM. Standard `defineVars` cannot make that promise; a manually scoped
@@ -519,6 +554,40 @@ The release uses a breaking 0.x minor with regeneration and consumer diagnostics
 Rejected: a legacy global-data mode. It would keep new artifacts on the behavior
 this decision removes and make runtime/static ownership mode-dependent.
 
+### DEC-9 — Prebuilt Core CSS defines the public data-variable entry
+
+**Reference:** `spec:AST-066/DEC-9`
+**Decider:** `cixzhang`, `2026-10-20`
+
+The prebuilt public `dataVars` entry contains CSS `var()` references with no
+surviving `defineVars()` call. A prebuilt-CSS consumer cannot retain defaults by
+importing that already-compiled object. Core's stylesheet therefore includes the
+single canonical group, like its other public token defaults. Graph-based
+source compilation retains the zero-or-56 rule (DEC-10); themes contain only
+authored deltas. The fixed
+cost is one group of 56 declarations, not a second source or a new runtime mode.
+
+Rejected: requiring prebuilt consumers to compile the source token entry, because
+it defeats the prebuilt-CSS contract and its documented import path.
+
+### DEC-10 — Source builds read data colors through `dataVars`
+
+**Reference:** `spec:AST-066/DEC-10`
+**Decider:** `cixzhang`, `<pending>`
+
+Raw `var(--color-data-*)` strings are the prebuilt path: Core's stylesheet
+defines the group (FR3, DEC-9). A source build reads data colors through
+`dataVars`, which retains the group in a graph-based pipeline and keeps DEC-2's
+zero-or-56 boundary there. The `@astryxdesign/build` PostCSS integration
+compiles every module Core publishes, so its output always carries the complete
+group in `astryx-base`. This decision scopes DEC-2's source boundary and DEC-5's
+unused-graph rule to graph-based source builds. Upgrade tooling requires no
+fallback for raw consumers (FR18); raw strings in a graph-based source build
+without a `dataVars` import are unsupported (FR4).
+
+Rejected: an upgrade check that infers the build mode and requires fallbacks,
+since no project signal reliably separates prebuilt from source builds.
+
 ## Deprecation and cleanup records
 
 ### IFIX-0009 — Themes stop emitting raw global data-color defaults
@@ -529,13 +598,13 @@ this decision removes and make runtime/static ownership mode-dependent.
 | cleanup       | `CLN-0016`                                                                                                                                                                                                                                                  |
 | package       | `@astryxdesign/core`, `@astryxdesign/cli`                                                                                                                                                                                                                   |
 | surface       | The unscoped raw `:root` block of canonical data-color defaults that `Theme` runtime and `theme build` (standalone and family) emit for every theme                                                                                                         |
-| authority     | FR6 (concrete themes emit only explicitly authored data values), FR7 (theme build never emits raw global data defaults), and FR12 (availability follows StyleX use). Owners: `spec:AST-066`: `cixzhang`                                                     |
+| authority     | FR6 (concrete themes emit only explicitly authored data values), FR7 (theme build never emits raw global data defaults), and FR12 (availability follows compilation mode, not Theme presence). Owners: `spec:AST-066`: `cixzhang`                           |
 | reproducer    | With the latest stable packages, a theme that authors no data colors emits every canonical data default in an unscoped root block, in runtime CSS and in `theme build` output                                                                               |
 | affected      | CSS that reads a raw data-color custom property directly, relying on a theme to define it, without compiling a `dataVars` consumer; and stale generated theme CSS checked into an app                                                                       |
 | matrix        | Theme with no authored data colors: every canonical default before; none after. Authored override: emitted before and after, scoped to its theme. StyleX `dataVars` consumers: same painted values before and after. Global `color-scheme` rules: unchanged |
-| coexistence   | The public `dataVars` group carries the canonical values before and after, so a consumer that reads `dataVars` gets the same values on both                                                                                                                 |
+| coexistence   | The public `dataVars` group supplies canonical values through retained source compilation or the prebuilt Core stylesheet; a compiled import alone does not emit CSS.                                                                                       |
 | migration     | Read data colors through the public `dataVars` group, or author the needed values in the theme. Regenerate built theme CSS                                                                                                                                  |
-| codemod       | `astryx upgrade` runs a validator that reports direct raw consumers and stale generated CSS; the rewrite depends on whether the consumer compiles StyleX                                                                                                    |
+| codemod       | `astryx upgrade` runs a validator that rejects stale generated CSS; direct raw consumers need no codemod                                                                                                                                                    |
 | downstream    | Maintained docs and templates read data colors through `dataVars`                                                                                                                                                                                           |
 | rollback      | Restore the raw default block in runtime and `theme build` output from the final-patch baseline                                                                                                                                                             |
 | harm of delay | Every theme keeps shipping a second global palette that survives without any consumer and can disagree with the canonical StyleX group                                                                                                                      |

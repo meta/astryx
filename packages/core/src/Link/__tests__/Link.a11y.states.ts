@@ -73,7 +73,7 @@ export const LINK_A11Y_EXCLUSIONS = [
   {
     owner: 'Link component tests and family:navigation-destinations FR7',
     reason:
-      'A disabled Link renders an href-less anchor that is neither a link nor focusable. That disabled semantics is member-owned, so disabled states are not bound to this available-link contract.',
+      'A disabled Link renders a focusable, href-less anchor with an explicit link role and aria-disabled, so it cannot navigate. That disabled semantics is member-owned, so disabled states are not bound to this available-link contract.',
   },
   {
     owner: 'Link component tests (button rendering)',

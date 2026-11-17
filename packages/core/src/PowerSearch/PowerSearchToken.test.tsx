@@ -218,11 +218,13 @@ describe('PowerSearchToken', () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
-  it('disables both the activation and remove buttons when isDisabled is set', () => {
+  it('marks both the activation and remove buttons disabled when isDisabled is set', () => {
     renderToken({onClick: vi.fn(), onRemove: vi.fn(), isDisabled: true});
-    expect(screen.getByRole('button', {name: 'Status: is'})).toBeDisabled();
-    expect(
-      screen.getByRole('button', {name: 'Remove Status: is'}),
-    ).toBeDisabled();
+    // spec:AST-085 FR1: focusable, exposed through aria-disabled.
+    for (const name of ['Status: is', 'Remove Status: is']) {
+      const button = screen.getByRole('button', {name});
+      expect(button).not.toHaveAttribute('disabled');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+    }
   });
 });

@@ -24,6 +24,9 @@ export const docs = {
     'docker',
     'read-only home',
     'cache the release cache',
+    'agent machine',
+    'restart',
+    'ephemeral machine',
   ],
   description:
     "What Astryx does in CI and containers: no update checks or notices, the project's version as always, and how to cache versions or work with a read-only home folder.",
@@ -71,6 +74,16 @@ export const docs = {
         {
           type: 'prose',
           text: "When the cache cannot be written, a project whose own CLI cannot start is answered by the global install, with a warning naming the folder. Point `XDG_CACHE_HOME` at a writable absolute path, or reinstall the project's dependencies. The global install's daily check and agent guide are skipped quietly when they cannot be written.",
+        },
+      ],
+    },
+    {
+      id: 'short-lived',
+      title: 'Machines that keep only the home folder',
+      content: [
+        {
+          type: 'prose',
+          text: 'Some agent machines keep the home folder across restarts but not system folders. A global install there disappears on restart while the agent guide in the home folder stays, so agents are told to run a global astryx command that is gone; the guide says to run the command that installed the CLI, such as `{@pm install @astryxdesign/cli --global}`, when that command is not found, and `astryx doctor` names the same step. To keep the CLI across restarts, install it into a folder in your home and put its `bin` folder on your PATH, as for a permission error ({@link generic:install-once}), or run that command when the machine starts.',
         },
       ],
     },

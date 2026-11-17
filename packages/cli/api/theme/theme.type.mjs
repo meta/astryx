@@ -31,14 +31,19 @@
  * `warnings` are defects the theme author should fix. `notices` are advisories
  * about a correct theme — most of them cannot be fixed in a theme file at all,
  * so folding them into `warnings` makes a clean build look dirty.
- * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[]}} data
+ * `base`, on a `--family` build only, is the theme the family's root extends
+ * that the family does not select: `package` is the installed package it comes
+ * from, a requirement of the outputs (null for a local base), and `export` the
+ * name the root imports it by (null for a theme the root's file defines).
+ * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
 /**
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE'}} data
+ *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
 /**
@@ -58,10 +63,19 @@
  * @property {string} displayName
  * @property {string} description
  * @property {boolean} maintained
- * @property {string} [package] source-selector package or local theme root; bundled themes retain @astryxdesign/cli
+ * @property {string} [package] source-selector package or local theme root; bundled themes retain `@astryxdesign/cli` (in backticks: a bare `@` word would end this typedef as a tag)
  * @property {boolean} [added] whether the app module records this theme
  * @property {boolean} [default] whether this is the app's default theme
  * @property {'bundled'|'package'|'local'} [source] where the theme source comes from
+ * @property {{export: string, from: string}} [wiredBy] the provider component
+ *   the owning integration wires its themes with (its manifest's
+ *   `themeProvider`): an app renders `export`, imported from `from`
+ * @property {string} [owner] what `theme add` records and the app imports the
+ *   built theme from: the package (a bundled theme's own, such as
+ *   `@astryxdesign/theme-neutral`) or the local themes root
+ * @property {boolean} [installed] whether its owner is installed: the owner
+ *   package is installed, or it is a local theme (in the project); `theme add`
+ *   refuses a theme whose owner package is not installed
  */
 
 /**
@@ -79,7 +93,7 @@
  * @typedef {object} ThemeListResponse
  * @property {'theme.list'} type
  * @property {ThemeListEntry[]} data
- * @property {{unmigratedCopies: ThemeUnmigratedCopy[]}} [meta] descriptor-less released copies that are not listed as themes
+ * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
  */
 
 /**
@@ -91,6 +105,9 @@
  * @property {string} stylesheet production stylesheet import
  * @property {string} [fontStylesheet] package-owned font stylesheet import
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode the theme has, when its
+ *   built module exports one (`colorModes`); the generated module then lists
+ *   it in `themeModes`. Absent for a theme with both modes.
  */
 
 /**
@@ -99,7 +116,34 @@
  * @property {'theme.app'} type
  * @property {string} [package] npm package that owns the theme `theme add`
  *   added. Omitted for a local theme, and for remove and use.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}}} data
+ * `notes` is present only when the command did more than its change says:
+ * it chose between a local and a package theme with one slug, replaced a
+ * recorded owner, or dropped a recorded theme whose source is gone.
+ * `change.wireModes` is present when the module lists a theme's one color
+ * mode (`themeModes`) for the first time after the app was wired: the app's
+ * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
+ * `change.moduleRemoved` is present when `theme remove` removed the only
+ * added theme and deleted the module at `modulePath`: `themes` is empty,
+ * `default` is `''`, and the app root must drop the module's wiring.
+ * `change.themeModes` is present then when that wiring imported `themeModes`.
+ * `appProvider` names the provider an installed package declares as the one
+ * that wires its themes (its manifest's `themeProvider`). `wiredBy` lists
+ * each such provider as `theme list` names it, `{export, from}`, with
+ * `themeProp` and `modeProp` when the provider takes the theme and its mode
+ * through those props. `wire` is what the text prints before the wiring.
+ * On the first add it is present whenever such a provider exists: `wire`
+ * says the app may already get its theme from it and names the props it
+ * takes; with exactly one provider, taking the theme, the wiring the text
+ * shows is that provider with the module's theme passed (`themeProp`, and
+ * `line`, its opening JSX), in place of a Theme wrap; otherwise `wire` adds
+ * each provider's trade-off (replacing it drops what else it sets up; a
+ * Theme inside it themes only what it wraps) above the Theme wiring. On a
+ * later add that marks `wireModes`, and on the removal of the last theme,
+ * it is present only when that one provider takes the theme: `wire` says
+ * how its wiring changes, with `line` the provider's opening JSX (passing
+ * the mode when it takes one and an added theme has one color mode). No
+ * receipt reads app source.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 
 /**
@@ -109,7 +153,10 @@
  * `maintained` describes the selected source theme. The ejected descriptor is
  * always written with `maintained: false` because the app owns the fork.
  * `package` is the source selector; bundled themes retain `@astryxdesign/cli`.
- * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[]}} data
+ * `missingPackages` names the packages the fork imports that the app does not
+ * declare (empty when none); `installCommand` installs them, and is null when
+ * none are missing or the package manager is undetermined.
+ * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null}} data
  */
 
 /**
@@ -118,7 +165,11 @@
  * re-run, and an edited template is the consumer's file to keep.
  * @typedef {object} ThemeTemplateResponse
  * @property {'theme.template'} type
- * @property {{path: string, written: boolean, reason: 'exists' | null}} data
+ * @property {{path: string, written: boolean, reason: 'exists' | null, overwritable?: boolean, alternative?: string | null}} data
+ *   When the file was left as is, `overwritable` says whether `--overwrite`
+ *   would replace it (a copy of the template or a theme source, outside a
+ *   theme the editor made), and `alternative` is a free path for the template
+ *   when it would not.
  */
 
 /**
@@ -168,7 +219,28 @@
  */
 
 /**
+ * Mutes the dark edge of every chromatic family. Their dark ramps keep
+ * `edgeMultiplier` of their in-gamut chroma through `throughStop`, then
+ * recover along a smoothstep to the standard recipe at `recoverAtStop`. Light
+ * ramps, neutral families, and the black and white endpoints do not change.
+ * @typedef {object} TonalPaletteDarkChromaTaper
+ * @property {number} edgeMultiplier Share of chroma, from 0 to 1, that the
+ * dark edge keeps.
+ * @property {number} throughStop Last stop that takes the full edge
+ * multiplier; must be a requested stop.
+ * @property {number} recoverAtStop First stop back on the standard recipe;
+ * must be a requested stop after `throughStop`.
+ * @property {Record<string, number>} [familyMultipliers] Edge multipliers,
+ * from 0 to 1, by chromatic family id, in place of `edgeMultiplier`.
+ */
+
+/**
  * @typedef {object} TonalPaletteGenerationInput
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
+ * run: astryx-oklch-v1 when none is named, so a request or config made
+ * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
+ * follow the vibrancy and the seed's own chroma. New palettes name v2 (the
+ * theme editor records it); a config pins its recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).
@@ -177,6 +249,8 @@
  * `warm-v1` and `cool-v1` add a slight tint, and `custom` derives the hue from
  * the family's own seed. Defaults to `neutral-v1`.
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} [modeStrategy]
+ * @property {TonalPaletteDarkChromaTaper} [darkChromaTaper] Mutes the dark
+ * edge of the chromatic families.
  * @property {number[]} [stops] Ordered stops shared by every requested family;
  * defaults to 0 through 100 in increments of 5. Decimal stops are supported,
  * and authors may omit the repeated black and white endpoints.
@@ -188,7 +262,7 @@
  * @typedef {object} TonalPaletteCandidate
  * @property {1} schemaVersion
  * @property {'candidate'} status
- * @property {'astryx-oklch-v1'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {'#000000'} black Exact solid black for theme authoring outside a tonal family.
  * @property {'#ffffff'} white Exact solid white for theme authoring outside a tonal family.
  * @property {number[]} stops Canonical order for iterating the palette's stop lookup maps.
@@ -230,10 +304,13 @@
 /**
  * The request as the generator resolved it, with every default filled in.
  * @typedef {object} TonalPaletteNormalizedRequest
- * @property {'astryx-oklch-v1'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
+ * @property {Required<TonalPaletteDarkChromaTaper>} [darkChromaTaper] The
+ * requested taper, with `familyMultipliers` filled in; present only when the
+ * request has a taper.
  * @property {number[]} stops
  * @property {Array<{id: string, name: string, seed: string, kind: 'chromatic' | 'neutral', anchors: TonalPaletteAnchor[]}>} families
  */
@@ -244,8 +321,14 @@
  * its request without rerunning generation.
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
- * @property {'astryx-oklch-v1'} recipe Recipe that produced the candidate.
- * @property {string} candidateSha256 SHA-256 over the candidate bytes as written.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe Recipe that produced the candidate.
+ * @property {'palette-generator-v1'} generatorVersion Generator
+ * implementation that ran the recipe.
+ * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
+ * Format of the candidate bytes `candidateSha256` covers: the TypeScript
+ * module for a `.ts` output, otherwise canonical JSON.
+ * @property {string} candidateSha256 SHA-256 over the candidate bytes in
+ * `candidateFormatVersion`, exactly as written when an output path is given.
  * @property {{version: string, sha256: string}} [preview] Present when preview
  * content was generated for the request, even if no file was written because
  * the target already exists.
@@ -257,7 +340,7 @@
  * astryx --json theme palette generate <config>
  * @typedef {object} ThemePaletteGenerateResponse
  * @property {'theme.palette.generate'} type
- * @property {{recipe: 'astryx-oklch-v1', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
+ * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
  */
 
 // Make this a module so the @typedefs above are importable as types via

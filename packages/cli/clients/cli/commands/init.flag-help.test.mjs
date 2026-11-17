@@ -67,6 +67,7 @@ describe('astryx init flag interactions', () => {
       expect(help).toContain(file);
     }
     expect(help).toMatch(/--agent-docs-path are refused/);
+    expect(help).toMatch(/at the project root \(where init writes them\) and in this folder/);
 
     await initJson(['--agent-docs-path', 'docs/AI.md']);
     await initJson([]);

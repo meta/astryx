@@ -10,10 +10,11 @@ export const docs = {
   usage: {
     description: 'A card that toggles between selected and unselected states with an accent border. For navigation use ClickableCard.',
     bestPractices: [
-      {guidance: true, description: 'Use for plan pickers, filter chips, or option grids.'},
-      {guidance: true, description: 'For single-select track one ID; for multi-select use a Set.'},
+      {guidance: true, description: 'Use for multi-select choices: filter chips, feature add-ons, or option grids where several can be on.'},
+      {guidance: true, description: 'Use for multi-select groups; track the selected IDs in a Set.'},
       {guidance: true, description: 'When focused, toggle selection with Space or Enter.'},
       {guidance: false, description: 'Use for navigation; use ClickableCard for that.'},
+      {guidance: false, description: 'Use for a single-select group: each card is a checkbox, so assistive technology announces a multi-select group with one tab stop per card.'},
     ],
     anatomy: [
       {name: 'Container', required: true, description: 'Interactive div with accent border on selection.'},
@@ -39,8 +40,7 @@ export const docs = {
     targets: [{className: 'astryx-selectable-card', visualProps: ['selected', 'variant']}],
     vars: [
       {name: '--selectable-card-ring-color', description: 'Colour of the selection ring drawn for a variant a theme added. The built-in variants each ring in their own border token and ignore this; a theme that adds a variant sets it in the same rule as that variant\'s `backgroundColor`, because no token the component could pick is guaranteed to contrast with a fill it cannot know.', default: 'var(--color-accent)'},
-      {name: '--_press-overlay', description: 'Fill of the ::after interaction overlay: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while pressed (`:active` on a mouse; `data-astryx-press="on"` written by the touch press controller under a finger) and the hover token for the release fade. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
-      {name: '--_press-overlay-transition', description: 'Duration of the overlay\'s background-color transition: the fast duration token, except 0s while a believed touch press paints so it lands on the first frame.', default: 'var(--duration-fast)', private: true},
+      {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
     ],
   },
   playground: {
@@ -66,10 +66,11 @@ export const docsDense = {
   usage: {
     description: 'Card toggling between selected/unselected states w/ accent border. For navigation use ClickableCard instead.',
     bestPractices: [
-      {guidance: true, description: 'Use for plan pickers, filter chips, option grids.'},
-      {guidance: true, description: 'For single-select track one ID; for multi-select use a Set.'},
+      {guidance: true, description: 'Use for multi-select choices: filter chips, add-ons, option grids.'},
+      {guidance: true, description: 'Use for multi-select groups; track selected IDs in a Set.'},
       {guidance: true, description: 'When focused, toggle selection with Space or Enter.'},
       {guidance: false, description: 'Use for navigation; use ClickableCard instead.'},
+      {guidance: false, description: 'Use for single-select: each card is a checkbox, so screen readers announce multi-select.'},
     ],
   },
   propDescriptions: {

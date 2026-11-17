@@ -42,10 +42,15 @@ ruleTester.run('no-raw-console-cli', rule, {
       code: `console.log('banner');`,
       filename: '/repo/packages/cli/clients/cli/index.mjs',
     },
-    // Exempt: bin/astryx.mjs (entrypoint / error boundary)
+    // Exempt: bin/astryx.mjs (entrypoint / Node gate)
     {
       code: `console.log('raw');`,
       filename: '/repo/packages/cli/clients/cli/bin/astryx.mjs',
+    },
+    // Exempt: run.mjs (one run / error boundary)
+    {
+      code: `console.log('raw');`,
+      filename: '/repo/packages/cli/clients/cli/run.mjs',
     },
     // Exemption is path-suffix based and tolerant of Windows separators
     {

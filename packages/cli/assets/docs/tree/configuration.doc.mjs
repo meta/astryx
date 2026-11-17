@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file astryx docs cli/integrations/building-blocks/configuration — set how your integration behaves. */
+/** @file astryx docs authoring/building-blocks/configuration — set how your integration behaves. */
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {

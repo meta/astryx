@@ -2,27 +2,31 @@
 
 /**
  * @file Item.swipeLayer.test.tsx
- * @input Item with and without swipe actions; the swipe layer module, spied
- * @output Verifies a row without swipe actions never renders the swipe layer,
- *   and a row with them renders it into the root once it has loaded
- * @position Companion to Item.test.tsx for the lazily loaded swipe layer
+ * @input Item with and without swipe actions; the swipe layer modules, spied
+ * @output Verifies a row without swipe actions never renders the swipe layer. A
+ *   row given `swipe` renders it into the root at its first render, under a
+ *   fine primary pointer as under a phone's
+ * @position Companion to Item.test.tsx for where the swipe layer comes from;
+ *   Item.deprecatedSwipeLayer.test.tsx covers the deprecated props' loader
  */
 
 import {createElement, type ReactNode} from 'react';
-import {describe, expect, it, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
-import type {ItemSwipeLayerProps} from './ItemSwipeLayer';
+import {createSwipe} from '../Swipe/createSwipe';
+import type {SwipeLayerProps} from '../Swipe/swipeHost';
+import {emulateTouch} from './__tests__/emulateTouch';
 
 const {layerRenders} = vi.hoisted(() => ({layerRenders: vi.fn()}));
 
-vi.mock('./ItemSwipeLayer', async importOriginal => {
+vi.mock('../Swipe/SwipeActionsLayer', async importOriginal => {
   const actual = await importOriginal<{
-    default: (props: ItemSwipeLayerProps) => ReactNode;
+    default: (props: SwipeLayerProps) => ReactNode;
   }>();
   return {
     ...actual,
-    default: (props: ItemSwipeLayerProps) => {
+    default: (props: SwipeLayerProps) => {
       layerRenders();
       return createElement(actual.default, props);
     },
@@ -30,6 +34,11 @@ vi.mock('./ItemSwipeLayer', async importOriginal => {
 });
 
 describe('Item and the swipe layer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    layerRenders.mockClear();
+  });
+
   it('renders a row without swipe actions with no swipe layer at all', async () => {
     render(
       <ul>
@@ -51,21 +60,40 @@ describe('Item and the swipe layer', () => {
     expect(screen.getByTestId('row').childElementCount).toBe(1);
   });
 
-  it('renders the swipe layer into the root of a row with swipe actions', async () => {
+  it('renders the layer of a row given swipe at its first render, under a fine primary pointer too', () => {
+    // A touchscreen laptop: a fine primary pointer, and a finger beside it.
+    // The gesture reads each touch's pointer, so the layer is there; a mouse
+    // never starts it (Item.test.tsx).
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     render(
       <Item
         label="Inbox"
         data-testid="row"
-        swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        swipe={createSwipe({
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+        })}
+      />,
+    );
+    // No chunk to wait for: the layer came with createSwipe.
+    expect(
+      screen.getByTestId('row').querySelector('[data-swipe-panel="trailing"]'),
+    ).not.toBeNull();
+    expect(layerRenders).toHaveBeenCalled();
+  });
+
+  it("renders the layer into the root of a row given swipe on a phone's pointer, adding nothing else", () => {
+    emulateTouch();
+    render(
+      <Item
+        label="Inbox"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+        })}
       />,
     );
     const row = screen.getByTestId('row');
-    const panel = await waitFor(() => {
-      const found = row.querySelector('[data-swipe-panel="trailing"]');
-      expect(found).not.toBeNull();
-      return found;
-    });
-    expect(layerRenders).toHaveBeenCalled();
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
     // The layer adds nothing but the panel: the root is still the content
     // followed by the out-of-flow panel, with no wrapper for either.
     expect(panel?.parentElement).toBe(row);

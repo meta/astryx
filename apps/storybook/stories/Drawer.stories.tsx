@@ -43,7 +43,14 @@ const meta: Meta<typeof Drawer> = {
   },
   decorators: [
     Story => (
-      <div style={{width: 560, minHeight: 360, padding: 32}}>
+      // 560 px wide, or the viewport less the frame's gutters (16 px a side,
+      // twice) on a phone, so the story never scrolls the page sideways.
+      <div
+        style={{
+          width: 'min(560px, 100vw - 64px)',
+          minHeight: 360,
+          padding: 32,
+        }}>
         <Story />
       </div>
     ),
@@ -515,6 +522,37 @@ export const Scrim: Story = {
             }
           />
         </Drawer>
+      </>
+    );
+  },
+};
+
+/**
+ * A drawer rendered only while open: Save removes it without a close. Focus
+ * goes back to the button that opened it, as a close returns it.
+ */
+export const UnmountWhileOpen: Story = {
+  render: () => {
+    const [isEditing, setIsEditing] = useState(false);
+    return (
+      <>
+        <Button label="Edit row" onClick={() => setIsEditing(true)} />
+        {isEditing ? (
+          <Drawer
+            isOpen
+            onOpenChange={setIsEditing}
+            label="Edit row"
+            hasScrim={false}>
+            <Section padding={4}>
+              <VStack gap={3}>
+                <Text type="body">
+                  This drawer renders only while open. Save removes it.
+                </Text>
+                <Button label="Save" onClick={() => setIsEditing(false)} />
+              </VStack>
+            </Section>
+          </Drawer>
+        ) : null}
       </>
     );
   },

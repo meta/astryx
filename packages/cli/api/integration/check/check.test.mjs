@@ -27,6 +27,7 @@ import {
 } from './check.mjs';
 import {validateIntegration} from '../validate-integration.mjs';
 import {discoverCoreTemplates} from '../../../foundation/discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const IDENTITY = {validated: true, name: '@acme/widgets', version: '1.2.3'};
 
@@ -276,6 +277,55 @@ describe('combineChecks', () => {
     respond('integration.doc-conflicts', {}),
   ];
 
+  it('counts the findings the next minor release fails as upcoming, and fails on them only with strict and next', () => {
+    const withNotes = [
+      respond('integration.validate', {
+        notes: [
+          {
+            code: 'duplicate_component_doc',
+            message: 'Two docs. Fix: one.',
+            next: true,
+          },
+          {code: 'invalid_cli_command', message: 'Not a command.'},
+        ],
+      }),
+      respond('integration.component-conflicts', {}),
+      respond('integration.template-conflicts', {}),
+      respond('integration.doc-conflicts', {}),
+    ];
+    // The default run, strict included, fails on none: the next minor does.
+    for (const strict of [false, true]) {
+      expect(combineChecks(withNotes, strict)).toMatchObject({
+        upcoming: 1,
+        warnings: 0,
+        failures: [],
+        failed: false,
+      });
+    }
+    expect(combineChecks(withNotes, false, true)).toMatchObject({
+      upcoming: 1,
+      warnings: 1,
+      failures: [],
+      failed: false,
+    });
+    // validate's own summary row shows the note it now counts.
+    expect(combineChecks(withNotes, false, true).checks[0].warnings).toBe(1);
+    expect(combineChecks(withNotes, false).checks[0].warnings).toBe(0);
+    expect(combineChecks(withNotes, true, true)).toMatchObject({
+      upcoming: 1,
+      warnings: 1,
+      failures: [
+        {
+          check: 'validate',
+          severity: 'error',
+          code: 'duplicate_component_doc',
+          message: 'Two docs. Fix: one.',
+        },
+      ],
+      failed: true,
+    });
+  });
+
   it('counts a package-level issue once, and two findings with one message twice, naming each component', () => {
     const loose = combineChecks(responses, false);
     const strict = combineChecks(responses, true);
@@ -349,7 +399,7 @@ describe('integrationCheck', () => {
   beforeEach(() => {
     // Under the repository, so the components check resolves Core.
     pkg = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-integration-check-'),
+      path.join(REPO_ROOT, '.astryx-integration-check-'),
     );
     fs.writeFileSync(
       path.join(pkg, 'package.json'),
@@ -424,9 +474,9 @@ describe('integrationCheck', () => {
     const strict = await integrationCheck({cwd: pkg, strict: true});
 
     expect(loose.data).toMatchObject({errors: 0, failures: [], failed: false});
-    // The unknown key is validate's, and every check starts from validate's
-    // issues: it counts once.
-    expect(loose.data.warnings).toBe(2);
+    // The unknown key is a note: it is usually a key from a newer CLI, so
+    // it counts nowhere, with or without strict.
+    expect(loose.data.warnings).toBe(1);
     expect(strict.data).toMatchObject({strict: true, errors: 0, failed: true});
     expect(strict.data.warnings).toBe(loose.data.warnings);
     // Same data: the same checks, read once each, in both modes.
@@ -445,7 +495,6 @@ describe('integrationCheck', () => {
       })),
     ).toEqual(warningsAndSkips(loose));
     expect(strict.data.failures.map(f => [f.check, f.code])).toEqual([
-      ['validate', 'unknown_manifest_key'],
       ['templates', 'template_id_conflict'],
     ]);
   });

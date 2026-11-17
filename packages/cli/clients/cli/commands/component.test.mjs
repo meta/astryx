@@ -12,7 +12,7 @@ import {
   findComponentSource,
   levenshteinDistance,
   findClosestComponents,
-} from './component/index.mjs';
+} from './component.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
@@ -141,7 +141,7 @@ describe('discoverComponents', () => {
     expect(result).toEqual({});
   });
 
-  // XDS-prefix migration (P2380608025, P4): source files are renamed from
+  // XDS-prefix migration (phase 4): source files are renamed from
   // `XDS{Name}.tsx` to the bare `{Name}.tsx`. Discovery must find both.
   it('discovers components from bare {Name}.tsx files (post-rename)', () => {
     const srcDir = path.join(tmpDir, 'src');
@@ -528,7 +528,7 @@ describe('findExternalComponentDoc', () => {
 describe('searchComponents', () => {
   it('finds Collapsible when searching "accordion"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'accordion',
@@ -542,7 +542,7 @@ describe('searchComponents', () => {
 
   it('finds Dialog when searching "modal"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'modal',
@@ -556,7 +556,7 @@ describe('searchComponents', () => {
 
   it('returns multiple matches for ambiguous terms like "select"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'select',
@@ -571,7 +571,7 @@ describe('searchComponents', () => {
 
   it('finds exact name matches with score 100', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'Button',
@@ -584,7 +584,7 @@ describe('searchComponents', () => {
 
   it('returns empty array for complete gibberish', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'zzzzzzzzzzz',

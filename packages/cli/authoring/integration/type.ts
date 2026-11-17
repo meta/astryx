@@ -11,7 +11,7 @@
  * The manifest module may also carry `debug` and `gapReport` NAMED exports.
  * They are not fields here on purpose: a CLI released before a given manifest
  * field existed could reject it and lose every contribution, while an unknown
- * named export is simply not read. See `astryx docs cli/integrations`.
+ * named export is simply not read. See `astryx docs authoring`.
  */
 export interface AstryxIntegration {
   /** Stable logical provider ID. Omit to use package.json#name. Set this only
@@ -38,6 +38,28 @@ export interface AstryxIntegration {
    *  lower-kebab theme directory contains a source module and mandatory
    *  same-stem, strongly typed `.doc.mjs` descriptor. */
   themes?: string;
+  /** The one provider component that wires every theme under `themes` into
+   *  an app, when the package wires its themes itself rather than through
+   *  Astryx's `Theme`. `export` is the component's named export and `from`
+   *  the module specifier an app imports it from. Doctor counts a theme as
+   *  wired when the app renders that component; `theme list` names it. Each
+   *  theme's stylesheet stays the one its package exports for it. */
+  themeProvider?: {
+    export: string;
+    from: string;
+    /** The provider's prop that takes a theme object, when it takes one. */
+    themeProp?: string;
+    /** The provider's prop that takes a color mode; only with themeProp. */
+    modeProp?: string;
+  };
+  /** Experimental contribution roots (spec:AST-017 FR27).
+   *  @experimental Their shape may change or be removed in a patch release. */
+  experimental?: {
+    /** Relative path to the icon-set root (spec:AST-084). Each lower-kebab
+     *  directory under it is one icon set holding a strongly typed
+     *  `<name>.doc.mjs` IconSetDoc and its `<name>.icons.json` data file. */
+    iconSets?: string;
+  };
   /** Static package guidance appended to the CLI-owned managed agent block. */
   agentDocs?: {
     append?: readonly string[];
@@ -48,6 +70,15 @@ export interface AstryxIntegration {
    *  accepts it as a known field; catalogs that list the package may show
    *  it. */
   docsiteUrl?: string;
+  /** The square logo catalogs show beside the package name: paths, relative
+   *  to the package root, to images the package ships. Each is a PNG, JPEG,
+   *  WebP, or an SVG drawn only with shapes, at most 512 KB. `dark`, when
+   *  set, is drawn for dark backgrounds; without it `light` is used
+   *  everywhere. `astryx integration check` checks both. */
+  logo?: {
+    light: string;
+    dark?: string;
+  };
   /** The command that runs the Astryx CLI for this package's users, such as
    *  `acme astryx`. Every command the CLI prints in a project that loads
    *  this package starts with it, in place of the package-manager prefix
@@ -56,6 +87,40 @@ export interface AstryxIntegration {
    *  `astryx doctor` warns. An invalid value is ignored with a warning; the
    *  rest of the manifest still loads. JSON output keeps commands bare. */
   cliCommand?: string;
+  /** Makes this package a base: a component library that stands in for
+   *  Core in a project that uses it. `adapters` maps a capability to the
+   *  module, relative to the package, that performs its platform steps; the
+   *  steps the module exports are the steps the base serves. `base: {}`
+   *  declares a base that serves content only. Core is a base too; the CLI
+   *  holds its declaration. See `astryx docs authoring`. */
+  base?: BaseDeclaration;
+}
+
+/** A capability a base declares one adapter module for. */
+export type BaseCapability =
+  'themes' | 'templates' | 'render' | 'icons' | 'setup';
+
+/** A platform step, named `<capability>.<step>`. The list is closed and
+ *  append-only; a command declares the steps it cannot run without. */
+export type BaseStep =
+  | 'themes.targets'
+  | 'themes.compile'
+  | 'themes.appModule'
+  | 'themes.template'
+  | 'themes.scaffold'
+  | 'themes.checks'
+  | 'templates.skeleton'
+  | 'templates.standalonePage'
+  | 'render.page'
+  | 'render.reverse'
+  | 'icons.appModule'
+  | 'setup.guide';
+
+/** What a base declares in its integration manifest. */
+export interface BaseDeclaration {
+  /** One module path per capability, relative to the package. A capability
+   *  this CLI does not know is ignored, so a newer base still loads. */
+  adapters?: Record<string, string>;
 }
 
 /**

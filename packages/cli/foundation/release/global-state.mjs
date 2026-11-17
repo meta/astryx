@@ -68,9 +68,11 @@ export const CHECK_INTERVAL_MS = 24 * 60 * 60_000;
 
 /**
  * Why an update notice did not print: `already-shown` (it printed within the
- * day) or `no-newer` (nothing newer is known). Recorded only while the run
+ * day), `no-newer` (nothing newer is known), or `no-project` (the folder
+ * installs Core but belongs to no Astryx project, so no install command
+ * fits). Recorded only while the run
  * holds the state file's lock.
- * @typedef {{reason: 'already-shown' | 'no-newer', at: number}} NoticeSkip
+ * @typedef {{reason: 'already-shown' | 'no-newer' | 'no-project', at: number}} NoticeSkip
  */
 
 /**

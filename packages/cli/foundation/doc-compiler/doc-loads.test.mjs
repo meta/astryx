@@ -54,29 +54,51 @@ const RUNNERS = {
   },
   'api/integration/pack-check.mjs': {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
-    sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
+    sites: ['child_process.spawnSync ×2', 'loadTopicModule'],
   },
-  'api/swizzle/_github.mjs': {
-    runs: '`gh auth status`, to check the GitHub CLI is signed in',
-    sites: ['child_process.execFileSync'],
+  'api/search/_gather-docs.mjs': {
+    runs: "each extension doc of a topic, to leave an experimental extension's sections out of search",
+    sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_context.mjs': {
+    runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
+    sites: ['import(<computed>)'],
+  },
+  'api/theme-edit/_css.mjs': {
+    runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
+    sites: ['require(<computed>)'],
+  },
+  'api/theme-edit/_preview.mjs': {
+    runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
+    sites: ['child_process.spawn'],
+  },
+  'api/theme-edit/_project.mjs': {
+    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
+    sites: ['import(<computed>) ×2', 'require'],
+  },
+  'api/theme-edit/_settings.mjs': {
+    runs: 'the built theme module, to read its resolved tokens after a build',
+    sites: ['import(<computed>)'],
+  },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
-      '.import()',
-      'createJiti ×5',
-      'eval ×2',
-      'import(<computed>) ×3',
+      '.import() ×2',
+      'createJiti ×7',
+      'import(<computed>) ×2',
+      'require(<computed>)',
+      'require.cache',
+      'withEmptyStylesheets ×6',
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
+    sites: ['module', 'require(<computed>)'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',
@@ -90,9 +112,27 @@ const RUNNERS = {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
+  'assets/codemods/run-codemod.mjs': {
+    runs: "jscodeshift's Babel parser and its TypeScript parser options (CommonJS), on the first declaration file, to parse it as declarations",
+    sites: ['require(./parser/tsOptions.js)', 'require(@babel/parser)'],
+  },
+  'authoring/example/preview.mjs': {
+    runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(globals)',
+    ],
+  },
   'authoring/shadcn/source-variants.mjs': {
-    runs: "@babel/plugin-transform-typescript (CommonJS), to reproduce the ShadCN client's transform",
-    sites: ['require(@babel/plugin-transform-typescript)'],
+    runs: "Babel, its TypeScript plugin and recast (CommonJS), each on first use, to reproduce the ShadCN client's transform",
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(recast)',
+    ],
   },
   'clients/cli/bin/astryx.mjs': {
     runs: "the CLI's own modules, by real path, so a linked bin finds them",
@@ -102,7 +142,85 @@ const RUNNERS = {
     runs: SELF_DOCS,
     sites: ['import ../../../api/blog/blog.doc.mjs', 'import ./blog.doc.mjs'],
   },
-  'clients/cli/commands/build-theme.mjs': {
+  'clients/cli/commands/experimental/icon.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/icon/icon.doc.mjs',
+      'import ../../../../api/icon/iconAdd.doc.mjs',
+      'import ../../../../api/icon/iconMap.doc.mjs',
+      'import ../../../../api/icon/iconNewDefinition.doc.mjs',
+      'import ../../../../api/icon/iconNewSet.doc.mjs',
+      'import ../../../../api/icon/iconUse.doc.mjs',
+      'import ../experimental-icon-add.doc.mjs',
+      'import ../experimental-icon-map.doc.mjs',
+      'import ../experimental-icon-new-definition.doc.mjs',
+      'import ../experimental-icon-new-set.doc.mjs',
+      'import ../experimental-icon-use.doc.mjs',
+      'import ../experimental-icon.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/index.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/theme.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewApp.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewList.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditSet.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditShow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
+      'import ../experimental-theme-add.doc.mjs',
+      'import ../experimental-theme-compile.doc.mjs',
+      'import ../experimental-theme-editor-how.doc.mjs',
+      'import ../experimental-theme-editor-new.doc.mjs',
+      'import ../experimental-theme-editor-set.doc.mjs',
+      'import ../experimental-theme-editor-show.doc.mjs',
+      'import ../experimental-theme-editor-undo.doc.mjs',
+      'import ../experimental-theme-editor.doc.mjs',
+      'import ../experimental-theme-eject.doc.mjs',
+      'import ../experimental-theme-list.doc.mjs',
+      'import ../experimental-theme-preview-add.doc.mjs',
+      'import ../experimental-theme-preview-app.doc.mjs',
+      'import ../experimental-theme-preview-list.doc.mjs',
+      'import ../experimental-theme-preview-remove.doc.mjs',
+      'import ../experimental-theme-preview.doc.mjs',
+      'import ../experimental-theme-remove.doc.mjs',
+      'import ../experimental-theme-targets.doc.mjs',
+      'import ../experimental-theme-template.doc.mjs',
+      'import ../experimental-theme-use.doc.mjs',
+      'import ../experimental-theme.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/render.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-render.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/manifest.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./manifest.doc.mjs'],
+  },
+  'clients/cli/commands/mcp.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./mcp.doc.mjs'],
+  },
+  'clients/cli/lib/mcp-server.mjs': {
+    runs: "this CLI's own bin, once for each tool call an MCP client makes",
+    sites: ['child_process.spawn'],
+  },
+  'clients/cli/commands/postinstall.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./postinstall.doc.mjs'],
+  },
+  'clients/cli/commands/theme.mjs': {
     runs: `${SELF_DOCS}; and \`astryx theme build\`, a child process per theme`,
     sites: [
       'child_process.spawn',
@@ -135,11 +253,11 @@ const RUNNERS = {
       'import ./build.doc.mjs',
     ],
   },
-  'clients/cli/commands/component/index.mjs': {
+  'clients/cli/commands/component.mjs': {
     runs: SELF_DOCS,
     sites: [
-      'import ../../../../api/component/component.doc.mjs',
-      'import ../component.doc.mjs',
+      'import ../../../api/component/component.doc.mjs',
+      'import ./component.doc.mjs',
     ],
   },
   'clients/cli/commands/discover.mjs': {
@@ -180,12 +298,9 @@ const RUNNERS = {
       'import ./gap-report.doc.mjs',
     ],
   },
-  'clients/cli/commands/hook/index.mjs': {
+  'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../../api/hook/hook.doc.mjs',
-      'import ../hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,
@@ -233,8 +348,15 @@ const RUNNERS = {
     ],
   },
   'clients/cli/index.mjs': {
-    runs: 'the command modules, to register each command, and the manifest command doc',
-    sites: ['import ./commands/manifest.doc.mjs', 'import(<computed>)'],
+    runs: 'the command modules, to register each command',
+    sites: ['import(<computed>)'],
+  },
+  'clients/cli/lib/cli-error.mjs': {
+    runs: 'the experimental theme editor and preview command docs, for the subcommand names an unknown-command refusal suggests',
+    sites: [
+      'import ../commands/experimental-theme-editor.doc.mjs',
+      'import ../commands/experimental-theme-preview.doc.mjs',
+    ],
   },
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',
@@ -244,17 +366,29 @@ const RUNNERS = {
     runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
     sites: ['require(<computed>)'],
   },
+  'foundation/bases/requirements.mjs': {
+    runs: "a base's adapter module, only in a run whose command needs one of its steps",
+    sites: ['import(<computed>)'],
+  },
+  'foundation/bases/core-docs.mjs': {
+    runs: 'docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run',
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'foundation/config/project.mjs': {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
+  'foundation/agent-docs/agent-docs.mjs': {
+    runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
+    sites: ['child_process.spawnSync'],
+  },
+  'foundation/fs/gather-cache.mjs': {
+    runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
+    sites: ['module.registerHooks'],
+  },
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
-  },
-  'foundation/discovery/component-discovery.mjs': {
-    runs: '@babel/parser, on first use, to read the members a family doc lists in its components without running the doc',
-    sites: ['require(@babel/parser)'],
   },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",
@@ -264,6 +398,14 @@ const RUNNERS = {
     runs: "a package's component docs and topics, to read the props, overlays, sections, and replaces/extends they declare",
     sites: ['importDocModule ×2'],
   },
+  'foundation/discovery/doc-stability.mjs': {
+    runs: "an integration's template docs, to see which set `stability`",
+    sites: ['loadTopicModule'],
+  },
+  'foundation/discovery/template-icon-notes.mjs': {
+    runs: "an integration's template docs, to read the icons each declares",
+    sites: ['loadTopicModule'],
+  },
   'foundation/discovery/doc-fluff.mjs': {
     runs: "the CLI's own guides, to measure the median share of content words a topic's density is compared with",
     sites: ['builtinGuideFiles'],
@@ -271,6 +413,10 @@ const RUNNERS = {
   'foundation/discovery/docs-discovery.mjs': {
     runs: 'a contributed topic, for its catalog fields: name, title, description, category, and relationships',
     sites: ['importDocModule'],
+  },
+  'foundation/discovery/runner-commands.mjs': {
+    runs: "the package's topics, to find each Astryx command written with a package runner",
+    sites: ['loadTopicModule'],
   },
   'foundation/discovery/stray-pointers.mjs': {
     runs: "the CLI's own guides, for their names, to tell which written `astryx docs <name>` points at a doc that exists",
@@ -285,43 +431,101 @@ const RUNNERS = {
     ],
   },
   'foundation/discovery/template-adapter.mjs': {
-    runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
-    sites: ['importDocModule', 'require(@babel/parser)'],
-  },
-  'foundation/discovery/theme-discovery.mjs': {
-    runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
-    sites: ['require(@babel/parser)', 'require(jscodeshift)'],
+    runs: 'a template doc that does not validate, to read the replacement it declares',
+    sites: ['importDocModule'],
   },
   'foundation/doc-compiler/import.mjs': {
-    runs: 'authored doc files, for the doc reader and discovery',
+    runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
-      '.import()',
-      'createJiti',
-      'import(<computed>) ×2',
-      'importUserModule',
+      '.import() ×2',
+      'importUrl ×2',
+      'importUserModule ×2',
+      'readFreshInTurn',
+      'readInTurn',
+      'require(jiti)',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
     runs: 'authored doc files, each one handed to the compiler, with the loader its reader has always used',
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
+  'foundation/render/page-worker.mjs': {
+    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script",
+    sites: [
+      '.import() ×11',
+      'createJiti ×2',
+      'globalThis[<computed>]',
+      'import(<computed>)',
+      'module',
+      'module.register',
+      'require(@stylexjs/babel-plugin)',
+    ],
+  },
+  'foundation/render/client-bundle.mjs': {
+    runs: "nothing: it parses the page's script it built (a vm.Script that is never run), so a script that would not run never reaches the file",
+    sites: ['vm.Script'],
+  },
+  'foundation/render/layers.mjs': {
+    runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
+    sites: ['g[<computed>] ×4'],
+  },
+  'foundation/render/picture-chrome.mjs': {
+    runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
+    sites: ['child_process.spawn'],
+  },
+  'foundation/render/picture-playwright.mjs': {
+    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
+    sites: ['import(<computed>)'],
+  },
+  'foundation/render/render-page.mjs': {
+    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
+    sites: ['child_process.fork', 'child_process.spawnSync'],
+  },
+  'foundation/render/page-host.mjs': {
+    runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
+    sites: ['worker_threads.Worker'],
+  },
+  'foundation/fs/import-url.mjs': {
+    runs: 'the module at a file URL, for the doc importers and the module loader',
+    sites: ['import(<computed>)'],
+  },
+  'foundation/fs/loaded-files.mjs': {
+    runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
+    sites: ['createRequire'],
+  },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
       '.import() ×3',
-      'createJiti ×3',
-      'import(<computed>)',
-      'require(<computed>)',
+      'importUrl ×2',
+      'module.registerHooks',
+      'require(jiti)',
       'require.cache',
     ],
+  },
+  'foundation/fs/read-record.mjs': {
+    runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
+    sites: ['module.syncBuiltinESMExports'],
   },
   'foundation/fs/paths.mjs': {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
   },
+  'foundation/integrations/example-code.mjs': {
+    runs: 'the React the package resolves, to read its named exports for the example check',
+    sites: ['require(react)'],
+  },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
+  },
+  'foundation/integrations/pack-state.mjs': {
+    runs: "`npm pack --json`, with its output in temporary files: `--dry-run --ignore-scripts` to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is packed), and the real pack `api/integration/pack-check.mjs` asks for (it runs the package's pack scripts and writes the tarball)",
+    sites: ['child_process.spawnSync'],
+  },
+  'foundation/integrations/validate-contributions.mjs': {
+    runs: "@babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
@@ -339,9 +543,64 @@ const RUNNERS = {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
   },
+  'foundation/runtime/css-tree.mjs': {
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads; reads which of the data files are loaded, from the require cache, to stamp them',
+    sites: [
+      'require(<computed>)',
+      'require(mdn-data/css/properties.json)',
+      'require(mdn-data/css/selectors.json)',
+      'require.cache',
+    ],
+  },
+  'foundation/runtime/lazy-dependencies.mjs': {
+    runs: 'Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(jscodeshift)',
+      'require(postcss)',
+      'require(postcss-selector-parser)',
+    ],
+  },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
+  'host/index.mjs': {
+    runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
+    sites: ['import(<computed>)'],
+  },
   'scripts/generate-cli-readme.mjs': {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'scripts/generate-manifest.mjs': {
+    runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-component-list.mjs': {
+    runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-docs-routes.mjs': {
+    runs: "node, to build the CLI's own docs tree on a copy of exactly the files the package publishes and store its routes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-search-catalog.mjs': {
+    runs: "node, to gather search's catalog in a project that installs exactly the files the CLI and Core publish, once per package manager and beside each one's lockfile (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-self-audit.mjs': {
+    runs: "node, to run Doctor's audit of the CLI's own files on a copy of exactly the files the package publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/published-files.mjs': {
+    runs: '`npm pack --dry-run --json --ignore-scripts`, to list the files a package publishes (at `prepack`)',
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-stored-docs.mjs': {
+    runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',
+    sites: ['import(<computed>)'],
   },
   'scripts/sync-api-types.mjs': {
     runs: '`tsc`, to emit the API declarations (build time, not shipped)',
@@ -356,17 +615,24 @@ const RUNNERS = {
  */
 const LOADER_MODULES = {
   'foundation/doc-compiler/import.mjs': [],
+  'foundation/fs/import-url.mjs': [],
   'foundation/fs/module-loader.mjs': ['findPresentFiles'],
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [
     'BUILTIN_DOCS_PACKAGE',
     'DocsCatalog',
+    'builtinTopicsForCore',
     'discoverBuiltinTopics',
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'integrationDocDeclaration',
+    'integrationDocsCatalog',
+    'isGuideRoute',
     'mergeTopic',
+    'mergeTopicReport',
     'problemsInTopic',
+    'withoutPosition',
     'withSourceTitle',
   ],
 };

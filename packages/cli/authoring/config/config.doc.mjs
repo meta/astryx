@@ -30,8 +30,8 @@ export const doc = {
       name: 'issuesUrl',
       type: 'string',
       description:
-        "Where reports about Core go: `astryx gap-report` routes a Core report here when no handler is loaded, gapReport handlers receive it as `report.target.issuesUrl`, and `astryx swizzle` prints it as the feedback link for a Core component. A report or swizzle for an integration's component uses that integration's own issuesUrl, never this one. An absolute URL; a value that is not a URL makes the config invalid.",
-      default: "'https://github.com/facebook/astryx/issues/new'",
+        "Where reports about Core go: `{@command gap-report}` routes a Core report here when no handler is loaded, gapReport handlers receive it as `report.target.issuesUrl`, and `{@command swizzle}` prints it as the feedback link for a Core component. A report or swizzle for an integration's component uses that integration's own issuesUrl, never this one. An absolute URL; a value that is not a URL makes the config invalid.",
+      default: "'https://github.com/meta/astryx/issues/new'",
     },
     {
       name: 'hooks',
@@ -42,7 +42,7 @@ export const doc = {
           name: 'hooks.postCodemod',
           type: 'PostCodemodHook[]',
           description:
-            'Commands to run after `astryx upgrade` changes files (e.g. re-run your formatter). Each hook is an object `{name?, buildCommand}`: buildCommand gets `{packageDir, files}` and returns `{command, args?, options?}` to run, or null to skip. A dry run prints each command instead of running it.',
+            'Commands to run after `{@command upgrade}` changes files (e.g. re-run your formatter). Each hook is an object `{name?, buildCommand}`: buildCommand gets `{packageDir, files}` and returns `{command, args?, options?}` to run, or null to skip. A dry run prints each command instead of running it.',
         },
       ],
     },
@@ -66,15 +66,31 @@ export const doc = {
       name: 'discover',
       type: 'DiscoverSource',
       description:
-        'Tell `astryx discover` which integrations this project could add: an async function that returns a catalog. An integration can provide one too, as a `discover` named export from its manifest. Discover calls every source, yours first, and one that fails never hides the others. Discover only reads; your package manager installs.',
+        'Tell `{@command discover}` which integrations this project could add: an async function that returns a catalog. An integration can provide one too, as a `discover` named export from its manifest. Discover calls every source, yours first, and one that fails never hides the others. Discover only reads; your package manager installs.',
       example:
-        "async ({signal, package: name, version}) => fetchCatalog({signal, name, version})",
+        'async ({signal, package: name, version}) => fetchCatalog({signal, name, version})',
     },
     {
       name: 'experimental',
       type: '{ xle?: { components?: Record<string, XleComponent> } }',
       description: 'Unstable features; may change without a breaking bump.',
       fields: [
+        {
+          name: 'experimental.iconSet',
+          type: 'string | string[]',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The project's main icon set, by set name or as `<package>/<set>`; or a list of them, the main set first and then backup sets in order. A copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. Copied templates use these icons only when it is set. `astryx discover` and `astryx doctor` report icon sets when it is set or when an icon-set package is installed. `astryx experimental icon use <main> --backup <set>` writes it. `astryx experimental icon` ranks the main set's icons first; without it, the only installed set is the project's there. `astryx search` never returns icons.",
+          example: "['@acme/outline-icons/outline', '@acme/brand-icons/brand']",
+        },
+        {
+          name: 'experimental.iconVariant',
+          type: 'string',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The look every icon of the project draws, such as `outline` or `filled`, by the variant name the icon sets declare. Each set in `experimental.iconSet` that declares a variant of that name draws it: copied templates import that variant's icons, and a theme takes that look's theme map (`themeIconsFilled`). A set that declares no variant of that name draws its default look. The main set must declare it, and it needs `experimental.iconSet`. `astryx experimental icon use <main> --variant <variant>` writes it; without `--variant` that command removes it.",
+          example: "'filled'",
+        },
         {
           name: 'experimental.xle.components',
           type: 'Record<string, XleComponent>',
@@ -101,7 +117,7 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: 'The config is validated at load with a strict schema: an unknown key, a misspelled one included, or a value of the wrong type makes the whole file invalid. `astryx gap-report`, `astryx discover`, and `astryx upgrade` stop with the error, and `astryx doctor` fails its `config` check (exit 1). Reads such as `component`, `docs`, `search`, `template`, and `theme` carry on silently as if there were no config and no integrations, and no debug handler runs, so run `astryx doctor` after editing the file.',
+      text: 'The config is validated at load with a strict schema: an unknown key, a misspelled one included, or a value of the wrong type makes the whole file invalid. `{@command gap-report}`, `{@command discover}`, and `{@command upgrade}` stop with the error, and `{@command doctor}` fails its `config` check (exit 1). Reads such as `component`, `docs`, `search`, `template`, and `theme` carry on silently as if there were no config and no integrations, and no debug handler runs, so run `{@command doctor}` after editing the file.',
     },
   ],
 };

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/build-the-template/template-assets/template-fonts`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-fonts`:
  * use the app typeface by default, and ship every font file a template needs
  * when it must bring its own.
  */

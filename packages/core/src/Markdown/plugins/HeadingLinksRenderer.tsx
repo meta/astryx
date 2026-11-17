@@ -17,9 +17,15 @@ import {Button} from '../../Button/Button';
 import {Icon} from '../../Icon';
 import {useClipboard} from '../../hooks/useClipboard';
 import {useContainerReveal} from '../../hooks/useContainerReveal';
-import {useTranslator} from '../../i18n';
 import {colorVars, sizeVars, spacingVars} from '../../theme/tokens.stylex';
 import {mergeProps, rtlStyles} from '../../utils';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../i18n/useComponentTranslator';
+import english from '../../i18n/generated-english/Markdown/plugins/HeadingLinksRenderer.generated';
+
+registerEnglishFallback(english);
 
 const COPY_FEEDBACK_MS = 1500;
 const COARSE_TARGET = '24px';
@@ -107,6 +113,8 @@ interface HeadingLinksRendererProps {
   readonly contentAlign: 'start' | 'center';
   readonly headingTextStyle: StyleXStyles;
   readonly blockSpacingStyle: StyleXStyles;
+  /** The heading's own direction; the copy control follows its inline end. */
+  readonly dir?: 'ltr' | 'rtl';
 }
 
 function isUnmodifiedPrimaryActivation(
@@ -131,8 +139,9 @@ export function HeadingLinksRenderer({
   contentAlign,
   headingTextStyle,
   blockSpacingStyle,
+  dir,
 }: HeadingLinksRendererProps): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const copiedLabel = t('@astryx.markdownHeadingLinks.copied');
   const copyLabel = t('@astryx.markdownHeadingLinks.copy', {
     heading: headingLabel || headingId,
@@ -157,6 +166,7 @@ export function HeadingLinksRenderer({
 
   return (
     <div
+      dir={dir}
       {...mergeProps(
         getContainerProps(),
         stylex.props(

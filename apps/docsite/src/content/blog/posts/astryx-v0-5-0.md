@@ -31,7 +31,7 @@ That is a dry run. Add `--apply` to write the changes to disk.
 
 ### Banner's collapse axis is one `collapsible` prop
 
-`defaultIsExpanded` is removed, and content can opt out of collapsing entirely — the case a banner most often wants ([#5255](https://github.com/facebook/astryx/pull/5255)). `collapsible` takes a boolean or a config, the convention `SideNav.collapsible` set:
+`defaultIsExpanded` is removed, and content can opt out of collapsing entirely — the case a banner most often wants ([#5255](https://github.com/meta/astryx/pull/5255)). `collapsible` takes a boolean or a config, the convention `SideNav.collapsible` set:
 
 ```tsx
 // `status` and `title` are required on every Banner
@@ -45,7 +45,7 @@ Default rendering is unchanged, and the codemod rewrites every call site that na
 
 ### One Escape dismisses one layer
 
-Every overlay used to own its own Escape listener, so one press could close a Popover _and_ the Dialog hosting it. Overlays now share a single dismissal stack that routes each press to the top-most layer and nothing else ([#4881](https://github.com/facebook/astryx/pull/4881)). A Tooltip inside a Dialog closes the tooltip.
+Every overlay used to own its own Escape listener, so one press could close a Popover _and_ the Dialog hosting it. Overlays now share a single dismissal stack that routes each press to the top-most layer and nothing else ([#4881](https://github.com/meta/astryx/pull/4881)). A Tooltip inside a Dialog closes the tooltip.
 
 Top-most comes from React-tree nesting, so it survives portals. A layer declares what it does with a press through `useLayerDismissal`'s `escapeBehavior` — `close`, or `block` for a required Dialog that has to swallow the press. Controlled layers, IME composition and browser-initiated dismissals like the Android back gesture all follow the same top-most rule.
 
@@ -61,19 +61,19 @@ A promotion means a component is out of the experimental `lab` package and into 
 
 ### Bottom Sheet → core (v0.4.4)
 
-`BottomSheet` and `BottomSheetSwitcher` now come from `@astryxdesign/core` ([#5080](https://github.com/facebook/astryx/pull/5080)), and `snapPoints` makes the drag stops the host's choice — a viewport fraction (`0.5`), a percentage (`'50%'`), or a length (`'320px'`). A swipe that runs out of content keeps pulling and expands the sheet instead of stopping dead, a sheet resting at a detent re-resolves its geometry when the window resizes or the device rotates, and the mobile keyboard no longer shifts the page or moves the detents out from under the sheet.
+`BottomSheet` and `BottomSheetSwitcher` now come from `@astryxdesign/core` ([#5080](https://github.com/meta/astryx/pull/5080)), and `snapPoints` makes the drag stops the host's choice — a viewport fraction (`0.5`), a percentage (`'50%'`), or a length (`'320px'`). A swipe that runs out of content keeps pulling and expands the sheet instead of stopping dead, a sheet resting at a detent re-resolves its geometry when the window resizes or the device rotates, and the mobile keyboard no longer shifts the page or moves the detents out from under the sheet.
 
 ![The same open Bottom Sheet rendered twice, light mode on the left and dark on the right. Each shows the top of a sheet on a narrow viewport: rounded top corners, a small grab handle centred above the content, a line of explanatory text, a divider, and a scrolling list of nearby places with distances running past the bottom of the frame.](/blog/astryx-v0-5-0/bottomsheet.png)
 
 ### Stepper → core (this release)
 
-`Stepper` and `Step` now come from `@astryxdesign/core` ([#5201](https://github.com/facebook/astryx/pull/5201)), with their horizontal and vertical layouts, separated and on-track indicators, semantic status, density and non-linear navigation. Advancing one step animates the connector — the accent fill grows out of the segment's leading edge, so moving forward reads as progress travelling the track. Going back, jumping several steps, mounting mid-flow and `prefers-reduced-motion` all apply at once.
+`Stepper` and `Step` now come from `@astryxdesign/core` ([#5201](https://github.com/meta/astryx/pull/5201)), with their horizontal and vertical layouts, separated and on-track indicators, semantic status, density and non-linear navigation. Advancing one step animates the connector — the accent fill grows out of the segment's leading edge, so moving forward reads as progress travelling the track. Going back, jumping several steps, mounting mid-flow and `prefers-reduced-motion` all apply at once.
 
 ![The same five-step Stepper rendered twice, light mode on the left and dark on the right. A vertical workspace-setup flow with the indicators sitting on the connector track itself: the first two steps complete with filled check indicators, the third current as a filled ring with a bold label, the last two upcoming as muted numbered circles. The track is solid through the completed steps and muted through the upcoming ones, and every step carries a one-line description under its label.](/blog/astryx-v0-5-0/stepper.png)
 
 ### RichTextEditor → `@astryxdesign/richtext` (v0.4.1)
 
-The Lexical-based editor moved out of `lab` into its own package ([#4678](https://github.com/facebook/astryx/pull/4678)), so it can be canaried on its own. **This one is not a stabilization** — `@astryxdesign/richtext` publishes under `@canary` only, exactly as `lab` does. What changed for you is the import: `RichTextEditor`, `RichTextView` and `RichTextEditorToolbar` come from `@astryxdesign/richtext` now.
+The Lexical-based editor moved out of `lab` into its own package ([#4678](https://github.com/meta/astryx/pull/4678)), so it can be canaried on its own. **This one is not a stabilization** — `@astryxdesign/richtext` publishes under `@canary` only, exactly as `lab` does. What changed for you is the import: `RichTextEditor`, `RichTextView` and `RichTextEditorToolbar` come from `@astryxdesign/richtext` now.
 
 ![The same RichTextEditor rendered twice, light mode on the left and dark on the right. Each is a field labelled "Notes" with a formatting toolbar across the top — undo, redo, a Paragraph block-type menu, then bold, italic, underline, strikethrough, code and link — above an editing area holding the sentence "Release notes for v0.5.0 — now in its own package.", with the version in bold.](/blog/astryx-v0-5-0/richtexteditor.png)
 
@@ -114,6 +114,6 @@ The focus ring is a token too — `--focus-outline-width`, `--focus-outline-styl
 
 Huge thanks to everyone who contributed across the eight releases since 0.4.0: [@AKnassa](https://github.com/AKnassa), [@andrskr](https://github.com/andrskr), [@arham766](https://github.com/arham766), [@Astro-Han](https://github.com/Astro-Han), [@athz](https://github.com/athz), [@bhamodi](https://github.com/bhamodi), [@cixzhang](https://github.com/cixzhang), [@ejhammond](https://github.com/ejhammond), [@Eloitor](https://github.com/Eloitor), [@ernestt](https://github.com/ernestt), [@freddymeta](https://github.com/freddymeta), [@Geervan](https://github.com/Geervan), [@gonzoblasco](https://github.com/gonzoblasco), [@Han5991](https://github.com/Han5991), [@HelloOjasMutreja](https://github.com/HelloOjasMutreja), [@imdreamrunner](https://github.com/imdreamrunner), [@is-jain](https://github.com/is-jain), [@jiunshinn](https://github.com/jiunshinn), [@josephfarina](https://github.com/josephfarina), [@kentonquatman](https://github.com/kentonquatman), [@Kevinjohn](https://github.com/Kevinjohn), [@lexs](https://github.com/lexs), [@nynexman4464](https://github.com/nynexman4464), [@potatowagon](https://github.com/potatowagon), [@rubyycheung](https://github.com/rubyycheung), [@Sunil56224972](https://github.com/Sunil56224972), and [@Unmesh100](https://github.com/Unmesh100).
 
-Particular thanks to [@Sunil56224972](https://github.com/Sunil56224972) for the Markdown security report and fix ([#4330](https://github.com/facebook/astryx/pull/4330)).
+Particular thanks to [@Sunil56224972](https://github.com/Sunil56224972) for the Markdown security report and fix ([#4330](https://github.com/meta/astryx/pull/4330)).
 
-The full changelog is on the [v0.5.0 release page](https://github.com/facebook/astryx/releases/tag/v0.5.0).
+The full changelog is on the [v0.5.0 release page](https://github.com/meta/astryx/releases/tag/v0.5.0).

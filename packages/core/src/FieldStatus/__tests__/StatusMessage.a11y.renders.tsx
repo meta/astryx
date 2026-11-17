@@ -10,7 +10,6 @@
  */
 
 import {useEffect, useState, type ReactElement, type ReactNode} from 'react';
-import {ChatSystemMessage} from '../../Chat/ChatSystemMessage';
 import {ProgressBar} from '../../ProgressBar/ProgressBar';
 import {Spinner} from '../../Spinner/Spinner';
 import {Toast} from '../../Toast/Toast';
@@ -117,6 +116,20 @@ function ToastAnnouncementHarness({type}: {type: 'info' | 'error'}) {
   );
 }
 
+function ToastTopLayerAnnouncementHarness({type}: {type: 'info' | 'error'}) {
+  // Outside a modal a top-layer viewport speaks through the shared channel.
+  const politeness = type === 'error' ? 'assertive' : 'polite';
+  return (
+    <ToastViewport>
+      <PrimeLiveRegion politeness={politeness} />
+      <button data-a11y-relation="focus-anchor" type="button">
+        Keep focus
+      </button>
+      <ToastAnnouncementButtons type={type} />
+    </ToastViewport>
+  );
+}
+
 function ToastCardHarness({type}: {type: 'info' | 'error'}) {
   const message = type === 'error' ? 'Upload failed' : 'Changes saved';
   const replacement =
@@ -198,22 +211,6 @@ function SpinnerHarness({visibleLabel}: {visibleLabel: boolean}) {
   );
 }
 
-function ChatSystemMessageHarness() {
-  const initial = 'Conversation started';
-  const [message, setMessage] = useState(initial);
-  return (
-    <Frame>
-      <TransitionButton name="show" onClick={() => setMessage(initial)} />
-      <TransitionButton
-        name="replace"
-        onClick={() => setMessage('A file was shared')}
-      />
-      <TransitionButton name="clear" onClick={() => setMessage('')} />
-      <ChatSystemMessage>{message}</ChatSystemMessage>
-    </Frame>
-  );
-}
-
 function ProgressHarness({
   initial,
   progressValue = 40,
@@ -259,6 +256,12 @@ export const CORE_STATUS_MESSAGE_STATE_RENDERS: Record<
 > = {
   'toast-info-announcement': () => <ToastAnnouncementHarness type="info" />,
   'toast-error-announcement': () => <ToastAnnouncementHarness type="error" />,
+  'toast-info-announcement-top-layer': () => (
+    <ToastTopLayerAnnouncementHarness type="info" />
+  ),
+  'toast-error-announcement-top-layer': () => (
+    <ToastTopLayerAnnouncementHarness type="error" />
+  ),
   'toast-info-card-mounted': () => <ToastCardHarness type="info" />,
   'toast-error-card-mounted': () => <ToastCardHarness type="error" />,
   'field-status-error-attached': () => (
@@ -289,7 +292,6 @@ export const CORE_STATUS_MESSAGE_STATE_RENDERS: Record<
     <SpinnerHarness visibleLabel={false} />
   ),
   'spinner-visible-label-mounted': () => <SpinnerHarness visibleLabel />,
-  'chat-system-status-mounted': () => <ChatSystemMessageHarness />,
   'progress-loading-to-complete': () => <ProgressHarness />,
   'progress-custom-range': () => (
     <ProgressHarness

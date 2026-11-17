@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/use-a-theme-in-an-app`:
+ * @file `astryx docs authoring/building-blocks/themes/use-a-theme-in-an-app`:
  * an app installs the integration and applies or extends the theme, like any theme.
  */
 
@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm install @acme/astryx-widgets\nastryx theme add ocean --package @acme/astryx-widgets',
+          code: '{@pm install @acme/astryx-widgets}\n{@command theme add ocean --package @acme/astryx-widgets}',
         },
         {
           type: 'code',

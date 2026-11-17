@@ -24,10 +24,18 @@ import {
   computerSkillLinks,
   inspectComputerAgentText,
   removeComputerAgentText,
+  computerInstallStep,
   renderComputerAgentText,
+  skillInstallStepOf,
   writeComputerAgentText,
 } from './computer-agent-text.mjs';
-import {MARKER_END, MARKER_START} from './agent-doc-state.mjs';
+import {
+  MARKER_END,
+  MARKER_START,
+  SELF_CHECK_CSS,
+  WORKFLOW_STEPS,
+  WORKFLOW_TITLE,
+} from './agent-doc-state.mjs';
 import {runWithCliDoor} from '../env/cli-command.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {parse as parseYaml} from 'yaml';
@@ -105,7 +113,12 @@ describe('renderComputerAgentText', () => {
       expect(text).toContain(
         'Use it when you build or change UI, pick components, or style or theme an app.',
       );
-      expect(text).toContain("Start with `astryx search '<what you need>'`.");
+      expect(text).toContain(
+        'To make a page, run `astryx build "<what the page is for>"` first, as the WORKFLOW below says.',
+      );
+      expect(text).toContain(
+        "Start with `astryx search '<what you need>'` for anything else.",
+      );
     }
   });
 
@@ -123,16 +136,105 @@ describe('renderComputerAgentText', () => {
 
   it('stays short, and tells agents to read docs through the CLI', () => {
     const text = renderComputerAgentText({command: 'astryx'});
-    expect(text.split('\n').length).toBeLessThanOrEqual(15);
+    expect(text.split('\n').length).toBeLessThanOrEqual(22);
     expect(text).toContain(
       "Then read `astryx component <Name>` or `astryx docs <topic>`, not the package's files.",
     );
+  });
+
+  // Discovery alone leaves the build to the agent's own page route, which
+  // may not install packages; the skill names the route and the project
+  // agent docs' own workflow lines.
+  it('gives the build workflow: a project with Astryx installed and init run, the shared template steps, then check and deliver the build', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    expect(text).toContain(
+      'To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). Run `astryx init` there and follow the agent docs it writes.',
+    );
+    for (const line of [WORKFLOW_TITLE, ...WORKFLOW_STEPS]) {
+      expect(text).toContain(line);
+    }
+    expect(text).toContain(`re-read each file; ${SELF_CHECK_CSS}.`);
+    expect(text).toContain('deliver that build');
   });
 
   it("uses the host's door when one is set", () => {
     const text = runWithCliDoor('acme astryx', () => renderComputerAgentText());
     expect(text).toContain("`acme astryx search '<what you need>'`");
     expect(text).not.toMatch(/`astryx /u);
+  });
+
+  // A machine can keep the home folder and lose the CLI installed for the
+  // computer, so the skill says how to get it back, with no version.
+  it('names the install step for when `astryx` is not found, and only for the global command', () => {
+    expect(
+      renderComputerAgentText({
+        command: 'astryx',
+        install: 'npm i -g @astryxdesign/cli',
+      }),
+    ).toContain(
+      'If `astryx` is not found, run `npm i -g @astryxdesign/cli` first.',
+    );
+    // It repeats the step that installed the copy writing it, which doctor
+    // reads back.
+    const bun = renderComputerAgentText({
+      command: 'astryx',
+      install: 'bun add -g @astryxdesign/cli',
+    });
+    expect(bun).toContain(
+      'If `astryx` is not found, run `bun add -g @astryxdesign/cli` first.',
+    );
+    expect(skillInstallStepOf(bun)).toBe('bun add -g @astryxdesign/cli');
+  });
+
+  // Rendering is pure: its default step never depends on the skill in the
+  // home folder of the computer the test runs on.
+  it("renders npm's step by default, whatever skill the caller's home folder holds", () => {
+    const home = tmp('caller-home');
+    const file = computerSkillFile(home);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(
+      file,
+      renderComputerAgentText({
+        command: 'astryx',
+        install: 'pnpm add -g @astryxdesign/cli',
+      }),
+    );
+    const saved = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      expect(renderComputerAgentText({command: 'astryx'})).toContain(
+        'run `npm i -g @astryxdesign/cli` first.',
+      );
+    } finally {
+      process.env.HOME = saved;
+    }
+  });
+
+  // Only the CLI installed for the computer chooses the step; every other
+  // copy of the release, such as a project's own CLI, keeps the one the file
+  // records, so it neither reports the file as different nor rewrites it.
+  it('keeps the step the file records for a copy that is not installed for the computer', () => {
+    const home = tmp('home');
+    const file = computerSkillFile(home);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    const pnpm = renderComputerAgentText({
+      command: 'astryx',
+      install: 'pnpm add -g @astryxdesign/cli',
+    });
+    fs.writeFileSync(file, pnpm);
+    expect(computerInstallStep({home})).toBe('pnpm add -g @astryxdesign/cli');
+    expect(inspectComputerAgentText({home, command: 'astryx'})[0].state).toBe(
+      'current',
+    );
+    writeComputerAgentText({home, command: 'astryx'});
+    expect(fs.readFileSync(file, 'utf8')).toBe(pnpm);
+    // No file yet: npm's step.
+    expect(computerInstallStep({home: tmp('empty-home')})).toBe(
+      'npm i -g @astryxdesign/cli',
+    );
+    expect(renderComputerAgentText({command: 'acme astryx'})).not.toContain(
+      'npm i -g',
+    );
   });
 });
 
@@ -244,7 +346,7 @@ describe('links and the copy', () => {
       writeComputerAgentText({home, command: 'astryx'});
       // A link as 0.7.x wrote it: relative to ~/.claude/skills, which the
       // system reads from ~/dotfiles/.claude/skills, so it dangles.
-      fs.rmSync(CLAUDE());
+      fs.unlinkSync(CLAUDE());
       fs.symlinkSync(
         path.relative(path.dirname(CLAUDE()), FOLDER()),
         CLAUDE(),

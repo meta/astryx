@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates`: guides for adding,
+ * @file `astryx docs authoring/building-blocks/templates`: guides for adding,
  * documenting, packaging, and testing templates in an integration package.
  */
 

@@ -20,6 +20,7 @@
  */
 
 import {useCallback, useMemo, useRef} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import type {ColumnSettingsOption} from './useTableColumnSettings';
 
 // =============================================================================
@@ -169,16 +170,18 @@ export interface UseTableColumnSettingsStateReturn<
  * <Table data={data} columns={allColumns} plugins={{ columnSettings: plugin }} />
  * ```
  */
-export function useTableColumnSettingsState<
-  TColumnKey extends string = string,
->(
+export function useTableColumnSettingsState<TColumnKey extends string = string>(
   config: UseTableColumnSettingsStateConfig<TColumnKey>,
 ): UseTableColumnSettingsStateReturn<TColumnKey> {
   const {columns, activeColumnKeys} = config;
 
   // Keep config in a ref so callbacks always read the latest version.
   const configRef = useRef(config);
-  configRef.current = config;
+  // Syncs configRef with the committed render. A render that React discards,
+  // as a suspended transition does, must not leave its config behind.
+  useIsomorphicLayoutEffect(() => {
+    configRef.current = config;
+  });
 
   // Build lookup sets for fast checks
   const activeSet = useMemo(

@@ -13,11 +13,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {component} from './component.mjs';
-import {CORE_PACKAGE, linkComponentResponse} from './_adapter.mjs';
-import {docs} from '../docs/docs.mjs';
-import {search} from '../search/search.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./component.mjs')} */
+const {component} = require('./component.mjs');
+/** @type {typeof import('./_adapter.mjs')} */
+const {CORE_PACKAGE, linkComponentResponse} = require('./_adapter.mjs');
+/** @type {typeof import('../docs/docs.mjs')} */
+const {docs} = require('../docs/docs.mjs');
+/** @type {typeof import('../search/search.mjs')} */
+const {search} = require('../search/search.mjs');
+/** @type {typeof import('../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../test-utils/run-cli.mjs');
 
 const SLOW = 60_000;
 
@@ -100,7 +109,7 @@ function scaffold() {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-component-links-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-component-links-'));
 });
 
 afterEach(() => {
@@ -130,6 +139,7 @@ describe("a link in a component doc's text", () => {
       expect(read.data.examples[0]).toEqual({
         label: 'As `astryx docs acme-setup` shows',
         code: '// {@link generic:acme-setup}',
+        kind: 'demo',
       });
     },
     SLOW,
@@ -185,9 +195,11 @@ describe("a link in a component doc's text", () => {
         '`astryx docs acme-setup`',
       );
 
+      // Text shows the command with the project's runner, as docs reads do.
       const text = await runCli(['component', 'AcmeButton'], tmpDir);
       expect(text.status).toBe(0);
-      expect(text.stdout).toContain('`astryx docs acme-setup`');
+      expect(text.stdout).toMatch(/`[^`\n]*astryx[^`\n]* docs acme-setup`/);
+      expect(text.stdout).not.toContain('`astryx docs acme-setup`');
       expect(text.stdout).not.toContain('{@link generic:acme-setup} says');
     },
     SLOW,
@@ -217,6 +229,39 @@ describe("a link in a component doc's text", () => {
     // A link that names no doc prints as written.
     expect(read.data.props[0].description).toBe('See {@link generic:nope}.');
   });
+});
+
+describe("doc tokens in a component doc's text", () => {
+  it(
+    'render with no link beside them, in the read and in search, for the project in cwd',
+    async () => {
+      scaffold();
+      fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '{}\n');
+      const docFile = path.join(
+        tmpDir,
+        'node_modules/@acme/widgets/components/AcmeButton.doc.mjs',
+      );
+      fs.writeFileSync(
+        docFile,
+        `export default ${JSON.stringify({
+          ...ACME_BUTTON,
+          usage: {
+            description:
+              'A button. Install with {@pm install @acme/widgets}; check with {@command doctor}.',
+          },
+          props: [],
+          examples: [],
+        })};\n`,
+      );
+      const read = /** @type {any} */ (
+        await component('AcmeButton', {cwd: tmpDir})
+      );
+      expect(read.data.usage.description).toBe(
+        'A button. Install with `bun add @acme/widgets`; check with `astryx doctor`.',
+      );
+    },
+    SLOW,
+  );
 });
 
 describe("a link in a topic's description", () => {
@@ -250,14 +295,14 @@ describe("a link in a guide's description, as the docs tree shows it", () => {
         'Document a theme by extending the core theme topic, so an app reads it in `astryx docs theme`.';
       const guide = /** @type {any} */ (
         await docs(
-          'cli/integrations/building-blocks/themes/document-the-theme',
+          'authoring/building-blocks/themes/document-the-theme',
           undefined,
           {cwd: tmpDir, full: true},
         )
       );
       expect(guide.data.description).toBe(expected);
       const namespace = /** @type {any} */ (
-        await docs('cli/integrations/building-blocks/themes', undefined, {
+        await docs('authoring/building-blocks/themes', undefined, {
           cwd: tmpDir,
         })
       );

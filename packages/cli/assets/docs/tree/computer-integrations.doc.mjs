@@ -37,7 +37,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm i -g @astryxdesign/cli @acme/widgets\n# or: pnpm add -g · yarn global add · bun add -g',
+          code: '{@pm install @astryxdesign/cli @acme/widgets --global}',
         },
         {
           type: 'prose',
@@ -51,7 +51,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'In a folder outside any project, Astryx loads each integration installed next to your global install the way a project loads its own: its components, templates, docs, themes, and discover source show up, and a command name it declares starts the commands Astryx prints. One whose `@astryxdesign/core` or `@astryxdesign/cli` peer range leaves out your global version is skipped, and `astryx doctor` says why.',
+          text: 'In a folder outside any project, Astryx loads each integration installed next to your global install the way a project loads its own: its components, templates, docs, themes, and discover source show up, and a command name it declares starts the commands Astryx prints. One whose `@astryxdesign/core` or `@astryxdesign/cli` peer range leaves out your global version is skipped, and `{@command doctor}` says why.',
         },
       ],
     },
@@ -61,7 +61,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "A project's answers must match what it installs: a component from a package it does not install would not build. So inside a project, an integration installed only globally adds nothing. `astryx discover` lists it among the packages the project could add, with the project's install command, when it supports the project's version and loads. When the project installs the same integration, the project's copy is the one used.",
+          text: "A project's answers must match what it installs: a component from a package it does not install would not build. So inside a project, an integration installed only globally adds nothing. `{@command discover}` lists it among the packages the project could add, with the project's install command, when it supports the project's version and loads. When the project installs the same integration, the project's copy is the one used.",
         },
       ],
     },
@@ -73,8 +73,8 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Outside a project, `astryx doctor` lists the global integrations it uses and warns about each it skips.',
-            'Inside a project, `astryx doctor` and `astryx discover` list the ones the project could add.',
+            'Outside a project, `{@command doctor}` lists the global integrations it uses and warns about each it skips.',
+            'Inside a project, `{@command doctor}` and `{@command discover}` list the ones the project could add.',
           ],
         },
       ],

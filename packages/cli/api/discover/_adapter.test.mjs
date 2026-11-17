@@ -21,6 +21,10 @@ import {
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
+import {
+  _resetHostedRun,
+  activateHostedRun,
+} from '../../foundation/runtime/package-root.mjs';
 
 /** No official packages, so a test sees only its own sources after it. */
 const NO_OFFICIAL = {packages: []};
@@ -228,6 +232,44 @@ describe('callSources', () => {
 
     const otherRequest = await callSources(p, {package: '@a/one'}, options);
     expect(otherRequest.sources[0].status).toBe('failed');
+  });
+
+  it("keeps a host's saved copies per host, so one tool never answers with another's", async () => {
+    let online = true;
+    const source = async () => {
+      if (!online) throw new Error('offline');
+      return catalog('Acme catalog', [pkg('@acme/one')]);
+    };
+    const options = {cacheDir, official: NO_OFFICIAL};
+    try {
+      activateHostedRun({
+        discoverSources: [source],
+        startingRoot: '/tools/acme',
+      });
+      await callSources(undefined, {}, options);
+      online = false;
+      const sameHost = await callSources(undefined, {}, options);
+      expect(sameHost.sources[0]).toMatchObject({
+        name: 'Acme catalog',
+        from: 'the host',
+        status: 'saved',
+      });
+
+      _resetHostedRun();
+      activateHostedRun({
+        discoverSources: [source],
+        startingRoot: '/tools/other',
+      });
+      const otherHost = await callSources(undefined, {}, options);
+      expect(otherHost.sources[0]).toMatchObject({
+        from: 'the host',
+        status: 'failed',
+        error: 'offline',
+      });
+      expect(otherHost.packages).toEqual([]);
+    } finally {
+      _resetHostedRun();
+    }
   });
 
   it('keeps the saved copy in the cache directory, not in the project', async () => {
@@ -793,5 +835,43 @@ describe('addCommand with the official list', () => {
     expect(command('@astryxdesign/theme-matcha', '0.7.1')).toMatch(
       / @astryxdesign\/theme-matcha@0\.7\.1$/,
     );
+  });
+
+  it('saves one version exactly in a project that pins its Core, and a range as the range', () => {
+    // A lockfile names npm, whichever package manager runs the tests.
+    const pinned = fs.mkdtempSync(path.join(cacheDir, 'pinned-'));
+    fs.writeFileSync(
+      path.join(pinned, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(pinned, 'package-lock.json'), '{}');
+    const command = addCommand(project({cwd: pinned}), {official: list});
+    expect(command('@astryxdesign/theme-gothic')).toBe(
+      'npm install -E @astryxdesign/theme-gothic@0.6.8',
+    );
+    expect(command('@astryxdesign/theme-matcha', '0.7.1')).toBe(
+      'npm install -E @astryxdesign/theme-matcha@0.7.1',
+    );
+    expect(command('@astryxdesign/theme-matcha')).toBe(
+      'npm install "@astryxdesign/theme-matcha@^0.6.8"',
+    );
+    expect(command('@acme/ui')).toBe('npm install @acme/ui');
+    // The pin is about Astryx's release: another package keeps the package
+    // manager's own way of saving it.
+    expect(command('@acme/widgets', '1.2.3')).toBe(
+      'npm install @acme/widgets@1.2.3',
+    );
+
+    const ranged = fs.mkdtempSync(path.join(cacheDir, 'ranged-'));
+    fs.writeFileSync(
+      path.join(ranged, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '^0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(ranged, 'package-lock.json'), '{}');
+    expect(
+      addCommand(project({cwd: ranged}), {official: list})(
+        '@astryxdesign/theme-gothic',
+      ),
+    ).toBe('npm install @astryxdesign/theme-gothic@0.6.8');
   });
 });

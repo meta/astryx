@@ -17,43 +17,39 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
+import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
+import {
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from '../doc-compiler/stored-docs.mjs';
+import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
+
+/**
+ * The theme a project starts with when it has none: the package `init`
+ * installs and the build playbook tells such a project to add.
+ */
+export const STARTER_THEME = Object.freeze({
+  slug: 'neutral',
+  package: '@astryxdesign/theme-neutral',
+});
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -73,6 +69,8 @@ function sourceParser() {
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [provider] the component the
+ *   owning integration's manifest names as the one that wires its themes
  */
 
 /**
@@ -112,14 +110,7 @@ function resolveThemePath(value, root, label) {
   }
 }
 
-export const THEME_MODULE_EXTENSIONS = [
-  '.mjs',
-  '.js',
-  '.mts',
-  '.ts',
-  '.tsx',
-  '.jsx',
-];
+export {THEME_MODULE_EXTENSIONS};
 
 /** A theme directory's name: lower-kebab, starting with a letter. */
 export const THEME_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
@@ -173,12 +164,39 @@ class ThemeRuntimeExportError extends Error {}
  * Every string specifier a module imports, re-exports, or imports dynamically.
  * @param {string} file
  * @param {any} jscodeshift
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`
  * @returns {string[]}
  */
-function moduleSpecifiers(file, jscodeshift) {
+function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
-  const j = jscodeshift.withParser(parser);
-  const root = j(fs.readFileSync(file, 'utf-8'));
+  const text = fs.readFileSync(file, 'utf-8');
+  // A module's specifiers follow from its text: one parse per text read
+  // (a command reads the same built theme module several times).
+  const key = `${parser}\0${withRequire}\0${createHash('sha256').update(text).digest('hex')}`;
+  const known = SPECIFIERS.get(key);
+  if (known) return [...known];
+  const found = parsedSpecifiers(text, jscodeshift.withParser(parser), {
+    withRequire,
+  });
+  if (SPECIFIERS.size >= 256) SPECIFIERS.clear();
+  SPECIFIERS.set(key, found);
+  return [...found];
+}
+
+/** The specifiers each module text read names, by parser, mode and text. @type {Map<string, string[]>} */
+const SPECIFIERS = new Map();
+
+/**
+ * The module specifiers a module's text names (imports, re-exports,
+ * import() calls, and with `withRequire` require() calls).
+ * @param {string} text
+ * @param {any} j jscodeshift with its parser
+ * @param {{withRequire: boolean}} options
+ * @returns {string[]}
+ */
+function parsedSpecifiers(text, j, {withRequire}) {
+  const root = j(text);
   /** @type {string[]} */
   const specifiers = [];
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
@@ -211,6 +229,23 @@ function moduleSpecifiers(file, jscodeshift) {
       specifiers.push(importPath.node.source.value);
     }
   });
+  if (withRequire) {
+    // CommonJS `require('./x')` and TypeScript `import x = require('./x')`.
+    root.find(j.CallExpression).forEach((/** @type {any} */ callPath) => {
+      const {callee, arguments: args} = callPath.node;
+      if (
+        callee?.type === 'Identifier' &&
+        callee.name === 'require' &&
+        typeof args?.[0]?.value === 'string'
+      )
+        specifiers.push(args[0].value);
+    });
+    root.find(j.TSImportEqualsDeclaration).forEach((/** @type {any} */ p) => {
+      const ref = p.node.moduleReference;
+      const value = ref?.expression?.value ?? ref?.argument?.value;
+      if (typeof value === 'string') specifiers.push(value);
+    });
+  }
 
   return specifiers;
 }
@@ -218,10 +253,12 @@ function moduleSpecifiers(file, jscodeshift) {
 /**
  * Every module a theme source file imports or re-exports, as written.
  * @param {string} file
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`.
  * @returns {string[]}
  */
-export function themeFileImports(file) {
-  return moduleSpecifiers(file, sourceParser());
+export function themeFileImports(file, options = {}) {
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -547,6 +584,67 @@ function staticThemeValue(node, label) {
 }
 
 /**
+ * Convert one static literal of a data descriptor (an icon definition): a
+ * string, a boolean, or an array or plain object of those.
+ * @param {any} node
+ * @param {string} label
+ * @returns {unknown}
+ */
+function staticDataValue(node, label) {
+  if (node?.type === 'StringLiteral' || node?.type === 'BooleanLiteral') {
+    return node.value;
+  }
+  if (node?.type === 'ArrayExpression') {
+    return node.elements.map((/** @type {any} */ element) =>
+      staticDataValue(unparenthesized(element), label),
+    );
+  }
+  if (node?.type === 'ObjectExpression') {
+    return staticObject(node, label, staticDataValue);
+  }
+  throw new Error(
+    `${label} must use static strings, booleans, arrays, and objects in its default export.`,
+  );
+}
+
+/**
+ * A static object literal, every value converted by `convert`.
+ * @param {any} object
+ * @param {string} label
+ * @param {(node: any, label: string) => unknown} convert
+ * @returns {Record<string, any>}
+ */
+function staticObject(object, label, convert) {
+  /** @type {Record<string, any>} */
+  const value = {};
+  for (const property of object.properties) {
+    if (property.type !== 'ObjectProperty' || property.computed) {
+      throw new Error(`${label} must contain only static object properties.`);
+    }
+    const key =
+      property.key.type === 'Identifier'
+        ? property.key.name
+        : property.key.type === 'StringLiteral'
+          ? property.key.value
+          : null;
+    if (key === null) {
+      throw new Error(`${label} has an invalid property name.`);
+    }
+    if (Object.hasOwn(value, key)) {
+      throw new Error(`${label} declares "${key}" more than once.`);
+    }
+    // Defined, not assigned, so `__proto__` stays a key the parser rejects.
+    Object.defineProperty(value, key, {
+      value: convert(unparenthesized(property.value), label),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return value;
+}
+
+/**
  * How messages about a theme descriptor name it.
  * @param {string} docPath
  * @param {string} owner
@@ -582,7 +680,7 @@ function readThemeDoc(docPath, owner) {
 /**
  * Descriptor reads in this process, by path and label, reused while the file
  * keeps its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, string | boolean>} | {error: unknown}}>}
+ * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, any>} | {error: unknown}}>}
  */
 const descriptorReads = new Map();
 
@@ -595,15 +693,52 @@ const descriptorReads = new Map();
  * @returns {Record<string, string | boolean>}
  */
 export function readThemeDescriptorValue(docPath, label) {
+  return readStaticDescriptorValue(docPath, label, 'ThemeDoc');
+}
+
+/**
+ * The static value a typed descriptor default-exports, read from its source
+ * without executing it. Throws when the file is not one static object typed
+ * with `typeName` from `@astryxdesign/cli/authoring`. Theme and icon-set
+ * descriptors share this reader.
+ * @param {string} docPath
+ * @param {string} label
+ * @param {string} typeName the public authoring type, such as `ThemeDoc`
+ * @param {{data?: boolean}} [options] `data`: also accept arrays and plain
+ *   objects of static values (icon definitions)
+ * @returns {Record<string, any>}
+ */
+export function readStaticDescriptorValue(
+  docPath,
+  label,
+  typeName,
+  {data = false} = {},
+) {
   const {size, mtimeMs} = fs.statSync(docPath);
-  const key = `${docPath}\0${label}`;
+  const key = `${docPath}\0${label}\0${typeName}\0${data}`;
   let cached = descriptorReads.get(key);
   if (!cached || cached.size !== size || cached.mtimeMs !== mtimeMs) {
-    /** @type {{value: Record<string, string | boolean>} | {error: unknown}} */
+    /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
+      const source = fs.readFileSync(docPath, 'utf-8');
+      // A descriptor Astryx ships was read at publish, by the hash of its
+      // text (scripts/generate-stored-docs.mjs): the same text reads the
+      // same value without parsing. Any other text, or a store that cannot
+      // be read, is parsed.
+      let stored;
+      try {
+        stored = readStore(STORED_DOCS_FILE).get(
+          descriptorStoreKey(source, typeName, data),
+        );
+      } catch {
+        stored = undefined;
+      }
       read = {
-        value: readDescriptorSource(fs.readFileSync(docPath, 'utf-8'), label),
+        value:
+          stored != null && typeof stored === 'object'
+            ? stored
+            : readDescriptorSource(source, label, typeName, data),
       };
     } catch (error) {
       read = {error};
@@ -612,19 +747,46 @@ export function readThemeDescriptorValue(docPath, label) {
     descriptorReads.set(key, cached);
   }
   if ('error' in cached.read) throw cached.read.error;
-  return {...cached.read.value};
+  return data ? structuredClone(cached.read.value) : {...cached.read.value};
 }
 
 /**
+ * The typed descriptors read statically, each with whether plain data is
+ * accepted: what scripts/generate-stored-docs.mjs reads at publish.
+ * @type {ReadonlyArray<[string, boolean]>}
+ */
+export const STATIC_DESCRIPTOR_TYPES = [
+  ['ThemeDoc', false],
+  ['IconSetDoc', false],
+  ['IconDefinitionDoc', true],
+];
+
+/**
+ * Where a descriptor's statically read value is stored at publish: by the
+ * hash of its text, the type it is read as, and whether plain data counts.
+ * @param {string} source
+ * @param {string} typeName
+ * @param {boolean} data
+ * @returns {string}
+ */
+export function descriptorStoreKey(source, typeName, data) {
+  return `descriptor:${typeName}:${data ? 'data' : 'object'}:${storedKey(source)}`;
+}
+
+/**
+ * The static value a descriptor's source default-exports (see
+ * {@link readStaticDescriptorValue}); throws when it is not one.
  * @param {string} source
  * @param {string} label
- * @returns {Record<string, string | boolean>}
+ * @param {string} typeName
+ * @param {boolean} [data]
+ * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label) {
+export function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -646,52 +808,34 @@ function readDescriptorSource(source, label) {
   );
   if (unsupported.length > 0 || ast.program.directives.length > 0) {
     throw new Error(
-      `${label} must contain only its static default-exported ThemeDoc object.`,
+      `${label} must contain only its static default-exported ${typeName} object.`,
     );
   }
   const object =
     defaults.length === 1 && unparenthesized(defaults[0].declaration);
   if (object?.type !== 'ObjectExpression') {
-    throw new Error(`${label} must default-export one static ThemeDoc object.`);
-  }
-  if (!declaresThemeDoc(ast, defaults[0])) {
     throw new Error(
-      `${label} must declare its public ThemeDoc type from @astryxdesign/cli/authoring.`,
+      `${label} must default-export one static ${typeName} object.`,
+    );
+  }
+  if (!declaresDocType(ast, defaults[0], typeName)) {
+    throw new Error(
+      `${label} must declare its public ${typeName} type from @astryxdesign/cli/authoring.`,
     );
   }
 
-  /** @type {Record<string, string | boolean>} */
-  const value = {};
-  for (const property of object.properties) {
-    if (property.type !== 'ObjectProperty' || property.computed) {
-      throw new Error(`${label} must contain only static object properties.`);
-    }
-    const key =
-      property.key.type === 'Identifier'
-        ? property.key.name
-        : property.key.type === 'StringLiteral'
-          ? property.key.value
-          : null;
-    if (key === null) {
-      throw new Error(`${label} has an invalid property name.`);
-    }
-    if (Object.hasOwn(value, key)) {
-      throw new Error(`${label} declares "${key}" more than once.`);
-    }
-    // Defined, not assigned, so `__proto__` stays a key the parser rejects.
-    Object.defineProperty(value, key, {
-      value: staticThemeValue(unparenthesized(property.value), label),
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
-  }
-  return value;
+  return staticObject(object, label, data ? staticDataValue : staticThemeValue);
 }
 
-/** `import('@astryxdesign/cli/authoring').ThemeDoc`, without whitespace. */
-const THEME_DOC_TYPE =
-  /^import\((['"])@astryxdesign\/cli\/authoring\1\)\.ThemeDoc$/u;
+/**
+ * `import('@astryxdesign/cli/authoring').<typeName>`, without whitespace.
+ * @param {string} typeName
+ */
+const authoringTypeRe = typeName =>
+  new RegExp(
+    String.raw`^import\((['"])@astryxdesign\/cli\/authoring\1\)\.${typeName}$`,
+    'u',
+  );
 
 /** @param {any} comment */
 function isJsdoc(comment) {
@@ -834,15 +978,16 @@ function wrappedInParens(type) {
 
 /**
  * Whether a JSDoc type, whitespace removed, checks an object literal exactly
- * as ThemeDoc does: ThemeDoc or one of its aliases, optionally parenthesized,
- * marked `!`, `?` or `=`, joined with `null` or `undefined`, or intersected
- * with `{}`.
+ * as `typeName` does: the type or one of its aliases, optionally
+ * parenthesized, marked `!`, `?` or `=`, joined with `null` or `undefined`, or
+ * intersected with `{}`.
  * @param {string} type
  * @param {Map<string, string>} aliases alias name to the type it names
+ * @param {string} typeName
  * @param {Set<string>} [seen]
  * @returns {boolean}
  */
-function isThemeDocType(type, aliases, seen = new Set()) {
+function isDocType(type, aliases, typeName, seen = new Set()) {
   let current = type;
   for (;;) {
     if (/^[!?]/u.test(current)) current = current.slice(1);
@@ -854,15 +999,17 @@ function isThemeDocType(type, aliases, seen = new Set()) {
     member => member !== 'null' && member !== 'undefined',
   );
   if (members.length !== 1) return false;
-  if (members[0] !== current) return isThemeDocType(members[0], aliases, seen);
+  if (members[0] !== current) {
+    return isDocType(members[0], aliases, typeName, seen);
+  }
   const parts = splitType(current, '&').filter(part => part !== '{}');
   if (parts.length !== 1) return false;
-  if (parts[0] !== current) return isThemeDocType(parts[0], aliases, seen);
-  if (THEME_DOC_TYPE.test(current)) return true;
+  if (parts[0] !== current) return isDocType(parts[0], aliases, typeName, seen);
+  if (authoringTypeRe(typeName).test(current)) return true;
   const named = aliases.get(current);
   if (named === undefined || seen.has(current)) return false;
   seen.add(current);
-  return isThemeDocType(named, aliases, seen);
+  return isDocType(named, aliases, typeName, seen);
 }
 
 const AUTHORING = String.raw`(['"])@astryxdesign\/cli\/authoring\2`;
@@ -871,12 +1018,13 @@ const AUTHORING = String.raw`(['"])@astryxdesign\/cli\/authoring\2`;
  * The type names the file's JSDoc binds with `@typedef` or `@import`, from any
  * JSDoc comment in the module, as TypeScript reads them.
  * @param {any[]} comments
+ * @param {string} typeName
  * @returns {Map<string, string>}
  */
-function jsdocAliases(comments) {
+function jsdocAliases(comments, typeName) {
   /** @type {Map<string, string>} */
   const aliases = new Map();
-  const theme = "import('@astryxdesign/cli/authoring').ThemeDoc";
+  const theme = `import('@astryxdesign/cli/authoring').${typeName}`;
   for (const comment of comments.filter(isJsdoc)) {
     for (const tag of jsdocTags(comment.value)) {
       if (tag.name === 'typedef') {
@@ -889,17 +1037,17 @@ function jsdocAliases(comments) {
           'u',
         ).exec(tag.text);
         for (const specifier of named?.[1].split(',') ?? []) {
-          const match =
-            /^\s*(?:type\s+)?ThemeDoc(?:\s+as\s+([$A-Z_a-z][$\w]*))?\s*$/u.exec(
-              specifier,
-            );
-          if (match) aliases.set(match[1] ?? 'ThemeDoc', theme);
+          const match = new RegExp(
+            String.raw`^\s*(?:type\s+)?${typeName}(?:\s+as\s+([$A-Z_a-z][$\w]*))?\s*$`,
+            'u',
+          ).exec(specifier);
+          if (match) aliases.set(match[1] ?? typeName, theme);
         }
         const namespace = new RegExp(
           String.raw`^\s*\*\s*as\s+([$A-Z_a-z][$\w]*)\s+from\s*${AUTHORING}`,
           'u',
         ).exec(tag.text)?.[1];
-        if (namespace) aliases.set(`${namespace}.ThemeDoc`, theme);
+        if (namespace) aliases.set(`${namespace}.${typeName}`, theme);
       }
     }
   }
@@ -908,14 +1056,15 @@ function jsdocAliases(comments) {
 
 /**
  * Whether the JSDoc TypeScript reads for the default export types it as the
- * public ThemeDoc: `@type` in the last JSDoc comment between the previous
+ * public `typeName` (such as ThemeDoc): `@type` in the last JSDoc comment between the previous
  * token and `export`, or `@type` or `@satisfies` in the last one between the
  * previous token and the opening parenthesis of a JSDoc cast of the object.
  * Line comments, strings, code spans, and JSDoc anywhere else never type it.
  * @param {any} ast parsed with tokens and parenthesized expressions
  * @param {any} exportDefault
+ * @param {string} typeName
  */
-function declaresThemeDoc(ast, exportDefault) {
+function declaresDocType(ast, exportDefault, typeName) {
   const tokens = ast.tokens.filter(
     (/** @type {any} */ token) => typeof token.type !== 'string',
   );
@@ -946,16 +1095,136 @@ function declaresThemeDoc(ast, exportDefault) {
       tags: ['type', 'satisfies'],
     });
   }
-  const aliases = jsdocAliases(comments);
+  const aliases = jsdocAliases(comments, typeName);
   return attached.some(({comment, tags}) => {
     if (!comment) return false;
     const found = jsdocTags(comment.value);
     return tags.some(name => {
       const tag = found.find(candidate => candidate.name === name);
       const typed = tag && bracedType(tag.text);
-      return typed != null && isThemeDocType(typed.type, aliases);
+      return typed != null && isDocType(typed.type, aliases, typeName);
     });
   });
+}
+
+/**
+ * Whether a file is the module `astryx theme build` writes rather than a
+ * theme source: plain JavaScript that carries the build's generated header
+ * and never calls defineTheme.
+ * @param {string} file
+ */
+function isBuiltThemeModule(file) {
+  if (!/\.m?js$/u.test(file)) return false;
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  return (
+    /@generated by `astryx theme build`/u.test(text) &&
+    !/\bdefineTheme\b/u.test(text)
+  );
+}
+
+/**
+ * The fix when a descriptor's stem names both a theme source and the module
+ * `astryx theme build` writes beside it (`brand.ts` and its built `brand.js`):
+ * the build names its output after the theme, so the source and descriptor
+ * take the `<name>Theme` stem instead. Null when no built module is among
+ * the matches, or the stem already ends in `Theme`.
+ * @param {string} sourceDir
+ * @param {string[]} sources same-stem module file names
+ * @param {string} doc the descriptor's file name
+ * @param {string} exportName the descriptor's stem
+ * @returns {string | null}
+ */
+function builtThemeSourceFix(sourceDir, sources, doc, exportName) {
+  if (exportName.endsWith('Theme')) return null;
+  const built = sources.filter(file =>
+    isBuiltThemeModule(path.join(sourceDir, file)),
+  );
+  const source = sources.filter(file => !built.includes(file));
+  if (built.length === 0 || source.length !== 1) return null;
+  const extension = source[0].slice(exportName.length);
+  const stem = `${exportName}Theme`;
+  return `Fix: ${built.map(file => `"${file}"`).join(', ')} is the module \`${formatCliCommand('theme build', sourceDir)}\` writes, which takes the theme's name; rename ${source[0]} to ${stem}${extension} and ${doc} to ${stem}${THEME_DOC_SUFFIX}, export \`${stem}\` from it, and build again.`;
+}
+
+/**
+ * Why a descriptor pairs with the built module and the built module lacks
+ * the export the descriptor's stem names (`ocean.doc.mjs` beside a built
+ * `ocean.js` that exports `oceanTheme`): the descriptor is named for the
+ * build's output, not the theme's source. The source is named only when the
+ * built module's `Source:` header, or a source whose defineTheme gives the
+ * theme's name, confirms it; otherwise the message stays generic. Null when
+ * the entry is not a built module.
+ * @param {string} label the descriptor, as messages name it
+ * @param {string} sourceDir
+ * @param {string} entry the file the descriptor pairs with
+ * @param {string} exportName the descriptor's stem
+ * @param {string} doc the descriptor's file name
+ * @param {string} slug the theme's name
+ * @param {string[]} files the theme folder's files
+ * @returns {string | null}
+ */
+function builtModuleDescriptorMessage(
+  label,
+  sourceDir,
+  entry,
+  exportName,
+  doc,
+  slug,
+  files,
+) {
+  if (!isBuiltThemeModule(path.join(sourceDir, entry))) return null;
+  const source = confirmedThemeSource(sourceDir, entry, slug, files);
+  const head = `${label} shares its stem with the built module "${entry}", which does not export "${exportName}": a descriptor must share its stem with the source that calls defineTheme.`;
+  if (source == null) {
+    return `${head} Fix: rename ${doc} to share its stem with the theme's source (the module that calls defineTheme, such as ${exportName}Theme.ts).`;
+  }
+  const stem = source.replace(/\.[^.]+$/u, '');
+  return `${head} The theme's source is "${source}". Fix: rename ${doc} to ${stem}${THEME_DOC_SUFFIX}.`;
+}
+
+/**
+ * The theme's source, when something confirms it: the file the built
+ * module's `Source:` header names, if it is in the folder, else the one
+ * module in the folder whose defineTheme gives the theme's name as a
+ * literal. Null otherwise: a `<name>Theme` file alone may be a helper.
+ * @param {string} sourceDir
+ * @param {string} built the built module's file name
+ * @param {string} slug
+ * @param {string[]} files
+ * @returns {string | null}
+ */
+function confirmedThemeSource(sourceDir, built, slug, files) {
+  const own = files.filter(
+    file =>
+      !file.includes('/') &&
+      file !== built &&
+      THEME_MODULE_EXTENSIONS.some(extension => file.endsWith(extension)),
+  );
+  /** @param {string} file */
+  const read = file => {
+    try {
+      return fs.readFileSync(path.join(sourceDir, file), 'utf8');
+    } catch {
+      return '';
+    }
+  };
+  const header = /^\s*\*?\s*Source:\s*(\S+)\s*$/mu.exec(read(built));
+  if (header) {
+    const named = path.posix.basename(header[1].replace(/\\/gu, '/'));
+    if (own.includes(named)) return named;
+  }
+  const quoted = slug.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const naming = new RegExp(
+    `\\bdefineTheme\\s*\\(\\s*\\{[^}]*\\bname\\s*:\\s*['"\`]${quoted}['"\`]`,
+    'u',
+  );
+  const matches = own.filter(file => naming.test(read(file)));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /** A module named for the theme it exports, such as `oceanTheme.ts`. */
@@ -990,7 +1259,7 @@ function listThemeFolder(folder) {
   const symlinks = [];
   /** @param {string} directory */
   function walk(directory) {
-    for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+    for (const entry of listDirEntries(directory)) {
       if (isIgnoredThemeEntry(entry.name)) continue;
       const full = path.join(directory, entry.name);
       const relative = path.relative(folder, full).split(path.sep).join('/');
@@ -1094,12 +1363,11 @@ export function discoverUnmigratedThemeCopies(
 ) {
   const root = path.resolve(projectDir, owner);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
-  return fs
-    .readdirSync(root, {withFileTypes: true})
+  return listDirEntries(root)
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .sort((a, b) => compareText(a.slug, b.slug));
 }
 
 /** @param {string[]} files */
@@ -1148,15 +1416,17 @@ function copiedThemeFiles(files, entry, descriptor, exportName, bundled) {
  * Discover and validate one theme root.
  * @param {string} themeRoot absolute root containing one directory per slug
  * @param {string} owner package that owns the root
- * @param {{bundled?: boolean, allowUnmigrated?: boolean}} [options] a bundled root is the CLI's own; its
+ * @param {{bundled?: boolean, allowUnmigrated?: boolean, skip?: Set<string>, progress?: {slug?: string}}} [options] a bundled root is the CLI's own; its
  *   sources are checked by the CLI's tests rather than on every read. A local
  *   root may skip released source copies until `astryx upgrade` adds descriptors.
+ *   `skip` names theme folders to leave out; `progress.slug` is set to the
+ *   folder being read, so a caller can tell which folder an error is about.
  * @returns {DiscoveredTheme[]}
  */
 export function discoverThemeDirectory(
   themeRoot,
   owner,
-  {bundled = false, allowUnmigrated = false} = {},
+  {bundled = false, allowUnmigrated = false, skip, progress} = {},
 ) {
   if (!fs.existsSync(themeRoot) || !fs.statSync(themeRoot).isDirectory()) {
     throw new Error(
@@ -1172,15 +1442,27 @@ export function discoverThemeDirectory(
   /** @type {DiscoveredTheme[]} */
   const themes = [];
   const slugs = new Set();
-  const rootEntries = fs
-    .readdirSync(themeRoot, {withFileTypes: true})
-    .filter(entry => !isIgnoredThemeEntry(entry.name));
+  const rootEntries = listDirEntries(themeRoot).filter(
+    entry => !isIgnoredThemeEntry(entry.name),
+  );
   const rootDescriptor = rootEntries.find(
     entry => entry.isFile() && entry.name.endsWith(THEME_DOC_SUFFIX),
   );
   if (rootDescriptor) {
+    const stem = rootDescriptor.name
+      .slice(0, -THEME_DOC_SUFFIX.length)
+      .replace(/Theme$/, '');
+    // The folder is under the theme root on disk. The owner names that
+    // root only for the project's own local themes; a package's root is
+    // named by its path.
+    const slug =
+      stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() || '<slug>';
+    const folder =
+      owner === LOCAL_THEME_ROOT
+        ? `${owner}/${slug}`
+        : path.join(themeRoot, slug).split(path.sep).join('/');
     throw new Error(
-      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory.`,
+      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory. Move that theme's files into their own folder, such as ${folder}/.`,
     );
   }
   const rootSymlink = rootEntries.find(entry => entry.isSymbolicLink());
@@ -1191,10 +1473,12 @@ export function discoverThemeDirectory(
   }
   const directories = rootEntries
     .filter(entry => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   for (const directory of directories) {
     const slug = directory.name;
+    if (skip?.has(slug)) continue;
+    if (progress) progress.slug = slug;
     const listing = listThemeFolder(path.join(themeRoot, slug));
     const evidence = themeEvidence(listing);
     if (evidence === undefined) continue;
@@ -1240,8 +1524,17 @@ export function discoverThemeDirectory(
           : evidence.includes('/')
             ? `; "${evidence}" is in a subfolder`
             : ` beside "${evidence}"`;
+      const themeDoc = formatCliCommand('docs authoring theme-doc', sourceDir);
+      const fix =
+        docs.length > 1
+          ? `Fix: keep the one descriptor that shares its stem with the theme's source and delete the rest.`
+          : evidence.includes('/')
+            ? `Fix: move "${evidence}" up into ${slug}/, beside where its descriptor goes.`
+            : THEME_SOURCE_RE.test(evidence)
+              ? `Fix: add ${evidence.replace(/\.[^.]+$/u, '')}${THEME_DOC_SUFFIX} beside it with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`
+              : `Fix: add a descriptor that shares its stem with the theme's source, with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`;
       throw new Error(
-        `${theme} must contain exactly one same-stem .doc.mjs descriptor; found ${docs.length}${detail}.`,
+        `${theme} must contain exactly one same-stem .doc.mjs descriptor; found ${docs.length}${detail}. ${fix}`,
       );
     }
     const nested = descriptors.find(file => file.includes('/'));
@@ -1267,15 +1560,20 @@ export function discoverThemeDirectory(
       extension => `${exportName}${extension}`,
     ).filter(file => listing.files.includes(file));
     if (sources.length !== 1) {
+      const fix =
+        sources.length > 1
+          ? (builtThemeSourceFix(sourceDir, sources, docs[0], exportName) ??
+            `Fix: keep one of them; the theme's source is a single module.`)
+          : `Fix: add ${exportName}.ts beside ${docs[0]}, exporting \`${exportName}\` from defineTheme.`;
       throw new Error(
-        `${theme} must contain exactly one same-stem source for ${docs[0]}; found ${sources.length}${sources.length > 1 ? `: ${quoted(sources)}` : ''}.`,
+        `${theme} must contain exactly one same-stem source for ${docs[0]}; found ${sources.length}${sources.length > 1 ? `: ${quoted(sources)}` : ''}. ${fix}`,
       );
     }
 
     const doc = readThemeDoc(docPath, owner);
     if (doc.name !== slug) {
       throw new Error(
-        `${label} names "${doc.name}" but its directory is "${slug}".`,
+        `${label} names "${doc.name}" but its directory is "${slug}". A theme's folder carries its name: move its files into a folder named "${doc.name}".`,
       );
     }
     const entry = sources[0];
@@ -1293,11 +1591,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1308,13 +1606,22 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
         ) {
           throw new ThemeRuntimeExportError(
-            `Theme "${slug}" for ${owner} entry "${entry}" does not export "${exportName}".`,
+            builtModuleDescriptorMessage(
+              label,
+              sourceDir,
+              entry,
+              exportName,
+              docs[0],
+              slug,
+              listing.files,
+            ) ??
+              `Theme "${slug}" for ${owner} entry "${entry}" does not export "${exportName}".`,
           );
         }
       } catch (error) {
@@ -1354,6 +1661,7 @@ export function discoverThemeDirectory(
     });
   }
 
+  if (progress) progress.slug = undefined;
   return themes;
 }
 
@@ -1394,8 +1702,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   if (!fs.existsSync(themeRoot) || !fs.statSync(themeRoot).isDirectory()) {
     return [];
   }
-  const folders = fs
-    .readdirSync(themeRoot, {withFileTypes: true})
+  const folders = listDirEntries(themeRoot)
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => path.join(themeRoot, entry.name))
     .sort();
@@ -1410,8 +1717,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   if (unread.length === 0) return [];
 
   const modules = [
-    ...fs
-      .readdirSync(themeRoot, {withFileTypes: true})
+    ...listDirEntries(themeRoot)
       .filter(
         entry =>
           entry.isFile() &&
@@ -1431,7 +1737,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }
@@ -1456,6 +1762,8 @@ let bundledThemeCache = null;
 
 /** @returns {DiscoveredTheme[]} */
 export function discoverBundledThemes() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   bundledThemeCache ??= discoverThemeDirectory(
     THEMES_DIR,
     BUNDLED_THEME_PACKAGE,
@@ -1472,21 +1780,62 @@ export function discoverBundledThemes() {
  * Discover authored themes in the app's conventional local themes root.
  * @param {string} projectDir
  * @param {string} [owner]
+ * @param {{onFolderError?: (slug: string, error: Error) => void}} [options]
+ *   with `onFolderError`, a theme folder that fails validation is reported
+ *   through it and left out, so one broken folder does not hide the others
  * @returns {DiscoveredTheme[]}
  */
-export function discoverLocalThemes(projectDir, owner = LOCAL_THEME_ROOT) {
+export function discoverLocalThemes(
+  projectDir,
+  owner = LOCAL_THEME_ROOT,
+  {onFolderError} = {},
+) {
   const root = path.resolve(projectDir, owner);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
-  return discoverThemeDirectory(root, owner, {allowUnmigrated: true}).map(
-    theme => ({
-      ...theme,
-      package: owner,
-      packageDir: projectDir,
-      packageExports: null,
-      source: /** @type {const} */ ('local'),
-    }),
-  );
+  /** @type {Set<string>} */
+  const skip = new Set();
+  /** @type {{slug?: string}} */
+  const progress = {};
+  let discovered;
+  for (;;) {
+    try {
+      discovered = discoverThemeDirectory(root, owner, {
+        allowUnmigrated: true,
+        skip,
+        progress,
+      });
+      break;
+    } catch (error) {
+      const slug = progress.slug;
+      if (!onFolderError || slug === undefined) throw error;
+      skip.add(slug);
+      onFolderError(
+        slug,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  }
+  return discovered.map(theme => ({
+    ...theme,
+    package: owner,
+    packageDir: projectDir,
+    packageExports: null,
+    source: /** @type {const} */ ('local'),
+  }));
 }
+
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
 
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
@@ -1494,12 +1843,21 @@ export function discoverLocalThemes(projectDir, owner = LOCAL_THEME_ROOT) {
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+    ...(integration.themeProvider ? {provider: integration.themeProvider} : {}),
+  }));
 }
