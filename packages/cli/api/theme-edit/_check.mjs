@@ -6818,6 +6818,34 @@ function checkOne(
         const spaced = partsOf(ctx, s).filter(
           t => reads(t) || (ctx.C.MAP[t]?.contains ?? []).some(reads),
         );
+        // (A part that sets its own width and height in px, a checkbox's
+        // box or a radio's circle, is sized by them, and Core draws its
+        // marks inside as a share of it: the refusal says so.)
+        const ownBox = (/** @type {string} */ t) => {
+          const at = ctx.C.MAP[t]?.at ?? {};
+          /** @param {string} k */
+          const px = k =>
+            Object.entries(at[k] ?? {})
+              .filter(
+                ([c, x]) =>
+                  !/:/.test(c) && /^\s*\d*\.?\d+px\s*$/.test(String(x)),
+              )
+              .sort(
+                (m, n) => m[0].split(',').length - n[0].split(',').length,
+              )[0]?.[1];
+          const w = px('width');
+          const h = px('height');
+          return w != null && h != null
+            ? `${String(w).trim()} by ${String(h).trim()}`
+            : null;
+        };
+        const boxed = partsOf(ctx, s).map(ownBox);
+        if (!spaced.length && boxed.length && boxed.every(b => b))
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `${s.on} sets its own width and height (${boxed[0]}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "smaller ${s.on}"); its marks are drawn as a share of it.`,
+            {run: [`${HOW} "smaller ${s.on}"`]},
+          );
         if (!spaced.length)
           refuse(
             E.ERR_THEME_NO_EFFECT,
