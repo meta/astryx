@@ -1918,10 +1918,15 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     setHighlightedIndex(-1);
   }
 
+  // Entering the cell that is already active changes nothing. Entering
+  // another option, or the other cell of the active grid row, is pointer
+  // input: that row draws no keyboard ring until a key moves the highlight.
   const hoveredOptionOf = useCallback(
     (...args: Parameters<typeof onComboboxItemMouseEnter>) =>
-      args[1] === highlightedIndex ? null : args[1],
-    [highlightedIndex],
+      args[1] === highlightedIndex && (args[2] ?? 'option') === highlightedCell
+        ? null
+        : args[1],
+    [highlightedIndex, highlightedCell],
   );
   const {
     isKeyboardHighlight,

@@ -146,6 +146,35 @@ describe('MultiSelector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 
+  it('keeps the fill alone when the mouse moves from a grid row’s action cell back onto its option cell', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={[
+          {
+            value: 'bug',
+            label: 'Bug',
+            action: <button type="button">Edit Bug</button>,
+          },
+          {value: 'feature', label: 'Feature'},
+        ]}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const field = screen.getByRole('combobox', {name: 'Labels'});
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowRight}');
+    const row = screen.getByRole('row', {name: 'Bug', hidden: true});
+    expect(activeOption(field)).toBe(row.children[1]);
+    // A hover without a press: the shared modality still reads keyboard.
+    await user.hover(row.children[0]);
+    expect(activeOption(field)).toBe(row);
+    expect(hasRing(row)).toBe(false);
+  });
+
   it.each(['light', 'dark'] as const)(
     'marks the keyboard-active option at 3:1 or more against the listbox in %s mode',
     async mode => {
