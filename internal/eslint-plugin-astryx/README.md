@@ -863,7 +863,7 @@ Ships as a **warning in both tiers** for now. The spread check has exactly one v
 
 Flags a StyleX shorthand set after one of its own longhands in one merge: one `stylex.props()` call or one `xstyle` array. For example, `paddingInlineStart` in one style and then `paddingInline` in a later one.
 
-StyleX resolves such a pair by its `styleResolution` option. Storybook builds with `application-order`, where the later style wins. The published CSS uses `property-specificity`, where the longhand wins whatever the order. A shorthand **before** its longhand resolves the same way under both, so the rule allows it. A shorthand **after** its longhand never overrides it in the published CSS, and Storybook may show the later style instead. Either way the later style does not do what it says.
+StyleX resolves such a pair by its `styleResolution` option. Storybook builds with `application-order`, where the later style usually wins; for some pairs, such as `paddingInline` after both of its longhands, the longhand wins there too. The published CSS uses `property-specificity`, where the longhand wins whatever the order. A shorthand **before** its longhand resolves the same way under both, so the rule allows it. A shorthand **after** its longhand never overrides it in the published CSS, and Storybook may show the later style instead. Either way the later style does not do what it says.
 
 **Bad:**
 

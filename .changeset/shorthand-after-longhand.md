@@ -2,12 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Three components now look the same in Storybook and in the published CSS. Each one had a style that set a shorthand after another style on the same element set one of its longhands. StyleX resolves that order differently in the two builds. The later style now sets the same longhands, so it wins in every build:
-
-- An ordered List with dividers keeps the gap between its numbers and text.
-- A flexible vertical on-track Stepper connector can shrink.
-- The PowerSearch sheet trigger with tokens has no padding.
-
-A new lint rule, `@astryx/no-shorthand-longhand-merge`, flags the pattern.
+[fix] Three styles that set a shorthand after another style on the same element set one of its longhands now set the longhands instead: an ordered List with dividers (its row gap), a flexible vertical on-track Stepper connector, and the PowerSearch sheet trigger with tokens. StyleX resolves that order differently in Storybook and in the published CSS, so each state had two computed values. It now has one. Nothing changes on screen in either build. A new lint rule, `@astryx/no-shorthand-longhand-merge`, flags the pattern.
 
 @josephfarina

@@ -7,7 +7,7 @@
  *   `marginInlineStart` in one style and then `marginInline` in a later one.
  *
  * StyleX resolves such a pair by its `styleResolution` option:
- * `application-order` lets the later style win, and `property-specificity`
+ * `application-order` usually lets the later style win, and `property-specificity`
  * lets the longhand win whatever the order. So in the published CSS a
  * shorthand set after its longhand never overrides it, and Storybook may
  * paint the later style instead. A shorthand before its longhand resolves
@@ -16,6 +16,7 @@
  *
  * The rule reads styles from `stylex.create()` objects declared in the same
  * file. A style it cannot read (an import, a prop, a dynamic key) adds nothing.
+ * A local constant is matched by its name anywhere in the file.
  * Two styles in different branches of one conditional never merge.
  */
 
