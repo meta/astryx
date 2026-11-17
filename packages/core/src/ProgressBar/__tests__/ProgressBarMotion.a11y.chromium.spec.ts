@@ -838,15 +838,14 @@ test('every tone reaches 3:1 against the track and keeps it at the pulse floor, 
       `${row.tone}, ${row.mode}, ${row.surface}: ${row.full.toFixed(3)}:1`,
     ).toBeGreaterThanOrEqual(3);
   }
-  const qualifying = rows;
-  for (const row of qualifying) {
+  for (const row of rows) {
     expect(
       row.atFloor,
       `${row.tone}, ${row.mode}, ${row.surface}: ${row.atFloor.toFixed(3)}:1`,
     ).toBeGreaterThanOrEqual(3);
   }
   // The floor is the lowest that holds: one step below, some tone drops.
-  expect(qualifying.some(row => row.below < 3)).toBe(true);
+  expect(rows.some(row => row.below < 3)).toBe(true);
 });
 
 test('below one track height of fill, the leading end follows the track\u2019s curve', async ({

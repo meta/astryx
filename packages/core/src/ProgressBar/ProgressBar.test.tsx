@@ -1355,9 +1355,28 @@ describe('ProgressBar forced colors', () => {
     expect(css).toContain('outline-color: canvastext;');
   });
 
-  it('turns a disabled fill outline GrayText, since opacity does not survive', () => {
+  it('turns a disabled fill outline GrayText, since forced colors replace the fill color', () => {
+    const {unmount} = render(
+      <ProgressBar value={40} variant="neutral" label="Live" />,
+    );
+    const liveFill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    const liveClasses = new Set(liveFill.className.split(/\s+/));
+    unmount();
     render(<ProgressBar value={40} isDisabled label="Upload" />);
-    expect(getForcedColorsRules()).toContain('outline-color: graytext;');
+    const disabledFill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    const added = disabledFill.className
+      .split(/\s+/)
+      .filter(name => name !== '' && !liveClasses.has(name));
+    const css = getForcedColorsRules();
+    expect(
+      added.some(name =>
+        new RegExp(`\\.${name}[^{]*\\{[^}]*outline-color:\\s*graytext`).test(
+          css,
+        ),
+      ),
+    ).toBe(true);
   });
 });
 

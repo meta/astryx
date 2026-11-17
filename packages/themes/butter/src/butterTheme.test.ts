@@ -203,4 +203,20 @@ describe('butter progress fills', () => {
       expect(contrast(fill.dark, track.dark)).toBeGreaterThanOrEqual(3);
     },
   );
+
+  it.each(['neutral', 'disabled'])(
+    'keeps a %s fill at 3:1 on the track: secondary text in light, stop 80 in dark',
+    variant => {
+      expect(
+        butterTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+      ).toMatchObject({
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
+      });
+      // Secondary text in light mode is stop 45.
+      expect(contrast(neutral.light[45], track.light)).toBeGreaterThanOrEqual(
+        3,
+      );
+      expect(contrast(neutral.dark[80], track.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
 });

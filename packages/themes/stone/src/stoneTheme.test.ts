@@ -139,6 +139,25 @@ describe('stone strong status contrast', () => {
       ).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it.each(['neutral', 'disabled'])(
+    'keeps a %s fill at 3:1 on the skeleton track: secondary text in light, stop 80 in dark',
+    variant => {
+      const {neutral} = stoneModePalettes;
+      expect(
+        stoneTheme.components!['progress-bar-fill'][`variant:${variant}`],
+      ).toMatchObject({
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
+      });
+      // Secondary text in light mode is stop 40.
+      expect(
+        contrast(neutral.light[40], neutral.light[85]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(neutral.dark[80], neutral.dark[40]),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 describe('stone secondary ComplexSelector', () => {
