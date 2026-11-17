@@ -30,7 +30,7 @@ import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
-import {TopNavMegaMenuCloseContext} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, usePickCloses} from './TopNavContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
@@ -150,9 +150,10 @@ export interface TopNavMegaMenuItemProps extends Omit<
   /** Callback when item is clicked. */
   onClick?: () => void;
   /**
-   * Whether picking the item closes the panel and returns focus to the
-   * trigger. Set `false` for an action that reports its result on the item
-   * itself, as with DropdownMenuItem.
+   * Whether a keyboard, finger or pen pick on the item closes the panel and
+   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
+   * for an action that reports its result on the item itself, as with
+   * DropdownMenuItem.
    * @default true
    */
   hasCloseOnSelect?: boolean;
@@ -213,6 +214,7 @@ export function TopNavMegaMenuItem({
     renderMode === 'drawer',
   );
   const closePanel = use(TopNavMegaMenuCloseContext);
+  const pick = usePickCloses();
 
   // =========================================================================
   // Drawer mode — matches SideNavItem / TopNavMenu drawer appearance
@@ -264,8 +266,13 @@ export function TopNavMegaMenuItem({
   const Element = href ? LinkComponent : onClick ? 'button' : 'div';
   const handleDesktopClick = () => {
     onClick?.();
-    // A pick ends the panel, as in TopNavMenu.
-    if (hasCloseOnSelect && (href != null || onClick != null)) {
+    // A keyboard, finger or pen pick ends the panel, as in TopNavMenu; a
+    // mouse pick leaves it open.
+    if (
+      hasCloseOnSelect &&
+      (href != null || onClick != null) &&
+      pick.closes()
+    ) {
       closePanel?.();
     }
   };
@@ -276,6 +283,8 @@ export function TopNavMegaMenuItem({
       type={Element === 'button' ? 'button' : undefined}
       href={href}
       {...pressable}
+      onPointerDownCapture={pick.onPointerDownCapture}
+      onKeyDownCapture={pick.onKeyDownCapture}
       onClick={handleDesktopClick}
       tabIndex={tabIndex}
       {...mergeProps(

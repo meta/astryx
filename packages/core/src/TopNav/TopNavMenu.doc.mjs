@@ -33,7 +33,7 @@ export const docs = {
       name: 'items',
       type: 'TopNavMenuItemData[]',
       description:
-        "Menu items to display in the hover popover. Item href values follow the shared navigation rule described on Link; rejected destinations remain visible without navigation. Picking an item closes the menu and returns focus to the trigger; set the item's `hasCloseOnSelect` to false to keep the menu open for an action that reports its result on the item.",
+        "Menu items to display in the hover popover. Item href values follow the shared navigation rule described on Link; rejected destinations remain visible without navigation. Picking an item with the keyboard, a finger or a pen closes the menu and returns focus to the trigger (a mouse pick leaves it open); set the item's `hasCloseOnSelect` to false to keep the menu open for an action that reports its result on the item.",
       required: true,
     },
     {
@@ -68,7 +68,7 @@ export const docsZh = {
       name: 'items',
       type: 'TopNavMenuItemData[]',
       description:
-        '在悬停弹出框中显示的菜单项。选择一项会关闭菜单并把焦点还给触发按钮；如需让菜单保持打开，把该项的 `hasCloseOnSelect` 设为 false。',
+        '在悬停弹出框中显示的菜单项。用键盘、手指或触控笔选择一项会关闭菜单并把焦点还给触发按钮（鼠标选择则保持打开）；如需让菜单保持打开，把该项的 `hasCloseOnSelect` 设为 false。',
       required: true,
     },
     {
@@ -94,7 +94,7 @@ export const docsDense = {
   propDescriptions: {
     label: 'Trigger button visible label.',
     items:
-      'Menu items in hover popover. href follows the Link navigation rule; rejected destinations do not navigate. A pick closes the menu, focus to trigger; item hasCloseOnSelect=false keeps it open.',
+      'Menu items in hover popover. href follows the Link navigation rule; rejected destinations do not navigate. A keyboard/finger/pen pick closes the menu, focus to trigger (mouse keeps it open); item hasCloseOnSelect=false keeps it open.',
     delay: 'Show delay ms on hover.',
     hideDelay: 'Hide delay ms after mouse leaves.',
   },

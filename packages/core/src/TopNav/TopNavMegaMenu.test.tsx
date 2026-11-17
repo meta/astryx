@@ -76,6 +76,13 @@ function restorePopoverApiMock() {
 // Default (desktop) mode
 // =============================================================================
 
+/** A finger tap: a touch press, then its click. */
+function tap(el: HTMLElement) {
+  fireEvent.pointerDown(el, {pointerType: 'touch'});
+  fireEvent.pointerUp(el, {pointerType: 'touch'});
+  fireEvent.click(el, {detail: 1});
+}
+
 describe('TopNavMegaMenu — default mode', () => {
   it('renders the trigger button with label', () => {
     render(
@@ -627,7 +634,25 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('closes and returns focus to the trigger when a panel action is picked', async () => {
+  it('closes and returns focus to the trigger when a panel action is tapped', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Start a trial" onClick={onClick} />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('button', {name: /Start a trial/, hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the panel open after a mouse click on a panel action', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     render(
@@ -643,8 +668,7 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
       screen.getByRole('button', {name: /Start a trial/, hidden: true}),
     );
     expect(onClick).toHaveBeenCalledOnce();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('keeps the panel open after a pick on an item that sets hasCloseOnSelect to false', async () => {
@@ -665,14 +689,12 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
     const trigger = screen.getByRole('button', {name: 'Products'});
     await user.click(trigger);
 
-    await user.click(
-      screen.getByRole('button', {name: /Copy link/, hidden: true}),
-    );
+    tap(screen.getByRole('button', {name: /Copy link/, hidden: true}));
     expect(onClick).toHaveBeenCalledOnce();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it("closes and returns focus to the trigger when the featured card's link is followed", async () => {
+  it("closes and returns focus to the trigger when the featured card's link is tapped", async () => {
     const user = userEvent.setup();
     render(
       <TopNavMegaMenu
@@ -692,7 +714,7 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
 
     const link = screen.getByRole('link', {name: /Read more/, hidden: true});
     link.addEventListener('click', event => event.preventDefault());
-    await user.click(link);
+    tap(link);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
   });
@@ -716,9 +738,8 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
-      await user.click(
-        screen.getByRole('button', {name: /Start a trial/, hidden: true}),
-      );
+      screen.getByRole('button', {name: /Start a trial/, hidden: true}).focus();
+      await user.keyboard('{Enter}');
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
       // The closing panel puts the trigger back under a still pointer, and

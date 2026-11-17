@@ -37,7 +37,7 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {useTopNavSlot, usePickCloses} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -278,9 +278,10 @@ export interface TopNavMenuItemData {
   onClick?: () => void;
 
   /**
-   * Whether picking the item closes the menu and returns focus to the
-   * trigger. Set `false` for an action that reports its result on the item
-   * itself, as with DropdownMenuItem.
+   * Whether a keyboard, finger or pen pick on the item closes the menu and
+   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
+   * for an action that reports its result on the item itself, as with
+   * DropdownMenuItem.
    * @default true
    */
   hasCloseOnSelect?: boolean;
@@ -390,6 +391,7 @@ export function TopNavMenu({
     role: 'none',
   });
 
+  const pick = usePickCloses();
   const {triggerProps, contentProps, menuRef, setTriggerEl, close} =
     useMenuHover<HTMLDivElement>({
       show: popover.show,
@@ -645,10 +647,13 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                // A pick ends the menu, as in DropdownMenu.
+                // A keyboard, finger or pen pick ends the menu, as in
+                // DropdownMenu; a mouse pick leaves it open.
+                onPointerDownCapture={pick.onPointerDownCapture}
+                onKeyDownCapture={pick.onKeyDownCapture}
                 onClick={() => {
                   item.onClick?.();
-                  if (item.hasCloseOnSelect !== false) {
+                  if (item.hasCloseOnSelect !== false && pick.closes()) {
                     close();
                   }
                 }}

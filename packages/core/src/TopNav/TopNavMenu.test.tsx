@@ -33,6 +33,13 @@ const mockItems = [
   },
 ];
 
+/** A finger tap: a touch press, then its click. */
+function tap(el: HTMLElement) {
+  fireEvent.pointerDown(el, {pointerType: 'touch'});
+  fireEvent.pointerUp(el, {pointerType: 'touch'});
+  fireEvent.click(el, {detail: 1});
+}
+
 describe('TopNavMenu', () => {
   it.each([
     'javascript:alert(1)',
@@ -211,7 +218,23 @@ describe('keyboard navigation (APG menu pattern)', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('closes the menu and returns focus to the trigger after a click on a link item', async () => {
+  it('closes the menu and returns focus to the trigger after a tap on a link item', async () => {
+    const user = userEvent.setup();
+    render(<TopNavMenu label="Products" items={mockItems} />);
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const item = screen.getByRole('menuitem', {
+      name: /Analytics/,
+      hidden: true,
+    });
+    item.addEventListener('click', event => event.preventDefault());
+    tap(item);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the menu open after a mouse click on an item', async () => {
     const user = userEvent.setup();
     render(<TopNavMenu label="Products" items={mockItems} />);
     const trigger = screen.getByRole('button', {name: 'Products'});
@@ -223,8 +246,7 @@ describe('keyboard navigation (APG menu pattern)', () => {
     });
     item.addEventListener('click', event => event.preventDefault());
     await user.click(item);
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('keeps the menu open after a pick on an item that sets hasCloseOnSelect to false', async () => {
@@ -239,7 +261,7 @@ describe('keyboard navigation (APG menu pattern)', () => {
     const trigger = screen.getByRole('button', {name: 'Menu'});
     await user.click(trigger);
 
-    await user.click(screen.getByRole('menuitem', {hidden: true}));
+    tap(screen.getByRole('menuitem', {hidden: true}));
     expect(onClick).toHaveBeenCalledOnce();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
@@ -261,7 +283,8 @@ describe('keyboard navigation (APG menu pattern)', () => {
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
-      await user.click(screen.getByRole('menuitem', {hidden: true}));
+      screen.getByRole('menuitem', {hidden: true}).focus();
+      await user.keyboard('{Enter}');
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
       // The closing popup puts the trigger back under a still pointer, and

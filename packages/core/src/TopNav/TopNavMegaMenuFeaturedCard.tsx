@@ -29,7 +29,7 @@ import {
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {TopNavMegaMenuCloseContext} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, usePickCloses} from './TopNavContext';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -152,6 +152,7 @@ export function TopNavMegaMenuFeaturedCard({
 }: TopNavMegaMenuFeaturedCardProps) {
   const LinkComponent = useLinkComponent();
   const closePanel = use(TopNavMegaMenuCloseContext);
+  const pick = usePickCloses();
   return (
     <div
       ref={ref}
@@ -182,8 +183,15 @@ export function TopNavMegaMenuFeaturedCard({
         {linkLabel && linkHref && (
           <LinkComponent
             href={linkHref}
-            // Following the card's link ends the panel, as an item pick does.
-            onClick={closePanel ?? undefined}
+            // Following the card's link with the keyboard, a finger or a pen
+            // ends the panel, as an item pick does.
+            onPointerDownCapture={pick.onPointerDownCapture}
+            onKeyDownCapture={pick.onKeyDownCapture}
+            onClick={() => {
+              if (pick.closes()) {
+                closePanel?.();
+              }
+            }}
             {...stylex.props(styles.link)}>
             {linkLabel}{' '}
             {/* The arrow points toward the inline end, so it mirrors in RTL

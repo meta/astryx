@@ -49,7 +49,7 @@ export const docs = {
       name: 'hasCloseOnSelect',
       type: 'boolean',
       description:
-        'Whether picking the item closes the mega menu panel and returns focus to its trigger. Set false for an action that reports its result on the item itself.',
+        'Whether picking the item with the keyboard, a finger or a pen closes the mega menu panel and returns focus to its trigger (a mouse pick leaves it open). Set false for an action that reports its result on the item itself.',
       default: 'true',
     },
     {
@@ -98,7 +98,7 @@ export const docsZh = {
       name: 'hasCloseOnSelect',
       type: 'boolean',
       description:
-        '选择该项时是否关闭大型菜单面板并把焦点还给触发按钮。若操作在项目本身显示结果，设为 false。',
+        '用键盘、手指或触控笔选择该项时是否关闭大型菜单面板并把焦点还给触发按钮（鼠标选择则保持打开）。若操作在项目本身显示结果，设为 false。',
       default: 'true',
     },
     {
@@ -122,7 +122,8 @@ export const docsDense = {
     icon: 'Left icon element.',
     href: 'Navigation URL.',
     onClick: 'Click callback.',
-    hasCloseOnSelect: 'Pick closes panel, focus to trigger. Default true.',
+    hasCloseOnSelect:
+      'Keyboard/finger/pen pick closes panel, focus to trigger. Default true.',
     as: 'Custom link component, overrides LinkProvider default.',
   },
 };
