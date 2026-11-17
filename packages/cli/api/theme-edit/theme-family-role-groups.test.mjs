@@ -73,6 +73,10 @@ describe('family role groups', () => {
     ]);
     has('accent-fills', ['button', 'progress-bar-fill']);
     has('inset-fields', ['text-input', 'slider-track']);
+    has('status-surfaces', ['banner', 'toast']);
+    has('overlay-headers', ['dialog-header', 'drawer-header']);
+    // (A badge or a dot is a mark, not a status surface.)
+    expect(groups['status-surfaces']).not.toContain('badge');
     // (A selectable item is never button-like; a tooltip is no surface.)
     expect(groups['button-like']).not.toContain('segmented-control-item');
     expect(groups.overlays).not.toContain('tooltip');
@@ -249,5 +253,24 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     );
     expect(day).toMatch(/border-radius: 4px/);
     expect(day).toMatch(/background-color: #0069d6/);
+  }, 240_000);
+});
+
+describe('alerts and overlay headers (Bootstrap 1.4)', () => {
+  it('the alert gradient reaches the toasts; the header rule every overlay header', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('a', {cwd, like: 'neutral'});
+    expect(
+      await first('banners with a gradient from #fceec1 to #eedc94', 'a'),
+    ).toEqual([
+      "set a background 'linear-gradient(#fceec1, #eedc94)' --on status-surfaces",
+    ]);
+    const r = await themeEditSet('a', 'border-bottom', '1px solid #eeeeee', {
+      cwd,
+      on: 'dialog-header',
+    });
+    const note = JSON.stringify(r.data?.leftOut ?? []);
+    expect(note).toMatch(/drawer-header/);
+    expect(note).toContain('--on overlay-headers');
   }, 240_000);
 });
