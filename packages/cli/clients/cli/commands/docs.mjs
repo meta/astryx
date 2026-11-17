@@ -540,6 +540,21 @@ function emitIndex(index, owner, run) {
 }
 
 /**
+ * The mark a listed doc row opens with: an experimental doc is marked as help
+ * marks an experimental command, so a reader cannot take it for a stable doc,
+ * unless its own summary already opens by saying so. Every docs list that
+ * marks a row asks here, so the namespace view and the `--depth` list agree.
+ * @param {string | undefined} stability
+ * @param {string} summary
+ * @returns {'[experimental] ' | ''}
+ */
+function experimentalMark(stability, summary) {
+  return stability === 'experimental' && !/^experimental\b/iu.test(summary)
+    ? '[experimental] '
+    : '';
+}
+
+/**
  * One child row of a namespace. Namespace and guide route names are already
  * readable, so repeating their titles adds noise (`start-a-template  Start a
  * template`). Typed docs keep a distinct title when it carries the real symbol
@@ -557,15 +572,10 @@ function childRow(child, owner) {
     // A child another package owns says which one.
     name:
       child.package === owner ? child.name : `${child.name} (${child.package})`,
-    // An experimental child is marked as help marks an experimental command,
-    // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
-      `${
-        child.stability === 'experimental' &&
-        !/^experimental\b/iu.test(child.summary)
-          ? '[experimental] '
-          : ''
-      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
+      `${experimentalMark(child.stability, child.summary)}${
+        titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary
+      }`,
       getCliInvocation(),
     ),
     experimental: child.stability === 'experimental',
@@ -676,14 +686,10 @@ function flattenNamespaces(rows) {
   return rows.flatMap(row => [
     {
       topic: row.topic,
-      // An experimental doc is marked here as it is wherever else it is
-      // listed, so a reader cannot take a row of this list for a stable doc.
-      description:
-        'stability' in row &&
-        row.stability === 'experimental' &&
-        !/^experimental\b/iu.test(row.description)
-          ? `[experimental] ${row.description}`
-          : row.description,
+      description: `${experimentalMark(
+        'stability' in row ? row.stability : undefined,
+        row.description,
+      )}${row.description}`,
       package: row.package,
     },
     ...flattenNamespaces(row.children ?? []),
