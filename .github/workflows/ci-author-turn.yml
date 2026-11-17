@@ -1,0 +1,88 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Starts a pull-request CI run again when its author's turn comes (spec:AST-030
+# DEC-31, author-cap.mjs). One author runs at most three pull-request CI runs at
+# once; a run past the cap marks its head with the "CI author cap" status and
+# cancels itself in admission, holding no runner. When one of the author's CI
+# runs ends, this workflow starts their oldest waiting run again, as many as
+# the cap leaves room for. A quarter-hourly schedule catches an end it missed.
+# It reads only this repository's API and runs no pull-request code.
+name: CI author turn
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: '4,19,34,49 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# One pass at a time reads every author, so a pass that GitHub replaces while
+# it queues loses nothing.
+concurrency:
+  group: ci-author-turn
+  cancel-in-progress: false
+
+jobs:
+  turn:
+    # A pull-request run's end, or the schedule.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      statuses: read
+    steps:
+      - name: Check out the author cap
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .author-cap
+          persist-credentials: false
+
+      - name: Start the runs whose author's turn came
+        uses: actions/github-script@v9
+        env:
+          AUTHOR_MODULE: ${{ github.workspace }}/.author-cap/.github/actions/ci-admission/author-cap.mjs
+        with:
+          script: |
+            const {pathToFileURL} = await import('node:url');
+            const cap = await import(pathToFileURL(process.env.AUTHOR_MODULE).href);
+            // A run's end serves that run's author; the schedule serves every
+            // author. A run the cap does not count (a fork's, or an exempt
+            // author's) ends here on one call.
+            let only;
+            const ended = context.payload.workflow_run;
+            if (ended != null) {
+              const number = ended.pull_requests?.[0]?.number;
+              if (number == null) {
+                core.info('The run that ended belongs to no pull request of this repository.');
+                return;
+              }
+              const {data: pull} = await github.rest.pulls.get({...context.repo, pull_number: number});
+              only = pull.user?.login;
+              if (cap.isExempt(only) || pull.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+                core.info(`#${number}: the author cap does not count ${only}'s runs here.`);
+                return;
+              }
+            }
+            const authors = await cap.readAuthors({github, ...context.repo, only});
+            let started = 0;
+            for (const [author, {running, waiting}] of authors) {
+              if (only != null && author !== only) continue;
+              for (const run of cap.nextTurns({running, waiting})) {
+                try {
+                  await github.rest.actions.reRunWorkflow({...context.repo, run_id: run.id});
+                  started += 1;
+                  core.info(`Started run ${run.id} again (#${run.pull}, ${author}): ${running.length} of their runs were running, at most ${cap.AUTHOR_CAP}.`);
+                } catch (error) {
+                  core.warning(`Could not start run ${run.id} again (#${run.pull}, ${author}): ${error.message}`);
+                }
+              }
+            }
+            core.info(`${started} waiting run${started === 1 ? '' : 's'} started again.`);

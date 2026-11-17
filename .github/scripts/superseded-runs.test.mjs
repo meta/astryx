@@ -546,12 +546,18 @@ describe('a superseded run in ci.yml', () => {
     expect(ungated(job.if)).toBe(
       "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository",
     );
+    // statuses: write marks a run that waits for its author's turn
+    // (ci-author-cap.test.mjs).
     expect(job.permissions).toEqual({
       actions: 'write',
       contents: 'read',
       'pull-requests': 'read',
+      statuses: 'write',
     });
-    expect(job.steps.at(-1).with).toEqual({cancel: true});
+    expect(
+      job.steps.find(step => step.name === 'Cancel runs for a superseded head')
+        .with,
+    ).toEqual({cancel: true});
     expect(job['runs-on']).toBe('ubuntu-slim');
     expect(job['timeout-minutes']).toBeLessThanOrEqual(5);
     // Its own failure fails no other job: it is not required, no job needs

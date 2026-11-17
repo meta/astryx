@@ -352,16 +352,23 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     continue-on-error: true
+    # statuses: write marks a run that waits for its author's turn.
     permissions:
       actions: write
       contents: read
       pull-requests: read
+      statuses: write
     steps:
+      # The author cap and the release-critical label check come beside the
+      # sweep: .github/scripts/lib brings run-labels.cjs and the module it reads.
       - name: Check out the superseded-runs action
         uses: actions/checkout@v7
         timeout-minutes: 3
         with:
-          sparse-checkout: .github/actions/superseded-runs
+          sparse-checkout: |
+            .github/actions/superseded-runs
+            .github/actions/ci-admission
+            .github/scripts/lib
           path: .superseded-runs
           persist-credentials: false
 
@@ -369,6 +376,85 @@ jobs:
         uses: ./.superseded-runs/.github/actions/superseded-runs
         with:
           cancel: true
+
+      # One author runs at most three pull-request CI runs at once
+      # (spec:AST-030/DEC-31, author-cap.mjs). A run past the cap holds no
+      # runner while it waits: it marks its head with the "CI author cap"
+      # status (pending) and cancels itself, and ci-author-turn.yml starts it
+      # again when one of the author's runs ends. Release-critical runs are
+      # outside the cap (DEC-30). A fork's run never reaches this job: its
+      # read-only token can neither set the status nor cancel the run. A count
+      # that fails lets the run go on.
+      - name: Wait for the author's turn
+        uses: actions/github-script@v9
+        env:
+          AUTHOR_MODULE: ${{ github.workspace }}/.superseded-runs/.github/actions/ci-admission/author-cap.mjs
+          RUN_LABELS_MODULE: ${{ github.workspace }}/.superseded-runs/.github/scripts/run-labels.cjs
+        with:
+          script: |
+            // The job goes on past a failed step, so a cap that could not be
+            // judged says so in a warning, and the run goes on uncapped.
+            try {
+              const {pathToFileURL} = await import('node:url');
+              const cap = await import(pathToFileURL(process.env.AUTHOR_MODULE).href);
+              const pr = context.payload.pull_request;
+              const author = pr?.user?.login;
+              if (!author || cap.isExempt(author)) {
+                core.info(`The author cap does not count ${author ?? 'this run'}.`);
+                return;
+              }
+              if ((pr.labels ?? []).some(label => label.name === 'release-critical')) {
+                const {decideRunLabel} = await import(pathToFileURL(process.env.RUN_LABELS_MODULE).href);
+                let trusted = false;
+                try {
+                  trusted = await decideRunLabel({github, context, core: {...core, notice: () => {}}, suite: 'release-critical', label: 'release-critical'});
+                } catch (error) {
+                  core.warning(`Could not check who applied release-critical (${error.message}): the run counts toward the author cap.`);
+                }
+                if (trusted) {
+                  core.info('A release-critical run is outside the author cap.');
+                  return;
+                }
+              }
+              const statusOf = (state, description) => ({
+                ...context.repo,
+                sha: pr.head.sha,
+                context: cap.AUTHOR_CAP_STATUS,
+                state,
+                description,
+                target_url: `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+              let turn;
+              try {
+                const mine = (await cap.readAuthors({github, ...context.repo, only: author})).get(author) ?? {running: [], waiting: []};
+                const self =
+                  mine.running.find(run => run.id === context.runId) ??
+                  (await github.rest.actions.getWorkflowRun({...context.repo, run_id: context.runId})).data;
+                turn = cap.authorTurn({self, running: mine.running, waiting: mine.waiting});
+              } catch (error) {
+                core.warning(`author cap not evaluated: could not count ${author}'s pull-request runs (${error.message}); the run goes on.`);
+                return;
+              }
+              if (turn.waits) {
+                const ahead = turn.ahead + turn.waitingAhead;
+                await github.rest.repos.createCommitStatus(
+                  statusOf('pending', `Waits for ${author}'s turn: ${ahead} of their pull-request runs began first. It starts again on its own.`),
+                );
+                core.notice(`Author cap: at most ${cap.AUTHOR_CAP} pull-request runs per author run at once, and ${ahead} of ${author}'s began first (${turn.ahead} running, ${turn.waitingAhead} waiting). This run cancels itself and starts again when one of them ends.`);
+                await github.rest.actions.cancelWorkflowRun({...context.repo, run_id: context.runId});
+                return;
+              }
+              core.info(`${author}'s turn: ${turn.ahead} of their runs began first and still run, ${turn.waitingAhead} wait.`);
+              try {
+                if ((await cap.capStatus({github, ...context.repo, sha: pr.head.sha}))?.state === 'pending') {
+                  await github.rest.repos.createCommitStatus(statusOf('success', 'Its turn came: this run started.'));
+                }
+              } catch (error) {
+                core.warning(`Could not update the ${cap.AUTHOR_CAP_STATUS} status (${error.message}).`);
+              }
+            } catch (error) {
+              core.warning(`author cap not evaluated: ${error.message}`);
+            }
 
   maintenance-request:
     needs: [admission]
