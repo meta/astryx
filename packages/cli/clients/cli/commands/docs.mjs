@@ -53,10 +53,12 @@ import {doc as docsCommand} from './docs.doc.mjs';
 import {doc as docsFn} from '../../../api/docs/docs.doc.mjs';
 
 /**
- * The longest whole topic a bare text read prints, in bytes of the text it
- * prints. Up to this size, reading the whole topic costs no more than a reader
- * who wants the answer reads through the section list and the sections it
- * opens; a longer topic lists its sections.
+ * The longest whole topic a bare text read prints, in bytes of the topic's own
+ * text at the read's detail: its title, description and sections, without the
+ * package line and the moves that frame the read. Up to this size, reading the
+ * whole topic costs no more than a reader who wants the answer reads through
+ * the section list and the sections it opens; a longer topic lists its
+ * sections.
  */
 export const WHOLE_READ_MAX_BYTES = 16 * 1024;
 
