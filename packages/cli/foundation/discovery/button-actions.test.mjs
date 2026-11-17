@@ -93,7 +93,7 @@ describe('a name in its props', () => {
       isOwnCode: () => false,
       stem: 'page',
     });
-    expect(scan?.buttons.map(button => button.note)).toEqual(['START is "#"']);
+    expect(scan?.buttons.map(button => button.note)).toEqual(['placeholder link: replace `#` in START with a real href']);
   });
 });
 
@@ -134,7 +134,7 @@ describe('a button with no action', () => {
     expect(scan?.buttons.map(button => [button.label, button.note])).toEqual([
       ['A', null],
       ['B', 'empty onClick'],
-      ['C', 'href="#"'],
+      ['C', 'placeholder link: replace `#` with a real href'],
       ['D', 'empty clickAction'],
     ]);
   });

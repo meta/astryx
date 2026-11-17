@@ -275,6 +275,19 @@ function goesNowhere(href, context) {
 }
 
 /**
+ * How the warning names a link that goes nowhere: a placeholder to replace.
+ * @param {{href: string, name: string | null}} link
+ */
+function placeholderNote({href, name}) {
+  if (href === '#') {
+    return name == null
+      ? 'placeholder link: replace `#` with a real href'
+      : `placeholder link: replace \`#\` in ${name} with a real href`;
+  }
+  return name == null ? 'placeholder link: give it a real href' : `placeholder link: give ${name} a real href`;
+}
+
+/**
  * The text of a string-valued attribute or child: a string literal, or a
  * template literal with no expressions. Null otherwise.
  * @param {any} node
@@ -709,7 +722,7 @@ function missingAction(path, context) {
     if (name === 'href') {
       const link = linkOf(attribute.value, path);
       if (link == null || !goesNowhere(link.href, context)) return null;
-      note ??= link.name == null ? `href="${link.href}"` : `${link.name} is "${link.href}"`;
+      note ??= placeholderNote(link);
       continue;
     }
     if (name === 'type') {

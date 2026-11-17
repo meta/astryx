@@ -1620,7 +1620,7 @@ export function checkButtonActions(ctx) {
     label,
     status: 'warn',
     message: `${count} button${count === 1 ? '' : 's'} ${count === 1 ? 'does' : 'do'} nothing when pressed: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
-    fix: 'Give each one an action: `onClick` (or `clickAction` for async work), a real `href`, or `type="submit"` inside a form. If it has no action yet, disable it with `isDisabled` or remove it: an empty handler or a `#` link still does nothing.',
+    fix: 'Give each one an action: `onClick` (or `clickAction` for async work), a real `href` in place of a placeholder, or `type="submit"` inside a form. If it has no action yet, disable it with `isDisabled` or remove it: an empty handler still does nothing.',
   };
 }
 
