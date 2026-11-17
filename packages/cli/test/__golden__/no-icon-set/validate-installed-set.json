@@ -1,0 +1,2257 @@
+{
+  "apiVersion": 1,
+  "type": "integration.validate",
+  "data": {
+    "validated": true,
+    "name": "@acme/glyphs",
+    "version": "1.0.0",
+    "issues": [
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"arrowDown\" (Sort descending or move down. Words: descending, down, decrease.). Every set maps every built-in definition: run `astryx experimental icon map arrowDown <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition arrowDown --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"arrowsUpDown\" (Show that a column can be sorted. Words: sort, sortable, reorder, arrow up down.). Every set maps every built-in definition: run `astryx experimental icon map arrowsUpDown <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition arrowsUpDown --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"arrowUp\" (Sort ascending or move up. Words: ascending, up, increase.). Every set maps every built-in definition: run `astryx experimental icon map arrowUp <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition arrowUp --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"calendar\" (Pick or show a date. Words: date, schedule, day.). Every set maps every built-in definition: run `astryx experimental icon map calendar <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition calendar --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"check\" (Mark something done, selected or confirmed. Words: done, tick, confirm, selected.). Every set maps every built-in definition: run `astryx experimental icon map check <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition check --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"checkDouble\" (Show that something was copied or read. Words: copied, read, seen, double check, check check.). Every set maps every built-in definition: run `astryx experimental icon map checkDouble <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition checkDouble --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"chevronDown\" (Open a dropdown or expand a section. Words: expand, dropdown, caret.). Every set maps every built-in definition: run `astryx experimental icon map chevronDown <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition chevronDown --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"chevronLeft\" (Go back or to the previous item. Words: back, previous.). Every set maps every built-in definition: run `astryx experimental icon map chevronLeft <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition chevronLeft --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"chevronRight\" (Go forward, to the next item, or into a nested item. Words: forward, next.). Every set maps every built-in definition: run `astryx experimental icon map chevronRight <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition chevronRight --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"chevronsLeft\" (Jump to the first item or page. Words: first, start, chevron double left.). Every set maps every built-in definition: run `astryx experimental icon map chevronsLeft <icon id> --set glyphs` with the icon that draws it (icons matching \"start\": `astryx experimental icon start --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"chevronsRight\" (Jump to the last item or page. Words: last, end, chevron double right.). Every set maps every built-in definition: run `astryx experimental icon map chevronsRight <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition chevronsRight --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"clock\" (Pick or show a time. Words: time, hour, recent.). Every set maps every built-in definition: run `astryx experimental icon map clock <icon id> --set glyphs` with the icon that draws it (icons matching \"time\": `astryx experimental icon time --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"copy\" (Copy to the clipboard. Words: duplicate, clipboard, document duplicate.). Every set maps every built-in definition: run `astryx experimental icon map copy <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition copy --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"error\" (Show that something failed. Words: failed, invalid, problem, x circle, circle x.). Every set maps every built-in definition: run `astryx experimental icon map error <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition error --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"externalLink\" (Open a link in a new tab or another site. Words: open, new tab, external, arrow top right on square, square arrow out up right.). Every set maps every built-in definition: run `astryx experimental icon map externalLink <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition externalLink --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"eyeSlash\" (Hide something, or show that it is hidden. Words: hide, hidden, invisible, eye off.). Every set maps every built-in definition: run `astryx experimental icon map eyeSlash <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition eyeSlash --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"funnel\" (Filter a list. Words: filter, refine.). Every set maps every built-in definition: run `astryx experimental icon map funnel <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition funnel --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"info\" (Give more information or help. Words: information, help, about, information circle.). Every set maps every built-in definition: run `astryx experimental icon map info <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition info --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"menu\" (Open the main navigation menu. Words: hamburger, navigation, bars.). Every set maps every built-in definition: run `astryx experimental icon map menu <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition menu --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"microphone\" (Start voice input or audio recording. Words: voice, audio, record, mic.). Every set maps every built-in definition: run `astryx experimental icon map microphone <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition microphone --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"moreHorizontal\" (Open more actions for an item. Words: more, overflow, actions, ellipsis, ellipsis horizontal.). Every set maps every built-in definition: run `astryx experimental icon map moreHorizontal <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition moreHorizontal --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"stop\" (Stop or cancel a running action. Words: halt, end, cancel, square, circle stop.). Every set maps every built-in definition: run `astryx experimental icon map stop <icon id> --set glyphs` with the icon that draws it (icons matching \"cancel\": `astryx experimental icon cancel --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"success\" (Show that something worked. Words: ok, complete, passed, check circle, circle check.). Every set maps every built-in definition: run `astryx experimental icon map success <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition success --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"upload\" (Upload a file or content. Words: import, attach file, arrow up tray.). Every set maps every built-in definition: run `astryx experimental icon map upload <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition upload --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"viewColumns\" (Choose which columns are shown. Words: columns, layout.). Every set maps every built-in definition: run `astryx experimental icon map viewColumns <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition viewColumns --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"warning\" (Warn about something that needs attention. Words: caution, alert, exclamation triangle, triangle alert.). Every set maps every built-in definition: run `astryx experimental icon map warning <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition warning --set glyphs`)."
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "Icon set \"glyphs\" maps no icon to the built-in icon definition \"wrench\" (Open settings or configuration tools. Words: tools, configure, fix.). Every set maps every built-in definition: run `astryx experimental icon map wrench <icon id> --set glyphs` with the icon that draws it (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition wrench --set glyphs`)."
+      }
+    ],
+    "docTypes": {
+      "status": "checked",
+      "typescript": "6.0.3",
+      "docs": 1,
+      "findings": [],
+      "unchecked": []
+    },
+    "docNames": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    },
+    "blockComponents": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    },
+    "iconSets": [
+      {
+        "set": "glyphs",
+        "unmappedDefinitions": [
+          {
+            "name": "activity",
+            "description": "Activity or live status over time.",
+            "words": [
+              "pulse",
+              "live"
+            ]
+          },
+          {
+            "name": "add",
+            "description": "Add or create a new item.",
+            "words": [
+              "create",
+              "new",
+              "plus"
+            ]
+          },
+          {
+            "name": "adjustments",
+            "description": "Adjust options such as view or filters.",
+            "words": [
+              "sliders",
+              "tune",
+              "options"
+            ]
+          },
+          {
+            "name": "alignBottom",
+            "description": "Align items to the bottom edge.",
+            "words": [
+              "bottom align",
+              "align end vertical"
+            ]
+          },
+          {
+            "name": "alignCenter",
+            "description": "Center text or items.",
+            "words": [
+              "center align",
+              "centre",
+              "text align"
+            ]
+          },
+          {
+            "name": "alignEnd",
+            "description": "Align text or items to the end edge: the right in a left-to-right layout, the left in a right-to-left one.",
+            "words": [
+              "align end",
+              "right align",
+              "justify right",
+              "text align"
+            ]
+          },
+          {
+            "name": "alignJustify",
+            "description": "Justify text so each line fills the full width.",
+            "words": [
+              "justify",
+              "full width text"
+            ]
+          },
+          {
+            "name": "alignMiddle",
+            "description": "Center items between the top and bottom edges.",
+            "words": [
+              "vertical center",
+              "middle align"
+            ]
+          },
+          {
+            "name": "alignStart",
+            "description": "Align text or items to the start edge: the left in a left-to-right layout, the right in a right-to-left one.",
+            "words": [
+              "align start",
+              "left align",
+              "justify left",
+              "text align"
+            ]
+          },
+          {
+            "name": "alignTop",
+            "description": "Align items to the top edge.",
+            "words": [
+              "top align",
+              "align start vertical"
+            ]
+          },
+          {
+            "name": "angle",
+            "description": "An angle, such as the rotation of an item.",
+            "words": [
+              "rotation",
+              "degrees",
+              "triangle"
+            ]
+          },
+          {
+            "name": "announcement",
+            "description": "An announcement or broadcast.",
+            "words": [
+              "broadcast",
+              "news",
+              "megaphone"
+            ]
+          },
+          {
+            "name": "apps",
+            "description": "Add or browse apps and widgets.",
+            "words": [
+              "grid",
+              "widgets",
+              "apps"
+            ]
+          },
+          {
+            "name": "archive",
+            "description": "Archive an item.",
+            "words": [
+              "box",
+              "stash"
+            ]
+          },
+          {
+            "name": "arrowLeft",
+            "description": "Go back to the previous page.",
+            "words": [
+              "back",
+              "previous"
+            ]
+          },
+          {
+            "name": "arrowRight",
+            "description": "Continue to the next step or page.",
+            "words": [
+              "next",
+              "continue",
+              "forward"
+            ]
+          },
+          {
+            "name": "attach",
+            "description": "Attach a file.",
+            "words": [
+              "attachment",
+              "paperclip",
+              "paper clip"
+            ]
+          },
+          {
+            "name": "audio",
+            "description": "Sound or volume.",
+            "words": [
+              "sound",
+              "volume",
+              "speaker",
+              "speaker wave"
+            ]
+          },
+          {
+            "name": "bank",
+            "description": "A bank or other institution.",
+            "words": [
+              "institution",
+              "building library",
+              "finance"
+            ]
+          },
+          {
+            "name": "bold",
+            "description": "Bold text.",
+            "words": [
+              "strong",
+              "text format"
+            ]
+          },
+          {
+            "name": "bolt",
+            "description": "Speed, power or quick actions.",
+            "words": [
+              "fast",
+              "power",
+              "lightning"
+            ]
+          },
+          {
+            "name": "book",
+            "description": "Documentation or a guide.",
+            "words": [
+              "docs",
+              "guide",
+              "read",
+              "learn"
+            ]
+          },
+          {
+            "name": "bookmark",
+            "description": "Save something to read later.",
+            "words": [
+              "save",
+              "later"
+            ]
+          },
+          {
+            "name": "bookmarkAdd",
+            "description": "Save something new as a bookmark or a saved view.",
+            "words": [
+              "add bookmark",
+              "bookmark plus",
+              "save view"
+            ]
+          },
+          {
+            "name": "bug",
+            "description": "A bug or issue.",
+            "words": [
+              "issue",
+              "defect",
+              "error"
+            ]
+          },
+          {
+            "name": "building",
+            "description": "A company or office.",
+            "words": [
+              "company",
+              "office",
+              "organization"
+            ]
+          },
+          {
+            "name": "cart",
+            "description": "A shopping cart.",
+            "words": [
+              "shop",
+              "buy",
+              "checkout",
+              "shopping cart"
+            ]
+          },
+          {
+            "name": "chart",
+            "description": "A chart or analytics.",
+            "words": [
+              "analytics",
+              "graph",
+              "stats",
+              "metrics"
+            ]
+          },
+          {
+            "name": "chevronUp",
+            "description": "Collapse a section or move up.",
+            "words": [
+              "collapse",
+              "up"
+            ]
+          },
+          {
+            "name": "click",
+            "description": "Click or select something on the screen.",
+            "words": [
+              "cursor",
+              "pointer",
+              "select"
+            ]
+          },
+          {
+            "name": "clipboard",
+            "description": "Show or use the clipboard, such as a paste action or copied content.",
+            "words": [
+              "paste",
+              "clipboard"
+            ]
+          },
+          {
+            "name": "cloud",
+            "description": "Cloud storage, a hosted service, or weather.",
+            "words": [
+              "storage",
+              "hosted",
+              "sync"
+            ]
+          },
+          {
+            "name": "code",
+            "description": "Source code or a developer view.",
+            "words": [
+              "developer",
+              "brackets",
+              "source"
+            ]
+          },
+          {
+            "name": "collapse",
+            "description": "Make something smaller or exit full screen.",
+            "words": [
+              "minimize",
+              "shrink",
+              "arrows pointing in"
+            ]
+          },
+          {
+            "name": "collection",
+            "description": "A series or stack of related items.",
+            "words": [
+              "series",
+              "stack",
+              "set of items"
+            ]
+          },
+          {
+            "name": "compose",
+            "description": "Write something new, such as a message or post.",
+            "words": [
+              "write",
+              "new message",
+              "draft",
+              "square pen",
+              "pencil square"
+            ]
+          },
+          {
+            "name": "contrast",
+            "description": "Contrast, or a two-tone effect on an image.",
+            "words": [
+              "duotone",
+              "two tone",
+              "half circle"
+            ]
+          },
+          {
+            "name": "conversation",
+            "description": "A conversation between people.",
+            "words": [
+              "chat",
+              "discussion",
+              "thread",
+              "chat bubbles",
+              "messages square"
+            ]
+          },
+          {
+            "name": "cornerRadius",
+            "description": "How round the corners of an item are.",
+            "words": [
+              "radius",
+              "rounded corners",
+              "border radius"
+            ]
+          },
+          {
+            "name": "cpu",
+            "description": "A processor or compute resource.",
+            "words": [
+              "processor",
+              "chip",
+              "compute",
+              "hardware"
+            ]
+          },
+          {
+            "name": "creditCard",
+            "description": "A payment card or billing.",
+            "words": [
+              "billing",
+              "payment",
+              "card"
+            ]
+          },
+          {
+            "name": "cut",
+            "description": "Cut a selection so you can paste it somewhere else.",
+            "words": [
+              "scissors",
+              "cut out",
+              "clip"
+            ]
+          },
+          {
+            "name": "database",
+            "description": "A database or stored data.",
+            "words": [
+              "data",
+              "storage"
+            ]
+          },
+          {
+            "name": "delete",
+            "description": "Delete something permanently.",
+            "words": [
+              "trash",
+              "bin",
+              "discard"
+            ]
+          },
+          {
+            "name": "desktop",
+            "description": "A desktop computer, or the desktop layout of a page.",
+            "words": [
+              "computer",
+              "monitor",
+              "screen",
+              "computer desktop"
+            ]
+          },
+          {
+            "name": "discount",
+            "description": "A discount, coupon, or percentage off.",
+            "words": [
+              "coupon",
+              "sale",
+              "percent",
+              "percent badge"
+            ]
+          },
+          {
+            "name": "document",
+            "description": "A document or file.",
+            "words": [
+              "file",
+              "page",
+              "doc"
+            ]
+          },
+          {
+            "name": "documentSearch",
+            "description": "Inspect a document or a detailed log.",
+            "words": [
+              "inspect",
+              "logging",
+              "find in document"
+            ]
+          },
+          {
+            "name": "download",
+            "description": "Download a file.",
+            "words": [
+              "export",
+              "save file",
+              "arrow down tray"
+            ]
+          },
+          {
+            "name": "drag",
+            "description": "A handle to drag an item and reorder it.",
+            "words": [
+              "grip",
+              "handle",
+              "reorder",
+              "move"
+            ]
+          },
+          {
+            "name": "edit",
+            "description": "Edit or change something.",
+            "words": [
+              "pencil",
+              "change",
+              "modify"
+            ]
+          },
+          {
+            "name": "emoji",
+            "description": "Add an emoji or a reaction.",
+            "words": [
+              "smile",
+              "reaction",
+              "face",
+              "face smile"
+            ]
+          },
+          {
+            "name": "expand",
+            "description": "Make something larger or full screen.",
+            "words": [
+              "maximize",
+              "fullscreen",
+              "enlarge",
+              "arrows pointing out"
+            ]
+          },
+          {
+            "name": "experiment",
+            "description": "An experiment, test, or lab feature.",
+            "words": [
+              "lab",
+              "test",
+              "beta",
+              "test tube"
+            ]
+          },
+          {
+            "name": "eye",
+            "description": "Show or preview something.",
+            "words": [
+              "view",
+              "visible",
+              "preview"
+            ]
+          },
+          {
+            "name": "file",
+            "description": "A file of any type.",
+            "words": [
+              "file",
+              "attachment",
+              "document"
+            ]
+          },
+          {
+            "name": "fingerprint",
+            "description": "A passkey, biometric sign-in, or unique identity.",
+            "words": [
+              "passkey",
+              "biometric",
+              "touch id"
+            ]
+          },
+          {
+            "name": "fire",
+            "description": "Something popular, trending, or hot.",
+            "words": [
+              "trending",
+              "hot",
+              "popular",
+              "flame"
+            ]
+          },
+          {
+            "name": "flag",
+            "description": "Flag or report something.",
+            "words": [
+              "report",
+              "mark"
+            ]
+          },
+          {
+            "name": "flipHorizontal",
+            "description": "Mirror an image or shape left to right.",
+            "words": [
+              "mirror",
+              "flip",
+              "reflect"
+            ]
+          },
+          {
+            "name": "flipVertical",
+            "description": "Mirror an image or shape top to bottom.",
+            "words": [
+              "mirror",
+              "flip",
+              "upside down"
+            ]
+          },
+          {
+            "name": "folder",
+            "description": "A folder or collection.",
+            "words": [
+              "directory",
+              "collection"
+            ]
+          },
+          {
+            "name": "folderAdd",
+            "description": "Create a new folder.",
+            "words": [
+              "new folder",
+              "folder plus"
+            ]
+          },
+          {
+            "name": "frame",
+            "description": "A frame that holds other layers on a canvas.",
+            "words": [
+              "artboard",
+              "canvas frame",
+              "container"
+            ]
+          },
+          {
+            "name": "gift",
+            "description": "A gift, gift card, or reward.",
+            "words": [
+              "present",
+              "reward",
+              "gift card"
+            ]
+          },
+          {
+            "name": "gitBranch",
+            "description": "A branch of a code repository.",
+            "words": [
+              "branch",
+              "version control",
+              "repository"
+            ]
+          },
+          {
+            "name": "gitFork",
+            "description": "A fork: a copy of a repository someone develops separately.",
+            "words": [
+              "fork",
+              "repository",
+              "version control"
+            ]
+          },
+          {
+            "name": "globe",
+            "description": "The web, a language or the world.",
+            "words": [
+              "world",
+              "web",
+              "language",
+              "internet"
+            ]
+          },
+          {
+            "name": "gridView",
+            "description": "Show items as a grid of tiles.",
+            "words": [
+              "grid",
+              "tiles",
+              "gallery view"
+            ]
+          },
+          {
+            "name": "group",
+            "description": "Group selected items together.",
+            "words": [
+              "group layers",
+              "combine",
+              "bundle"
+            ]
+          },
+          {
+            "name": "heart",
+            "description": "Like something.",
+            "words": [
+              "like",
+              "love"
+            ]
+          },
+          {
+            "name": "home",
+            "description": "Go to the home page.",
+            "words": [
+              "house",
+              "start",
+              "dashboard"
+            ]
+          },
+          {
+            "name": "image",
+            "description": "An image or photo.",
+            "words": [
+              "photo",
+              "picture",
+              "media"
+            ]
+          },
+          {
+            "name": "inbox",
+            "description": "An inbox of incoming items.",
+            "words": [
+              "incoming",
+              "tray"
+            ]
+          },
+          {
+            "name": "integration",
+            "description": "A connected app, plugin, or extension.",
+            "words": [
+              "plugin",
+              "extension",
+              "add-on",
+              "connected app"
+            ]
+          },
+          {
+            "name": "italic",
+            "description": "Italic text.",
+            "words": [
+              "emphasis",
+              "text format"
+            ]
+          },
+          {
+            "name": "key",
+            "description": "Keys, passwords or access.",
+            "words": [
+              "password",
+              "access",
+              "credential"
+            ]
+          },
+          {
+            "name": "keyboard",
+            "description": "A keyboard or keyboard shortcuts.",
+            "words": [
+              "keyboard",
+              "shortcuts",
+              "hotkeys"
+            ]
+          },
+          {
+            "name": "language",
+            "description": "Choose a language, or translate.",
+            "words": [
+              "translate",
+              "locale",
+              "i18n"
+            ]
+          },
+          {
+            "name": "lightbulb",
+            "description": "An idea or tip.",
+            "words": [
+              "idea",
+              "tip",
+              "hint"
+            ]
+          },
+          {
+            "name": "link",
+            "description": "Add or show a link.",
+            "words": [
+              "url",
+              "chain",
+              "hyperlink"
+            ]
+          },
+          {
+            "name": "list",
+            "description": "A list view.",
+            "words": [
+              "bullets",
+              "items",
+              "rows"
+            ]
+          },
+          {
+            "name": "location",
+            "description": "A place or address.",
+            "words": [
+              "place",
+              "address",
+              "map",
+              "map pin"
+            ]
+          },
+          {
+            "name": "lock",
+            "description": "Locked, private or secure.",
+            "words": [
+              "secure",
+              "private",
+              "locked"
+            ]
+          },
+          {
+            "name": "lowercase",
+            "description": "Make text all small letters.",
+            "words": [
+              "lower case",
+              "small letters"
+            ]
+          },
+          {
+            "name": "mail",
+            "description": "Email or a message inbox.",
+            "words": [
+              "email",
+              "envelope",
+              "message"
+            ]
+          },
+          {
+            "name": "mention",
+            "description": "Mention someone or show an email address.",
+            "words": [
+              "at",
+              "email",
+              "handle",
+              "at symbol",
+              "at sign"
+            ]
+          },
+          {
+            "name": "message",
+            "description": "A chat message or comment.",
+            "words": [
+              "chat",
+              "comment",
+              "conversation"
+            ]
+          },
+          {
+            "name": "mobile",
+            "description": "A phone, or the mobile layout of a page.",
+            "words": [
+              "phone",
+              "smartphone"
+            ]
+          },
+          {
+            "name": "money",
+            "description": "Money, prices or payments.",
+            "words": [
+              "price",
+              "payment",
+              "cost",
+              "currency",
+              "currency dollar"
+            ]
+          },
+          {
+            "name": "moon",
+            "description": "Dark mode or night.",
+            "words": [
+              "dark mode",
+              "night"
+            ]
+          },
+          {
+            "name": "notification",
+            "description": "Notifications or alerts.",
+            "words": [
+              "bell",
+              "alerts",
+              "notify"
+            ]
+          },
+          {
+            "name": "notificationActive",
+            "description": "New or unread notifications.",
+            "words": [
+              "ringing",
+              "unread",
+              "new alert",
+              "bell alert",
+              "bell ring"
+            ]
+          },
+          {
+            "name": "notificationOff",
+            "description": "Turn notifications off, or show that they are muted.",
+            "words": [
+              "mute",
+              "silence",
+              "notifications off",
+              "bell slash",
+              "bell off"
+            ]
+          },
+          {
+            "name": "package",
+            "description": "A package, product or shipment.",
+            "words": [
+              "box",
+              "product",
+              "module",
+              "cube"
+            ]
+          },
+          {
+            "name": "paddingHorizontal",
+            "description": "Space on the left and right sides inside an item.",
+            "words": [
+              "horizontal padding",
+              "inline padding"
+            ]
+          },
+          {
+            "name": "paddingPerSide",
+            "description": "Set the space inside an item one side at a time.",
+            "words": [
+              "padding per side",
+              "individual padding"
+            ]
+          },
+          {
+            "name": "paddingVertical",
+            "description": "Space on the top and bottom sides inside an item.",
+            "words": [
+              "vertical padding",
+              "block padding"
+            ]
+          },
+          {
+            "name": "paintBrush",
+            "description": "Paint or style something, such as appearance settings.",
+            "words": [
+              "paint",
+              "brush",
+              "appearance"
+            ]
+          },
+          {
+            "name": "panelBottom",
+            "description": "Show or hide a panel at the bottom edge.",
+            "words": [
+              "bottom panel",
+              "toolbar",
+              "dock"
+            ]
+          },
+          {
+            "name": "panelLeft",
+            "description": "Show or hide a side panel on the left, such as a navigation sidebar.",
+            "words": [
+              "sidebar",
+              "left panel",
+              "drawer",
+              "toggle sidebar"
+            ]
+          },
+          {
+            "name": "panelRight",
+            "description": "Show or hide a side panel on the right, such as a details or inspector pane.",
+            "words": [
+              "right panel",
+              "inspector",
+              "details pane",
+              "drawer"
+            ]
+          },
+          {
+            "name": "pause",
+            "description": "Pause media or a running task.",
+            "words": [
+              "hold",
+              "wait"
+            ]
+          },
+          {
+            "name": "photoEffect",
+            "description": "An effect on a photo, such as grain or a lens look.",
+            "words": [
+              "aperture",
+              "lens",
+              "grain",
+              "camera effect"
+            ]
+          },
+          {
+            "name": "pin",
+            "description": "Pin an item to the top.",
+            "words": [
+              "pinned",
+              "keep"
+            ]
+          },
+          {
+            "name": "play",
+            "description": "Play media or start something.",
+            "words": [
+              "start",
+              "run",
+              "video"
+            ]
+          },
+          {
+            "name": "radiusPerCorner",
+            "description": "Set the roundness of each corner on its own.",
+            "words": [
+              "radius per corner",
+              "individual corners"
+            ]
+          },
+          {
+            "name": "raiseHand",
+            "description": "Raise a hand to ask or speak.",
+            "words": [
+              "hand",
+              "ask",
+              "hand raised"
+            ]
+          },
+          {
+            "name": "redo",
+            "description": "Redo the last change that was undone.",
+            "words": [
+              "again",
+              "repeat",
+              "arrow uturn right"
+            ]
+          },
+          {
+            "name": "refresh",
+            "description": "Reload or refresh data.",
+            "words": [
+              "reload",
+              "sync",
+              "retry",
+              "arrow path"
+            ]
+          },
+          {
+            "name": "remove",
+            "description": "Remove an item or reduce a value.",
+            "words": [
+              "minus",
+              "subtract",
+              "less"
+            ]
+          },
+          {
+            "name": "rocket",
+            "description": "Launch or get started.",
+            "words": [
+              "launch",
+              "start",
+              "deploy"
+            ]
+          },
+          {
+            "name": "rotate",
+            "description": "Rotate an image, shape, or view.",
+            "words": [
+              "turn",
+              "spin",
+              "orientation"
+            ]
+          },
+          {
+            "name": "rotateCounterclockwise",
+            "description": "Rotate to the left, against the clock.",
+            "words": [
+              "rotate left",
+              "counterclockwise",
+              "anticlockwise"
+            ]
+          },
+          {
+            "name": "save",
+            "description": "Save changes.",
+            "words": [
+              "floppy disk",
+              "floppy",
+              "keep",
+              "store"
+            ]
+          },
+          {
+            "name": "scale",
+            "description": "A balance scale: law, fairness, or weighing one option against another.",
+            "words": [
+              "balance",
+              "legal",
+              "justice",
+              "compare"
+            ]
+          },
+          {
+            "name": "send",
+            "description": "Send a message.",
+            "words": [
+              "submit",
+              "post",
+              "paper airplane"
+            ]
+          },
+          {
+            "name": "server",
+            "description": "A server or backend service.",
+            "words": [
+              "backend",
+              "host",
+              "infrastructure"
+            ]
+          },
+          {
+            "name": "settings",
+            "description": "Open settings or preferences.",
+            "words": [
+              "gear",
+              "preferences",
+              "options",
+              "cog"
+            ]
+          },
+          {
+            "name": "share",
+            "description": "Share with other people.",
+            "words": [
+              "send to",
+              "forward"
+            ]
+          },
+          {
+            "name": "shield",
+            "description": "Security or protection.",
+            "words": [
+              "security",
+              "verified",
+              "protected"
+            ]
+          },
+          {
+            "name": "shipping",
+            "description": "Shipping or delivery.",
+            "words": [
+              "delivery",
+              "truck",
+              "ship"
+            ]
+          },
+          {
+            "name": "shoppingBag",
+            "description": "A store, a purchase, or a shopping bag.",
+            "words": [
+              "shop",
+              "store",
+              "purchase"
+            ]
+          },
+          {
+            "name": "sparkles",
+            "description": "AI or something new and special.",
+            "words": [
+              "ai",
+              "magic",
+              "new"
+            ]
+          },
+          {
+            "name": "star",
+            "description": "Favorite or rate something.",
+            "words": [
+              "favorite",
+              "rating"
+            ]
+          },
+          {
+            "name": "strikethrough",
+            "description": "Strike text through.",
+            "words": [
+              "strike",
+              "cross out",
+              "text format"
+            ]
+          },
+          {
+            "name": "sun",
+            "description": "Light mode or daytime.",
+            "words": [
+              "light mode",
+              "day",
+              "bright"
+            ]
+          },
+          {
+            "name": "swatch",
+            "description": "Pick colors, a palette, or a theme.",
+            "words": [
+              "color",
+              "palette",
+              "theme"
+            ]
+          },
+          {
+            "name": "table",
+            "description": "A table or grid of data.",
+            "words": [
+              "grid",
+              "spreadsheet",
+              "rows"
+            ]
+          },
+          {
+            "name": "tablet",
+            "description": "A tablet device, or a tablet-sized view.",
+            "words": [
+              "ipad",
+              "device",
+              "tablet view"
+            ]
+          },
+          {
+            "name": "tag",
+            "description": "A tag or label.",
+            "words": [
+              "label",
+              "category"
+            ]
+          },
+          {
+            "name": "text",
+            "description": "Text content, such as a text layer or a text field.",
+            "words": [
+              "type",
+              "typography",
+              "text layer"
+            ]
+          },
+          {
+            "name": "textCase",
+            "description": "Change the letter case of text, such as upper or lower case.",
+            "words": [
+              "uppercase",
+              "lowercase",
+              "capitalize",
+              "case",
+              "case sensitive"
+            ]
+          },
+          {
+            "name": "textRegular",
+            "description": "Plain upright text, the regular style beside italic.",
+            "words": [
+              "regular",
+              "normal text",
+              "not italic"
+            ]
+          },
+          {
+            "name": "thumbsDown",
+            "description": "Give negative feedback.",
+            "words": [
+              "dislike",
+              "bad",
+              "hand thumb down"
+            ]
+          },
+          {
+            "name": "thumbsUp",
+            "description": "Approve or give positive feedback.",
+            "words": [
+              "approve",
+              "good",
+              "like",
+              "hand thumb up"
+            ]
+          },
+          {
+            "name": "transfer",
+            "description": "Move money or items between two places.",
+            "words": [
+              "exchange",
+              "swap",
+              "payment processor"
+            ]
+          },
+          {
+            "name": "trendDown",
+            "description": "Show a value going down.",
+            "words": [
+              "decrease",
+              "decline",
+              "down",
+              "arrow trending down",
+              "trending down"
+            ]
+          },
+          {
+            "name": "trendUp",
+            "description": "Show a value going up.",
+            "words": [
+              "increase",
+              "growth",
+              "up",
+              "arrow trending up",
+              "trending up"
+            ]
+          },
+          {
+            "name": "underline",
+            "description": "Underlined text.",
+            "words": [
+              "text format"
+            ]
+          },
+          {
+            "name": "undo",
+            "description": "Undo the last change.",
+            "words": [
+              "revert",
+              "back",
+              "arrow uturn left"
+            ]
+          },
+          {
+            "name": "unlock",
+            "description": "Unlocked or public.",
+            "words": [
+              "open",
+              "public",
+              "unlocked"
+            ]
+          },
+          {
+            "name": "uppercase",
+            "description": "Make text all capital letters.",
+            "words": [
+              "caps",
+              "all caps",
+              "upper case"
+            ]
+          },
+          {
+            "name": "user",
+            "description": "A person or the current user's profile.",
+            "words": [
+              "person",
+              "profile",
+              "account"
+            ]
+          },
+          {
+            "name": "userAdd",
+            "description": "Invite or add a person.",
+            "words": [
+              "invite",
+              "add person",
+              "user plus"
+            ]
+          },
+          {
+            "name": "userCircle",
+            "description": "The signed-in user's avatar or account.",
+            "words": [
+              "avatar",
+              "account",
+              "me"
+            ]
+          },
+          {
+            "name": "userRemove",
+            "description": "Remove a person from a group, chat, or team.",
+            "words": [
+              "remove person",
+              "user minus",
+              "kick"
+            ]
+          },
+          {
+            "name": "users",
+            "description": "A group of people or a team.",
+            "words": [
+              "team",
+              "group",
+              "people",
+              "members"
+            ]
+          },
+          {
+            "name": "video",
+            "description": "A video or camera recording.",
+            "words": [
+              "camera",
+              "record",
+              "movie"
+            ]
+          },
+          {
+            "name": "wallet",
+            "description": "A wallet, a balance, or stored payment methods.",
+            "words": [
+              "wallet",
+              "balance",
+              "billfold"
+            ]
+          },
+          {
+            "name": "work",
+            "description": "Work, a job, or business.",
+            "words": [
+              "job",
+              "business",
+              "briefcase"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "definition": "delete",
+            "icon": "trash"
+          },
+          {
+            "definition": "home",
+            "icon": "home"
+          },
+          {
+            "definition": "remove",
+            "icon": "trash"
+          }
+        ],
+        "unchecked": [],
+        "templateMeanings": {
+          "unmapped": [
+            {
+              "definition": "add",
+              "templates": 17
+            },
+            {
+              "definition": "package",
+              "templates": 17
+            },
+            {
+              "definition": "settings",
+              "templates": 16
+            },
+            {
+              "definition": "delete",
+              "templates": 14
+            },
+            {
+              "definition": "folder",
+              "templates": 13
+            },
+            {
+              "definition": "sparkles",
+              "templates": 13
+            },
+            {
+              "definition": "chart",
+              "templates": 12
+            },
+            {
+              "definition": "users",
+              "templates": 12
+            },
+            {
+              "definition": "download",
+              "templates": 11
+            },
+            {
+              "definition": "home",
+              "templates": 11
+            },
+            {
+              "definition": "lock",
+              "templates": 11
+            },
+            {
+              "definition": "shield",
+              "templates": 11
+            },
+            {
+              "definition": "star",
+              "templates": 11
+            },
+            {
+              "definition": "tag",
+              "templates": 11
+            },
+            {
+              "definition": "user",
+              "templates": 11
+            },
+            {
+              "definition": "document",
+              "templates": 10
+            },
+            {
+              "definition": "edit",
+              "templates": 10
+            },
+            {
+              "definition": "notification",
+              "templates": 9
+            },
+            {
+              "definition": "arrowUp",
+              "templates": 8
+            },
+            {
+              "definition": "compose",
+              "templates": 8
+            },
+            {
+              "definition": "copy",
+              "templates": 8
+            },
+            {
+              "definition": "share",
+              "templates": 8
+            },
+            {
+              "definition": "success",
+              "templates": 8
+            },
+            {
+              "definition": "arrowDown",
+              "templates": 7
+            },
+            {
+              "definition": "arrowRight",
+              "templates": 7
+            },
+            {
+              "definition": "bolt",
+              "templates": 7
+            },
+            {
+              "definition": "code",
+              "templates": 7
+            },
+            {
+              "definition": "globe",
+              "templates": 7
+            },
+            {
+              "definition": "image",
+              "templates": 7
+            },
+            {
+              "definition": "arrowLeft",
+              "templates": 6
+            },
+            {
+              "definition": "book",
+              "templates": 6
+            },
+            {
+              "definition": "calendar",
+              "templates": 6
+            },
+            {
+              "definition": "chevronRight",
+              "templates": 6
+            },
+            {
+              "definition": "clipboard",
+              "templates": 6
+            },
+            {
+              "definition": "file",
+              "templates": 6
+            },
+            {
+              "definition": "funnel",
+              "templates": 6
+            },
+            {
+              "definition": "link",
+              "templates": 6
+            },
+            {
+              "definition": "stop",
+              "templates": 6
+            },
+            {
+              "definition": "userCircle",
+              "templates": 6
+            },
+            {
+              "definition": "viewColumns",
+              "templates": 6
+            },
+            {
+              "definition": "attach",
+              "templates": 5
+            },
+            {
+              "definition": "chevronDown",
+              "templates": 5
+            },
+            {
+              "definition": "creditCard",
+              "templates": 5
+            },
+            {
+              "definition": "error",
+              "templates": 5
+            },
+            {
+              "definition": "eye",
+              "templates": 5
+            },
+            {
+              "definition": "inbox",
+              "templates": 5
+            },
+            {
+              "definition": "location",
+              "templates": 5
+            },
+            {
+              "definition": "mention",
+              "templates": 5
+            },
+            {
+              "definition": "moreHorizontal",
+              "templates": 5
+            },
+            {
+              "definition": "refresh",
+              "templates": 5
+            },
+            {
+              "definition": "adjustments",
+              "templates": 4
+            },
+            {
+              "definition": "bookmark",
+              "templates": 4
+            },
+            {
+              "definition": "check",
+              "templates": 4
+            },
+            {
+              "definition": "italic",
+              "templates": 4
+            },
+            {
+              "definition": "list",
+              "templates": 4
+            },
+            {
+              "definition": "microphone",
+              "templates": 4
+            },
+            {
+              "definition": "underline",
+              "templates": 4
+            },
+            {
+              "definition": "undo",
+              "templates": 4
+            },
+            {
+              "definition": "userAdd",
+              "templates": 4
+            },
+            {
+              "definition": "archive",
+              "templates": 3
+            },
+            {
+              "definition": "audio",
+              "templates": 3
+            },
+            {
+              "definition": "bold",
+              "templates": 3
+            },
+            {
+              "definition": "cart",
+              "templates": 3
+            },
+            {
+              "definition": "clock",
+              "templates": 3
+            },
+            {
+              "definition": "desktop",
+              "templates": 3
+            },
+            {
+              "definition": "flag",
+              "templates": 3
+            },
+            {
+              "definition": "gridView",
+              "templates": 3
+            },
+            {
+              "definition": "mail",
+              "templates": 3
+            },
+            {
+              "definition": "mobile",
+              "templates": 3
+            },
+            {
+              "definition": "money",
+              "templates": 3
+            },
+            {
+              "definition": "play",
+              "templates": 3
+            },
+            {
+              "definition": "rocket",
+              "templates": 3
+            },
+            {
+              "definition": "shoppingBag",
+              "templates": 3
+            },
+            {
+              "definition": "strikethrough",
+              "templates": 3
+            },
+            {
+              "definition": "table",
+              "templates": 3
+            },
+            {
+              "definition": "thumbsUp",
+              "templates": 3
+            },
+            {
+              "definition": "warning",
+              "templates": 3
+            },
+            {
+              "definition": "activity",
+              "templates": 2
+            },
+            {
+              "definition": "apps",
+              "templates": 2
+            },
+            {
+              "definition": "bank",
+              "templates": 2
+            },
+            {
+              "definition": "click",
+              "templates": 2
+            },
+            {
+              "definition": "cpu",
+              "templates": 2
+            },
+            {
+              "definition": "discount",
+              "templates": 2
+            },
+            {
+              "definition": "drag",
+              "templates": 2
+            },
+            {
+              "definition": "emoji",
+              "templates": 2
+            },
+            {
+              "definition": "experiment",
+              "templates": 2
+            },
+            {
+              "definition": "group",
+              "templates": 2
+            },
+            {
+              "definition": "heart",
+              "templates": 2
+            },
+            {
+              "definition": "info",
+              "templates": 2
+            },
+            {
+              "definition": "language",
+              "templates": 2
+            },
+            {
+              "definition": "menu",
+              "templates": 2
+            },
+            {
+              "definition": "moon",
+              "templates": 2
+            },
+            {
+              "definition": "notificationActive",
+              "templates": 2
+            },
+            {
+              "definition": "notificationOff",
+              "templates": 2
+            },
+            {
+              "definition": "panelLeft",
+              "templates": 2
+            },
+            {
+              "definition": "raiseHand",
+              "templates": 2
+            },
+            {
+              "definition": "remove",
+              "templates": 2
+            },
+            {
+              "definition": "send",
+              "templates": 2
+            },
+            {
+              "definition": "shipping",
+              "templates": 2
+            },
+            {
+              "definition": "sun",
+              "templates": 2
+            },
+            {
+              "definition": "swatch",
+              "templates": 2
+            },
+            {
+              "definition": "text",
+              "templates": 2
+            },
+            {
+              "definition": "thumbsDown",
+              "templates": 2
+            },
+            {
+              "definition": "work",
+              "templates": 2
+            },
+            {
+              "definition": "alignBottom",
+              "templates": 1
+            },
+            {
+              "definition": "alignCenter",
+              "templates": 1
+            },
+            {
+              "definition": "alignEnd",
+              "templates": 1
+            },
+            {
+              "definition": "alignJustify",
+              "templates": 1
+            },
+            {
+              "definition": "alignMiddle",
+              "templates": 1
+            },
+            {
+              "definition": "alignStart",
+              "templates": 1
+            },
+            {
+              "definition": "alignTop",
+              "templates": 1
+            },
+            {
+              "definition": "angle",
+              "templates": 1
+            },
+            {
+              "definition": "announcement",
+              "templates": 1
+            },
+            {
+              "definition": "arrowsUpDown",
+              "templates": 1
+            },
+            {
+              "definition": "bookmarkAdd",
+              "templates": 1
+            },
+            {
+              "definition": "building",
+              "templates": 1
+            },
+            {
+              "definition": "checkDouble",
+              "templates": 1
+            },
+            {
+              "definition": "chevronLeft",
+              "templates": 1
+            },
+            {
+              "definition": "chevronUp",
+              "templates": 1
+            },
+            {
+              "definition": "cloud",
+              "templates": 1
+            },
+            {
+              "definition": "collection",
+              "templates": 1
+            },
+            {
+              "definition": "contrast",
+              "templates": 1
+            },
+            {
+              "definition": "conversation",
+              "templates": 1
+            },
+            {
+              "definition": "cornerRadius",
+              "templates": 1
+            },
+            {
+              "definition": "cut",
+              "templates": 1
+            },
+            {
+              "definition": "database",
+              "templates": 1
+            },
+            {
+              "definition": "documentSearch",
+              "templates": 1
+            },
+            {
+              "definition": "expand",
+              "templates": 1
+            },
+            {
+              "definition": "externalLink",
+              "templates": 1
+            },
+            {
+              "definition": "eyeSlash",
+              "templates": 1
+            },
+            {
+              "definition": "fingerprint",
+              "templates": 1
+            },
+            {
+              "definition": "fire",
+              "templates": 1
+            },
+            {
+              "definition": "flipHorizontal",
+              "templates": 1
+            },
+            {
+              "definition": "flipVertical",
+              "templates": 1
+            },
+            {
+              "definition": "folderAdd",
+              "templates": 1
+            },
+            {
+              "definition": "frame",
+              "templates": 1
+            },
+            {
+              "definition": "gift",
+              "templates": 1
+            },
+            {
+              "definition": "gitBranch",
+              "templates": 1
+            },
+            {
+              "definition": "gitFork",
+              "templates": 1
+            },
+            {
+              "definition": "integration",
+              "templates": 1
+            },
+            {
+              "definition": "key",
+              "templates": 1
+            },
+            {
+              "definition": "keyboard",
+              "templates": 1
+            },
+            {
+              "definition": "lightbulb",
+              "templates": 1
+            },
+            {
+              "definition": "lowercase",
+              "templates": 1
+            },
+            {
+              "definition": "message",
+              "templates": 1
+            },
+            {
+              "definition": "paddingHorizontal",
+              "templates": 1
+            },
+            {
+              "definition": "paddingPerSide",
+              "templates": 1
+            },
+            {
+              "definition": "paddingVertical",
+              "templates": 1
+            },
+            {
+              "definition": "paintBrush",
+              "templates": 1
+            },
+            {
+              "definition": "panelBottom",
+              "templates": 1
+            },
+            {
+              "definition": "panelRight",
+              "templates": 1
+            },
+            {
+              "definition": "photoEffect",
+              "templates": 1
+            },
+            {
+              "definition": "pin",
+              "templates": 1
+            },
+            {
+              "definition": "radiusPerCorner",
+              "templates": 1
+            },
+            {
+              "definition": "redo",
+              "templates": 1
+            },
+            {
+              "definition": "rotate",
+              "templates": 1
+            },
+            {
+              "definition": "rotateCounterclockwise",
+              "templates": 1
+            },
+            {
+              "definition": "save",
+              "templates": 1
+            },
+            {
+              "definition": "scale",
+              "templates": 1
+            },
+            {
+              "definition": "server",
+              "templates": 1
+            },
+            {
+              "definition": "tablet",
+              "templates": 1
+            },
+            {
+              "definition": "textCase",
+              "templates": 1
+            },
+            {
+              "definition": "textRegular",
+              "templates": 1
+            },
+            {
+              "definition": "transfer",
+              "templates": 1
+            },
+            {
+              "definition": "trendDown",
+              "templates": 1
+            },
+            {
+              "definition": "unlock",
+              "templates": 1
+            },
+            {
+              "definition": "uppercase",
+              "templates": 1
+            },
+            {
+              "definition": "userRemove",
+              "templates": 1
+            },
+            {
+              "definition": "video",
+              "templates": 1
+            },
+            {
+              "definition": "wallet",
+              "templates": 1
+            },
+            {
+              "definition": "wrench",
+              "templates": 1
+            }
+          ]
+        }
+      }
+    ],
+    "publicImports": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

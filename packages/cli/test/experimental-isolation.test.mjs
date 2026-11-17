@@ -249,6 +249,46 @@ function placeholders(text, cwd) {
     .replace(VERSION_PATTERN, '$1<version>');
 }
 
+/** Doctor checks that read the computer, not the project. */
+const COMPUTER_CHECKS = new Set([
+  'newest-release',
+  'cli-on-path',
+  'computer-integrations',
+]);
+
+/**
+ * A doctor JSON report with the computer's checks reduced to their ids, and
+ * the summary counting only the project's: those checks answer from this
+ * machine's cache and search path, which no golden can hold.
+ * @param {string} stdout
+ */
+function withoutComputerChecks(stdout) {
+  const report = JSON.parse(stdout);
+  const summary = {pass: 0, warn: 0, fail: 0, info: 0};
+  report.data.checks = report.data.checks.map((/** @type {any} */ check) => {
+    if (COMPUTER_CHECKS.has(check.id)) return {id: check.id};
+    summary[/** @type {keyof typeof summary} */ (check.status)] += 1;
+    // A message is prose; its counts are what icon sets could change. The
+    // Node version is the machine's, not the project's.
+    return {
+      ...check,
+      message: numbersIn(
+        check.id === 'node-version'
+          ? check.message.replace(/v\d+\.\d+\.\d+/u, 'v<node>')
+          : check.message,
+      ),
+    };
+  });
+  report.data.summary = summary;
+  const shaped = skeleton(report);
+  report.data.checks.forEach(
+    (/** @type {any} */ check, /** @type {number} */ at) => {
+      if (check.message != null) shaped.data.checks[at].message = check.message;
+    },
+  );
+  return asGolden(shaped);
+}
+
 /*
  * The goldens hold what icon sets could change, not main's prose: an edit to a
  * stable doc's title, summary, description, or snippet, or to a command's
@@ -1306,13 +1346,18 @@ describe.skipIf(REGENERATING)(
       );
     });
 
-    it('discover lists the set, and --type icon-set lists its package', () => {
+    // The goldens keep the released JSON of these three reads covered: the
+    // set and its package now show, and an unknown type answers as before.
+    it('discover lists the set, and --type icon-set lists its package', async () => {
       const cwd = installed('discover');
-      const all = JSON.parse(astryx(['discover', '--json'], cwd).stdout);
-      const glyphs = all.data.find(
+      const listed = astryx(['discover', '--json'], cwd);
+      const glyphs = JSON.parse(listed.stdout).data.find(
         (/** @type {any} */ each) => each.package === '@acme/glyphs',
       );
       expect(glyphs.iconSets).toEqual(['glyphs']);
+      await expect(listed.stdout).toMatchFileSnapshot(
+        path.join(GOLDEN, 'discover.json'),
+      );
       const typed = astryx(['discover', '--type', 'icon-set', '--json'], cwd);
       expect(typed.status).toBe(0);
       expect(
@@ -1320,6 +1365,14 @@ describe.skipIf(REGENERATING)(
           (/** @type {any} */ each) => each.package,
         ),
       ).toEqual(['@acme/glyphs']);
+      await expect(typed.stdout).toMatchFileSnapshot(
+        path.join(GOLDEN, 'discover-type-icon-set.json'),
+      );
+      const unknown = astryx(['discover', '--type', 'bogus', '--json'], cwd);
+      expect(unknown.status).toBe(1);
+      await expect(unknown.stdout).toMatchFileSnapshot(
+        path.join(GOLDEN, 'discover-type-bogus.json'),
+      );
     });
 
     // A valid set draws no integration issue, so no command prints the
@@ -1378,22 +1431,38 @@ describe.skipIf(REGENERATING)(
       }
     });
 
-    it('doctor integration validate of the installed package checks its set', () => {
+    it('doctor integration validate of the installed package checks its set', async () => {
       const cwd = installed('validate');
       const json = astryx(
         ['doctor', 'integration', 'validate', '@acme/glyphs', '--json'],
+        cwd,
+      );
+      const text = astryx(
+        ['doctor', 'integration', 'validate', '@acme/glyphs'],
         cwd,
       );
       const body = JSON.parse(json.stdout);
       expect(body.data.iconSets).toEqual([
         expect.objectContaining({set: 'glyphs'}),
       ]);
+      // One exit code for both; the text golden holds it.
+      expect(json.status).toBe(text.status);
+      await expect(json.stdout).toMatchFileSnapshot(
+        path.join(GOLDEN, 'validate-installed-set.json'),
+      );
+      await expect(
+        `exit ${text.status}\n${textShape(`${text.stdout}${text.stderr}`, [
+          /^Validating integration: /u,
+          /^Summary: /u,
+          /^severity:|^code:/u,
+        ])}`,
+      ).toMatchFileSnapshot(path.join(GOLDEN, 'validate-installed-set.txt'));
     });
 
     // Doctor looks for Core's peers in the node_modules of a fixed number of
     // folders above the project, and that search can leave the checkout. So
     // the project installs each peer itself, from Core's own install.
-    it('doctor reports an invalid installed set', () => {
+    it('doctor reports an invalid installed set', async () => {
       const cwd = installed('doctor', '{nope');
       const core = path.join(PROJECTS_ROOT, 'packages', 'core');
       const {peerDependencies} = JSON.parse(
@@ -1410,6 +1479,9 @@ describe.skipIf(REGENERATING)(
       }
       const res = astryx(['doctor', '--json'], cwd);
       expect(res.stdout).toMatch(/Icon set \\"glyphs\\" in @acme\/glyphs/u);
+      await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(
+        path.join(GOLDEN, 'doctor-installed-set.json'),
+      );
     });
 
     // Search joins icon sets only through its own section; until then it

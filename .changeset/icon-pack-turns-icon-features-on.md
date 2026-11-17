@@ -12,4 +12,6 @@ Copied templates still follow a set only once `experimental.iconSet` names it.
 
 For integration authors: `astryx search` now leaves out the sections that a doc marked `stability: 'experimental'` adds to another topic with `extends`, as it already leaves out an experimental topic. `astryx docs` still shows those sections.
 
+Compatibility: in a project that installs an icon-set package, `astryx discover --type icon-set --json` now lists that package instead of failing as an unknown type, so its answer no longer carries the error fields `discover-type-icon-set.json.code`, `discover-type-icon-set.json.error`, `discover-type-icon-set.json.suggestions`, `discover-type-icon-set.json.suggestions[].name` and `discover-type-icon-set.json.suggestions[].reason`. A script built on 0.7.16 keeps working: a type discover does not know still fails with the same fields, and a project with no icon-set package gets the same error as before.
+
 @josephfarina
