@@ -606,7 +606,7 @@ export default function Page() {
       render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
     );
     expect(local?.code).toBe('ERR_RENDER_COMPILE');
-    expect(local?.message).toContain('line 1): ./lib-x has no export b');
+    expect(local?.message).toContain('(src/no-export.tsx, line 1): ./lib-x has no export b');
     put(
       'src/no-token.tsx',
       "import * as stylex from '@stylexjs/stylex';\nimport {colors} from '@astryxdesign/core/theme/tokens.stylex';\nconst styles = stylex.create({p: {color: colors.text}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
@@ -616,7 +616,7 @@ export default function Page() {
     );
     expect(token?.code).toBe('ERR_RENDER_COMPILE');
     expect(token?.message).toContain(
-      'line 2): @astryxdesign/core/theme/tokens.stylex has no export colors',
+      '(src/no-token.tsx, line 2): @astryxdesign/core/theme/tokens.stylex has no export colors',
     );
     expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
     expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
@@ -633,7 +633,7 @@ export default function Page() {
     );
     expect(component?.code).toBe('ERR_RENDER_COMPILE');
     expect(component?.message).toContain(
-      'line 1): @astryxdesign/core has no export Chart',
+      '(src/no-component.tsx, line 1): @astryxdesign/core has no export Chart',
     );
     put(
       'src/no-member.tsx',
@@ -644,7 +644,7 @@ export default function Page() {
     );
     expect(member?.code).toBe('ERR_RENDER_COMPILE');
     expect(member?.message).toContain(
-      'line 3): @astryxdesign/core/Button has no export Button.Icon',
+      '(src/no-member.tsx, line 3): @astryxdesign/core/Button has no export Button.Icon',
     );
     put(
       'src/types-only.tsx',
