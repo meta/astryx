@@ -71,7 +71,10 @@ const styles = stylex.create({
     // a heavier face, so the label stays heavier than its description with
     // every font.
     fontWeight: fontWeightVars['--font-weight-semibold'],
-    color: colorVars['--color-text-secondary'],
+    // The label names the control, so it takes the primary text colour. The
+    // description and the optionality marker stay secondary and read as
+    // supporting text beside it.
+    color: colorVars['--color-text-primary'],
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',

@@ -31,6 +31,26 @@ describe('FieldLabel', () => {
     );
   });
 
+  it('draws the label in the primary text colour and its description in the secondary', () => {
+    render(
+      <FieldLabel
+        label="Email"
+        inputID="email-input"
+        description="We never share it"
+        isOptional
+      />,
+    );
+    const label = screen.getByText('Email').closest('label') as Element;
+    expect(declarationsOf(label)).toContain('color: var(--color-text-primary)');
+    expect(declarationsOf(screen.getByText('We never share it'))).toContain(
+      'color: var(--color-text-secondary)',
+    );
+    const marker = screen.getByText('Optional').closest('span') as Element;
+    expect(declarationsOf(marker)).toContain(
+      'color: var(--color-text-secondary)',
+    );
+  });
+
   it('renders label text', () => {
     render(<FieldLabel label="Email" inputID="email-input" />);
     expect(screen.getByText('Email')).toBeInTheDocument();
