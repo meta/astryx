@@ -51,10 +51,7 @@ import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
-import {
-  ROOT_SCHEME_UNNAMED,
-  rootSchemeIs,
-} from '../privateAttributes/scheme';
+import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 
 /**
  * Theme @scope selectors.

@@ -15,6 +15,7 @@ applies_to:
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
+    packages/core/src/privateAttributes/scheme.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
@@ -248,7 +249,10 @@ Platform-specific details stay inside that compiler.
   root's `data-theme` decides. Under a root mode other than `light` or `dark`
   and no Theme that forces one, a block follows the scheme the page draws in.
   When the page draws in one scheme, the root Theme names it on `<html>` in a
-  private attribute (`architecture:public-component-api` INV23), and a block
+  private attribute (`architecture:public-component-api` INV23). Its owner is
+  `privateAttributes/scheme.ts`, which the root Theme writes it through and the
+  theme engine reads its selectors from; no existing owner module serves,
+  since each names one attribute. A block
   applies where that scheme is its mode, whatever the reader prefers. While
   no scheme is named, a block applies where the reader's preference
   (`prefers-color-scheme`) is its mode: on a page that follows the reader,
