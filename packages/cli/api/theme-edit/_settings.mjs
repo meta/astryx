@@ -12299,10 +12299,48 @@ function scopedTextProblems(ctx, data, res) {
         // reads, set on the part in that state or condition.
         const thing = colorSet || !textRead ? 'color' : textToken;
         const key = `scoped-text|${t}|${st ?? ''}|${when ?? ''}|${m}`;
+        // A color the theme set for the text in a state over that state's
+        // see-through tint (white text on a highlighted row's overlay):
+        // the tint is made a solid fill instead, the nearest to the accent
+        // that the chosen text reads on, so the text stays as the theme
+        // set it.
+        const accent = parseColor(String(res[m]['--color-accent'] ?? ''));
+        const solid =
+          colorSet &&
+          st &&
+          !fillSet &&
+          /^--color-overlay-/.test(String(fillRead?.token ?? '')) &&
+          accent
+            ? nearestReading(accent, [fg0], 4.5)
+            : null;
         out.set(key, {
           key,
           text: `text in ${t} (${label}) is ${r.toFixed(2)}:1 in ${m} (${textValue} on ${t}'s ${fillSet ? groundValue : fillRead ? fillRead.token : 'page'} there); text needs 4.5:1`,
-          fix: `${P} set ${data.name} ${thing} '${fix}' --on ${t} ${scope}${modeFlag(m)}`,
+          // (Text of the parts inside it that read a text token of their
+          // own, a typeahead option's label, takes the chosen color there
+          // too, by that token set on it in that state.)
+          fix: solid
+            ? [
+                `${P} set ${data.name} background-color '${solid}' --on ${t} ${scope}${modeFlag(m)}`,
+                ...[
+                  ...new Set(
+                    /** @type {TextPair[]} */ (
+                      /** @type {any} */ (ctx).parts.pairs
+                    )
+                      .filter(
+                        q =>
+                          q.bg.target === t &&
+                          q.fg.target !== t &&
+                          /^--color-text-/.test(String(q.fg.tokens[0])),
+                      )
+                      .map(q => String(q.fg.tokens[0])),
+                  ),
+                ].map(
+                  tok =>
+                    `${P} set ${data.name} ${tok} '${hex(fg0)}' --on ${t} ${scope}${modeFlag(m)}`,
+                ),
+              ].join(' && ')
+            : `${P} set ${data.name} ${thing} '${fix}' --on ${t} ${scope}${modeFlag(m)}`,
         });
       }
     }
