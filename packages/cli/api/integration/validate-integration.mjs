@@ -1035,9 +1035,8 @@ async function validateIntegrationOnce(pkg, options) {
       })),
     );
   }
-  // A link in a template's description that names no doc prints as written,
-  // as one in a component doc does: a `next` note until the next minor
-  // release makes it a warning (spec:AST-047 FR9).
+  // Each link in a template's description that names no doc: a `next` note
+  // until the next minor release makes it a warning.
   if (integration?.templates) {
     const ownDocs = integration.docs
       ? await discoverIntegrationDocs(integration)

@@ -1336,9 +1336,9 @@ function leftOutOfRun(absent, problem, provider) {
 }
 
 /**
- * Every link in a template's description that names no doc (spec:AST-047
- * FR9). A description resolves against the docs of the package that wrote
- * it, as a component doc's text does.
+ * Every link in a template's description that names no doc. Each description
+ * is checked against the docs of the package that wrote it, with the provider
+ * a component doc's links use.
  * @param {DocsCatalog} catalog
  * @param {{owner?: string, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
  *   `owner`: only this package's templates. `absent`: as in
@@ -1356,8 +1356,7 @@ export async function templateLinkProblems(catalog, {owner, absent} = {}) {
     try {
       provider = componentLinkProvider(record.package, record.providerId);
     } catch {
-      // An owner that is not a provider id links nothing (as on the read
-      // path); its text reads as written.
+      // An owner that is not a provider id has no docs to check against.
       continue;
     }
     const linked = await linkComponentDoc(catalog, provider, {
@@ -1420,17 +1419,15 @@ export async function packageComponentLinkProblems(integration, discovered) {
 }
 
 /**
- * Each link in one integration's own template descriptions that names no doc
- * (spec:AST-047 FR9). It prints as written. `validate` lists each as a note
- * that the next minor release makes a warning (architecture:cli-surface
- * INV35).
+ * Each link in one integration's own template descriptions that names no doc.
+ * `validate` lists each as a `next` note.
  * @param {any} integration a loaded integration
  * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
  *   docs, which its templates' links may name; null when it ships none
  * @returns {Promise<string[]>}
  */
 export async function packageTemplateLinkProblems(integration, discovered) {
-  // A package with no provider id links nothing, as on the read path.
+  // A package with no provider id has no docs to check against.
   try {
     normalizeProviderId(integration.providerId ?? integration.name);
   } catch {
