@@ -263,6 +263,59 @@ test('a mouse drag on a thumb pans: the value holds through the 10 px hysteresis
   await page.mouse.up();
 });
 
+test('a mouse drag on a thumb released outside its frame ends: the thumb does not follow the pointer that comes back with no button down', async ({
+  page,
+}) => {
+  // The page in a sandboxed frame that fills the window, as a viewer shows
+  // it. A button let go outside the window sends its pointerup to the top
+  // page, not to the frame. The frame's origin is opaque, so the Storybook's
+  // module scripts load only with a CORS header.
+  await page.route(`${storybook()}/**`, async route => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      headers: {...response.headers(), 'access-control-allow-origin': '*'},
+    });
+  });
+  await page.setContent(
+    `<iframe sandbox="allow-scripts" src="${storybook()}/iframe.html?id=core-slider--default&viewMode=story" style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>`,
+  );
+  const frame = page.frameLocator('iframe');
+  const thumb = frame.getByRole('slider').first();
+  await expect(thumb).toBeVisible();
+  const control = thumb.locator(
+    'xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]',
+  );
+  await expect
+    .poll(async () =>
+      control.evaluate(element =>
+        element.getAttribute('data-astryx-touch-action'),
+      ),
+    )
+    .toBe('manipulation');
+  const value = async () => Number(await thumb.getAttribute('aria-valuenow'));
+  const box = await thumb.boundingBox();
+  if (box == null) {
+    throw new Error('no thumb box');
+  }
+  const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  const start = await value();
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 40, at.y, {steps: 5});
+  await expect.poll(value).not.toBe(start);
+  // Out of the window, where the button goes up.
+  const width = page.viewportSize()?.width ?? 800;
+  await page.mouse.move(width + 100, at.y, {steps: 5});
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+  const released = await value();
+  // Back over the frame with no button down: the drag is over.
+  await page.mouse.move(at.x + 120, at.y, {steps: 5});
+  await page.waitForTimeout(100);
+  expect(await value()).toBe(released);
+});
+
 test('a right click on the track moves nothing and paints nothing: only a primary click presses (spec:AST-094 FR43)', async ({
   page,
 }) => {

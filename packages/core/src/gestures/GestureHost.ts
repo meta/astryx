@@ -3794,6 +3794,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    this.endMissedMouseLift(event);
     this.endWheel(eventTime(event, this.timing));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
@@ -3886,6 +3887,9 @@ export class GestureHost {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
+    if (this.endMissedMouseLift(event)) {
+      return;
+    }
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       const id = this.fingerPointers.get(event.pointerId);
       if (id != null) {
@@ -3923,6 +3927,39 @@ export class GestureHost {
       return;
     }
   };
+
+  /**
+   * End a mouse press whose release this document never heard. A button let
+   * go outside the document, such as over the page around an iframe, sends
+   * its `pointerup` to that page alone. The next pointer event here then
+   * reports the button up, or a new press. The contact ends there as a lift
+   * at its last place, at that event's time, so whatever it drove (a pan, a
+   * slider thumb) does not stay held. No click follows such a lift, so none
+   * is guarded or replayed. Returns whether a contact ended.
+   */
+  private endMissedMouseLift(event: PointerEvent): boolean {
+    if (event.pointerType !== 'mouse') {
+      return false;
+    }
+    const isNewPress = event.type === 'pointerdown';
+    if (!isNewPress && (event.buttons & 1) !== 0) {
+      return false;
+    }
+    const id = this.pointerIds.get(event.pointerId);
+    const touch = id == null ? undefined : this.arena.getTouch(id);
+    if (id == null || touch == null) {
+      return false;
+    }
+    this.releaseArmedPress();
+    this.pointerIds.delete(event.pointerId);
+    this.pointerKinds.delete(event.pointerId);
+    this.unlockSelection(id);
+    this.retargeted.delete(id);
+    this.arena.ended([
+      {id, x: touch.x, y: touch.y, time: eventTime(event, this.timing)},
+    ]);
+    return true;
+  }
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     this.releaseArmedPress();
