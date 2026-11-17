@@ -617,7 +617,7 @@ describe('themeBuild() — check mode', () => {
     expect(result?.data.stale).toEqual([]);
   });
 
-  it('is up to date when another CLI release built the same outputs, and stale when another Core did', async () => {
+  it('is up to date when another CLI release built the same outputs, and stale when the content or the Core differs', async () => {
     const themeFile = path.join(tmpDir, 'release.mjs');
     fs.writeFileSync(
       themeFile,
@@ -650,6 +650,20 @@ describe('themeBuild() — check mode', () => {
     );
     expect(otherCli?.data.upToDate).toBe(true);
     expect(otherCli?.data.stale).toEqual([]);
+
+    // Content drift still counts beside another release's header.
+    const css = path.join(tmpDir, 'release.css');
+    const built = fs.readFileSync(css, 'utf8');
+    fs.writeFileSync(css, built + '\n.injected{}\n');
+    const drifted = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(drifted?.data.stale).toEqual([
+      {path: 'release.css', reason: 'outdated'},
+    ]);
+    fs.writeFileSync(css, built);
 
     rewriteHeaders(
       /Core: @astryxdesign\/core@\S+/,

@@ -143,6 +143,22 @@ describe('verify-only generated CSS header normalization', () => {
     expect(released).not.toBe(current);
   });
 
+  it('build --check leaves out only the CLI line, which names the release that built the file', () => {
+    const current = generatedCssArtifact();
+    expect(
+      normalizeThemeBuildForCompare(generatedCssArtifact({cli: '0.7.0'})),
+    ).toBe(normalizeThemeBuildForCompare(current));
+    for (const other of [
+      generatedCssArtifact({core: '0.7.0'}),
+      generatedCssArtifact({source: 'oceanTheme.ts'}),
+      generatedCssArtifact({body: ':root { color: blue; }'}),
+    ]) {
+      expect(normalizeThemeBuildForCompare(other)).not.toBe(
+        normalizeThemeBuildForCompare(current),
+      );
+    }
+  });
+
   it.each([
     ['body change', source => source.replace('color: red', 'color: blue')],
     [
