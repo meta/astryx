@@ -1146,6 +1146,21 @@ describe('Icon given its glyph as name', () => {
     warn.mockRestore();
   });
 
+  it('passes name through untouched when icon is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {
+      icon: 'check',
+      name: 'status',
+      'data-testid': 'with-name',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    const icon = screen.getByTestId('with-name');
+    expect(icon.querySelector('svg')).not.toBeNull();
+    expect(icon).toHaveAttribute('name', 'status');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('prefers icon and does not warn when icon is given', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     render(<Icon icon="check" data-testid="both" />);

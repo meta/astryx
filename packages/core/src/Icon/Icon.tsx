@@ -384,18 +384,28 @@ Icon.displayName = 'Icon';
 
 /**
  * The glyph and the remaining props. Other icon libraries name the glyph
- * prop `name`, so a call without `icon` reads `name`, and `name` does not
- * reach the DOM.
+ * prop `name`, so a call without `icon` reads a `name` that is a glyph
+ * source (a key or an icon component), and that `name` does not reach the
+ * DOM.
  */
 function readGlyph<Rest extends object>(
   icon: IconProps['icon'] | undefined,
   rest: Rest,
 ): {icon: IconProps['icon']; props: Rest} {
-  if (icon != null || !('name' in rest) || rest.name == null) {
+  if (icon != null || !('name' in rest) || !isGlyphSource(rest.name)) {
     return {icon: icon as IconProps['icon'], props: rest};
   }
   const {name, ...props} = rest as Rest & {name: IconProps['icon']};
   return {icon: name, props: props as Rest};
+}
+
+/** Whether a value can be a glyph: a key string or an icon component. */
+function isGlyphSource(value: unknown): boolean {
+  return (
+    (typeof value === 'string' && value !== '') ||
+    typeof value === 'function' ||
+    (typeof value === 'object' && value !== null && 'render' in value)
+  );
 }
 
 // =============================================================================
