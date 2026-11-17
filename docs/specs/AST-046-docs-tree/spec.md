@@ -196,7 +196,10 @@ and references from other packages are an open question (OQ2).
   topic result's command MUST list the topic's sections when it has more than
   one. A typed doc MUST also match by its own name, and a doc part by each
   identifier it defines or names in code (`assertResponse`,
-  `ERR_UNKNOWN_SECTION`). A docs-only search (`--type doc`) MUST NOT need
+  `ERR_UNKNOWN_SECTION`). A namespace that sums up the docs beneath it MUST
+  NOT answer a query word through its text when one of those docs answers it
+  at least as strongly, so the doc that holds the rule is the hit
+  (`spec:AST-083` FR1). A docs-only search (`--type doc`) MUST NOT need
   `@astryxdesign/core`, because `astryx docs` does not.
 - **FR11 — Integrations join the tree.** A configured integration MAY ship
   namespace docs, and guides with `placement`, in its docs directory. The tree
