@@ -167,6 +167,29 @@ test.describe("a start lane's own OverflowList", () => {
     );
   });
 
+  test('holds one fold across frames at 565 px, the edge of its share', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      'core-toolbar--overflow-actions',
+      'overflow-actions-frame',
+    );
+    await rowAt(page, 'overflow-actions-frame', 565);
+    await page.waitForTimeout(300);
+    const samples: string[][] = [];
+    for (let frame = 0; frame < 10; frame += 1) {
+      samples.push((await rowAt(page, 'overflow-actions-frame', 565)).labels);
+    }
+    test.info().annotations.push({
+      type: 'edge-565',
+      description: JSON.stringify(samples[0]),
+    });
+    for (const sample of samples) {
+      expect(sample).toEqual(samples[0]);
+    }
+  });
+
   test('shows every action and no trigger when the row has room', async ({
     page,
   }) => {
@@ -238,7 +261,9 @@ test.describe('two lists in one row', () => {
     );
   }
 
-  for (const width of [380, 530, 900]) {
+  // 597 and 901 px sit at the edge of a list's share, where a rounding
+  // mismatch once folded and unfolded it each frame.
+  for (const width of [380, 530, 597, 900, 901]) {
     test(`settle without clipping or flicker at ${width} px`, async ({
       page,
     }) => {

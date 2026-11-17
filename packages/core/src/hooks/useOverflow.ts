@@ -440,23 +440,34 @@ function flexRowFreeWidth(list: HTMLElement): number {
 }
 
 /**
- * How far a list's box can widen as it shows more items: up to its
- * `max-width`, and not at all when its width is set (a caller `width`).
+ * How far a list's box can widen as it shows more items. A list sized by
+ * its items shows them at their own widths; one that is not (a caller
+ * `width`, a squeeze) has no room to give. Otherwise the room runs up to the
+ * list's `max-width`. `shownWidth` is the natural width of what the list
+ * shows now.
  */
-function widenRoom(list: HTMLElement): number {
-  const maxWidth = parseFloat(getComputedStyle(list).maxWidth);
-  const room = Number.isFinite(maxWidth)
-    ? Math.max(0, maxWidth - list.getBoundingClientRect().width)
-    : Infinity;
-  // Typed OM keeps `auto` for a width nothing sets; where it is missing,
-  // only `max-width` limits the room.
+function widenRoom(list: HTMLElement, shownWidth: number): number {
+  const style = getComputedStyle(list);
+  const px = (value: string) => parseFloat(value) || 0;
+  const box = list.getBoundingClientRect().width;
+  const content =
+    box -
+    px(style.paddingLeft) -
+    px(style.paddingRight) -
+    px(style.borderLeftWidth) -
+    px(style.borderRightWidth);
+  if (Math.abs(content - shownWidth) > 1) {
+    return 0;
+  }
+  // Typed OM keeps `auto` for a width nothing sets.
   if (typeof list.computedStyleMap === 'function') {
     const width = list.computedStyleMap().get('width');
     if (width != null && width.toString() !== 'auto') {
       return 0;
     }
   }
-  return room;
+  const maxWidth = parseFloat(style.maxWidth);
+  return Number.isFinite(maxWidth) ? Math.max(0, maxWidth - box) : Infinity;
 }
 
 /**
@@ -601,14 +612,9 @@ export function useOverflowInternal(
           parseFloat(parentStyle.paddingRight);
         measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
-        // A list in a single flex row may unfold into the row's free width.
-        availableWidth =
-          container.offsetWidth +
-          (tracksInlineBounds
-            ? Math.floor(
-                Math.min(flexRowFreeWidth(container), widenRoom(container)),
-              )
-            : 0);
+        // A list in a single flex row may unfold into the row's free width
+        // (added below, once the items are measured).
+        availableWidth = container.offsetWidth;
         recordBorderBox(measuredSizes, container);
         if (container.parentElement != null && tracksInlineBounds) {
           recordBorderBox(measuredSizes, container.parentElement);
@@ -634,6 +640,38 @@ export function useOverflowInternal(
       }
 
       const widths = children.map(child => child.offsetWidth);
+      if (tracksInlineBounds && !observeParent) {
+        // The share goes on the list's sub-pixel width and rounds once, so a
+        // list at the edge of its share does not fold and unfold each frame
+        // (its width and its share trade off, and their sum stays put).
+        const exact = children.map(
+          child => child.getBoundingClientRect().width,
+        );
+        const count = appliedRef.current.visibleCount;
+        const shown =
+          collapseFrom === 'end'
+            ? exact.slice(0, count)
+            : exact.slice(exact.length - count);
+        const indicatorShown = hasIndicator && count < itemCount;
+        const shownWidth =
+          shown.reduce((sum, width) => sum + width, 0) +
+          // The indicator as the list renders it: its count can differ from
+          // the measure copy's.
+          (indicatorShown
+            ? (container.lastElementChild?.getBoundingClientRect().width ?? 0)
+            : 0) +
+          gap * Math.max(0, shown.length + (indicatorShown ? 1 : 0) - 1);
+        const box = container.getBoundingClientRect().width;
+        availableWidth = Math.round(
+          // offsetWidth is the box rounded; this puts its fraction back.
+          container.offsetWidth +
+            (box - Math.round(box)) +
+            Math.min(
+              flexRowFreeWidth(container),
+              widenRoom(container, shownWidth),
+            ),
+        );
+      }
       if (tracksInlineBounds) {
         const bounds = inlineBoundsOf(
           children.map(child => child.getBoundingClientRect().width),
