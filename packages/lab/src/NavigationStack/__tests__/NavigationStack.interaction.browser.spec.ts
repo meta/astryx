@@ -1199,9 +1199,13 @@ test('a push whose commit blocks the main thread starts from its first frame', a
         );
       }),
   );
-  // Critically damped from the trailing edge: about 70 % of the width is
-  // still to travel after 33 ms. The share left `ms` into the push:
-  const leftAt = (ms: number) => (1 + ms / 30) * Math.exp(-ms / 30);
+  // The push spring from the trailing edge (OMEGA, starting at
+  // PUSH_VELOCITY): about 70 % of the width is still to travel after 33 ms.
+  // The share left `ms` into the push:
+  const leftAt = (ms: number) => {
+    const s = ms / 1000;
+    return (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
   // Started at the block's end, at least half of what the spring leaves at
   // that time is still to travel. Dated before the 300 ms block, almost none
   // would be.
