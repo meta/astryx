@@ -83,12 +83,12 @@ export const doc = {
     {
       value: 'docs.detail',
       description:
-        "One topic's full ReferenceDoc (the JSON read of a topic, --full, --dense, or a topic with one section), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
+        "One topic's full ReferenceDoc (the JSON read of a topic; in text, a read of a topic whose whole text is 16 KB or less, --full, or --dense), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
     },
     {
       value: 'docs.index',
       description:
-        "One topic's section index, the text read of a topic with more than one section (and --index): the topic's name, title, and description, plus sections, each {id, title, package, summary} (pass the id as the section argument; package is the npm package that wrote the section; summary is the section's one-line summary), and links ({up, previous, next}: the commands that open the level it sits in and its neighbors there); replaces and replacedPackage when the topic or guide took another's place.",
+        "One topic's section index, the text read of a topic whose whole text is over 16 KB (and --index): the topic's name, title, and description, plus sections, each {id, title, package, summary} (pass the id as the section argument; package is the npm package that wrote the section; summary is the section's one-line summary), and links ({up, previous, next}: the commands that open the level it sits in and its neighbors there); replaces and replacedPackage when the topic or guide took another's place.",
     },
     {
       value: 'docs.detail.section',
