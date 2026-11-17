@@ -56,9 +56,11 @@ import {layerViewportInset} from './layerViewportInset.stylex';
 export const LAYER_CLEARANCE_PROPERTY = '--_astryx-layer-clearance';
 
 /**
- * The custom property a layer writes its software-keyboard lift to.
- * `layerViewportInset.lift` reads it in every block inset, so the lift moves
- * the layer toward the block-start in every option.
+ * The custom property a layer writes its software-keyboard lift to. Every
+ * block-start inset subtracts it and every block-end inset adds it, so the
+ * lift moves the layer toward the block-start in every option. useLayer.tsx
+ * names it in its own styles (`LIFT`), because StyleX resolves only constants
+ * defined in the same file.
  */
 export const LAYER_LIFT_PROPERTY = '--_astryx-layer-lift';
 
@@ -69,7 +71,7 @@ export function slideRuleName(placement: LayerPlacement, side: Side): string {
 }
 
 const CLEARANCE = `var(${LAYER_CLEARANCE_PROPERTY}, 0px)`;
-const LIFT = layerViewportInset.lift;
+const LIFT = `var(${LAYER_LIFT_PROPERTY}, 0px)`;
 
 /** Two declarations: the `env()`-less fallback first, then the full value. */
 function pair(property: string, fallback: string, value: string): string {

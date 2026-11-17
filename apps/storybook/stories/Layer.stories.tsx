@@ -1036,6 +1036,18 @@ export const AnchorAlreadyOffScreen: Story = {
       );
     }
     await scrollAndSettle(0);
+    // Once the anchor is back in view, the layer is back beside it and on
+    // screen (FR4, FR5): aligned to it where it fits, slid where it does not.
+    const back = rects(canvasElement);
+    if (
+      back.layer.left > back.trigger.right + TOLERANCE ||
+      back.layer.right < back.trigger.left - TOLERANCE
+    ) {
+      fail(
+        `The layer ${fmt(back.layer)} did not return to its trigger ${fmt(back.trigger)} once the trigger was back in view`,
+      );
+    }
+    assertOnScreen(back, 'anchor back in view');
   },
 };
 

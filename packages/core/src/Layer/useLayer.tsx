@@ -83,6 +83,10 @@ import {
 } from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
+// The keyboard lift every block inset reads (`LAYER_LIFT_PROPERTY` in
+// layerSlideRules.ts). StyleX resolves only constants defined in this file.
+const LIFT = 'var(--_astryx-layer-lift, 0px)';
+
 const styles = stylex.create({
   // The software keyboard's block-size cap, on the layer's own element. Every
   // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
@@ -193,12 +197,12 @@ const styles = stylex.create({
   // and the other meets the viewport edge. The placement margins above hold
   // the clearance and the gutter.
   sideBelow: {
-    insetBlockStart: `calc(anchor(outside) - ${layerViewportInset.lift})`,
-    insetBlockEnd: `calc(${layerViewportInset.lift})`,
+    insetBlockStart: `calc(anchor(outside) - ${LIFT})`,
+    insetBlockEnd: `calc(${LIFT})`,
   },
   sideAbove: {
-    insetBlockStart: `calc(0px - ${layerViewportInset.lift})`,
-    insetBlockEnd: `calc(anchor(outside) + ${layerViewportInset.lift})`,
+    insetBlockStart: `calc(0px - ${LIFT})`,
+    insetBlockEnd: `calc(anchor(outside) + ${LIFT})`,
   },
   sideEnd: {
     insetInlineStart: 'anchor(outside)',
@@ -236,20 +240,20 @@ const styles = stylex.create({
   },
   alignBlockStart: {
     insetBlockStart: stylex.firstThatWorks(
-      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) - ${layerViewportInset.lift})`,
-      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) - ${layerViewportInset.lift})`,
+      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) - ${LIFT})`,
+      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) - ${LIFT})`,
     ),
-    insetBlockEnd: `calc(${layerViewportInset.lift})`,
+    insetBlockEnd: `calc(${LIFT})`,
     marginBlockEnd: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterBlock})`,
       `calc(${layerViewportInset.gutterBlockFallback})`,
     ),
   },
   alignBlockEnd: {
-    insetBlockStart: `calc(0px - ${layerViewportInset.lift})`,
+    insetBlockStart: `calc(0px - ${LIFT})`,
     insetBlockEnd: stylex.firstThatWorks(
-      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) + ${layerViewportInset.lift})`,
-      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) + ${layerViewportInset.lift})`,
+      `calc(max(${layerViewportInset.gutterBlock}, anchor(inside)) + ${LIFT})`,
+      `calc(max(${layerViewportInset.gutterBlockFallback}, anchor(inside)) + ${LIFT})`,
     ),
     marginBlockStart: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterBlock})`,
@@ -266,10 +270,10 @@ const styles = stylex.create({
     insetInlineEnd: 'anchor(inside)',
   },
   heldBlockStart: {
-    insetBlockStart: `calc(anchor(inside) - ${layerViewportInset.lift})`,
+    insetBlockStart: `calc(anchor(inside) - ${LIFT})`,
   },
   heldBlockEnd: {
-    insetBlockEnd: `calc(anchor(inside) + ${layerViewportInset.lift})`,
+    insetBlockEnd: `calc(anchor(inside) + ${LIFT})`,
   },
   // Alignment axis of a centered layer: both insets meet the viewport edges
   // with the gutter as both margins.
@@ -286,8 +290,8 @@ const styles = stylex.create({
     ),
   },
   centerBlock: {
-    insetBlockStart: `calc(0px - ${layerViewportInset.lift})`,
-    insetBlockEnd: `calc(${layerViewportInset.lift})`,
+    insetBlockStart: `calc(0px - ${LIFT})`,
+    insetBlockEnd: `calc(${LIFT})`,
     marginBlockStart: stylex.firstThatWorks(
       `calc(${layerViewportInset.gutterBlock})`,
       `calc(${layerViewportInset.gutterBlockFallback})`,
@@ -2493,6 +2497,40 @@ function useLayerImplementation(
       clearObserversRef.current = null;
     };
   }, [keepsAnchorClear, isOpen, mode, mountGeneration]);
+
+  // An anchored layer's `anchor()` insets are resolved against the scroll
+  // offsets the browser recorded when it last placed the layer, and a scroll
+  // only translates the result. While the anchor is out of view the aligned
+  // inset follows the anchor, which a translation keeps right. Once the
+  // anchor is back in view the inset holds the gutter, which a translation
+  // does not, so a layer whose anchor came back into view during a scroll is
+  // placed afresh once the scroll stops (`observeScrollStop`). Nothing reads
+  // or forces layout during the scroll itself.
+  const placedInViewRef = useRef(true);
+  useIsomorphicLayoutEffect(() => {
+    if (!isOpen || mode !== 'context') {
+      return;
+    }
+    const layer = popoverRef.current;
+    const anchor = triggerRef.current;
+    const view = anchor?.ownerDocument.defaultView;
+    if (!layer || !anchor || !view) {
+      return;
+    }
+    placedInViewRef.current = isAnchorInViewRef.current;
+    return observeScrollStop(view, anchor, () => {
+      const inView = isAnchorInViewRef.current;
+      const cameBack = inView && !placedInViewRef.current;
+      placedInViewRef.current = inView;
+      if (
+        cameBack &&
+        popoverRef.current === layer &&
+        layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
+      ) {
+        placeAfresh(layer);
+      }
+    });
+  }, [isOpen, mode, mountGeneration]);
 
   // Render function for context mode
   const renderContext = useCallback(
