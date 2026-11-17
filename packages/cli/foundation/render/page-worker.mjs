@@ -657,17 +657,6 @@ function aliasPlugin() {
 }
 
 /**
- * Babel plugin: replace asset imports with data: URIs and stylesheet imports
- * with nothing (their CSS is inlined into the page), and record static text
- * children of capitalized JSX elements.
- *
- * For the browser (`browser`), the same imports load the same way, but the
- * page keeps its real charts and nothing is recorded: the server render
- * recorded it already.
- * @param {string} filename
- * @param {boolean} [browser]
- */
-/**
  * The name a browser module calls `carried` by, imported once at its top.
  * @param {any} p an import declaration's path
  * @param {any} t Babel's types
@@ -688,6 +677,17 @@ function carriedName(p, t) {
   return t.identifier(name);
 }
 
+/**
+ * Babel plugin: replace asset imports with data: URIs and stylesheet imports
+ * with nothing (their CSS is inlined into the page), and record static text
+ * children of capitalized JSX elements.
+ *
+ * For the browser (`browser`), the same imports load the same way, but the
+ * page keeps its real charts and nothing is recorded: the server render
+ * recorded it already.
+ * @param {string} filename
+ * @param {boolean} [browser]
+ */
 function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
   return (/** @type {any} */ {types: t}) => ({
