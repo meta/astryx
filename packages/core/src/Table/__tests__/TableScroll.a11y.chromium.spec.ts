@@ -141,3 +141,21 @@ test('a fitting table passes horizontal wheel input to its outer scroller', asyn
     .poll(async () => outer.evaluate(element => element.scrollLeft))
     .toBeGreaterThan(0);
 });
+
+test("a host rule that scrolls every table's parent leaves the wrapper the scroller", async ({
+  page,
+}) => {
+  // Some page hosts give every table's parent `overflow-x: auto` with zero
+  // specificity. The table's own wrapper must stay the one viewport.
+  const wrappers = await mount(page);
+  await page.addStyleTag({
+    content: ':where(:not(body):has(> table)){max-width:100%;overflow-x:auto}',
+  });
+  const tableViewport = wrappers.nth(0);
+  await expect(tableViewport).toHaveAttribute('data-scrollable-inline', 'true');
+  await expect(tableViewport).toHaveAttribute('tabindex', '0');
+  const content = tableViewport.locator('[data-scroll-content]');
+  expect(
+    await content.evaluate(element => getComputedStyle(element).overflowX),
+  ).toBe('visible');
+});
