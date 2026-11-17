@@ -378,4 +378,32 @@ describe('discover lists icon packs before a project opts in', () => {
     },
     TIMEOUT,
   );
+
+  it(
+    'suggests no icon set of a pack the project has under an alias while icon features are off',
+    async () => {
+      const cwd = project('alias', [{...PACK, aliases: ['@acme/glyphs-lite']}]);
+      // The project declares the pack under its alias; nothing installs it,
+      // so icon features stay off.
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'),
+      );
+      pkg.dependencies['@acme/glyphs-lite'] = '^1.0.0';
+      fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
+      const json = await runCli(
+        ['discover', '@acme/glyph-pack/glyphs', '--json'],
+        {cwd},
+      );
+      expect(json.status).not.toBe(0);
+      expect(json.stdout).not.toContain('@acme/glyph-pack/glyphs"');
+      const text = await runCli(['discover', '@acme/glyph-pack/glyphs'], {
+        cwd,
+      });
+      expect(text.status).not.toBe(0);
+      expect(text.stdout + text.stderr).not.toMatch(
+        /discover @acme\/glyph-pack\/glyphs/,
+      );
+    },
+    TIMEOUT,
+  );
 });

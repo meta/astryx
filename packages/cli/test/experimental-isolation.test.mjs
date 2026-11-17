@@ -196,6 +196,8 @@ const ICON_SET_READERS = {
     'integration verify, for the package being authored',
   'clients/cli/commands/doctor.mjs':
     "prints validate's iconSets, which validate fills only with the gate on",
+  'api/discover/discover.mjs':
+    "passes the gate to the catalog view, and keeps search's discover line off icon sets without it; it reads a source's catalog, never an installed root",
   'api/discover/_catalog-view.mjs':
     "marks a catalog entry's iconSets experimental; it reads a source's catalog, never an installed root",
   'clients/cli/commands/discover.mjs':

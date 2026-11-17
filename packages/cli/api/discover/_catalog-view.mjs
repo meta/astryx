@@ -87,6 +87,23 @@ export function catalogState(pkg, installedNames, declared, officialDeclared) {
 }
 
 /**
+ * A catalog package as discover may show it: an installed package's icon
+ * sets, under its own name or an alias, are read only where icon features are
+ * on (spec:AST-084 FR17), whichever version is shown.
+ * @param {CatalogPackage} entry
+ * @param {{installed: boolean, iconSets?: boolean}} options `installed`: the
+ *   project has the package, under its name or an alias
+ * @returns {CatalogPackage}
+ */
+export function shownEntry(entry, {installed, iconSets}) {
+  if (!installed || iconSets) return entry;
+  return {
+    ...entry,
+    contributions: entry.contributions.filter(c => c.kind !== 'icon-set'),
+  };
+}
+
+/**
  * The version a catalog package shows by default.
  * @param {CatalogPackage} pkg
  * @returns {string | undefined}

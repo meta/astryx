@@ -10,7 +10,7 @@
  */
 
 import {toEntry} from '../_adapter.mjs';
-import {catalogEntry, defaultVersion} from '../_catalog-view.mjs';
+import {catalogEntry, defaultVersion, shownEntry} from '../_catalog-view.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
@@ -35,17 +35,9 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 export function detail(packages, name, options = {}) {
   const {catalog: listed, version, add, installedAs, iconSets} = options;
   const pkg = packages.find(p => p.name === name);
-  // An installed package's icon sets are read only where icon features are
-  // on (spec:AST-084 FR17), whichever version the page shows.
   const catalog =
-    listed && (pkg != null || installedAs) && !iconSets
-      ? {
-          ...listed,
-          contributions: listed.contributions.filter(
-            c => c.kind !== 'icon-set',
-          ),
-        }
-      : listed;
+    listed &&
+    shownEntry(listed, {installed: pkg != null || !!installedAs, iconSets});
   if (!pkg && !catalog) {
     throw new AstryxError(
       `Package "${name}" not found`,

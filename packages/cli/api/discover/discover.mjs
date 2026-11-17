@@ -281,7 +281,7 @@ function isSavedSearchInput(value) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
-  const {availableEntries, catalogState, searchItems, withLatest} =
+  const {availableEntries, catalogState, searchItems, shownEntry, withLatest} =
     await catalogView();
   // An experimental kind is read only in a project where it is on (spec:AST-017
   // FR27); only then does `--type` take it, or an error name it.
@@ -451,19 +451,27 @@ export async function discover(query, options = {}) {
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
-    if (officialOnly) {
+    // Suggest only what the page itself would show: never an installed
+    // package's icon set while icon features are off.
+    const shown =
+      entry &&
+      shownEntry(entry, {
+        installed: packages.some(p => p.name === target.name) || !!installedAs,
+        iconSets: context.iconSets,
+      });
+    if (officialOnly && shown) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_PACKAGE,
       );
     }
     // Only an installed package has docs to fall back to. For one that is
     // only in a source, the item is what is unknown, not the package.
-    if (entry && !isIntegration) {
+    if (shown && !isIntegration) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
