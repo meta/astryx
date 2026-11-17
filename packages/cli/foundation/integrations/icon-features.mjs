@@ -31,9 +31,11 @@ export const ICON_FEATURES_RELEASED = false;
 /**
  * Whether icon features are on in a project, and why. They are on when the
  * release switch is on, when astryx.config sets `experimental.iconSet`, or
- * when a loaded integration declares an `experimental.iconSets` root.
+ * when an installed integration declares an `experimental.iconSets` root.
+ * The package being authored in the current folder (`__local`) is not
+ * installed: its own sets turn nothing on there.
  * A project that cannot be read has them off, unless they are released.
- * @param {{config?: {experimental?: {iconSet?: unknown}}, loadedIntegrations?: ReadonlyArray<{iconSets?: unknown, __loadError?: unknown, __providerConflict?: unknown} | null | undefined>} | null | undefined} project
+ * @param {{config?: {experimental?: {iconSet?: unknown}}, loadedIntegrations?: ReadonlyArray<{iconSets?: unknown, __local?: unknown, __loadError?: unknown, __providerConflict?: unknown} | null | undefined>} | null | undefined} project
  * @returns {IconFeatureGate}
  */
 export function iconFeatureGate(project) {
@@ -44,6 +46,7 @@ export function iconFeatureGate(project) {
   const packInstalled = (project?.loadedIntegrations ?? []).some(
     integration =>
       Boolean(integration?.iconSets) &&
+      !integration?.__local &&
       !integration?.__loadError &&
       !integration?.__providerConflict,
   );

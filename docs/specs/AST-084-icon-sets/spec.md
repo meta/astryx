@@ -112,7 +112,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 
   Icon features are on in a project that loads an installed package that
   declares `experimental.iconSets`, or that sets `experimental.iconSet`, and
-  off in every other project (DEC-13). One function in the CLI,
+  off in every other project (DEC-13). The package being authored in the
+  current folder is not installed there, so its own sets turn nothing on. One function in the CLI,
   `iconFeatureGate`, decides it, and every icon surface outside
   `astryx experimental icon` reads it: discover, Doctor and its
   `doctor integration` subcommands, and `astryx docs icons`. Template
