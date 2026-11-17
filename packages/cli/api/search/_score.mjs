@@ -270,26 +270,40 @@ export function scoreQuery(
   // A query word that names another entry outright asks for that entry: a
   // title that leaves it unanswered names only part of the query, so it keeps
   // the token sum (`drawer side panel` is Drawer, not the side-panels guide).
-  // A title that answers no word otherwise stays a match, in this tier.
+  // Kept from the tier, the title still answers its own words, as a keyword
+  // substring hit does (STRONG_TOKEN_SCORE), on the token sum.
   const named = titleInQuery(term, candidate.titles);
-  // The title answers its own words.
+  // The title answers its own words: a query word all of whose words it holds.
   const titleWords = named != null ? phraseWords(named) : [];
+  const inTitle = (/** @type {string} */ tok) =>
+    phraseWords(tok).every(w => titleWords.some(t => samePhraseWord(t, w)));
   const leftNamed =
     named != null &&
     namedWords != null &&
     tokens.some(
       tok =>
         !hitTerms.includes(tok) &&
-        !titleWords.some(w => samePhraseWord(w, joined(tok))) &&
+        !inTitle(tok) &&
         namedWords().has(joined(tok)),
     );
-  if (named != null && (!leftNamed || matched === 0)) {
+  if (named != null && !leftNamed) {
     return {
       score: TITLE_IN_QUERY_SCORE + Math.min(matched, 9),
       reason: `the query names the title "${named}"`,
       matched,
       total,
     };
+  }
+  if (named != null) {
+    for (const tok of tokens) {
+      if (!hitTerms.includes(tok) && inTitle(tok)) {
+        if (STRONG_TOKEN_SCORE > strongest) strongest = STRONG_TOKEN_SCORE;
+        matched++;
+        ownMatched++;
+        hitTerms.push(tok);
+        tokenSum += STRONG_TOKEN_SCORE;
+      }
+    }
   }
   if (matched === 0) return full ? asFull(full) : null;
 

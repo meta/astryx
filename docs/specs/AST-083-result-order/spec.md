@@ -42,7 +42,8 @@ owns response fields and compatibility.
 
 - Which ordering method or weights win. They are measured, and they change
   under FR6.
-- How search matches or scores an entry.
+- How search matches or scores an entry, beyond the reading of other
+  entries' names that FR1 states.
 - Build's start template, alternatives, and page call (`spec:AST-048`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.

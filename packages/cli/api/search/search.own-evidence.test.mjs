@@ -203,6 +203,25 @@ describe('a title inside the query', () => {
     );
   });
 
+  it('keeps a guide whose title is its only answer below a component the query names, as a match', () => {
+    const titleOnly = /** @type {Candidate} */ ({
+      domain: 'doc',
+      name: 'guides/slat-check',
+      keywords: [],
+      titles: ['Slat check'],
+      description: '',
+    });
+    const view = rankLexical(
+      'drawl slat check',
+      {},
+      searchView(catalog([Drawl, titleOnly])),
+    );
+    expect(scoreOf(view, 'guides/slat-check')).toBeLessThan(
+      TITLE_IN_QUERY_SCORE,
+    );
+    expect(first(view)).toBe('Drawl');
+  });
+
   it('takes the title tier when the named word is in the title itself', () => {
     const drawlGuide = /** @type {Candidate} */ ({
       domain: 'doc',
