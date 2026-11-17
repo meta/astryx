@@ -5777,8 +5777,14 @@ describe('MultiSelector active option announcement', () => {
       />,
     );
     await user.click(screen.getByRole('button', {name: /^Fruit/}));
-    fireEvent.mouseMove(
-      screen.getByRole('option', {hidden: true, name: /Orange/}),
+    const orange = screen.getByRole('option', {hidden: true, name: /Orange/});
+    await user.hover(orange);
+    // The pointer moved the highlight, so the silence below is the gate's.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', {hidden: true})).toHaveAttribute(
+        'aria-activedescendant',
+        orange.id,
+      ),
     );
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));

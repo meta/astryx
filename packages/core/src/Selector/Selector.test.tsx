@@ -6083,7 +6083,15 @@ describe('active option announcement', () => {
       />,
     );
     await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
-    fireEvent.mouseMove(screen.getByRole('option', {...h, name: 'Cherry'}));
+    const cherry = screen.getByRole('option', {...h, name: 'Cherry'});
+    await user.hover(cherry);
+    // The pointer moved the highlight, so the silence below is the gate's.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', h)).toHaveAttribute(
+        'aria-activedescendant',
+        cherry.id,
+      ),
+    );
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
