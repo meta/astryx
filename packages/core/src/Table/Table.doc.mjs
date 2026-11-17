@@ -218,7 +218,8 @@ export const docs = {
     {
       name: 'isStriped',
       type: 'boolean',
-      description: 'Applies a background wash to even-numbered rows.',
+      description:
+        'Stripes alternate rows (zebra striping): a background wash on the even-numbered body rows. A theme restyles either stripe through the `table-row` target: its `parity` (odd or even) and its `striped` state.',
       default: 'false',
     },
     {
