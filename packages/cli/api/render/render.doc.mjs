@@ -110,7 +110,7 @@ export const doc = {
       code: 'ERR_RENDER_NEWER_FORMAT',
       when: 'reversing a file in a newer render format than this CLI reads; the message and the suggestion name the CLI version that wrote it',
     },
-    {code: 'ERR_PATH_TRAVERSAL', when: 'a file would be written outside the current folder (symlinks followed), or through a symbolic link: a relative `out`, or with `reverse` the page or an embedded file; or, with `reverse`, a file other than the page would go into a folder that already exists'},
+    {code: 'ERR_PATH_TRAVERSAL', when: 'a file would be written outside the current folder (symlinks followed), or through a symbolic link: a relative `out`, or with `reverse` the page or an embedded file; an absolute `out` that is a symbolic link; or, with `reverse`, a file other than the page would go into a folder that already exists'},
   ],
   examples: [
     {label: 'Render a page', code: "const {data} = await render('src/app/page.tsx', {out: 'page.html'});"},

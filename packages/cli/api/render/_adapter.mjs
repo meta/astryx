@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
@@ -644,13 +645,7 @@ function aliasedResult(unaliased, page, cwd) {
  * @param {string} input absolute
  */
 function restoreFolder(input) {
-  const stem = path.basename(input).replace(/\.[^.]+$/, '');
-  let folder = path.join(path.dirname(input), `${stem}-restored`);
-  for (let n = 2; fs.existsSync(folder); n++) {
-    removeStaleTemporaries(folder);
-    folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
-  }
-  return folder;
+  return freeRestoreFolder(path.dirname(input), path.basename(input), removeStaleTemporaries);
 }
 
 /**

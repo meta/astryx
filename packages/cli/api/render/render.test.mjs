@@ -2049,22 +2049,27 @@ describe('astryx experimental render (CLI)', () => {
     const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
     try {
       const out = path.join(elsewhere, 'shared report.html');
-      const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
-      expect(rendered.status, rendered.stderr).toBe(0);
-      const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
-      expect(line).toBeDefined();
-      // The printed command, run as printed after the CLI's own name.
-      const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
-      const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
-      expect(args).toEqual(['--reverse', out, '--out', 'shared report-restored/page.tsx']);
-      const back = await runCli(['experimental', 'render', ...args], dir);
-      expect(back.status, back.stderr).toBe(0);
-      expect(fs.readFileSync(path.join(dir, 'shared report-restored', 'page.tsx'), 'utf8')).toBe(
-        fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
-      );
+      // Twice: the second round trip names the next free folder.
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
+        expect(rendered.status, rendered.stderr).toBe(0);
+        const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
+        expect(line).toBeDefined();
+        // The printed command, run as printed after the CLI's own name.
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
+        const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
+        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'render', ...args], dir);
+        expect(back.status, back.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
+          fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
+        );
+      }
     } finally {
       fs.rmSync(elsewhere, {recursive: true, force: true});
-      fs.rmSync(path.join(dir, 'shared report-restored'), {recursive: true, force: true});
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        fs.rmSync(path.join(dir, folder), {recursive: true, force: true});
+      }
     }
   }, 120_000);
 

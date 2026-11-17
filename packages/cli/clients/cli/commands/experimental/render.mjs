@@ -22,6 +22,7 @@ import {emit, section, text, record, list} from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
+import {freeRestoreFolder} from '../../../../foundation/render/restore-folder.mjs';
 import {doc as renderCommand} from '../experimental-render.doc.mjs';
 import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 
@@ -30,13 +31,13 @@ const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 /**
  * A file rendered outside the current folder comes back into it: --reverse
- * writes only inside the folder it runs from, so the command names a new
- * folder here, as a restore beside the file would.
+ * writes only inside the folder it runs from, so the command names the first
+ * free restore folder here, as a restore beside the file would.
  * @param {{output: string, files: string[]}} d
  */
 const restoreHere = d =>
   path.isAbsolute(d.output)
-    ? ` --out ${shellArg(`${path.basename(d.output).replace(/\.[^.]+$/, '')}-restored/${d.files[0]}`)}`
+    ? ` --out ${shellArg(`${path.relative(process.cwd(), freeRestoreFolder(process.cwd(), path.basename(d.output)))}/${d.files[0]}`)}`
     : '';
 
 /**
