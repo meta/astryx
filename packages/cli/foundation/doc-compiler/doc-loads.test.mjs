@@ -56,6 +56,10 @@ const RUNNERS = {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
     sites: ['child_process.spawnSync ×2', 'loadTopicModule'],
   },
+  'api/search/_gather-docs.mjs': {
+    runs: "each extension doc of a topic, to leave an experimental extension's sections out of search",
+    sites: ['readDocAsData'],
+  },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
@@ -359,7 +363,7 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/bases/core-docs.mjs': {
-    runs: "docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run",
+    runs: 'docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run',
     sites: ['import(../discovery/docs-discovery.mjs)'],
   },
   'foundation/config/project.mjs': {

@@ -761,7 +761,7 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * @param {string} [cwd]
  * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
  *   `iconSets`: check the package's experimental icon sets; by default only
- *   when the project at `cwd` sets `experimental.iconSet`.
+ *   where icon features are on in the project at `cwd`.
  *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */
