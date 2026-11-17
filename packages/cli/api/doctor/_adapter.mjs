@@ -44,6 +44,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
   iconUseCommand,
   unlistedIconSets,

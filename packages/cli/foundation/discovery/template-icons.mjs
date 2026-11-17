@@ -848,8 +848,8 @@ export const NO_ICON_SETS = Object.freeze({
  *   icon definition each imported icon draws, by its imported name
  * @returns {{source: string, icons: TemplateIconsReport | undefined}} `icons`
  *   is undefined, and the source unchanged, when no set is given and none is
- *   configured, as for every project without the opt-in, whose state carries
- *   no sets: icon sets are experimental (spec:AST-017 FR27), so a
+ *   configured, as for every project where icon features are off, whose
+ *   state carries no sets: icon sets are experimental (spec:AST-017 FR27), so a
  *   project that does not use them gets exactly the output it always has.
  */
 export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
