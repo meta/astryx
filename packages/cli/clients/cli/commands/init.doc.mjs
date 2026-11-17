@@ -45,7 +45,7 @@ export const doc = {
       flag: '--features <list>',
       param: 'options.features',
       description:
-        'Comma-separated features: agents (agent docs), theme (writes theme.template.ts), template (prints the page-building commands). ' +
+        'Comma-separated features: agents (agent docs), theme (writes theme.template.ts), template (prints the page-building commands; writes no file). ' +
         'An unknown feature exits 1 with ERR_UNKNOWN_FEATURE. Refused with --all or --remove-agents',
     },
     {
@@ -75,7 +75,7 @@ export const doc = {
       choices: ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'],
       description:
         'Which agent files get the block: claude (the Claude Code file), cursor (.cursorrules, else AGENTS.md), codex and muse (AGENTS.md), ' +
-        'hermes (.hermes.md or HERMES.md, else AGENTS.md), all (every existing agent file). An unknown tool exits 1 with ERR_UNKNOWN_AGENT. ' +
+        'hermes (.hermes.md or HERMES.md, else AGENTS.md), all (every existing agent file; GEMINI.md keeps its import of AGENTS.md). An unknown tool exits 1 with ERR_UNKNOWN_AGENT. ' +
         'Used only when agent docs are installed; --agent-docs-path takes precedence',
     },
     {
@@ -101,7 +101,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written)',
+      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written)',
     },
   ],
   related: ['doctor', 'upgrade', 'build', 'theme'],
