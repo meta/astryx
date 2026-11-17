@@ -318,7 +318,8 @@ if (
     ? planMainNodeLegs(files, seconds)
     : planNodeLegs(files, seconds);
   // A record that cannot be used fails the plan, as one past its budget
-  // does: a change only to the recorded times runs no other check of them.
+  // does: a change only to the recorded times runs only this check and the
+  // tests that read them.
   const problem = RECORDS.map(recordProblem).find(Boolean);
   const plan = problem
     ? {

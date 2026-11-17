@@ -189,8 +189,9 @@ const SURFACES = Object.freeze({
 
 // The recorded Node test times. They decide only how the Node legs are
 // scheduled, never what a test checks, so a change to them alone runs the
-// Node leg plan's budget check and no test (spec:AST-030 FR13). Beside any
-// other change they count as test configuration and run the full suite.
+// Node leg plan's check and the tests that read the times (spec:AST-030
+// FR13). Beside any other change they count as test configuration and run the
+// full suite.
 const RECORDED_TIMES = /^scripts\/vitest-node-durations(?:\.[\w-]+)?\.json$/;
 
 const RUNTIME_PACKAGE_SURFACES = Object.freeze([
@@ -412,8 +413,8 @@ function classifyChanges(
     !hasPackageReleaseChange;
   const exactSurface = surface =>
     complete && surfaces.length === 1 && surfaces[0] === surface;
-  // A change only to the recorded Node test times takes the knowledge lane,
-  // which runs no test for a change that holds no record.
+  // A change only to the recorded Node test times takes the knowledge lane:
+  // the leg plan's check and the tests that read the times.
   const timesOnly = exactSurface(SURFACES.NODE_TIMES);
   const specOnly = exactSurface(SURFACES.KNOWLEDGE) || timesOnly;
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);

@@ -85,7 +85,7 @@ describe('spec-only change scope', () => {
     expect(readme.specOnly).toBe(false);
   });
 
-  it('gives a change only to the recorded Node test times the knowledge lane, which runs no test', () => {
+  it('gives a change only to the recorded Node test times the knowledge lane: the leg plan check and the tests that read the times', () => {
     for (const files of [
       ['scripts/vitest-node-durations.json'],
       [
