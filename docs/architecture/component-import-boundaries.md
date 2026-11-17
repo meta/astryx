@@ -210,6 +210,9 @@ one pending load per module, caches a success, and resets after a failure.
   pull request whose shared module none of these pages reaches adds a page
   that imports a component that reaches it. Default behavior, CSS (`spec:AST-080` DEC-4 governs it),
   tests, stories, docs and generated files are outside this rule (DEC-5).
+  A field's status icon (`useInputStatusIcon`) is core field behavior, not an
+  optional feature: every field that takes `status` loads it with the field,
+  as TextInput does.
 
   Named entry: the shared theme lookup Spinner reads for a theme's `spinner`
   indicator (`Indicator/useThemeIndicator` through `theme/useTheme` and
