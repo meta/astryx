@@ -527,4 +527,28 @@ describe('DropdownMenu: a touch outside the open menu (spec:AST-094 FR32)', () =
       'click',
     ]);
   });
+
+  it('after the browser takes a pan outside, a second finger is a new touch: every one of its events reaches the page', async () => {
+    const {heard, trigger, beneath} = await openMenuOver();
+    fireEvent.pointerDown(beneath, pointer('touch', 9, 10, 100));
+    fireTouch(beneath, 'touchstart', 9);
+    fireEvent.pointerMove(beneath, pointer('touch', 9, 10, 80));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    // The browser takes the pan, and the first finger still scrolls.
+    fireEvent.pointerCancel(beneath, pointer('touch', 9, 10, 80));
+    fireTouch(beneath, 'touchmove', 9);
+    fireEvent.pointerDown(beneath, pointer('touch', 11));
+    fireTouch(beneath, 'touchstart', 11, {down: [9, 11]});
+    fireEvent.pointerUp(beneath, pointer('touch', 11));
+    const touchEnd = fireTouch(beneath, 'touchend', 11, {down: [9]});
+    expect(touchEnd.defaultPrevented).toBe(false);
+    browserClickAfter(touchEnd, beneath);
+    expect(heard).toEqual([
+      'pointerdown',
+      'touchstart',
+      'pointerup',
+      'touchend',
+      'click',
+    ]);
+  });
 });

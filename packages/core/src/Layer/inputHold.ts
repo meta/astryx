@@ -1057,7 +1057,7 @@ function createPressHold(doc: Document): PressHold | null {
     if (type === 'pointerdown') {
       const isHeldType = HELD_POINTERS.has(pointerType);
       // Another finger of an outside press, such as a pinch's second one,
-      // joins it while one of the press's fingers is still down.
+      // joins it while one of the press's pointers is still down.
       const joinsOutside =
         isHeldType && outside != null && outside.pointers.size > 0;
       const isPresented =
@@ -1145,7 +1145,9 @@ function createPressHold(doc: Document): PressHold | null {
       // An outside press whose target left the page with its layer ends here:
       // its touchend reached no listener on the window.
       endOutsideIfDone();
-      if (outside != null) {
+      // A touch joins an outside press on the same terms as its pointer. Once
+      // the browser takes the press's pan, a later finger is a new touch.
+      if (outside != null && outside.pointers.size > 0) {
         for (const touch of changed) {
           touches.add(touch.identifier);
           outside.touches.add(touch.identifier);
@@ -1287,10 +1289,10 @@ function createPressHold(doc: Document): PressHold | null {
 
   // Of the pointer and touch events, only a held press's `pointerdown`, a
   // tap's `touchend` and a presentation's one-finger `touchmove` are
-  // canceled. Their other subscriptions stay passive. The hold's caller adds
-  // `touchmove` through `sync`, which cancels only while a presentation holds. The hold hears each
-  // event first, so a held one reaches no other subscriber: press feedback
-  // and the gesture host never hear it.
+  // canceled. Their other subscriptions stay passive. `touchmove` subscribes
+  // through `sync`. It cancels only while a presentation holds. The hold
+  // hears each event first, so a held one reaches no other subscriber: press
+  // feedback and the gesture host never hear it.
   const unsubscribers = [
     ...POINTER_EVENTS.map(type =>
       subscribeInput(view, type, onPointer, {
