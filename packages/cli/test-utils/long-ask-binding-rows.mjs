@@ -251,6 +251,12 @@ export const LOCK = [
   ],
   ['status badges: green stable, amber pending, red critical', [], ['badge']],
   ['inputs 32px tall with a 2px border when focused', [], ['inputs']],
+  ['input border #dddddd, bottom border #999999', [], ['inputs']],
+  [
+    'selected tab: #dddddd border on top and sides, no bottom border',
+    [],
+    ['tab'],
+  ],
   ['cards 8px corners, brighter and more cheerful', [], ['card']],
   ['bold headings, red #c8102e and blue #003da5 accents', ['accent'], []],
   [
