@@ -76,7 +76,48 @@ document.addEventListener('keydown', event => {
 });
 }`;
 
-/** The namespace of the page's own files in the build. */
+/**
+ * Storage for a page in a viewer that blocks it. A frame without
+ * allow-same-origin has an opaque origin, where touching `localStorage` or
+ * `sessionStorage` throws. Then the page gets an in-memory storage with the
+ * same API for each one: what it saves lasts until the page closes. A file
+ * opened from disk or on a real origin keeps its real storage. This runs as
+ * the script's first module, before any of the page's own modules.
+ */
+export const VIEWER_STORAGE = `for (const name of ['localStorage', 'sessionStorage']) {
+  let usable = true;
+  try {
+    window[name].getItem('');
+  } catch {
+    usable = false;
+  }
+  if (usable) continue;
+  const items = new Map();
+  const storage = {
+    get length() {
+      return items.size;
+    },
+    key: index => [...items.keys()][index] ?? null,
+    getItem: key => (items.has(String(key)) ? items.get(String(key)) : null),
+    setItem: (key, value) => {
+      items.set(String(key), String(value));
+    },
+    removeItem: key => {
+      items.delete(String(key));
+    },
+    clear: () => {
+      items.clear();
+    },
+  };
+  try {
+    Object.defineProperty(window, name, {configurable: true, enumerable: true, get: () => storage});
+  } catch {
+    // A window that refuses the property keeps the storage it has.
+  }
+}`;
+
+/** The namespace of the module that gives a page storage in a viewer that blocks it. */
+const STORAGE = 'astryx-viewer-storage';
 const PAGE = 'astryx-page';
 
 /** The namespace of the module that mounts the page. */
@@ -207,7 +248,7 @@ export async function bundleForBrowser({
   // A page whose script throws, in render or in an effect (a frame that
   // blocks storage, say), keeps its first paint: React would empty the root.
   const mount =
-    `import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `import 'astryx:viewer-storage';import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
     `${IN_A_VIEWER}` +
     `const root = document.getElementById(${JSON.stringify(ROOT_ID)});const painted = root.innerHTML;` +
     `class FirstPaint extends Component {constructor(props) {super(props);this.state = {failed: false};}` +
@@ -264,6 +305,8 @@ export async function bundleForBrowser({
     setup(/** @type {any} */ setupBuild) {
       build = setupBuild;
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
+      build.onResolve({filter: /^astryx:viewer-storage$/, namespace: MOUNT}, () => ({path: 'storage', namespace: STORAGE}));
+      build.onLoad({filter: /.*/, namespace: STORAGE}, () => ({contents: VIEWER_STORAGE, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

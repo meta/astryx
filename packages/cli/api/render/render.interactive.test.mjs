@@ -327,13 +327,13 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
-  it("keeps the first paint when the page's script throws, as in a frame that blocks storage", async () => {
+  it("keeps the first paint when the page's script throws", async () => {
     put(
-      'src/saves.tsx',
+      'src/throws.tsx',
       `import {useEffect} from 'react';
 export default function Page() {
   useEffect(() => {
-    window.localStorage.setItem('seen', '1');
+    throw new Error('the page broke after its first paint');
   }, []);
   return (
     <main>
@@ -344,18 +344,65 @@ export default function Page() {
 }
 `,
     );
-    await render('src/saves.tsx', {cwd: dir, out: 'saves.html'});
-    // An opaque origin, as in a frame without allow-same-origin: storage throws.
-    const dom = new JSDOM(read('saves.html'), {
+    await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
+    const dom = new JSDOM(read('throws.html'), {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       virtualConsole: new VirtualConsole(),
     });
     await new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    expect(() => dom.window.localStorage).toThrow();
     const root = dom.window.document.getElementById(ROOT_ID);
     expect(root?.textContent).toContain('Saved notes');
     expect(root?.textContent).toContain('Kept on screen');
+  }, 120_000);
+
+  it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
+    put(
+      'src/filter.tsx',
+      `import {useEffect, useState} from 'react';
+const inBrowser = typeof window !== 'undefined';
+export default function Page() {
+  const [filter, setFilter] = useState(() => (inBrowser ? window.localStorage.getItem('filter') : null) ?? 'all');
+  useEffect(() => {
+    window.localStorage.setItem('filter', filter);
+    window.sessionStorage.setItem('seen', '1');
+  }, [filter]);
+  return (
+    <main>
+      <p id="filter">{filter}</p>
+      <button type="button" onClick={() => setFilter('open')}>Open only</button>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
+    const settle = (/** @type {any} */ dom) => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    // An opaque origin, as in a frame without allow-same-origin: storage throws.
+    const blocked = new JSDOM(read('filter.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await settle(blocked);
+    const doc = blocked.window.document;
+    expect(doc.getElementById('filter')?.textContent).toBe('all');
+    /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
+    await settle(blocked);
+    expect(doc.getElementById('filter')?.textContent).toBe('open');
+    expect(blocked.window.localStorage.getItem('filter')).toBe('open');
+    expect(blocked.window.sessionStorage.getItem('seen')).toBe('1');
+    blocked.window.close();
+    // A real origin keeps the browser's own storage.
+    const open = new JSDOM(read('filter.html'), {
+      url: 'https://example.test/',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const real = open.window.localStorage;
+    await settle(open);
+    expect(open.window.localStorage).toBe(real);
+    expect(real.getItem('filter')).toBe('all');
+    open.window.close();
   }, 120_000);
 
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
