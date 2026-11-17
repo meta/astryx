@@ -22,7 +22,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import postcss from 'postcss';
 import {
   assetDataUri,
@@ -949,6 +949,21 @@ function inlineAssets(text, kind, ctx) {
 }
 
 /**
+ * The function Core's naming module builds a part's class with, from the Core
+ * the page uses, so the namespace comes from Core and not from the CLI. Null
+ * when the page has no Core, or its Core has no naming module.
+ * @param {string} entry
+ * @param {ServedSet | null} served
+ * @returns {Promise<((part: string) => string) | null>}
+ */
+async function coreClassNamer(entry, served) {
+  const file = resolveServed('@astryxdesign/core/naming', entry, served);
+  if (!file) return null;
+  const {stableClassName} = await import(pathToFileURL(file).href);
+  return typeof stableClassName === 'function' ? stableClassName : null;
+}
+
+/**
  * The version of a package the page rendered with: the package set's copy
  * when the page took it from there, else the copy Node's resolver finds from
  * the page's folder.
@@ -1141,7 +1156,14 @@ export async function renderPage(entry, options = {}) {
   const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
   // The script draws what the markup does not show yet (a menu as it opens,
   // the next tab), so the rules every class name it holds needs stay too.
-  const kept = script ? new Set([...used, ...(script.match(/[A-Za-z_][\w-]*/g) ?? [])]) : used;
+  // Core builds a part's class at run time from the part's name
+  // (`banner-icon` -> `astryx-banner-icon`), so each name also keeps the
+  // class Core's naming module makes from it.
+  const tokens = script?.match(/[A-Za-z_][\w-]*/g) ?? [];
+  const coreClass = script ? await coreClassNamer(entry, served) : null;
+  const kept = script
+    ? new Set([...used, ...tokens, ...(coreClass ? tokens.map(coreClass) : [])])
+    : used;
   // A page that draws elements in a state (hovered, focused, pressed) marks
   // them; its stylesheet then applies those states' rules to them too.
   const states = markup.includes(' data-astryx-state="');
