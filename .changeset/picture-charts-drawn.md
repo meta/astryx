@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] Theme editor pictures show responsive charts drawn: the picture window opens as tall as the page and waits until the page is quiet, instead of resizing at capture time, which restarted a chart's drawing and pictured it empty.
+[fix] Theme editor pictures show responsive charts drawn: each page draws in a window of its own until it is quiet, and its script is held while the whole page is pictured, so a chart no longer starts over and is pictured empty. The page stays laid out for the 1280 × 900 window.
 
 @josephfarina

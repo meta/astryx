@@ -28,10 +28,9 @@ export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
 }`;
 
 /**
- * The script run once the window is as tall as the page, before the
- * picture: it waits until the page stops changing, so a part that redraws
- * when its size changes (a responsive chart, which draws its lines over an
- * animation) is drawn whole. Quiet means no change to the document for
+ * The script run before the picture: it waits until the page stops
+ * changing, so a part drawn over animation frames (a responsive chart's
+ * lines) is drawn whole. Quiet means no change to the document for
  * QUIET_MS; it waits QUIET_MOST_MS at most.
  */
 export const AWAIT_QUIET = `new Promise(resolve => {

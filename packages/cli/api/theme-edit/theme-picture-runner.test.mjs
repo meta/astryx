@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
-import {newPictureRun, runBrowser, screenshot} from './_preview.mjs';
+import {newPictureRun, runBrowser, screenshot, screenshots} from './_preview.mjs';
 import {decodePng} from './_png.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -72,20 +72,18 @@ describe('the picture run', () => {
   );
 
   it.skipIf(!chrome)(
-    'a part that redraws when its size changes (a responsive chart) is pictured drawn, not started over',
+    'a part that redraws on resize (a responsive chart) is pictured drawn on every page of a batch, laid out for the window',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-redraw-'));
       try {
-        const html = path.join(dir, 'p.html');
-        // A stand-in for a responsive chart: each size change clears its
-        // red bar and grows it again over 600 ms, frame by frame. The page
-        // is taller than the window, so the whole-page picture needs it all.
-        fs.writeFileSync(
-          html,
-          `<html><body style="margin:0"><div id="chart" style="height:100px"><div id="bar" style="height:100px;width:0;background:#ff0000"></div></div><div style="height:3000px"></div>
+        // A stand-in for a responsive chart: each resize clears its red bar
+        // and grows it again over 600 ms, frame by frame. A 100vh hero sits
+        // above it and a tall block below, so the page is taller than the
+        // window.
+        const page = `<html><body style="margin:0"><section style="height:100vh;background:#00ff00"></section><div id="bar" style="height:100px;width:0;background:#ff0000"></div><div style="height:3000px;background:#0000ff"></div>
 <script>
 const bar = document.getElementById('bar');
-new ResizeObserver(() => {
+const draw = () => {
   const start = performance.now();
   const grow = now => {
     const t = Math.min(1, (now - start) / 600);
@@ -94,24 +92,36 @@ new ResizeObserver(() => {
   };
   bar.style.width = '0px';
   requestAnimationFrame(grow);
-}).observe(document.documentElement);
-</script></body></html>`,
-        );
-        const png = path.join(dir, 'p.png');
-        const r = await screenshot(
+};
+addEventListener('resize', draw);
+draw();
+</script></body></html>`;
+        const jobs = ['a', 'b'].map(name => {
+          fs.writeFileSync(path.join(dir, `${name}.html`), page);
+          return {html: path.join(dir, `${name}.html`), png: path.join(dir, `${name}.png`), mode: /** @type {const} */ ('light')};
+        });
+        const results = await screenshots(
           {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
-          html,
-          png,
-          'light',
+          jobs,
         );
-        expect(r.ok).toBe(true);
-        const pic = decodePng(fs.readFileSync(png));
-        let red = 0;
-        for (let x = 0; x < 400; x += 1) {
-          const i = (50 * pic.width + x) * 4;
-          if (pic.rgba[i] > 200 && pic.rgba[i + 1] < 60 && pic.rgba[i + 2] < 60) red += 1;
+        expect(results.map(r => r.ok)).toEqual([true, true]);
+        for (const job of jobs) {
+          const pic = decodePng(fs.readFileSync(job.png));
+          /** @param {number} x @param {number} y */
+          const at = (x, y) => Array.from(pic.rgba.subarray((y * pic.width + x) * 4, (y * pic.width + x) * 4 + 3));
+          let red = 0;
+          for (let x = 0; x < 400; x += 1) {
+            const [r, g, b] = at(x, 950);
+            if (r > 200 && g < 60 && b < 60) red += 1;
+          }
+          expect(red).toBeGreaterThan(390);
+          // Laid out for the 1280 x 900 window: the hero is 900 px tall, and
+          // the page below the window is drawn, not left white.
+          expect(at(10, 899)).toEqual([0, 255, 0]);
+          expect(at(10, 905)).not.toEqual([0, 255, 0]);
+          expect(pic.height).toBe(900 + 100 + 3000);
+          expect(at(10, pic.height - 10)).toEqual([0, 0, 255]);
         }
-        expect(red).toBeGreaterThan(390);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
