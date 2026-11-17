@@ -276,4 +276,52 @@ describe('Button label truncation tooltip', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
+
+  it('keeps working after the Button renders a new element', async () => {
+    restore = withOverflow(true);
+    const openLayers = new Set<HTMLElement>();
+    const proto = HTMLElement.prototype;
+    vi.spyOn(proto, 'showPopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.add(this);
+    });
+    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.delete(this);
+    });
+    const hover = (element: HTMLElement) => {
+      act(() => {
+        fireEvent.pointerOver(element, {pointerType: 'mouse'});
+        fireEvent.pointerEnter(element, {pointerType: 'mouse'});
+        fireEvent.mouseOver(element);
+        fireEvent.mouseEnter(element);
+      });
+    };
+    const leave = (element: HTMLElement) => {
+      act(() => {
+        fireEvent.pointerLeave(element, {pointerType: 'mouse'});
+        fireEvent.mouseLeave(element);
+      });
+    };
+    const {rerender} = render(<Button label={LABEL} href="/next" />);
+    const link = screen.getByRole('link');
+    hover(link);
+    await waitFor(() => {
+      expect(openLayers.size).toBe(1);
+    });
+    leave(link);
+    await waitFor(() => {
+      expect(openLayers.size).toBe(0);
+    });
+    // A disabled link Button renders a <button> in place of the <a>.
+    rerender(<Button label={LABEL} href="/next" isDisabled />);
+    const button = screen.getByRole('button');
+    hover(button);
+    await waitFor(() => {
+      expect(openLayers.size).toBe(1);
+    });
+    expect([...openLayers][0]).toHaveTextContent(LABEL);
+  });
 });

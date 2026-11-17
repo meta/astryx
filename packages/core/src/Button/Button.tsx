@@ -30,11 +30,10 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {UndescribedTooltip, useTooltip} from '../Tooltip/useTooltip';
 import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
 import {useTruncationTooltipInterest} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   colorVars,
   sizeVars,
@@ -831,28 +830,6 @@ function visibleLabelText(label: HTMLElement): string {
 }
 
 /**
- * The tooltip for a cut label. It attaches to the Button without a
- * description, because its text is the Button's own name.
- */
-function CutLabelTooltip({
-  anchorRef,
-  label,
-}: {
-  anchorRef: React.RefObject<HTMLElement | null>;
-  label: string;
-}): ReactNode {
-  const tooltip = useTooltip({placement: 'above'});
-  const attach = tooltip.ref;
-  useIsomorphicLayoutEffect(() => {
-    attach(anchorRef.current);
-    return () => {
-      attach(null);
-    };
-  }, [anchorRef, attach]);
-  return tooltip.renderTooltip(label);
-}
-
-/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -1325,7 +1302,7 @@ export function Button({
       {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
       {canShowCutLabel && cutLabelInterest.isWanted && cutLabel != null ? (
         <TooltipPresentInterestContext value={cutLabelInterest.interestRef}>
-          <CutLabelTooltip anchorRef={buttonRef} label={cutLabel} />
+          <UndescribedTooltip anchorRef={buttonRef} content={cutLabel} />
         </TooltipPresentInterestContext>
       ) : null}
     </>
