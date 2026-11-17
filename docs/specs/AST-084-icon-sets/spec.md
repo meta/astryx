@@ -662,8 +662,11 @@ message}`) names each template or namespace doc that sets `stability`, and
   leaves one out, with the `use` command that adds it. With no list, it
   passes and names the installed sets and whether one is the project's set.
   It warns when another
-  installed set is withdrawn. Its pass message names the project's look. Doctor's `icon-placeholders` check reads the
-  project's own source (not dependencies or build output) as syntax trees
+  installed set is withdrawn. Its pass message names the project's look.
+  Doctor's `icon-placeholders` check runs only where icon features are on
+  and a main set is decided (named by `experimental.iconSet`, or the only
+  installed set); with no main set there is no check and no scan. It reads
+  the project's own source (not dependencies or build output) as syntax trees
   for the FR19 declaration in the exact shape the CLI writes, under any
   name, and for its uses; a commented-out or quoted copy never counts. It
   warns while any use remains, naming each file and the definitions its
