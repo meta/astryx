@@ -53,7 +53,9 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
   const before = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
   );
-  expect(before.length).toBe(5);
+  // The lifted parts (selected rows, a dropzone, a numbered citation) and
+  // any coloured card that sets its own secondary text.
+  expect(before.length).toBeGreaterThanOrEqual(5);
   const r = await themeEditSet('t', 'accent', '#E11D48', {cwd});
   const after = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),

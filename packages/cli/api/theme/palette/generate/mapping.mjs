@@ -324,7 +324,7 @@ export const OFFICIAL_NEUTRAL_STOPS = ownTable({
   '--color-on-accent': [{stop: 100}, {stop: 5}],
 });
 /**
- * The parts whose secondary text the official Neutral theme lifts, `[part, block]`.
+ * The parts whose secondary text the official Neutral theme lifts, `[part, block]`; a coloured card's own secondary text is that card's ink, not a lift.
  * @type {ReadonlyArray<readonly [string, string]>}
  */
 export const OFFICIAL_NEUTRAL_LIFTED = Object.freeze(
@@ -334,15 +334,6 @@ export const OFFICIAL_NEUTRAL_LIFTED = Object.freeze(
     ['file-input', 'mode:dropzone'],
     ['citation', 'variant:number'],
     ['segmented-control-item', 'base'],
-    ['card', 'variant:blue'],
-    ['card', 'variant:cyan'],
-    ['card', 'variant:green'],
-    ['card', 'variant:orange'],
-    ['card', 'variant:pink'],
-    ['card', 'variant:purple'],
-    ['card', 'variant:red'],
-    ['card', 'variant:teal'],
-    ['card', 'variant:yellow'],
   ]),
 );
 /** A token's official `[light, dark]` stops. */
