@@ -242,6 +242,84 @@ export const GroupMultiple: Story = {
   },
 };
 
+/**
+ * A labeled group wider than a phone: the members wrap onto another row and
+ * every label stays whole.
+ */
+export const GroupNarrow: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: function Render() {
+    const [category, setCategory] = useState<string | null>('writing');
+    return (
+      <ToggleButtonGroup
+        label="Category"
+        value={category}
+        onChange={setCategory}
+        size="lg">
+        <ToggleButton
+          value="writing"
+          label="Writing"
+          icon={<StarIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="coding"
+          label="Coding"
+          icon={<LinkIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="research"
+          label="Research"
+          icon={<BookmarkIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="creative"
+          label="Creative"
+          icon={<HeartIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="planning"
+          label="Planning"
+          icon={<ListBulletIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="data"
+          label="Data"
+          icon={<Squares2X2Icon style={iconSize} />}
+        />
+      </ToggleButtonGroup>
+    );
+  },
+};
+
+/**
+ * A member whose label is wider than a phone: the group stays inside its
+ * container and that member shortens its label.
+ */
+export const GroupNarrowLongLabel: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: function Render() {
+    const [kind, setKind] = useState<string | null>('weekly');
+    return (
+      <ToggleButtonGroup
+        label="Report type"
+        value={kind}
+        onChange={setKind}
+        size="lg">
+        <ToggleButton
+          value="weekly"
+          label="Weekly revenue and retention summary for every region"
+          icon={<ListBulletIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="daily"
+          label="Daily"
+          icon={<StarIcon style={iconSize} />}
+        />
+      </ToggleButtonGroup>
+    );
+  },
+};
+
 /** Notification toggle — icon swap between bell and bell-slash. */
 export const NotificationToggle: Story = {
   render: function Render() {

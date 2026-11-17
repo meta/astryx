@@ -144,15 +144,14 @@ describe('a write build refusal keeps --icons-specifier and quotes the source', 
       expect(n).toContain(` theme build ${source}`);
       expect(n).toContain('--icons-specifier ./icons.mjs');
     }
-    // One of them drops --out: the outputs beside the source.
-    expect(names.some((/** @type {string} */ n) => !n.includes('--out'))).toBe(
-      true,
-    );
+    // Each names a free --out path: never the same paths, nor the build
+    // beside the source, which could replace a file there.
+    for (const n of names) expect(n).toContain('--out');
   });
 });
 
 describe('the glob and --family refusals keep the mode', () => {
-  it('a quoted glob stays unquoted, its flags follow quoted', async () => {
+  it('a quoted glob names the sources it matches, its flags follow quoted', async () => {
     const r = await runCli(
       [
         '--json',
@@ -168,7 +167,7 @@ describe('the glob and --family refusals keep the mode', () => {
     expect(r.status).toBe(1);
     const [first] = JSON.parse(r.stdout).suggestions;
     expect(first.name).toMatch(
-      / theme build themes\/\*\.mjs --icons-specifier \.\/icons\.mjs --check$/,
+      / theme build themes\/a\.theme\.mjs --icons-specifier \.\/icons\.mjs --check$/,
     );
   });
 
@@ -208,7 +207,7 @@ describe('the glob and --family refusals keep the mode', () => {
     expect(r.status).toBe(1);
     const [first] = JSON.parse(r.stdout).suggestions;
     expect(first.name).toMatch(
-      / theme build --family themes\/\*\.mjs --family-key fam --check$/,
+      / theme build --family themes\/a\.theme\.mjs --family-key fam --check$/,
     );
   });
 
@@ -232,7 +231,9 @@ describe('the glob and --family refusals keep the mode', () => {
       .join('\n');
     expect(names).not.toContain('undefined');
     expect(names).not.toContain('--out');
-    expect(names).toMatch(/ theme build --family themes\/\*\.mjs --check$/m);
+    expect(names).toMatch(
+      / theme build --family themes\/a\.theme\.mjs --check$/m,
+    );
     expect(fs.existsSync(path.join(app, 'themes', 'undefined.css'))).toBe(
       false,
     );

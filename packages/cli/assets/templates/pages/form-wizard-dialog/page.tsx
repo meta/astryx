@@ -98,6 +98,7 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import type {ISOTimeString} from '@astryxdesign/core/TimeInput';
 import {TimeInput} from '@astryxdesign/core/TimeInput';
 import {useToast} from '@astryxdesign/core/Toast';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -276,7 +277,8 @@ export default function FormWizardDialogPage() {
   return (
     // Center is the page root, so the dialog stands in the middle of the space
     // its backdrop would have covered.
-    <Center height="100dvh">
+    <Center role="main" height="100dvh">
+      <VisuallyHidden as="h1">Report scheduler</VisuallyHidden>
       <Dialog
         isOpen
         // See the module header: inline so this page can be a gallery tile and

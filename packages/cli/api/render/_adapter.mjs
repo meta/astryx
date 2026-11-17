@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
@@ -49,7 +50,7 @@ import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
-import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
+import {hostedRun, recordResolved, servingRootPackages} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -136,15 +137,16 @@ function resolvesCore(dir) {
  * @param {string} file absolute
  * @param {string} cwd
  * @param {string} what
+ * @param {string} [fix] what to do instead
  * @returns {string}
  */
-function confined(file, cwd, what) {
+function confined(file, cwd, what, fix = 'Write inside the folder you run the command from.') {
   try {
     return assertWithin(file, cwd, {allowAbsolute: true, label: what});
   } catch (e) {
     if (e instanceof PathSafetyError) {
       throw new AstryxError(
-        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. Write inside the folder you run the command from.`,
+        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. ${fix}`,
         [],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
@@ -411,7 +413,17 @@ function asAstryxError(e) {
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      suggestions.push({name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'});
+      // The install command in the project's package manager, when the
+      // render named one; else one npm line for every package it found.
+      const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
+      suggestions.push(
+        typeof e.detail.install === 'string'
+          ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
+          : {
+              name: `npm install ${packages.join(' ')}`,
+              reason: packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports',
+            },
+      );
     }
     return new AstryxError(e.message, suggestions, code);
   }
@@ -420,6 +432,16 @@ function asAstryxError(e) {
     return new AstryxError(err.message, [], err.code);
   }
   return e;
+}
+
+/**
+ * The packages besides Astryx, React and StyleX that a page outside a project
+ * takes from the package set: the integrations the host approves, and the
+ * other packages its set declares, such as the icon library templates import.
+ * @returns {string[]}
+ */
+function servedExtras() {
+  return [...(hostedRun()?.integrations ?? []), ...servingRootPackages()];
 }
 
 /**
@@ -438,7 +460,7 @@ function servedSet(input) {
   const dir = path.dirname(input);
   if (runChoice(dir).inProject) return null;
   try {
-    return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
+    return {dir: requireCoreDir(dir), integrations: servedExtras()};
   } catch (e) {
     const err = /** @type {any} */ (e);
     return err?.code === ERROR_CODES.ERR_VERSIONS_UNAVAILABLE ? {unavailable: err} : null;
@@ -447,12 +469,17 @@ function servedSet(input) {
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
+ * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title}) {
+export async function renderToFile({cwd, input, output, title, absolute = false}) {
   readInput(input, cwd);
-  confined(output, cwd, 'The output');
+  // An absolute --out is the caller's choice of place, also outside the
+  // current folder (cli-surface DEC-16). The file there is still never one a
+  // render did not write.
+  const elsewhere = absolute && !isInside(output, cwd);
+  if (!elsewhere) confined(output, cwd, 'The output', 'Write inside the folder you run the command from, or name an absolute path.');
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
@@ -461,8 +488,11 @@ export async function renderToFile({cwd, input, output, title}) {
       page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
-      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
-      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+      const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
+      /** @type {unknown[]} */
+      const missing = Array.isArray(detail?.packages) ? detail.packages : [detail?.package];
+      const served = servedExtras();
+      if (set && 'unavailable' in set && missing.some(name => typeof name === 'string' && isServedPackage(name, served))) {
         throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
       }
       throw e;
@@ -479,7 +509,16 @@ export async function renderToFile({cwd, input, output, title}) {
     }
     recordResolved(name, version, dir, 'package-set');
   }
-  refuseProtected([output], cwd);
+  if (!elsewhere) refuseProtected([output], cwd);
+  // Elsewhere, the file named is the file written: a link there would put the
+  // render wherever the link points.
+  if (elsewhere && fs.lstatSync(output, {throwIfNoEntry: false})?.isSymbolicLink()) {
+    throw new AstryxError(
+      `${shown(cwd, output)} is a symbolic link, so it is not replaced; nothing was written. Name the file itself.`,
+      [],
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
+  }
   // An existing file is replaced only when a render wrote it.
   if (
     fs.existsSync(output) &&
@@ -517,6 +556,8 @@ export async function renderToFile({cwd, input, output, title}) {
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
+    scriptBytes: page.scriptBytes ?? 0,
+    scriptModules: page.scriptModules ?? 0,
   };
 }
 
@@ -629,13 +670,7 @@ function aliasedResult(unaliased, page, cwd) {
  * @param {string} input absolute
  */
 function restoreFolder(input) {
-  const stem = path.basename(input).replace(/\.[^.]+$/, '');
-  let folder = path.join(path.dirname(input), `${stem}-restored`);
-  for (let n = 2; fs.existsSync(folder); n++) {
-    removeStaleTemporaries(folder);
-    folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
-  }
-  return folder;
+  return freeRestoreFolder(path.dirname(input), path.basename(input), removeStaleTemporaries);
 }
 
 /**

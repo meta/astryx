@@ -322,7 +322,7 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('first')).toHaveFocus();
   });
 
-  it('leaves controls inside a closed dialog out of the Tab cycle', () => {
+  it('leaves controls inside a closed dialog that the page does not display out of the Tab cycle', () => {
     render(
       <Trap>
         <button type="button" data-testid="first">
@@ -375,6 +375,42 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
     expect(first).toHaveFocus();
     matches.mockRestore();
+  });
+
+  it('keeps controls inside a closed dialog that the page displays in the Tab cycle', () => {
+    // A Popover opened inside a closed <dialog> that the page shows in flow, as
+    // a card. The dialog has a box, and it never sets `open`.
+    render(
+      <dialog data-testid="card">
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="second">
+            Second
+          </button>
+        </Trap>
+      </dialog>,
+    );
+    const card = screen.getByTestId('card');
+    const box = new DOMRect(0, 0, 320, 120);
+    const rects = vi.spyOn(card, 'getClientRects').mockReturnValue({
+      length: 1,
+      item: (index: number) => (index === 0 ? box : null),
+      0: box,
+      [Symbol.iterator]: function* () {
+        yield box;
+      },
+    } as unknown as DOMRectList);
+    const first = screen.getByTestId('first');
+    first.focus();
+
+    expect(fireEvent.keyDown(first, {key: 'Tab'})).toBe(true);
+    const second = screen.getByTestId('second');
+    second.focus();
+    expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    rects.mockRestore();
   });
 
   it('lets the innermost region answer Tab when regions nest at the end', () => {

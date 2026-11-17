@@ -27,6 +27,7 @@ export default function SideNavHeadingShowcase() {
   return (
     <HStack gap={6}>
       <SideNav
+        aria-label="Side navigation with a heading"
         header={
           <SideNavHeading
             heading="Analytics"
@@ -37,6 +38,7 @@ export default function SideNavHeadingShowcase() {
         {null}
       </SideNav>
       <SideNav
+        aria-label="Side navigation with a heading, superheading and subheading"
         header={
           <SideNavHeading
             heading="Analytics"
