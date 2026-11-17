@@ -166,9 +166,11 @@ export const SAMPLE_PAGE = h(
           'VStack',
           {gap: 3},
           h('Heading', {level: 3}, 'This week'),
+          // Striped, so a theme's stripes (either parity) show on the page.
           h('Table', {
             data: ROWS,
             idKey: 'id',
+            isStriped: true,
             columns: [
               {key: 'task', header: 'Task'},
               {key: 'owner', header: 'Owner'},
