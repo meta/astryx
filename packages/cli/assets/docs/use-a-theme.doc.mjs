@@ -55,7 +55,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The theme's page color, `--color-background-body`, paints inside `AppShell`; `Theme` sets the tokens but paints no page of its own. A page without `AppShell` keeps the browser's white until its own CSS adds one line: `body { background: var(--color-background-body) }`.",
+          text: "Your theme's page color, `--color-background-body`, shows inside `AppShell`; `Theme` sets the tokens but paints no page of its own. Wrap the page in `AppShell`; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer `AppShell`). A theme with one mode draws its text for its own page, so the page needs that color in every OS mode.",
         },
         {
           type: 'prose',

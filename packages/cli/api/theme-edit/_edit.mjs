@@ -56,6 +56,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  pageColorNote,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -6876,6 +6877,14 @@ async function changeOnce(
     (['text-size', 'type'].includes(s.thing) ||
       /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(s.thing))
       ? [PHONE_SIZES_NOTE]
+      : []),
+    // The page color shows inside AppShell only: said once for the theme,
+    // with the first page color it sets.
+    ...(sub === 'set' &&
+    !s.on &&
+    s.thing === '--color-background-body' &&
+    data.settings.filter(x => x.thing === s.thing && !x.on).length <= 1
+      ? [pageColorNote(data.mode)]
       : []),
     // A scale step far outside reading sizes is named.
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)

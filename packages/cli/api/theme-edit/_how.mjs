@@ -24,6 +24,7 @@ import {
   LIKE,
   P,
   familyOf,
+  pageColorNote,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
@@ -1475,6 +1476,10 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   return {
     kind: 'setting',
     subject,
+    // (The page color shows inside AppShell only: said first.)
+    ...(key === '--color-background-body'
+      ? {note: pageColorNote(env.data?.mode)}
+      : {}),
     source: 'token',
     tokenType: type,
     default: String(ctx.project.core.tokenDefaults[key]),

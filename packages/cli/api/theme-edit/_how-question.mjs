@@ -41,6 +41,7 @@ import {
   FEELS,
   LIKE,
   wordTable,
+  pageColorNote,
 } from './_tables.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
 import {
@@ -592,7 +593,7 @@ function sideColorsIn(text) {
   const written = colorsFound(lower)
     .filter(([at, v, typed]) => typed && lower.slice(at, at + v.length) === v)
     .sort((a, b) => a[0] - b[0]);
-  for (let i = 0; i < written.length; ) {
+  for (let i = 0; i < written.length;) {
     let j = i;
     while (
       j + 1 < written.length &&
@@ -3404,11 +3405,10 @@ function clausesOf(q, partWords, words = null) {
     ),
     (m, at, all) => {
       const from = Math.max(0, String(all).lastIndexOf(';', at) + 1);
-      const end = String(all).slice(at).search(/[;.](?:\s|$)/);
-      const sentence = String(all).slice(
-        from,
-        end < 0 ? undefined : at + end,
-      );
+      const end = String(all)
+        .slice(at)
+        .search(/[;.](?:\s|$)/);
+      const sentence = String(all).slice(from, end < 0 ? undefined : at + end);
       return /\b(?:borders?|edges?|outlines?)\b/i.test(sentence)
         ? m.replace(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/gi, ' & ')
         : m;
@@ -3520,7 +3520,10 @@ function clausesOf(q, partWords, words = null) {
             for (const y of rest.matchAll(o)) {
               const s = /** @type {number} */ (y.index);
               if (s > at) break;
-              if (s + y[0].length >= end && y[0].trim().length > x[0].trim().length)
+              if (
+                s + y[0].length >= end &&
+                y[0].trim().length > x[0].trim().length
+              )
                 return true;
             }
             return false;
@@ -18142,9 +18145,10 @@ export function draftAnswer(ctx, env, question) {
    * @returns {Draft | null}
    */
   function variantLookAnswer(c) {
-    const said = /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
-      c.text.trim(),
-    );
+    const said =
+      /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
+        c.text.trim(),
+      );
     if (!said) return null;
     const on = [...new Set(c.parts.map(x => x.on))];
     if (on.length !== 1 || FAMILIES[on[0]]) return null;
@@ -18173,7 +18177,10 @@ export function draftAnswer(ctx, env, question) {
     const to =
       toSaid.length === 1
         ? toSaid[0]
-        : !toSaid.length && /\bdefault\b/.test(said[2]) && def && values.has(def)
+        : !toSaid.length &&
+            /\bdefault\b/.test(said[2]) &&
+            def &&
+            values.has(def)
           ? def
           : null;
     if (from.length !== 1 || !to || from[0] === to) return null;
@@ -20872,7 +20879,7 @@ export function draftAnswer(ctx, env, question) {
                         named.corners.includes(k) ? each : '0',
                       ).join(' '),
                       {...f, ...modeOf(c)},
-                ),
+                    ),
                   ]
                 : [
                     ...(rounded
@@ -20898,7 +20905,7 @@ export function draftAnswer(ctx, env, question) {
                 text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tok ?? `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
                 options: [steps],
                 sequence: steps.length > 1,
-            };
+              };
           }
         }
         const tall = tallIn(c.text);
@@ -29257,7 +29264,7 @@ export function draftAnswer(ctx, env, question) {
       !result.some(d => /shows only where a part draws it/.test(d.text))
     )
       result.push({
-        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's white until its own CSS adds one line: body { background: var(--color-background-body) }`,
+        text: `${pageColorNote(env.data?.mode)} (The parts that paint it: ${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}.)`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
       });
