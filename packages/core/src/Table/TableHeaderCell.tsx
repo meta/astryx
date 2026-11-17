@@ -26,11 +26,7 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {
-  overflowStyles,
-  containerEdgeStyles,
-  headerEndRoomStyles,
-} from './table.stylex';
+import {overflowStyles, containerEdgeStyles} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
   hasTableContextActions,
@@ -59,22 +55,34 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
   contextMenuActions?: TableContextActions;
 }
 
+// The end padding is also the room header content may grow into before its
+// label truncates (BaseTable, sort plugin). The last column takes the
+// container edge inset.
 const densityStyles = stylex.create({
   compact: {
     paddingBlock: spacingVars['--spacing-1'],
-    paddingInline: spacingVars['--spacing-2'],
+    '--_table-header-inline': spacingVars['--spacing-2'],
+    paddingInline: 'var(--_table-header-inline)',
+    '--_table-header-end-room':
+      'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
     boxSizing: 'border-box',
   },
   balanced: {
     paddingBlock: spacingVars['--spacing-2'],
-    paddingInline: spacingVars['--spacing-3'],
+    '--_table-header-inline': spacingVars['--spacing-3'],
+    paddingInline: 'var(--_table-header-inline)',
+    '--_table-header-end-room':
+      'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
     boxSizing: 'border-box',
   },
   spacious: {
     paddingBlock: spacingVars['--spacing-3'],
-    paddingInline: spacingVars['--spacing-4'],
+    '--_table-header-inline': spacingVars['--spacing-4'],
+    paddingInline: 'var(--_table-header-inline)',
+    '--_table-header-end-room':
+      'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
     boxSizing: 'border-box',
   },
@@ -166,7 +174,6 @@ export function TableHeaderCell({
       headerDividerStyles.cell,
       overflowStyles.cell,
       containerEdgeStyles[ctx.density],
-      headerEndRoomStyles[ctx.density],
     );
     // Column dividers come from the shared builder (column axis only).
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
