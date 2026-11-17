@@ -121,9 +121,11 @@ function inlineBoundsOf(
   const collapsed = folds
     ? span(keptWidths) + (keptWidths.length > 0 ? gap : 0) + indicatorWidth
     : span(widths);
+  // Round the folded width up so the trigger never clips. Keep the unfolded
+  // width exact: a floor at that width must not widen a list with room.
   return {
     collapsed: Math.ceil(collapsed),
-    rendered: Math.ceil(span(widths)),
+    rendered: span(widths),
   };
 }
 

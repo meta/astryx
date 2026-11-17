@@ -401,6 +401,7 @@ test.describe('a list outside a toolbar', () => {
     expect(sizes.contentSized.labels).toHaveLength(6);
     expect(sizes.contentSized.width).toBeCloseTo(sizes.contentSized.span, 0);
     expect(sizes.oneItem.labels).toEqual(['Go']);
-    expect(sizes.oneItem.width).toBeCloseTo(sizes.oneItem.span, 0);
+    // No wider than its one item, to the sub-pixel: the floor adds no width.
+    expect(sizes.oneItem.width).toBeCloseTo(sizes.oneItem.span, 1);
   });
 });
