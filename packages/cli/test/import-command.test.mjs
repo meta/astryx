@@ -28,6 +28,29 @@ function renderedFile() {
 }
 
 describe('experimental import', () => {
+  it('fails on an HTML file no render wrote, with ERR_RENDER_NOT_ASTRYX, and writes nothing', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-import-plain-'));
+    fs.writeFileSync(
+      path.join(dir, 'plain.html'),
+      '<!doctype html><p>Just a page</p>\n',
+    );
+    const json = await runCli(
+      ['--json', 'experimental', 'import', 'plain.html'],
+      {cwd: dir},
+    );
+    expect(json.status).toBe(1);
+    const answer = JSON.parse(json.stdout);
+    expect(answer.code).toBe('ERR_RENDER_NOT_ASTRYX');
+    expect(answer.error).toContain('plain.html is not an Astryx page');
+    const text = await runCli(['experimental', 'import', 'plain.html'], {
+      cwd: dir,
+    });
+    expect(text.status).toBe(1);
+    expect(text.stderr).toContain(`Error: ${answer.error}`);
+    expect(fs.readdirSync(dir)).toEqual(['plain.html']);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+
   it('gives the page back as export --reverse does, with the same JSON', async () => {
     const dir = renderedFile();
     const imported = await runCli(
