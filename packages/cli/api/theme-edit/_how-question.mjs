@@ -13699,6 +13699,35 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // ("controls 4px corners, overlays 8px corners": the two corner sizes
+    // Core keeps apart, the controls' (--radius-element: buttons, inputs,
+    // selectors) and the surfaces' and overlays' (--radius-container:
+    // cards, dialogs, popovers, menus), each said by its role.)
+    {
+      const role =
+        !c.parts.length &&
+        c.aspects.length === 1 &&
+        c.aspects[0] === 'corners' &&
+        c.lengths.length === 1
+          ? /^(?:the\s+|all\s+)?(controls?|elements?|overlays?|surfaces?|containers?)\b/.exec(
+              c.text.toLowerCase(),
+            )?.[1]
+          : undefined;
+      const token = role
+        ? /^(?:controls?|elements?)$/.test(role)
+          ? '--radius-element'
+          : '--radius-container'
+        : undefined;
+      if (token && Object.hasOwn(TOKENS, token)) {
+        const d = {
+          text: `corners on ${role}: ${token} ${c.lengths[0]}, the corner size ${token === '--radius-element' ? 'controls (buttons, inputs, selectors)' : 'surfaces and overlays (cards, dialogs, popovers, menus)'} read`,
+          options: [[set(token, c.lengths[0])]],
+        };
+        push(d);
+        recordTop(c, d.options[0]);
+        continue;
+      }
+    }
     // The unknown-part guard: a clause whose part slot holds a word how
     // knows as no part ("from widgets") is never answered for the whole
     // theme or dropped; it says so.
@@ -28432,6 +28461,33 @@ export function draftAnswer(ctx, env, question) {
         )
           d.text += ` (the theme keeps only its ${gone === 'dark' ? 'light' : 'dark'} mode, so it has no ${gone} mode to write)`;
       }
+    }
+  }
+  // (A light-only theme still has a dark half each color token keeps,
+  // which Core's dark media surfaces read: the lightbox, and what sits on
+  // the overlay scrim. A color written for the theme's one mode leaves that
+  // half as it is, never takes the light value: the answer says so, with
+  // the token's dark value now and the line that changes it there.)
+  if (env.data?.mode === 'light-only') {
+    const media = Object.entries(C.MAP)
+      .filter(([, x]) => x?.media)
+      .map(([k]) => k)
+      .filter(k => k !== 'toast');
+    for (const d of result) {
+      if (d.offer) continue;
+      const toks = [
+        ...new Set(
+          d.options
+            .flat()
+            .filter(
+              st => /^--color-/.test(String(st.thing)) && !st.on && !st.mode,
+            )
+            .map(st => String(st.thing)),
+        ),
+      ].filter(t => current(t, 'dark') != null);
+      if (!toks.length || !media.length || /dark media surfaces/.test(d.text))
+        continue;
+      d.text += ` (${env.slug} is light only, but Core's dark media surfaces (${media.join(', ')}) still read ${toks.map(t => `${t}'s dark half, now ${current(t, 'dark')}`).join('; ')}; to change ${toks.length > 1 ? 'them' : 'it'} there too, set ${toks.length > 1 ? 'each' : 'it'} with --mode dark)`;
     }
   }
   // Every clause ends as a command or a named line, never silence: a
