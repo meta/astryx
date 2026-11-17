@@ -134,84 +134,107 @@ describe('build playbook theme rule', () => {
     );
   });
 
-  it('names the provider an installed integration declares, with its mode, the same before and after theme add', async () => {
-    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-build-help-'));
-    dirs.push(dir);
-    /** @param {string} rel @param {string} text */
-    const write = (rel, text) => {
-      fs.mkdirSync(path.dirname(path.join(dir, rel)), {recursive: true});
-      fs.writeFileSync(path.join(dir, rel), text);
-    };
-    write(
-      'package.json',
-      JSON.stringify({
-        name: 'provider-app',
-        private: true,
-        dependencies: {'@acme/ui': '1.0.0', '@astryxdesign/core': CLI_VERSION},
-      }),
-    );
-    write(
-      'node_modules/@astryxdesign/core/package.json',
-      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
-    );
-    write(
-      'node_modules/@acme/ui/package.json',
-      JSON.stringify({
-        name: '@acme/ui',
-        version: '1.0.0',
-        type: 'module',
-        exports: {
-          './theme': './dist/theme.js',
-          './themes/brand': './dist/brand.js',
-          './themes/brand.css': './dist/brand.css',
-        },
-      }),
-    );
-    write(
-      'node_modules/@acme/ui/astryx.integration.mjs',
-      "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme', modeProp: 'colorMode'}};\n",
-    );
-    write(
-      'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
-      "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
-    );
-    write(
-      'node_modules/@acme/ui/themes/brand/brandTheme.ts',
-      "export const brandTheme = {name: 'brand', tokens: {}};\n",
-    );
-    write(
-      'node_modules/@acme/ui/dist/brand.js',
-      "export const brandTheme = {name: 'brand', tokens: {}};\nexport const colorModes = ['dark'];\n",
-    );
-    write('node_modules/@acme/ui/dist/brand.css', '');
-    write(
-      'node_modules/@acme/ui/dist/theme.js',
-      'export function AcmeThemeProvider({children}) { return children; }\n',
-    );
+  it.each([
+    ['with', 'colorMode'],
+    ['without', undefined],
+  ])(
+    'names the provider an installed integration declares %s a mode prop, the same before and after theme add',
+    async (_label, modeProp) => {
+      const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-build-help-'));
+      dirs.push(dir);
+      /** @param {string} rel @param {string} text */
+      const write = (rel, text) => {
+        fs.mkdirSync(path.dirname(path.join(dir, rel)), {recursive: true});
+        fs.writeFileSync(path.join(dir, rel), text);
+      };
+      write(
+        'package.json',
+        JSON.stringify({
+          name: 'provider-app',
+          private: true,
+          dependencies: {
+            '@acme/ui': '1.0.0',
+            '@astryxdesign/core': CLI_VERSION,
+          },
+        }),
+      );
+      write(
+        'node_modules/@astryxdesign/core/package.json',
+        JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+      );
+      write(
+        'node_modules/@acme/ui/package.json',
+        JSON.stringify({
+          name: '@acme/ui',
+          version: '1.0.0',
+          type: 'module',
+          exports: {
+            './theme': './dist/theme.js',
+            './themes/brand': './dist/brand.js',
+            './themes/brand.css': './dist/brand.css',
+          },
+        }),
+      );
+      write(
+        'node_modules/@acme/ui/astryx.integration.mjs',
+        `export default {themes: './themes', themeProvider: ${JSON.stringify({
+          export: 'AcmeThemeProvider',
+          from: '@acme/ui/theme',
+          themeProp: 'theme',
+          ...(modeProp ? {modeProp} : {}),
+        })}};\n`,
+      );
+      write(
+        'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
+        "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
+      );
+      write(
+        'node_modules/@acme/ui/themes/brand/brandTheme.ts',
+        "export const brandTheme = {name: 'brand', tokens: {}};\n",
+      );
+      write(
+        'node_modules/@acme/ui/dist/brand.js',
+        "export const brandTheme = {name: 'brand', tokens: {}};\nexport const colorModes = ['dark'];\n",
+      );
+      write('node_modules/@acme/ui/dist/brand.css', '');
+      write(
+        'node_modules/@acme/ui/dist/theme.js',
+        'export function AcmeThemeProvider({children}) { return children; }\n',
+      );
 
-    const before = await buildHelp({cwd: dir});
-    const rule = before.data.rules.find(r => r.includes('AcmeThemeProvider'));
-    const line =
-      '<AcmeThemeProvider theme={themes[defaultThemeSlug]} colorMode={themeModes[defaultThemeSlug]}>';
-    expect(rule).toContain(line);
-    expect(rule).toContain("import {AcmeThemeProvider} from '@acme/ui/theme'");
-    expect(rule).not.toContain('<Theme ');
-    expect(before.data.steps.at(-1)?.commands[0].command).toBe(
-      'theme add brand',
-    );
+      const before = await buildHelp({cwd: dir});
+      const rule = before.data.rules.find(r => r.includes('AcmeThemeProvider'));
+      const line = modeProp
+        ? `<AcmeThemeProvider theme={themes[defaultThemeSlug]} ${modeProp}={themeModes[defaultThemeSlug]}>`
+        : '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>';
+      expect(rule).toContain(line);
+      expect(rule).toContain(
+        "import {AcmeThemeProvider} from '@acme/ui/theme'",
+      );
+      // The module's names it imports are the ones the line uses.
+      expect(rule).toContain(
+        modeProp
+          ? '{themes, defaultThemeSlug, themeModes}'
+          : '{themes, defaultThemeSlug} from',
+      );
+      expect(rule).not.toContain('<Theme ');
+      expect(before.data.steps.at(-1)?.commands[0].command).toBe(
+        'theme add brand',
+      );
 
-    // The wiring theme add then prints is the wiring the playbook named.
-    const added = await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
-    expect(added.data.appProvider?.line).toBe(line);
-    const after = await buildHelp({cwd: dir});
-    expect(after.data.rules).toContain(
-      /** @type {string} */ (rule).replace(
-        'the astryx-themes module the theme step writes',
-        `the generated ${added.data.modulePath}`,
-      ),
-    );
-    expect(after.data.steps.at(-1)?.commands[0].command).not.toMatch(
-      /^theme add/,
-    );
-  });
+      // The wiring theme add then prints is the wiring the playbook named.
+      const added = await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+      expect(added.data.appProvider?.line).toBe(line);
+      const after = await buildHelp({cwd: dir});
+      expect(after.data.rules).toContain(
+        /** @type {string} */ (rule).replace(
+          'the astryx-themes module the theme step writes',
+          `the generated ${added.data.modulePath}`,
+        ),
+      );
+      expect(after.data.steps.at(-1)?.commands[0].command).not.toMatch(
+        /^theme add/,
+      );
+    },
+  );
 });
