@@ -3573,7 +3573,10 @@
 "Ant Space",
 "flex row",
 "flex column",
-"div with display flex"
+"div with display flex",
+"Flex",
+"Chakra Flex",
+"Mantine Flex"
 ],
 "props":[
 "direction",
