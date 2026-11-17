@@ -49,6 +49,7 @@ import {
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
+import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
@@ -493,13 +494,17 @@ function acceptDeclaration(
  * declarations it means to emit.
  */
 function joinDeclarations(
-  entries: [string, string][],
+  entries: [string, unknown][],
   location: string,
   sink: DiagnosticSink,
   mapProp: (prop: string) => string = p => p,
 ): string {
   const lines: string[] = [];
   for (const [rawProp, rawValue] of entries) {
+    // An undefined value sets nothing, as a page token's does.
+    if (rawValue === undefined) {
+      continue;
+    }
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
     const value = stringifyTokenValue(rawValue);
@@ -578,6 +583,9 @@ function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);
@@ -1219,25 +1227,28 @@ export function generateThemeRules(
   }
 
   // 2. Component overrides: stable .astryx-* target classes combined with
-  // reflected data-* selectors for visual props and runtime states.
-  if (theme.components) {
-    generateComponentRules(theme.components, parts, {sink});
+  // reflected data-* selectors for visual props and runtime states. A rule
+  // source passed in directly can still hold undefined. Read it as every
+  // layer does: an undefined value is not set.
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {sink});
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
   generateProseRules(val, parts);
 
   // 4. Prop-level color overrides (for text/heading/link specificity)
-  generateColorOverrides(theme.components || {}, parts);
+  generateColorOverrides(components || {}, parts);
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(theme.components || {}, parts);
+  generateSizeOverrides(components || {}, parts);
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
   //    when a custom visual type declares its own default weight.
-  generateHeadingWeightOverrides(theme.components || {}, parts);
+  generateHeadingWeightOverrides(components || {}, parts);
 
   // (on-media rules are generated separately — see generateOnMediaCSS)
 
@@ -1419,7 +1430,7 @@ function generateComponentRules(
           const pseudoEntries = Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
-              pseudoEntries as [string, string][],
+              pseudoEntries,
               `${location}[${JSON.stringify(pseudo)}]`,
               sink,
               toKebabCase,
@@ -1456,9 +1467,9 @@ function generateComponentRules(
             }
             continue;
           }
-          // The theme root decides outside media surfaces. Inside one, the
-          // surface decides as the onDark and onLight overrides do: by an
-          // ancestor condition, at the root's weight.
+          // The theme root decides outside media surfaces. Inside them, the
+          // nearest surface decides, by ancestor conditions at the root's
+          // weight (no scope proximity).
           const inside = (ancestor: string) =>
             `:is(${selector}):where(${ancestor} *)`;
           const outsideSurfaces = `:where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
@@ -1473,7 +1484,10 @@ function generateComponentRules(
             rule =>
               wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
           );
-          modeEmit(inside(`:scope ${mediaSelector(name)}`), wrap);
+          modeEmit(
+            `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`,
+            wrap,
+          );
         }
       };
       emit(
@@ -1489,6 +1503,47 @@ function generateComponentRules(
 
 /** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
 const THEME_MODE_ATTR = 'data-theme';
+
+/**
+ * How many media surfaces of alternating modes, one inside another, a
+ * color-mode block tells apart. CSS has no selector for an element's nearest
+ * ancestor with an attribute: `@scope (A) to (B)` finds it, but a scoped rule
+ * beats an unscoped or farther-scoped one of equal specificity by scope
+ * proximity, so on a surface the block would override the theme root's
+ * equal-weight rules (an explicit Heading weight) that win over it at the
+ * root. The nearest surface is read from ancestor chains instead, one
+ * condition per depth. Core nests a surface in a surface (a toast or a
+ * lightbox over a MediaTheme) well within this; deeper, the block writes
+ * nothing.
+ */
+const NEAREST_SURFACE_DEPTH = 5;
+
+/**
+ * Ancestor conditions (for `:where()`) that hold where the element's
+ * nearest media surface in the theme is of `mode`. The surfaces around an
+ * element, outermost first, form R runs of one mode; the nearest surface is
+ * the last run's. Condition k is a chain of k surfaces alternating in mode
+ * and ending in `mode` around the element, with no such chain one longer
+ * ending in the other mode. When the last run is `mode`, the longest chain
+ * ending in `mode` is R long and the longest ending in the other mode R - 1,
+ * so condition R - 1 or R holds; when it is not, no condition holds. With
+ * conditions 1 to NEAREST_SURFACE_DEPTH - 1, that reads R up to
+ * NEAREST_SURFACE_DEPTH.
+ */
+function nearestSurfaceIs(mode: MediaSurface): string[] {
+  const other: MediaSurface = mode === 'dark' ? 'light' : 'dark';
+  const chain = (length: number, last: MediaSurface) =>
+    Array.from({length}, (_, i) =>
+      mediaSelector(
+        (length - 1 - i) % 2 === 0 ? last : last === mode ? other : mode,
+      ),
+    ).join(' ');
+  return Array.from(
+    {length: NEAREST_SURFACE_DEPTH - 1},
+    (_, i) =>
+      `:scope ${chain(i + 1, mode)} *:not(:scope ${chain(i + 2, other)} *)`,
+  );
+}
 
 /**
  * A component block's declarations with Core's derived variables added,
@@ -1623,6 +1678,12 @@ function generateProseRules(
 }
 
 /**
+ * The Link color props whose color Core tints on hover.
+ * <!-- SYNC: packages/core/src/Link/Link.tsx (linkColorStyles) -->
+ */
+const LINK_HOVER_TINTED = new Set(['primary', 'secondary', 'accent']);
+
+/**
  * Generate prop-level color override rules for text/heading/link components.
  * These ensure color prop classes override theme token changes.
  */
@@ -1659,9 +1720,20 @@ function generateColorOverrides(
         );
       }
       if (touchesLink) {
-        parts.push(
-          `  ${componentSelector('link', parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
+        const pin = componentSelector(
+          'link',
+          parseStyleKey(`color:${colorName}`),
+          surface,
         );
+        parts.push(`  ${pin} { color: ${colorValue}; }`);
+        // On hover Core mixes the hover tint into these colors, so the pin
+        // holds that tint of the prop's color there too, at no added weight:
+        // a theme's own hover color for the color key wins over it.
+        if (LINK_HOVER_TINTED.has(colorName)) {
+          parts.push(
+            `  @media (hover: hover) {\n    ${pin}:where(:hover)${HOVER_DISABLED_GUARD} { color: color-mix(in srgb, ${colorValue}, var(--color-tint-hover) 15%); }\n  }`,
+          );
+        }
       }
     }
   }

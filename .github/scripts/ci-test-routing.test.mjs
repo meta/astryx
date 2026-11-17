@@ -287,9 +287,22 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(vitestLanes).toEqual(['test-ui', 'test-node']);
         for (const lane of vitestLanes) {
           const job = workflow.jobs[lane];
-          const legs = job.strategy?.matrix?.shard;
-          expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(true);
+          const shard = job.strategy?.matrix?.shard;
+          if (typeof shard === 'string') {
+            // Planned Node legs are as many as the workflow's planning job
+            // gives (ci.yml's room, the Main workflow's main-commit), which
+            // numbers them 1..n (vitest-node-legs.test.mjs); the fallback is
+            // the widest matrix.
+            expect(shard).toMatch(
+              /^\$\{\{ fromJSON\(needs\.(room|main-commit)\.outputs\.node-shards \|\| '\[[\d, ]+\]'\) \}\}$/,
+            );
+          } else {
+            expect(Array.isArray(shard), `${lane} has no shard matrix`).toBe(
+              true,
+            );
+          }
           // Legs are numbered 1..n exactly once, so --shard i/n covers all n.
+          const legs = matrixFor(shard, 'workflow_dispatch');
           expect(legs).toEqual(
             Array.from({length: legs.length}, (_, index) => index + 1),
           );

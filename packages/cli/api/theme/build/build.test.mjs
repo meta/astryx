@@ -390,7 +390,15 @@ describe('themeBuild() — dropped declarations reach the receipt', () => {
     expect(css).toContain('--color-background-body: null;');
     expect(css).toContain('--spacing-4: 12;');
     expect(css).toContain('border-radius: 4px;');
-    expect(result?.data.warnings).toEqual([]);
+    // A null value keeps its meaning; the build names where it is.
+    expect(result?.data.warnings).toEqual([
+      expect.stringMatching(
+        /^tokens\.--color-background-body \(line 3\): --color-background-body holds null; the build writes it as it is \(--color-background-body: null\), and a browser keeps that as the token's value/,
+      ),
+      expect.stringMatching(
+        /^onDark\.tokens\.--color-background-body \(line 4\): /,
+      ),
+    ]);
   });
 
   it('keeps valid CSS that carries semicolons, and reports nothing', async () => {
@@ -818,8 +826,9 @@ describe('themeBuild() — icon registry detection', () => {
     const result = await themeBuild('live.mjs', {}, {cwd: tmpDir});
 
     const generated = fs.readFileSync(path.join(tmpDir, 'live.js'), 'utf8');
+    // The source's path, with the extension of the file it names.
     expect(iconImportLine(generated)).toBe(
-      "import { liveIcons } from './icons';",
+      "import { liveIcons } from './icons.mjs';",
     );
     expect(generated).toContain('icons: liveIcons,');
     expect(generated).toContain('export { liveIcons };');
@@ -869,7 +878,7 @@ describe('themeBuild() — icon registry detection', () => {
     // and emitted `./old-icons` — the live import must win.
     const generated = fs.readFileSync(path.join(tmpDir, 'both.js'), 'utf8');
     expect(iconImportLine(generated)).toBe(
-      "import { realIcons } from './icons';",
+      "import { realIcons } from './icons.mjs';",
     );
     expect(generated).not.toContain('old-icons');
     expect(result?.data.warnings).toEqual([]);
@@ -1015,7 +1024,8 @@ describe('themeBuild() — extends', () => {
   }
 
   /** A base theme with geometry, elevation and a component override. */
-  const BASE_SOURCE = `export const brandTheme = {
+  const BASE_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+  export const brandTheme = defineTheme({
     name: 'ext-base',
     tokens: {
       '--radius-element': '6px',
@@ -1025,7 +1035,7 @@ describe('themeBuild() — extends', () => {
     components: {
       switch: {base: {backgroundColor: 'var(--color-border-emphasized)'}},
     },
-  };\n`;
+  });\n`;
 
   /**
    * The child names its base with a plain relative specifier, exactly as a

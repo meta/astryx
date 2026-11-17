@@ -51,6 +51,30 @@ afterEach(() => {
 });
 
 describe('resolveThemeImports', () => {
+  it("in a fresh clone that lists the theme package, says to install the project's dependencies, but not from a folder with its own package.json", () => {
+    const dir = project();
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16', '@acme/themes': '1.0.0'},
+      }),
+    );
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}\n');
+
+    expect(() => resolveThemeImports(discovered(), {cwd: dir})).toThrow(
+      'Theme package "@acme/themes" is not installed, though this project lists it: install the project\'s dependencies with `npm install`.',
+    );
+    // A tool folder inside the project has a package.json of its own, so an
+    // install there would install the tool's packages, not the project's.
+    const tool = path.join(dir, 'tools', 'gen');
+    fs.mkdirSync(tool, {recursive: true});
+    fs.writeFileSync(path.join(tool, 'package.json'), '{"name":"gen"}\n');
+    expect(() => resolveThemeImports(discovered(), {cwd: tool})).toThrow(
+      /^Theme package "@acme\/themes" is not installed\. The app imports ocean from it/u,
+    );
+  });
+
   it('resolves the per-theme built module, CSS, and optional font CSS', () => {
     const dir = project();
     const packageDir = packageTheme(dir, {

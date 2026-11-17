@@ -90,6 +90,47 @@ const testStyles = stylex.create({
 });
 
 describe('BaseTypeahead', () => {
+  it('marks only the active option highlighted on its typeahead-option row', async () => {
+    const user = userEvent.setup();
+    const source: SearchSource<SearchableItem> = {
+      search: () => [
+        {id: 'a', label: 'Apple'},
+        {id: 'b', label: 'Apricot'},
+        {id: 'c', label: 'Avocado'},
+      ],
+      bootstrap: () => [],
+    };
+    render(
+      <BaseTypeahead
+        searchSource={source}
+        value={{id: 'c', label: 'Avocado'}}
+        onChange={() => {}}
+        aria-label="Fruit"
+      />,
+    );
+    const field = screen.getByRole('combobox');
+    await user.type(field, 'A');
+    await screen.findByRole('option', {name: 'Apple', hidden: true});
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+
+    const rows = screen.getAllByRole('option', {hidden: true});
+    for (const row of rows) {
+      expect(row).toHaveClass('astryx-typeahead-option');
+    }
+    const active = document.getElementById(
+      field.getAttribute('aria-activedescendant') ?? '',
+    );
+    const marked = rows.filter(
+      row => row.getAttribute('data-highlighted') === 'highlighted',
+    );
+    expect(marked).toEqual([active]);
+    expect(
+      rows
+        .filter(row => row.getAttribute('data-selected') === 'selected')
+        .map(row => row.textContent),
+    ).toEqual(['Avocado']);
+  });
+
   describe('picking a result', () => {
     const source: SearchSource<SearchableItem> = {
       search: () => [

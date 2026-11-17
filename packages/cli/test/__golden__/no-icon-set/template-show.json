@@ -29,7 +29,8 @@
     ],
     "source": "<text>",
     "demoMediaReplaced": 0,
-    "demoContentReplaced": 0
+    "demoContentReplaced": 0,
+    "isReady": true
   },
   "meta": {
     "answeredBy": {
