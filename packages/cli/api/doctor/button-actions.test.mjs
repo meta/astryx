@@ -84,6 +84,7 @@ describe('the button-actions check', () => {
         'src/App.test.tsx': app('<Button label="In a test" />'),
         'src/App.stories.tsx': app('<Button label="In a story" />'),
         'src/__fixtures__/Demo.tsx': app('<Button label="In a fixture" />'),
+        'tests/host.tsx': app('<Button label="In a test folder" />'),
       });
       expect(check).toEqual({
         id: 'button-actions',

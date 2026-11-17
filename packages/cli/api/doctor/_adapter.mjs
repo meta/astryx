@@ -322,7 +322,7 @@ export function findIconPlaceholders(projectDir) {
  * page that a person uses.
  */
 const NOT_APP_CODE =
-  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__|stories|fixtures|e2e)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__|tests?|stories|fixtures|e2e)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
 
 /**
  * The name another module imports a module by: its file name without the
