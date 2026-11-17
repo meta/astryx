@@ -332,7 +332,8 @@ const sizeStyles = stylex.create({
 export type FileInputSize = keyof typeof sizeStyles;
 
 export interface FileInputProps extends Omit<
-  FieldInputBaseProps,  'onChange' | 'defaultValue' | 'value'
+  FieldInputBaseProps,
+  'onChange' | 'defaultValue' | 'value'
 > {
   /**
    * Ref to the native file input.
