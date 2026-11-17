@@ -596,6 +596,174 @@ describe('usePowerSearchSource', () => {
       expect(aux.filterValue).toEqual({type: 'enum_list', value: ['bug']});
     });
   });
+  describe("valueMatchBehavior: 'all-string-fields'", () => {
+    const allStringsConfig: PowerSearchConfig = {
+      ...baseConfig,
+      contentSearchFieldKey: 'title',
+      valueMatchBehavior: 'all-string-fields',
+    };
+
+    it('is off by default: free text offers only the content-search item', () => {
+      const source = createSource(configWithContentSearch);
+      const results = syncSearch(source, 'nest');
+      expect(results.map(r => r.label)).toEqual(['"nest"']);
+    });
+
+    it('emits one item per visible string operator for free text', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'nest');
+
+      // Content-search item still leads; per-field value items follow.
+      expect(results.map(r => r.label)).toEqual([
+        '"nest"',
+        'Title contains "nest"',
+        'Title is "nest"',
+      ]);
+
+      const aux = results[1].auxiliaryData as PowerSearchAuxData;
+      expect(aux.fieldKey).toBe('title');
+      expect(aux.operatorKey).toBe('contains');
+      expect(aux.filterValue).toEqual({type: 'string', value: 'nest'});
+    });
+
+    it('skips enum operators and enum-only fields', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'open');
+      // Status is enum-only: no 'Status is "open"' value item.
+      expect(results.some(r => r.label.startsWith('Status '))).toBe(false);
+    });
+
+    it('respects isValueMatchAllowed: false', () => {
+      const config: PowerSearchConfig = {
+        name: 'OptOut',
+        contentSearchFieldKey: 'title',
+        valueMatchBehavior: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            isValueMatchAllowed: false,
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+        ],
+      };
+      const results = syncSearch(createSource(config), 'nest');
+      expect(results.map(r => r.label)).toEqual(['"nest"']);
+    });
+
+    it('respects typeaheadMinQueryLength', () => {
+      const config: PowerSearchConfig = {
+        name: 'MinLength',
+        valueMatchBehavior: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            typeaheadMinQueryLength: 5,
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+        ],
+      };
+      expect(syncSearch(createSource(config), 'nest')).toEqual([]);
+      expect(
+        syncSearch(createSource(config), 'nest/').map(r => r.label),
+      ).toEqual(['Title contains "nest/"']);
+    });
+
+    it('skips search-source operators without arbitrary strings', () => {
+      const ownerSource = {
+        search: () => [{id: 'other', label: 'other'}],
+        bootstrap: () => [],
+      };
+      const config: PowerSearchConfig = {
+        name: 'SourceValues',
+        contentSearchFieldKey: 'title',
+        valueMatchBehavior: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+          {
+            key: 'owner',
+            label: 'Owner',
+            operators: [
+              {
+                key: 'is',
+                label: 'is',
+                value: {
+                  type: 'string',
+                  searchSource: ownerSource,
+                  // Set so only the `string`-type clause skips this
+                  // operator: without it, the `string_list` clause skips it
+                  // too and the test below cannot tell them apart.
+                  isArbitraryStringAllowed: true,
+                },
+              },
+              {
+                key: 'is-either',
+                label: 'is-either',
+                value: {
+                  type: 'string_list',
+                  searchSource: ownerSource,
+                  isArbitraryStringAllowed: true,
+                },
+              },
+              {
+                key: 'is-any',
+                label: 'is-any',
+                // No flag, so only the `string_list` clause skips this
+                // operator: it pins that clause the way `is` pins the
+                // `string`-type clause.
+                value: {type: 'string_list', searchSource: ownerSource},
+              },
+            ],
+          },
+        ],
+      };
+      const labels = syncSearch(createSource(config), 'nest').map(r => r.label);
+      // Committing 'Owner is "nest"' would offer a value the Owner editor
+      // never lists, so the closed operators stay out; the open list
+      // operator and the plain Title operators still match.
+      expect(labels).toContain('Title contains "nest"');
+      expect(labels).toContain('Owner is-either "nest"');
+      expect(labels.some(l => l.startsWith('Owner is '))).toBe(false);
+      expect(labels.some(l => l.startsWith('Owner is-any '))).toBe(false);
+    });
+
+    it('leaves field-prefixed queries to the exact value path', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'title nest');
+      // The prefix path owns this query: no field item may reuse the whole
+      // query ('title nest') as the value. (The content-search item quotes
+      // the raw query by design, so it is excluded here.)
+      const valueItems = results.filter(
+        r => !r.id.startsWith('__content_search__'),
+      );
+      expect(valueItems.some(r => r.label.includes('"title nest"'))).toBe(
+        false,
+      );
+      expect(valueItems.map(r => r.label)).toContain('Title contains "nest"');
+    });
+
+    it.each(['title', 'title '])(
+      'gives no free-text rows for a bare field label (%j)',
+      query => {
+        const source = createSource(allStringsConfig);
+        const valueItems = syncSearch(source, query).filter(r =>
+          r.id.includes(':value:'),
+        );
+        expect(valueItems).toEqual([]);
+      },
+    );
+  });
 });
 
 describe('typed-result cap', () => {

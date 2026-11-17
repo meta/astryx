@@ -177,6 +177,61 @@ export function usePowerSearchSource(
           }
         }
 
+        // A query that starts with a field label belongs to the prefix path
+        // above. Its value is the text after the label, not the whole query.
+        if (config.config.valueMatchBehavior === 'all-string-fields') {
+          const startsWithFieldLabel = config.getVisibleFields().some(f => {
+            const label = f.label.toLowerCase();
+            return lower === label || lower.startsWith(`${label} `);
+          });
+          if (!startsWithFieldLabel) {
+            for (const field of config.getVisibleFields()) {
+              if (field.isValueMatchAllowed === false) {
+                continue;
+              }
+              if (
+                field.typeaheadMinQueryLength != null &&
+                lower.length < field.typeaheadMinQueryLength
+              ) {
+                continue;
+              }
+              for (const op of field.operators) {
+                if (
+                  op.value.type !== 'string' &&
+                  op.value.type !== 'string_list'
+                ) {
+                  continue;
+                }
+                // A search-source editor offers only source values. Its `string` form
+                // never accepts free text. Its `string_list` form accepts free text
+                // only when it allows arbitrary strings.
+                if (
+                  op.value.searchSource != null &&
+                  (op.value.type === 'string' ||
+                    op.value.isArbitraryStringAllowed !== true)
+                ) {
+                  continue;
+                }
+                for (const match of resolveValueMatches(op, query)) {
+                  const id = `${field.key}:${op.key}:value:${match.displayValue}`;
+                  if (!seen.has(id)) {
+                    seen.add(id);
+                    results.push({
+                      id,
+                      label: `${field.label} ${opLabel(op)} ${match.quoted ? `"${match.displayValue}"` : match.displayValue}`,
+                      auxiliaryData: {
+                        fieldKey: field.key,
+                        operatorKey: op.key,
+                        filterValue: match.filterValue,
+                      },
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // If contentSearchFieldKey is set and no field or field+operator
         // exactly matches the query, prepend a content search item
         const contentFieldKey = config.config.contentSearchFieldKey;
