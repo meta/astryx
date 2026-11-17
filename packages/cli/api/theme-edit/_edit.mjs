@@ -2420,6 +2420,62 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * The parts a setting reaches because their element is drawn as one of the
+ * parts it writes (the census saw both targets on one element: a calendar's
+ * nav arrow is a button), and which keep no setting of the same thing of
+ * their own: each with the part it is drawn as and the line that keeps it
+ * as Core draws it there (the value Core gives it at rest, or the
+ * property's initial value where Core sets none).
+ * @param {any} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string[]} parts the parts the setting writes
+ * @returns {Array<{part: string, as: string, keep: string}>}
+ */
+function embeddedReach(ctx, slug, data, s, parts) {
+  if (!s.on || s.source !== 'property' || !parts.length) return [];
+  const prop = kebab(String(s.thing));
+  /** @type {Record<string, any>} */
+  const MAP = ctx.C?.MAP ?? {};
+  /** @type {Array<{part: string, as: string, keep: string}>} */
+  const out = [];
+  for (const [part, rec] of Object.entries(MAP)) {
+    if (!ctx.project.target.has(part) || parts.includes(part)) continue;
+    const as = (rec?.drawnAs ?? []).find((/** @type {string} */ t) =>
+      parts.includes(t),
+    );
+    if (!as) continue;
+    if (
+      data.settings.some(
+        x =>
+          x.on === part &&
+          kebab(String(x.thing)) === prop &&
+          (x.state ?? '') === (s.state ?? '') &&
+          (x.mode ?? '') === (s.mode ?? ''),
+      )
+    )
+      continue;
+    // (Core's value on the part at rest, the same in every place it is
+    // drawn; else the property's initial value.)
+    const rest = [
+      ...new Set(
+        Object.entries(rec?.at?.[prop] ?? {})
+          .filter(([cond]) => !/[\s:[]/.test(cond))
+          .map(([, v]) => String(v).trim()),
+      ),
+    ];
+    const value = rest.length === 1 ? rest[0] : 'initial';
+    out.push({
+      part,
+      as,
+      keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}`,
+    });
+  }
+  return out;
+}
+
+/**
  * What a whole-theme change leaves out, by the census, each with the lines
  * that reach it, one per part: corners leave the parts the theme gives
  * corners of their own as they are; square corners leave the parts drawn as
@@ -7172,6 +7228,16 @@ async function changeOnce(
     notes.push(
       `reaches ${s.on}'s family (${group}), the parts drawn alike: ${parts.join(', ')}; for ${s.on} alone: \`${onlyLine}\``,
     );
+  // The parts drawn as one of the parts this writes, inside other
+  // components (a calendar's nav arrow and a pagination cell are Buttons
+  // too): a rule on the part reaches them as well. Each is named, with the
+  // line that keeps it as Core draws it (its own entry wins over the
+  // part's).
+  const embedded = sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
+  if (embedded.length)
+    notes.push(
+      `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}`,
+    );
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -7707,6 +7773,7 @@ async function changeOnce(
             ...(onlyLine ? {only: onlyLine} : {}),
           }
         : null,
+      ...(embedded.length ? {embedded} : {}),
       changedTokens: lookCollapsed(
         r.changed,
         derivedStatusWords(data),

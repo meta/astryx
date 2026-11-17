@@ -19,6 +19,7 @@ import {
   themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
+import {context} from './_context.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -185,6 +186,50 @@ describe('family reach by default', () => {
       `\\.astryx-typeahead-option\\[data-highlighted[^{]*\\{[^}]*${look.replace(/[()#,]/g, '\\$&')}`,
     );
     expect(css).toMatch(rule);
+  }, 240_000);
+
+  it('a button look names every button drawn inside another component, each with the line that keeps it', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('e', {cwd, like: 'neutral'});
+    // (Every part whose element the census drew as a button too.)
+    const {C} = /** @type {any} */ (await context(cwd));
+    const drawnAsButton = Object.entries(C.MAP)
+      .filter(([, rec]) => (/** @type {any} */ (rec).drawnAs ?? []).includes('button'))
+      .map(([part]) => part);
+    expect(drawnAsButton).toEqual(
+      expect.arrayContaining(['calendar-nav', 'code-block-copy-button']),
+    );
+    const r = await themeEditSet('e', 'background-image', GRADIENT, {
+      cwd,
+      on: 'button',
+      only: true,
+    });
+    const named = (r.data.embedded ?? []).map(
+      (/** @type {any} */ x) => x.part,
+    );
+    expect([...named].sort()).toEqual([...drawnAsButton].sort());
+    for (const x of r.data.embedded ?? [])
+      expect(x.keep).toMatch(
+        new RegExp(`set e background-image \\S+ --on ${x.part}$`),
+      );
+    expect(r.data.notes.join(' ')).toMatch(/also reaches .*calendar-nav/);
+    // Its line keeps the part as Core draws it: named no more.
+    const keep = /** @type {any} */ (r.data.embedded).find(
+      (/** @type {any} */ x) => x.part === 'calendar-nav',
+    );
+    const value = /set e background-image (\S+) --on/.exec(keep.keep)?.[1];
+    await themeEditSet('e', 'background-image', String(value), {
+      cwd,
+      on: 'calendar-nav',
+    });
+    const again = await themeEditSet('e', 'background-image', 'linear-gradient(#ffffff, #dddddd)', {
+      cwd,
+      on: 'button',
+      only: true,
+    });
+    expect(
+      (again.data.embedded ?? []).map((/** @type {any} */ x) => x.part),
+    ).not.toContain('calendar-nav');
   }, 240_000);
 
   it('a member that draws the thing differently is left as Core draws it', async ctx => {
