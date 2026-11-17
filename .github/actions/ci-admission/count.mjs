@@ -141,7 +141,7 @@ const LIVE = ['in_progress', 'queued', 'waiting', 'pending'];
 const JUST_ADMITTED_MS = 45_000;
 // GitHub keeps listing some long-finished runs as queued; a run not updated in
 // this long holds no runner.
-const STALE_MS = 2 * 60 * 60_000;
+export const STALE_MS = 2 * 60 * 60_000;
 export const short = run =>
   (run.path ?? '').replace(/^.*\//, '').replace(/\.ya?ml$/, '');
 export const isPullRun = run =>

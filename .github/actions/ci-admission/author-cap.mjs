@@ -16,6 +16,8 @@
  * take turns in the order they began (spec:AST-030/DEC-31, FR16).
  */
 
+import {STALE_MS} from './count.mjs';
+
 /** The most pull-request CI runs one author runs at once. */
 export const AUTHOR_CAP = 3;
 
@@ -142,6 +144,9 @@ export async function readAuthors({
   };
   const all = [...(await list('in_progress')), ...(await list('queued'))];
   for (const run of all) {
+    // A run GitHub still lists as running but has not updated in STALE_MS
+    // holds no runner and never ends: it takes no turn (as in count.mjs).
+    if (now - Date.parse(run.updated_at ?? '') > STALE_MS) continue;
     const pull = pullOf(run);
     if (pull) of(pull.user.login).running.push({...run, pull: pull.number});
   }

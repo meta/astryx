@@ -183,6 +183,22 @@ describe("reading each author's runs", () => {
     expect(alex.waiting.map(r => r.id)).toEqual([103]);
   });
 
+  it('does not count a run GitHub lists as queued but has not updated in two hours, which never ends', async () => {
+    const now = Date.parse(at(0)) + 3 * 60 * 60_000;
+    const {github} = stubGithub({
+      pulls: [pull(1, 'alex', 'a1'), pull(2, 'alex', 'a2')],
+      runs: [
+        {...ciRun(101, 0, 'a1', 1, 'queued'), updated_at: at(0)},
+        {
+          ...ciRun(102, 1, 'a2', 2, 'in_progress'),
+          updated_at: new Date(now - 60_000).toISOString(),
+        },
+      ],
+    });
+    const authors = await cap.readAuthors({github, owner: 'o', repo: 'r', now});
+    expect(authors.get('alex').running.map(r => r.id)).toEqual([102]);
+  });
+
   it('does not count a cancelled run whose newest author-cap status is not pending', async () => {
     const {github} = stubGithub({
       pulls: [pull(1, 'alex', 'a1')],
