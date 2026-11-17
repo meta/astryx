@@ -397,6 +397,9 @@ describe('refusals', () => {
   it.each([
     [{to: 'skills', agent: 'claude'}, '--agent'],
     [{to: 'skills', agentDocsPath: 'X.md'}, '--agent-docs-path'],
+    [{to: '~/team-skills', agent: 'claude'}, '--agent'],
+    [{to: '~/team-skills', agentDocsPath: 'docs/AI.md'}, '--agent-docs-path'],
+    [{to: 'user,~/team', agent: 'claude'}, '--agent'],
     [{to: 'skills', features: 'theme'}, '--features'],
     [{to: 'user', user: true}, '--user'],
     [{to: 'skills', removeAgents: true}, '--remove-agents'],

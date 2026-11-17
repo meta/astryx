@@ -169,16 +169,7 @@ function changeLine({path: shown, change, from, to}) {
  * @param {import('../init.type.mjs').InitRunData} data
  */
 async function applyAgents(cwd, options, invocation, data) {
-  // Validate --agent up front (a hard error, not a swallowed install failure).
-  // ERR_UNKNOWN_AGENT was defined but never wired — a typo like `--agent claud`
-  // otherwise silently fell back to writing AGENTS.md. Mirrors --features.
-  if (options.agent && !VALID_AGENTS.includes(options.agent)) {
-    throw new AstryxError(
-      `Unknown agent "${options.agent}". Valid agents: ${VALID_AGENTS.join(', ')}`,
-      undefined,
-      ERROR_CODES.ERR_UNKNOWN_AGENT,
-    );
-  }
+  // An unknown `--agent` was refused before any write (checkBlockOptions).
   try {
     const paths = options.agentDocsPath
       ? Array.isArray(options.agentDocsPath)
@@ -494,18 +485,13 @@ function checkBlockOptions(options, given) {
     options.agent ? '--agent' : null,
     options.agentDocsPath ? '--agent-docs-path' : null,
   ].filter(Boolean);
-  const projectPlaces = given.places.filter(place => place.scope === 'project');
-  if (
-    blockOptions.length === 0 ||
-    projectPlaces.length === 0 ||
-    projectPlaces.some(place => place.kind === 'agents-md')
-  ) {
+  if (blockOptions.length === 0 || given.places.some(place => place.kind === 'agents-md')) {
     return;
   }
   const saved = given.previous == null;
   throw new AstryxError(
     saved
-      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${projectPlaces.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
+      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${given.places.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
       : `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
     undefined,
     ERROR_CODES.ERR_INVALID_ARGUMENT,
