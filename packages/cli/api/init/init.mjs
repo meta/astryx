@@ -143,20 +143,6 @@ async function initTo(options, cwd) {
     }
     return user({remove: false});
   }
-  const blockOptions = [
-    options.agent ? '--agent' : null,
-    options.agentDocsPath ? '--agent-docs-path' : null,
-  ].filter(Boolean);
-  if (
-    blockOptions.length > 0 &&
-    !places.some(place => place.kind === 'agents-md')
-  ) {
-    throw new AstryxError(
-      `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
   const features = parseFeatures(options) ?? ['agents'];
   if (!features.includes('agents')) {
     throw new AstryxError(

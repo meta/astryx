@@ -475,6 +475,44 @@ function checkPlaces(given) {
 }
 
 /**
+ * Check the options that choose the AGENTS.md block's files once the places
+ * are known, the ones `--to` named or the project's saved places: an unknown
+ * `--agent` is refused, and `--agent` or `--agent-docs-path` with no
+ * `agents-md` place among them is refused rather than ignored.
+ * @param {import('../init.type.mjs').InitOptions} options
+ * @param {InitPlaces} given
+ */
+function checkBlockOptions(options, given) {
+  if (options.agent && !VALID_AGENTS.includes(options.agent)) {
+    throw new AstryxError(
+      `Unknown agent "${options.agent}". Valid agents: ${VALID_AGENTS.join(', ')}`,
+      undefined,
+      ERROR_CODES.ERR_UNKNOWN_AGENT,
+    );
+  }
+  const blockOptions = [
+    options.agent ? '--agent' : null,
+    options.agentDocsPath ? '--agent-docs-path' : null,
+  ].filter(Boolean);
+  const projectPlaces = given.places.filter(place => place.scope === 'project');
+  if (
+    blockOptions.length === 0 ||
+    projectPlaces.length === 0 ||
+    projectPlaces.some(place => place.kind === 'agents-md')
+  ) {
+    return;
+  }
+  const saved = given.previous == null;
+  throw new AstryxError(
+    saved
+      ? `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block, and this project saves its Astryx guidance in ${projectPlaces.map(savedName).join(', ')} (astryx.config skills.to): add \`--to agents-md\` to write the block, or leave them out.`
+      : `${blockOptions.join(' and ')} choose the agent files of the AGENTS.md block: add agents-md to \`--to\`, or leave them out.`,
+    undefined,
+    ERROR_CODES.ERR_INVALID_ARGUMENT,
+  );
+}
+
+/**
  * Write the computer places `--to` named: folders outside any project,
  * saved in the settings file, and the computer-level skill.
  * @param {import('../../../foundation/agent-docs/skill-places.mjs').SkillPlace[]} places
@@ -661,6 +699,7 @@ export async function run(options = {}, {cwd = process.cwd(), places} = {}) {
   // The places are checked before any feature writes anything.
   const checked =
     !features || features.includes('agents') ? checkPlaces(await placesFor(cwd, places)) : null;
+  if (checked) checkBlockOptions(options, checked);
   if (features) {
 
     /** @type {import('../init.type.mjs').InitRunData} */

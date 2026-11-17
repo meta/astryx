@@ -468,6 +468,21 @@ describe('option pairs that compose with --to', () => {
   });
 });
 
+describe('the agent options in a project saved on a skill place', () => {
+  it.each([
+    [{agent: 'claude'}, 'ERR_INVALID_ARGUMENT', '--agent'],
+    [{agentDocsPath: 'docs/AI.md'}, 'ERR_INVALID_ARGUMENT', '--agent-docs-path'],
+    [{agent: 'bogus'}, 'ERR_UNKNOWN_AGENT', 'bogus'],
+  ])('plain init %o is refused, not ignored', async (options, code, named) => {
+    await run({to: 'skills'});
+    const err = await refusal(() => run(options));
+    expect(err.code).toBe(ERROR_CODES[/** @type {keyof typeof ERROR_CODES} */ (code)]);
+    expect(err.message).toContain(named);
+    expect(exists('docs/AI.md')).toBe(false);
+    expect(exists('.claude/CLAUDE.md')).toBe(false);
+  });
+});
+
 describe('a project root in a settings folder of the home folder', () => {
   it('takes no project place: nothing is saved or written there, as plain init', async () => {
     const settingsDir = path.join(home, '.claude');

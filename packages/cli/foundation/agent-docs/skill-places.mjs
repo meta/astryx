@@ -39,9 +39,14 @@ import {
   PROJECT_SKILL_NAME,
 } from './agent-doc-state.mjs';
 import {withHash} from './managed-skill-file.mjs';
+import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
 
-/** The keywords `--to` takes besides a folder. */
-export const PLACE_KEYWORDS = Object.freeze(['agents-md', 'skills', 'user']);
+/**
+ * The keywords `--to` takes besides a folder: the project place keywords
+ * astryx.config accepts in `skills.to`, and `user`. One list, so the config
+ * check and init never disagree.
+ */
+export const PLACE_KEYWORDS = Object.freeze([...PROJECT_PLACE_KEYWORDS, 'user']);
 
 /** The project place that holds the block; the default. */
 export const AGENTS_MD_PLACE = 'agents-md';
@@ -181,13 +186,13 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
     let place;
     if (name === 'user') {
       place = {scope: 'computer', kind: 'user'};
-    } else if (name === 'agents-md' || name === 'skills') {
+    } else if (/** @type {readonly string[]} */ (PROJECT_PLACE_KEYWORDS).includes(name)) {
       if (projectRoot == null && name === 'skills') {
         throw new SkillPlaceError(
           '`--to skills` writes the project skills folders, and this folder is not in a project.',
         );
       }
-      place = {scope: 'project', kind: name};
+      place = {scope: 'project', kind: /** @type {'agents-md' | 'skills'} */ (name)};
     } else if (writtenAsPath(name)) {
       const dir = absoluteFolder(name, cwd, home);
       if (projectRoot != null && inside(dir, projectRoot)) {
