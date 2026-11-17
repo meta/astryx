@@ -81,7 +81,11 @@ const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
+    // The room between the box and its label. A theme sets it with gap on
+    // the `checkbox-input` target, which the compiler hands to this row as
+    // --_checkbox-input-gap (derivedVarRegistry): the target is the outer
+    // field, which also holds the status message below the row.
+    gap: `var(--_checkbox-input-gap, ${spacingVars['--spacing-2']})`,
   },
   containerLabelHidden: {
     gap: 0,

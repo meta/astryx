@@ -287,6 +287,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   Button: 'button',
   Card: 'card',
   Chat: 'chat-composer',
+  CheckboxInput: 'checkbox-input',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -300,6 +301,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
+  Switch: 'switch-field',
   TextArea: 'text-area',
 };
 

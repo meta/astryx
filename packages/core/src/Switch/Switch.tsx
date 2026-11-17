@@ -256,7 +256,11 @@ const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
+    // The room between the switch and its label. A theme sets it with gap on
+    // the `switch-field` target, which the compiler hands to this row as
+    // --_switch-field-gap (derivedVarRegistry): the target is the outer field,
+    // which also holds the status message below the row.
+    gap: `var(--_switch-field-gap, ${spacingVars['--spacing-2']})`,
   },
   // A hidden label is sr-only, so its wrapper is a zero-width flex item — the
   // row gap would still be painted beside the track, making the field box

@@ -55,6 +55,9 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'borderRadius', vars: ['--_chat-composer-radius']},
     {property: 'padding', vars: ['--_chat-composer-padding']},
   ],
+  'checkbox-input': [
+    {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
+  ],
   dialog: [
     {property: 'borderRadius', vars: ['--_dialog-radius']},
     {property: 'padding', expand: 'container'},
@@ -88,6 +91,9 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
   'segmented-control': [
     {property: 'borderRadius', vars: ['--_segmented-control-radius']},
     {property: 'padding', vars: ['--_segmented-control-padding']},
+  ],
+  'switch-field': [
+    {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
   ],
   'text-area': [
     {
