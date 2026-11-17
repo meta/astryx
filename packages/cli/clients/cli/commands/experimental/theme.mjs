@@ -620,6 +620,7 @@ function changeBlocks(r) {
     missedParts: _missedParts,
     missedOn: _missedOn,
     missedWhere: _missedWhere,
+    missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -662,15 +663,23 @@ function changeBlocks(r) {
  * named, near the top of a change or a new theme, so a head of the
  * output keeps it; show names the first ones with their lines, and show
  * --json lists each.
- * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}} d
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}} d
  */
 function missedLine(d) {
-  const {missed = 0, missedParts = missed, missedOn = [], missedWhere = []} = d;
+  const {
+    missed = 0,
+    missedParts = missed,
+    missedOn = [],
+    missedWhere = [],
+    missedNew,
+  } = d;
   const named = missedWhere.length ? missedWhere : missedOn;
-  if (!missed) return [];
+  if (!missed || missedNew === 0) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
     }),
   ];
 }
