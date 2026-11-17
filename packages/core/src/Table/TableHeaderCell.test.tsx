@@ -15,6 +15,7 @@ import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Table} from './Table';
 import {TableHeaderCell} from './TableHeaderCell';
+import {useTableColumnResize} from './plugins/columnResize/useTableColumnResize';
 import type {TableColumn} from './types';
 
 // =============================================================================
@@ -164,6 +165,61 @@ describe('TableHeaderCell', () => {
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('font-weight: var(--font-weight-semibold)');
     expect(declarations).toContain('color: var(--color-text-secondary)');
+  });
+
+  it('pins header cells when hasStickyHeader is enabled', () => {
+    const {container} = render(
+      <Table hasStickyHeader data={users} columns={columns} />,
+    );
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).toContain('position: sticky');
+    expect(declarations).toContain('top: 0px');
+    expect(declarations).toContain('overflow: visible');
+    expect(declarations).toContain('z-index: 2');
+    expect(declarations.join('\n')).toContain('table-sticky-background');
+    const content = container.querySelector('thead th > div') as HTMLElement;
+    expect(content).not.toBeNull();
+    expect(cssDeclarationsOf(content)).toContain('overflow: hidden');
+    expect(
+      declarations.some(declaration => declaration.includes('::after')),
+    ).toBe(false);
+  });
+
+  it('keeps the sticky header with custom cell renderers', () => {
+    const customColumns: TableColumn<User>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: item => <strong>{item.name}</strong>,
+      },
+      ...columns.slice(1),
+    ];
+    const {container} = render(
+      <Table hasStickyHeader data={users} columns={customColumns} />,
+    );
+    expect(container.querySelector('tbody strong')).toHaveTextContent('Alice');
+    expect(headerCellDeclarations(container)).toContain('position: sticky');
+  });
+
+  it('keeps the header sticky when column resize is enabled', () => {
+    function ResizableStickyTable() {
+      const resize = useTableColumnResize<User>({
+        columns: columns as TableColumn<Record<string, unknown>>[],
+      });
+      return (
+        <Table
+          hasStickyHeader
+          data={users}
+          columns={columns}
+          plugins={{resize}}
+        />
+      );
+    }
+
+    const {container} = render(<ResizableStickyTable />);
+    const header = container.querySelector('thead th') as HTMLElement;
+    expect(header.style.position).toBe('sticky');
+    expect(header.style.insetBlockStart).toBe('0');
   });
 
   it('draws the bottom divider even when the table has dividers off', () => {

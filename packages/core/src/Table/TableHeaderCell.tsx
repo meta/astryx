@@ -109,6 +109,29 @@ const headerMenuCellStyles = stylex.create({
   },
 });
 
+const stickyHeaderStyles = stylex.create({
+  cell: {
+    position: 'sticky',
+    insetBlockStart: 0,
+    zIndex: 2,
+    // The sticky-column surface and its divider need to bleed out of the
+    // header cell. The label's inner wrapper owns truncation instead.
+    backgroundColor: `var(--table-sticky-background, ${colorVars['--color-background-card']})`,
+    backgroundClip: 'padding-box',
+    overflow: 'visible',
+  },
+});
+
+const stickyHeaderContentStyles = stylex.create({
+  content: {
+    display: 'block',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+});
+
 const dividerColumnStyles = stylex.create({
   cell: {
     borderInlineEndWidth: {
@@ -170,6 +193,9 @@ export function TableHeaderCell({
     if (hasContextMenu) {
       cellStyles.push(headerMenuCellStyles.cell);
     }
+    if (ctx.hasStickyHeader) {
+      cellStyles.push(stickyHeaderStyles.cell);
+    }
   }
 
   // The cell owns the context-menu wrapper so it controls how the menu
@@ -181,6 +207,14 @@ export function TableHeaderCell({
     contextMenuActions,
     ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
   );
+  const mergedStyle = ctx?.hasStickyHeader
+    ? {position: 'sticky' as const, insetBlockStart: 0, ...incomingStyle}
+    : incomingStyle;
+  const renderedContent = ctx?.hasStickyHeader ? (
+    <div {...stylex.props(stickyHeaderContentStyles.content)}>{content}</div>
+  ) : (
+    content
+  );
 
   return (
     <th
@@ -190,9 +224,9 @@ export function TableHeaderCell({
         themeProps('table-header-cell', {density: ctx?.density}),
         stylex.props(...mergeXStyle(cellStyles, xstyle)),
         incomingClassName,
-        incomingStyle,
+        mergedStyle,
       )}>
-      {content}
+      {renderedContent}
     </th>
   );
 }
