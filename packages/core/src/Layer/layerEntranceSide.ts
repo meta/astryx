@@ -165,8 +165,11 @@ export function registerLayerEntranceProperties(): void {
       CSS.registerProperty({name, syntax: '*', inherits: false});
     } catch (error) {
       if (
-        !(error instanceof DOMException) ||
-        error.name !== 'InvalidModificationError'
+        process.env.NODE_ENV !== 'production' &&
+        !(
+          error instanceof DOMException &&
+          error.name === 'InvalidModificationError'
+        )
       ) {
         devWarn(
           'Layer',

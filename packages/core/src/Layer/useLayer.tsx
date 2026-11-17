@@ -687,11 +687,12 @@ function keepAnchorClear(
  * stand when it left the layer in place; otherwise the side is read after
  * the placement. Only an anchored layer has a side.
  *
- * The write waits for the next animation frame, which runs before that
- * frame's style pass and paint, so the entrance still starts from the side.
- * A write in the show's own task would leave style dirty for the reads that
- * follow it there (moving focus in, measuring touch targets), and each
- * would restyle the layer once more.
+ * The write waits for the layer's first resize observation, which runs after
+ * the next frame's layout and before its paint, so the entrance starts from
+ * the side wherever the show runs, an animation frame callback included, and
+ * the read finds layout clean. A write in the show's own task would leave
+ * style dirty for the reads that follow it there (moving focus in, measuring
+ * touch targets), and each would restyle the layer once more.
  */
 function writeEntranceSide(
   layer: HTMLElement,
@@ -706,18 +707,22 @@ function writeEntranceSide(
     anchor != null && boxes != null
       ? layerEntranceSide(boxes.layer, boxes.anchor)
       : null;
-  const writeEntranceSideOnFrame = () => {
+  const write = () => {
     writeLayerEntranceSide(
       layer,
       anchor == null ? null : (known ?? readLayerEntranceSide(layer, anchor)),
     );
   };
-  const view = layer.ownerDocument.defaultView;
-  if (view == null) {
-    writeEntranceSideOnFrame();
+  const Observer = layer.ownerDocument.defaultView?.ResizeObserver;
+  if (Observer == null) {
+    write();
     return;
   }
-  view.requestAnimationFrame(writeEntranceSideOnFrame);
+  const observer = new Observer(function writeEntranceSideOnResize() {
+    observer.disconnect();
+    write();
+  });
+  observer.observe(layer);
 }
 
 /**
