@@ -654,6 +654,7 @@ async function capture(page: Page, scenario: Case) {
     let firstBox = initialBox;
     let box = initialBox;
     let geometryDelta = Infinity;
+    let maxObservedDelta = 0;
     let missingBox = false;
     // Opening can place the menu between frame samples. The receipt needs a
     // settled pair, not two frames chosen before the layout stops moving.
@@ -675,6 +676,7 @@ async function capture(page: Page, scenario: Case) {
             Math.abs(box.width - firstBox.width),
             Math.abs(box.height - firstBox.height),
           );
+          maxObservedDelta = Math.max(maxObservedDelta, geometryDelta);
           return geometryDelta;
         },
         {message: `${scenario.state}: geometry settles before capture`},
@@ -1039,7 +1041,13 @@ async function capture(page: Page, scenario: Case) {
         forcedColorsFocusIndicator: focusIndicator,
         pageErrors: pageErrors.length,
         geometry: box,
-        settledRender: {initial: firstBox, final: box, maxDelta: geometryDelta},
+        settledRender: {
+          opening: initialBox,
+          maxObservedDelta,
+          initial: firstBox,
+          final: box,
+          maxDelta: geometryDelta,
+        },
       },
       image: {
         file,
