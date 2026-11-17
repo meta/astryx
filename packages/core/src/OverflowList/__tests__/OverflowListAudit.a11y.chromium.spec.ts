@@ -262,15 +262,19 @@ for (const theme of ['neutral', 'matcha'] as const) {
       edge: 'end',
       run: async (page, check, frame) => {
         const steps: unknown[] = [];
+        let previousExtent = Number.POSITIVE_INFINITY;
         for (const width of RESIZE_WIDTHS) {
-          await page.evaluate(w => {
+          const resized = await page.evaluate(w => {
             const frameEl = document.querySelector(
               '#storybook-root .astryx-overflow-list',
             )?.parentElement;
-            if (frameEl != null) {
-              frameEl.style.width = `${w}px`;
+            if (frameEl == null) {
+              return false;
             }
+            frameEl.style.width = `${w}px`;
+            return true;
           }, width);
+          check(resized, `no resizable frame at ${width}px`);
           await settle(page);
           const [list] = await lists(page);
           if (list == null) {
@@ -278,6 +282,15 @@ for (const theme of ['neutral', 'matcha'] as const) {
             continue;
           }
           checkList(check, list, `${width}px`, 'end');
+          const extent = list.box.right - list.box.left;
+          check(
+            extent <= previousExtent,
+            `the list did not narrow at ${width}px: ${extent}`,
+          );
+          previousExtent = extent;
+          if (width === RESIZE_WIDTHS[RESIZE_WIDTHS.length - 1]) {
+            check(list.indicator >= 0, `no indicator at ${width}px`);
+          }
           steps.push({
             width,
             gap: list.gap,

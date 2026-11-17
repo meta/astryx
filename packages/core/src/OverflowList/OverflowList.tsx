@@ -315,7 +315,7 @@ export function OverflowList({
     {
       tracksRows: isMultiRow,
       // The gap is a spacing token, so its pixels follow the theme.
-      readsGap: true,
+      gapToken: gapTokens[gap],
       // The measured key moves with the measurement's result, so the report
       // never sees a key that is ahead of the visible set.
       onMeasure: () => setMeasuredKey(measurementKey),
