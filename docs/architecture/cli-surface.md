@@ -296,7 +296,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -1084,6 +1084,26 @@ Rejected: refusing every path outside the current folder (most agents that
 render a page for an artifact name an absolute path, and retry after the
 refusal); accepting a relative path that climbs out (a path such as
 `../page.html` reads as a mistake more often than as a choice).
+
+### DEC-17 — A named scaffold path is the file the copy writes
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+`astryx build`'s start and alternative commands, and the place
+`astryx template` suggests when it refuses a path, name where a template goes.
+A block, and a page outside a Next App Router, is the file the copy writes
+(`<id>.tsx` in the project's components folder, `src/pages/<id>.tsx`, or the
+Pages Router file `pages/<id>.tsx`), so an import of the named path finds the
+scaffold. A Next App Router page keeps its route folder, because Next serves
+the folder's `page.tsx`. Where the named path is a block or a page with no Next
+route folder, a name that an import already resolves to (a folder's index, or
+a file with another extension) counts as taken, so the new file neither
+shadows a module nor is shadowed by one; a Next page also skips a name whose
+URL another page serves.
+
+Rejected: naming a folder that holds `page.tsx` (an import of the folder does
+not resolve without an index file); writing an index file beside each scaffold
+(a second file that the template does not own).
 
 ## Verification
 
