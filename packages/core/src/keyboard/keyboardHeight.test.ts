@@ -23,11 +23,13 @@ import {
   __resetLayoutViewportForTest,
   layoutViewportHeight,
 } from '../utils/layoutViewport';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {
   claimTapFocus,
   findTextEntryControl,
   focusAtPoint,
   getKeyboardHeight,
+  getKeyboardViewportHeight,
   isKeyboardMeasurable,
   isTextEntryControl,
   measureKeyboardHeight,
@@ -36,6 +38,7 @@ import {
   watchRevealPan,
   type KeyboardHeightEvent,
 } from './keyboardHeight';
+import {coveredBy} from './keyboardTarget';
 
 type FakeViewport = EventTarget & {
   height: number;
@@ -138,6 +141,17 @@ describe('the layout viewport WebKit reports under a pinch zoom (FR2)', () => {
     expect(Math.abs(measureKeyboardHeight(window) - 337)).toBeLessThan(1);
   });
 
+  // The root's client box. Safari keeps its height at the layout viewport's,
+  // and its width at the visual viewport's.
+  function rootHeight(clientHeight: number, clientWidth = 402) {
+    for (const [key, value] of Object.entries({clientHeight, clientWidth})) {
+      Object.defineProperty(document.documentElement, key, {
+        configurable: true,
+        value,
+      });
+    }
+  }
+
   it('follows the layout viewport WebKit clamps to the document after a scroll', () => {
     safari({
       innerHeight: 666,
@@ -146,7 +160,105 @@ describe('the layout viewport WebKit reports under a pinch zoom (FR2)', () => {
       scale: 1,
       offsetTop: 120,
     });
+    rootHeight(714);
     expect(measureKeyboardHeight(window)).toBe(289);
+  });
+
+  it('reads no keyboard on a layout wider than the screen at a scale of 1', () => {
+    // A width=1024 page at initial-scale=1: the root spans the whole layout.
+    safari({innerHeight: 714, innerWidth: 402, height: 714, scale: 1});
+    rootHeight(1819, 1024);
+    expect(measureKeyboardHeight(window)).toBe(0);
+  });
+
+  it('reads no keyboard on a zoomed-out page with none shown', () => {
+    // No width=device-width viewport: a 980 px layout viewport at a scale of
+    // 402 / 980.
+    safari({
+      innerHeight: 1741,
+      innerWidth: 980,
+      height: 1741,
+      scale: 402 / 980,
+    });
+    rootHeight(1741);
+    expect(measureKeyboardHeight(window)).toBeCloseTo(0);
+  });
+
+  it('reads the keyboard while Safari pans the page to a focused field, where innerHeight follows the visual viewport', () => {
+    safari({
+      innerHeight: 377,
+      innerWidth: 402,
+      height: 377,
+      scale: 1,
+      offsetTop: 337,
+    });
+    rootHeight(714);
+    expect(measureKeyboardHeight(window)).toBe(337);
+  });
+
+  it('reads the visual viewport height once while Safari pans, the pan check included (INV11)', () => {
+    safari({
+      innerHeight: 377,
+      innerWidth: 402,
+      height: 377,
+      scale: 1,
+      offsetTop: 337,
+    });
+    rootHeight(714);
+    let height = viewport.height;
+    let reads = 0;
+    Object.defineProperty(viewport, 'height', {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return height;
+      },
+      set: (value: number) => {
+        height = value;
+      },
+    });
+    expect(measureKeyboardHeight(window)).toBe(337);
+    expect(reads).toBe(1);
+  });
+
+  it('reads the visual viewport height once per report while Safari pans, a reader laying out included (INV11)', () => {
+    safari({innerHeight: 714, innerWidth: 402, height: 714, scale: 1});
+    rootHeight(714);
+    const covered: number[] = [];
+    const stop = subscribeKeyboardHeight(window, event => {
+      if (event.type === 'viewport') {
+        covered.push(coveredBy(700, event.height, 0, window));
+      }
+    });
+    let height = viewport.height;
+    let reads = 0;
+    Object.defineProperty(viewport, 'height', {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return height;
+      },
+      set: (value: number) => {
+        height = value;
+      },
+    });
+    try {
+      vi.stubGlobal('innerHeight', 377);
+      reads = 0;
+      report({height: 377, offsetTop: 337});
+      // A 337 px keyboard under a 714 px layout viewport covers 323 px of a
+      // bottom edge at 700.
+      expect(covered).toEqual([323]);
+      expect(reads).toBe(1);
+    } finally {
+      stop();
+    }
+  });
+
+  it('reads none where the layout viewport truly shrinks for the keyboard, as under resizes-content', () => {
+    safari({innerHeight: 377, innerWidth: 402, height: 377, scale: 1});
+    rootHeight(377);
+    expect(measureKeyboardHeight(window)).toBe(0);
   });
 
   it('reads the same keyboard scrolled and pinch-zoomed', () => {
@@ -510,6 +622,49 @@ describe('a hide Chrome reports in steps under Remove animations (FR8)', () => {
       vi.advanceTimersByTime(1000);
     });
     expect(heightsOf(listener)).toEqual([300]);
+  });
+});
+
+describe('the store beside another copy of Core (spec:AST-110 FR3)', () => {
+  it('keeps its own store beside a copy whose store has the earlier shape, and each reads its own heights', () => {
+    // An earlier copy of Core keeps the window's store under the first
+    // version, without the layout viewport's height. It listens, and read
+    // 300 px.
+    const earlier = sharedWeakMap<Window, object>(
+      'keyboard/keyboard-height/stores',
+      1,
+    );
+    const previous = earlier.get(window);
+    const theirs = {
+      height: 300,
+      listeners: new Set(),
+      focusListeners: new Set(),
+      detach: () => {},
+      detachFocus: null,
+    };
+    earlier.set(window, theirs);
+    const stop = subscribeKeyboardHeight(window, () => {});
+    try {
+      expect(getKeyboardHeight(window)).toBe(0);
+      report({height: window.innerHeight - 200});
+      expect(getKeyboardHeight(window)).toBe(200);
+      expect(getKeyboardViewportHeight(window)).toBe(window.innerHeight);
+      expect(theirs.height).toBe(300);
+      expect(Object.keys(theirs)).toEqual([
+        'height',
+        'listeners',
+        'focusListeners',
+        'detach',
+        'detachFocus',
+      ]);
+    } finally {
+      stop();
+      if (previous == null) {
+        earlier.delete(window);
+      } else {
+        earlier.set(window, previous);
+      }
+    }
   });
 });
 

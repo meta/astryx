@@ -3,7 +3,7 @@
 /**
  * @file layoutViewport.ts
  * @input A window: its innerHeight and innerWidth, its visual viewport's
- *   width and scale, and its document's root box
+ *   width, scale and height, and its document's root box
  * @output layoutViewportHeight, the layout viewport's height in layout px
  *   less a classic horizontal scrollbar, and __resetLayoutViewportForTest
  * @position Internal shared measurement, not re-exported from the utils
@@ -21,8 +21,19 @@
  * viewport's height times its scale stay in layout px. So, read as is, a zoom
  * shrinks the layout viewport by the zoom, and the function scales the height
  * back.
+ *
+ * While Safari on iOS 26.2 pans the page to a focused field, it reports
+ * `innerHeight` as the visual viewport's height. With the keyboard up, that is
+ * 377 of 714. The root's client height stays 714. So at a scale of 1, where
+ * `innerHeight` equals the visual viewport's height, the function takes the
+ * larger of the two. The root must also be as wide as the visual viewport.
+ * A caller that has read the visual viewport's height for the same layout
+ * passes it as `visualHeight`, so that one layout reads it once.
  */
-export function layoutViewportHeight(win: Window): number {
+export function layoutViewportHeight(
+  win: Window,
+  visualHeight?: number,
+): number {
   const viewport = win.visualViewport;
   const width = viewport?.width ?? 0;
   if (viewport == null || !(width > 0)) {
@@ -40,7 +51,28 @@ export function layoutViewportHeight(win: Window): number {
   const fromLayout = Math.abs(win.innerWidth - width * scale);
   const height =
     fromVisual < fromLayout ? win.innerHeight * scale : win.innerHeight;
-  return height - horizontalScrollbarHeight(win);
+  const layout = height - horizontalScrollbarHeight(win);
+  // At a scale of 1, an `innerHeight` equal to the visual viewport's height
+  // can be Safari's pan. A layout wider than the screen gives a root taller
+  // than the screen too, so the root must span only the visual viewport.
+  const root = viewportRoot(win.document);
+  if (
+    root != null &&
+    Math.abs(scale - 1) < 0.001 &&
+    Math.abs(win.innerHeight - (visualHeight ?? viewport.height)) < 1 &&
+    Math.abs(root.clientWidth - width) < 1
+  ) {
+    return Math.max(layout, root.clientHeight);
+  }
+  return layout;
+}
+
+/**
+ * The element whose client box reports the viewport: the root in standards
+ * mode, the body in quirks mode.
+ */
+function viewportRoot(doc: Document): Element | null {
+  return doc.compatMode === 'BackCompat' ? doc.body : doc.documentElement;
 }
 
 /**
