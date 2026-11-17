@@ -223,7 +223,7 @@ export const docs = {
       name: 'ref',
       type: 'Ref<HTMLButtonElement>',
       description:
-        'Ref to the root element. With `href` (and not disabled) the root is the link, so the ref receives the anchor or the link component\'s element, although the type names `HTMLButtonElement`.',
+        'In link mode (with `href` and not disabled) the ref receives the link element, the anchor or the link component\'s element, although the type names `HTMLButtonElement`; otherwise it receives the button.',
     },
     {
       name: 'target',
