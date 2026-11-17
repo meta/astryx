@@ -2449,6 +2449,8 @@ export function Tokenizer<T extends SearchableItem>({
               placeholderSizeStyle,
               isTruncated && styles.truncatedWrapper,
               isDisabled && inputWrapperStyles.disabled,
+              // Keyboard focus on the disabled placeholder still shows the ring.
+              isDisabled && inputDisabledFocusStyles.selfRing,
               localStatus && inputStatusBorderStyles[localStatus.type],
               localStatus &&
                 !isDisabled &&

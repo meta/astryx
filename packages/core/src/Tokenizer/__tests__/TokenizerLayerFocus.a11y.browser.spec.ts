@@ -12,7 +12,12 @@
  *   FR1-FR2; jsdom cannot show it, because it does not hide a closed popover
  */
 
-import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -39,6 +44,11 @@ async function mount(page: Page, story: string) {
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('.astryx-tokenizer').first()).toBeAttached();
   await page.evaluate(async () => document.fonts.ready);
+}
+
+/** The focus ring a field box draws: its inset shadow, or `none`. */
+async function focusRing(box: Locator): Promise<string> {
+  return box.evaluate(el => getComputedStyle(el).boxShadow);
 }
 
 /** Whether a field's layer (the popover holding its input) is open. */
@@ -100,6 +110,8 @@ test('Tab reaches a collapsed field with no tokens; disabled fields keep their s
       focused = page.locator(':focus');
     }
     await expect(focused).toHaveAttribute('tabindex', '0');
+    // Keyboard focus shows the field's focus ring (spec:AST-085 FR6).
+    expect(await focusRing(focused)).not.toBe('none');
     if (name === 'Approvers') {
       // The disabled reason shows on focus, anchored to the placeholder.
       await expect(
@@ -112,6 +124,22 @@ test('Tab reaches a collapsed field with no tokens; disabled fields keep their s
     await expect(focused).toBeFocused();
   }
   expect(await page.locator('[disabled]').count()).toBe(0);
+});
+
+test('pointer focus on a disabled field shows no focus ring', async ({
+  page,
+}) => {
+  await mount(page, 'core-tokenizer--overflow-layer-states');
+  const owners = page.getByRole('group', {name: 'Owners'}).first();
+  // A real mouse press; Playwright waits on aria-disabled elements otherwise.
+  const box = await owners.boundingBox();
+  if (box == null) {
+    throw new Error('Owners placeholder has no box');
+  }
+  await page.mouse.click(box.x + 8, box.y + box.height / 2);
+  await expect(owners).toBeFocused();
+  expect(await focusRing(owners)).toBe('none');
+  expect(await anyLayerOpen(page)).toBe(false);
 });
 
 test('Shift+Tab out of an open field returns to the page order and closes it', async ({
