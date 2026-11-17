@@ -64,6 +64,8 @@ export interface SegmentSpan {
   /** The box's top and bottom, when measured. */
   readonly top?: number;
   readonly bottom?: number;
+  /** The box grown by the segment's touch hit band, when measured. */
+  readonly band?: ControlBounds;
 }
 
 /** Every segment of `track`, disabled ones included, measured once. */
@@ -78,6 +80,12 @@ export function measureSegments(track: HTMLElement): SegmentSpan[] {
         right: rect.right,
         top: rect.top,
         bottom: rect.bottom,
+        band: {
+          left: rect.left - hitInset(element, 'left'),
+          top: rect.top - hitInset(element, 'top'),
+          right: rect.right + hitInset(element, 'right'),
+          bottom: rect.bottom + hitInset(element, 'bottom'),
+        },
       };
     },
   );
@@ -122,8 +130,9 @@ export function segmentTargetAt(
 
 /**
  * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
- * control's lift `area`, the segment whose own box holds the `finger`, else
- * the one `segmentTargetAt` counts (`x`, `y`) for; outside them, none. The
+ * control's lift `area`, the segment whose own box, else whose touch band,
+ * holds the `finger`, else the one `segmentTargetAt` counts (`x`, `y`) for;
+ * outside them, none. The
  * tracker passes (`x`, `y`) on the control's center line, so a press never
  * lands outside and a drift off the control keeps its horizontal position.
  * `finger` is where the pointer really is (it defaults to (`x`, `y`)): the
@@ -143,15 +152,18 @@ export function liftTargetAt(
   if (!isInside) {
     return null;
   }
-  const under = segments.find(
-    ({left, right, top, bottom}) =>
-      top != null &&
-      bottom != null &&
-      finger.x >= left &&
-      finger.x <= right &&
-      finger.y >= top &&
-      finger.y <= bottom,
-  );
+  const holds = (box: ControlBounds) =>
+    finger.x >= box.left &&
+    finger.x <= box.right &&
+    finger.y >= box.top &&
+    finger.y <= box.bottom;
+  // A segment's own box first, then its touch band, so a band never takes a
+  // press that lands on a neighbor.
+  const under =
+    segments.find(
+      ({left, right, top, bottom}) =>
+        top != null && bottom != null && holds({left, right, top, bottom}),
+    ) ?? segments.find(({band}) => band != null && holds(band));
   if (under != null) {
     return isDisabled(under.element) ? null : under.element;
   }

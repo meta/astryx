@@ -10,6 +10,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {createActionGroupTracker} from '../hooks/actionGroupTracker';
+import {HIT_INSET_PROPERTIES} from '../utils/hitArea';
 import {SEGMENT_SELECTOR} from './useSegmentedSelectionMotion';
 import {
   createSegmentLiftTarget,
@@ -161,6 +162,17 @@ describe('a lift through the tracker, when a caller wraps the segments', () => {
     document.body.append(track);
     return track;
   }
+  /** Gives each segment a touch band of `inset` px on every side. */
+  function withBands(track: HTMLElement, inset: number): HTMLElement {
+    for (const segment of track.querySelectorAll<HTMLElement>(
+      '[role="radio"]',
+    )) {
+      for (const property of Object.values(HIT_INSET_PROPERTIES)) {
+        segment.style.setProperty(property, `${inset}px`);
+      }
+    }
+    return track;
+  }
   function liftAt(track: HTMLElement, x: number, y: number): string | null {
     const segments = measureSegments(track);
     const area = measureLiftArea(track, segments);
@@ -193,6 +205,17 @@ describe('a lift through the tracker, when a caller wraps the segments', () => {
     expect(liftAt(wrappedTrack(rows), 160, 80)).toBe('e');
     expect(liftAt(wrappedTrack(rows), 60, 80)).toBe('d');
     expect(liftAt(wrappedTrack(rows), 160, 40)).toBe('b');
+  });
+
+  it('commits the second-row segment a tap lands on its touch band', () => {
+    const rows = [
+      ['a', 'b', 'c'],
+      ['d', 'e'],
+    ];
+    // 2 px below E (its box ends at 98), inside E's 4 px band and the control.
+    expect(liftAt(withBands(wrappedTrack(rows), 4), 160, 100)).toBe('e');
+    // On the 4 px gap between B and E, B's own band holds the lift first.
+    expect(liftAt(withBands(wrappedTrack(rows), 4), 160, 59)).toBe('b');
   });
 
   it('commits the first-row segment a tap lands on in three rows', () => {
