@@ -27,7 +27,7 @@ function write(files) {
 /**
  * @param {string} target
  * @param {string[]} [packages]
- * @param {{fileLimit?: number}} [options]
+ * @param {{fileLimit?: number, sourceBuild?: string | null}} [options]
  */
 function check(target, packages = [], options = {}) {
   const checks = checkBuilt(target, {cwd: dir, packages, ...options});
@@ -135,7 +135,7 @@ describe('built-astryx-styles', () => {
   const CORE_JS =
     'function v(n){return`@layer astryx-base {\\n:root {\\n${n}\\n}\\n}`}var c="--astryx-space-1";';
 
-  it('fails a build whose Astryx components have no Core stylesheet, with the imports to add', () => {
+  it('warns about a build whose Astryx components have no Core stylesheet, with the imports to add', () => {
     write({
       'dist/index.html':
         '<!doctype html><link rel="stylesheet" href="/assets/index.css"><script type="module" src="/assets/index.js"></script>',
@@ -145,7 +145,7 @@ describe('built-astryx-styles', () => {
     const {usage, styles, purity} = check('dist');
     expect(usage?.status).toBe('pass');
     expect(styles).toMatchObject({
-      status: 'fail',
+      status: 'warn',
       message: expect.stringContaining('render unstyled'),
       fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
     });
@@ -184,6 +184,42 @@ describe('built-astryx-styles', () => {
       ),
     });
     expect(check('entry').styles?.message).toContain('src/main.tsx imports');
+  });
+
+  it("is not checked for an app that compiles Core's styles from source", async () => {
+    write({
+      'dist/index.html':
+        '<!doctype html><link rel="stylesheet" href="/assets/index.css">',
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(
+      check('dist', [], {sourceBuild: 'withAstryx() in next.config.mjs'})
+        .styles,
+    ).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('(withAstryx() in next.config.mjs)'),
+    });
+    // Output that carries the styles passes in any setup.
+    write({'dist/assets/index.css': THEME_CSS + CORE_CSS});
+    expect(
+      check('dist', [], {sourceBuild: 'withAstryx() in next.config.mjs'}).styles
+        ?.status,
+    ).toBe('pass');
+    write({'dist/assets/index.css': THEME_CSS});
+    // doctor reads the setup from the project that holds the path.
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'vite.config.ts':
+        "import {astryxStylex} from '@astryxdesign/build/vite';\nexport default {plugins: [...astryxStylex()]};\n",
+    });
+    const built = await runChecks({cwd: dir, built: 'dist'});
+    expect(
+      built.checks.find(c => c.id === 'built-astryx-styles'),
+    ).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('(astryxStylex() in vite.config.ts)'),
+    });
   });
 
   it('says it did not check output with no built stylesheet or page, and is left out when the output uses no Astryx', () => {

@@ -130,6 +130,9 @@ import {
   builtTargetOf,
   listProjectSourceFiles,
   readTextFile,
+  doctorStylesheetImports,
+  doctorStylesheetAtRules,
+  builtProjectRoot,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
@@ -367,38 +370,139 @@ export function checkCoreInstalled(ctx) {
 /** Core's component styles, the stylesheet an Astryx app imports once. */
 const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
 
-/** A stylesheet `@import` of Core's component styles. */
-const CORE_STYLESHEET_IMPORT =
-  /@import\s+(?:url\(\s*)?(['"]?)@astryxdesign\/core\/astryx\.css\1/u;
+/**
+ * A page's link to Core's component styles: the package's file, from a
+ * package CDN (`…/@astryxdesign/core@<version>/dist/astryx.css`) or an
+ * installed copy.
+ */
+const CORE_STYLESHEET_HREF =
+  /@astryxdesign\/core(?:@[^/"'\s]+)?\/(?:dist\/)?astryx\.css(?:[?#"'\s]|$)/u;
+
+/** Config files a build that compiles Core from source names its plugin in. */
+const SOURCE_BUILD_CONFIGS = [
+  {stem: 'next.config', plugin: 'withAstryx()'},
+  {stem: 'vite.config', plugin: 'astryxStylex()'},
+];
+
+/** The extensions those config files take. */
+const CONFIG_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
 
 /**
- * The first project file that imports Core's component styles: a stylesheet
- * that `@import`s them, or a module that imports them, read as a syntax
- * tree. Comments never count.
+ * How an app compiles Core's styles from its source with
+ * `@astryxdesign/build`, so it loads no `astryx.css`: a `next.config` or
+ * `vite.config` that imports the build's plugin (`withAstryx()`,
+ * `astryxStylex()`), or a stylesheet with the `@astryx;` or `@stylex;` rule
+ * the compiled rules are written into. Null when it does neither.
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function sourceBuildSetup(root) {
+  for (const {stem, plugin} of SOURCE_BUILD_CONFIGS) {
+    for (const extension of CONFIG_EXTENSIONS) {
+      const file = path.join(root, `${stem}${extension}`);
+      let source;
+      try {
+        source = readTextFile(file);
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if (
+          [...moduleSpecifiers(source)].some(
+            specifier =>
+              specifier === '@astryxdesign/build' ||
+              specifier.startsWith('@astryxdesign/build/'),
+          )
+        ) {
+          return `${plugin} in ${stem}${extension}`;
+        }
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+    if (!file.endsWith('.css')) continue;
+    let css;
+    try {
+      css = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!/@(?:astryx|stylex)\s*;/iu.test(css)) continue;
+    const rules = doctorStylesheetAtRules(css);
+    const rule = rules.has('astryx')
+      ? '@astryx;'
+      : rules.has('stylex')
+        ? '@stylex;'
+        : null;
+    if (rule)
+      return `the \`${rule}\` rule in ${path.relative(root, file) || file}`;
+  }
+  return null;
+}
+
+/**
+ * {@link sourceBuildSetup} for a project folder, or null without one.
+ * @param {string | null} root
+ * @returns {string | null}
+ */
+function sourceBuildOf(root) {
+  return root ? sourceBuildSetup(root) : null;
+}
+
+/**
+ * Whether a page links Core's component styles: a `<link>` whose `rel` is a
+ * stylesheet and whose `href` names the package's `astryx.css`. Comments
+ * never count.
+ * @param {string} html
+ */
+function linksCoreStylesheet(html) {
+  const text = html.replace(/<!--[\s\S]*?-->/gu, ' ');
+  for (const tag of text.matchAll(/<link\b[^>]*>/giu)) {
+    const attributes = tag[0];
+    if (!/\brel\s*=\s*["']?[^"'>]*\bstylesheet\b/iu.test(attributes)) continue;
+    const href = /\bhref\s*=\s*(["'])([^"']*)\1/iu.exec(attributes)?.[2];
+    if (href && CORE_STYLESHEET_HREF.test(href)) return true;
+  }
+  return false;
+}
+
+/**
+ * The first project file that loads Core's component styles: a stylesheet
+ * that `@import`s them, a module that imports them, or a page that links
+ * them. Each is read as a syntax tree or its tags, so comments never count.
  * @param {string} root
  * @returns {{file: string | null, unparsed: number}}
  */
-function coreStylesheetImport(root) {
+function coreStylesheetLoad(root) {
   let unparsed = 0;
-  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+  for (const file of listProjectSourceFiles(root, '', {
+    stylesheets: true,
+    pages: true,
+  })) {
     let source;
     try {
       source = readTextFile(file);
     } catch {
       continue;
     }
-    if (!source.includes(CORE_STYLESHEET)) continue;
+    if (!source.includes('astryx.css')) continue;
     if (file.endsWith('.css')) {
-      if (
-        CORE_STYLESHEET_IMPORT.test(source.replace(/\/\*[\s\S]*?\*\//gu, ' '))
-      ) {
+      if (doctorStylesheetImports(source).has(CORE_STYLESHEET)) {
         return {file, unparsed};
       }
       continue;
     }
+    if (/\.html?$/u.test(file)) {
+      if (linksCoreStylesheet(source)) return {file, unparsed};
+      continue;
+    }
     try {
-      if (moduleSpecifiers(source).has(CORE_STYLESHEET))
+      if (moduleSpecifiers(source).has(CORE_STYLESHEET)) {
         return {file, unparsed};
+      }
     } catch {
       unparsed += 1;
     }
@@ -407,29 +511,41 @@ function coreStylesheetImport(root) {
 }
 
 /**
- * The app imports Core's component styles. Without them, Astryx components
+ * The app loads Core's component styles. Without them, Astryx components
  * render unstyled, and nothing else fails: the build passes and the page
- * loads. Read from the project's own source and stylesheets, never run.
+ * loads. An app that loads none but compiles Core's styles from source is
+ * not checked. Read from the project's own source, stylesheets and pages,
+ * never run.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
 export function checkCoreStylesheets(ctx) {
   if (!ctx.coreDir) return null;
   const root = projectRootOf(ctx);
-  const {file, unparsed} = coreStylesheetImport(root);
+  const label = "Core's component styles loaded";
+  const {file, unparsed} = coreStylesheetLoad(root);
   if (file) {
     return {
       id: 'core-stylesheets',
-      label: "Core's component styles imported",
+      label,
       status: 'pass',
-      message: `${path.relative(root, file) || file} imports ${CORE_STYLESHEET}, Core's component styles.`,
+      message: `${path.relative(root, file) || file} loads ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  const setup = sourceBuildSetup(root);
+  if (setup) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${setup}), so it does not need ${CORE_STYLESHEET}.`,
     };
   }
   return {
     id: 'core-stylesheets',
-    label: "Core's component styles imported",
+    label,
     status: 'warn',
-    message: `Found no import of ${CORE_STYLESHEET}, Core's component styles, in project source. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
+    message: `Found nothing in project source, stylesheets or pages that imports or links ${CORE_STYLESHEET}, Core's component styles. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
     fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first.",
   };
 }
@@ -2541,6 +2657,7 @@ export async function runChecks(options = {}) {
       ...checkBuilt(built, {
         cwd,
         packages: builtIntegrationPackages(built, cwd),
+        sourceBuild: sourceBuildOf(builtProjectRoot(built, cwd)),
       }),
     ];
     const summary = {pass: 0, warn: 0, fail: 0, info: 0};

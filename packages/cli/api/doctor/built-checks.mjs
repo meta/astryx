@@ -11,9 +11,10 @@
  *   integration the project loads (its component catalog's providers).
  * @output `built-astryx-usage`: fails when the path holds no value import from those
  *   packages, no use of a component imported from them, and no Astryx
- *   stylesheet in built CSS or HTML. `built-astryx-styles`: fails when output
- *   that uses Astryx holds built files but none carries Core's component
- *   styles, so its components render unstyled. `built-astryx-purity`: warns with the
+ *   stylesheet in built CSS or HTML. `built-astryx-styles`: warns when output
+ *   that uses Astryx holds built stylesheets or pages but none carries Core's
+ *   component styles, so its components render unstyled; an app that compiles
+ *   Core from source is not checked. `built-astryx-purity`: warns with the
  *   findings of the source check in `astryx docs is-my-code-good` (raw
  *   elements Astryx has a component for, raw SVG and icon-library icons,
  *   inline styles, classes, StyleX declarations and imported stylesheets),
@@ -759,13 +760,18 @@ function plural(count, word) {
 /**
  * Whether output that uses Astryx carries Core's component styles. A page's
  * components take their styles from `@astryxdesign/core/astryx.css`; a build
- * without it passes and loads, but every component renders unstyled.
+ * without it passes and loads, but every component renders unstyled. It
+ * warns: `--built` shipped in a stable release without this check, and a new
+ * failure waits for the next minor release. An app that compiles Core's
+ * styles from source needs no `astryx.css`, so output that carries none is
+ * not checked there.
  * @param {BuiltScan} scan
  * @param {string} target as the caller gave it
  * @param {string} cwd
+ * @param {string | null} sourceBuild how the app compiles Core from source
  * @returns {import('./doctor.type.mjs').DoctorCheck}
  */
-function coreStylesCheck(scan, target, cwd) {
+function coreStylesCheck(scan, target, cwd, sourceBuild) {
   const label = "Built output carries Core's component styles";
   if (scan.coreStyles.length > 0) {
     return {
@@ -783,6 +789,14 @@ function coreStylesCheck(scan, target, cwd) {
       message: `${scan.coreStyleImports[0]} imports ${CORE_STYLESHEET}, Core's component styles, so a build of it carries them.`,
     };
   }
+  if (sourceBuild) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${sourceBuild}), so its build does not need ${CORE_STYLESHEET}.`,
+    };
+  }
   if (scan.styleFiles === 0) {
     return {
       id: 'built-astryx-styles',
@@ -794,7 +808,7 @@ function coreStylesCheck(scan, target, cwd) {
   return {
     id: 'built-astryx-styles',
     label,
-    status: 'fail',
+    status: 'warn',
     message: `${scan.styleFiles === 1 ? 'The one built stylesheet or page that doctor read does not carry' : `None of the ${scan.styleFiles} built stylesheets and pages that doctor read carries`} Core's component styles (the \`astryx-base\` layer of ${CORE_STYLESHEET}). This output's Astryx components render unstyled.`,
     fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first. Then build again. Do not deliver this output.",
   };
@@ -803,14 +817,16 @@ function coreStylesCheck(scan, target, cwd) {
 /**
  * The checks for a path.
  * @param {string} target as the caller gave it
- * @param {{cwd: string, packages: readonly string[], fileLimit?: number}} options
+ * @param {{cwd: string, packages: readonly string[], fileLimit?: number, sourceBuild?: string | null}} options
  *   `packages`: the integration packages whose components count as Astryx.
  *   `fileLimit`: how many files to read at most (BUILT_FILE_LIMIT).
+ *   `sourceBuild`: how the path's app compiles Core's styles from source,
+ *   when it does (the doctor adapter reads it).
  * @returns {import('./doctor.type.mjs').DoctorCheck[]}
  */
 export function checkBuilt(
   target,
-  {cwd, packages, fileLimit = BUILT_FILE_LIMIT},
+  {cwd, packages, fileLimit = BUILT_FILE_LIMIT, sourceBuild = null},
 ) {
   const resolved = resolveBuiltPath(cwd, target);
   if (resolved == null) {
@@ -936,6 +952,6 @@ export function checkBuilt(
     };
   }
   return used
-    ? [usage, coreStylesCheck(scan, target, cwd), purity]
+    ? [usage, coreStylesCheck(scan, target, cwd, sourceBuild), purity]
     : [usage, purity];
 }
