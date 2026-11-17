@@ -4130,11 +4130,41 @@ export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
  * @returns {Map<string, string | null>}
  */
 function ownTokens(cwd, slug) {
+  // Read several times in one change, each a build's module evaluated: the
+  // files it reads (the settings module, the build, the theme source and
+  // what it imports) name the answer, which is made once.
+  const f = themeFiles(cwd, slug);
+  const text = (/** @type {string} */ file) => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const key = createHash('sha256')
+    .update(
+      JSON.stringify([
+        cwd,
+        slug,
+        text(f.settingsTs),
+        text(f.js),
+        ...ownSourceFiles(cwd, slug).map(file => [file, text(file)]),
+      ]),
+    )
+    .digest('hex');
+  const kept = OWN_TOKENS.get(key);
+  if (kept) return new Map(kept);
   const out = new Map(ownPageTokens(cwd, slug));
   const fromBuild = builtOwnTokens(cwd, slug);
   if (fromBuild) for (const [k, v] of fromBuild) out.set(k, v);
+  OWN_TOKENS.set(key, new Map(out));
+  if (OWN_TOKENS.size > 8)
+    OWN_TOKENS.delete(/** @type {string} */ (OWN_TOKENS.keys().next().value));
   return out;
 }
+
+/** What ownTokens read last, by the files it read. @type {Map<string, Map<string, string | null>>} */
+const OWN_TOKENS = new Map();
 
 /**
  * The tokens the own source sets, as the current build shows them, or null

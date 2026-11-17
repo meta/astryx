@@ -23,7 +23,6 @@ import {LEASE_RENEW_MS} from '../../foundation/release/lock-lease.mjs';
 import {reactMissing, renderGenerated} from './_parts.mjs';
 import {previewRecordProblem} from './_preview-app.mjs';
 import {
-  SILENT_MS,
   stillHolds,
   withFolderLock,
 } from '../../foundation/release/folder-lock.mjs';
@@ -214,31 +213,30 @@ describe('leased lock taken process', () => {
     expect(code).toBe('ERR_LOCK_LOST');
   });
 
-  it(
-    'NEW-H: a quiet lock whose holder runs on this computer is never taken over',
-    async () => {
-      const dir = path.join(
-        fs.mkdtempSync(path.join(os.tmpdir(), 'alive-')),
-        'x.lock',
-      );
-      fs.mkdirSync(dir);
-      // This process holds it and never renews (a stopped command).
-      fs.writeFileSync(
-        path.join(dir, 'owner.json'),
-        JSON.stringify({pid: process.pid, host: os.hostname(), at: Date.now()}),
-      );
-      let busy = false;
-      await withFolderLock(dir, async () => undefined, {
-        waitMs: SILENT_MS + 2000,
-        onBusy: () => {
-          busy = true;
-          throw new Error('busy');
-        },
-      }).catch(() => undefined);
-      expect(busy).toBe(true);
-    },
-    SILENT_MS * 3,
-  );
+  it('NEW-H: a quiet lock whose holder runs on this computer is never taken over', async () => {
+    const dir = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'alive-')),
+      'x.lock',
+    );
+    fs.mkdirSync(dir);
+    // This process holds it and never renews (a stopped command).
+    fs.writeFileSync(
+      path.join(dir, 'owner.json'),
+      JSON.stringify({pid: process.pid, host: os.hostname(), at: Date.now()}),
+    );
+    let busy = false;
+    // (A short silent window, waited past: the holder is still alive.)
+    const silentMs = 300;
+    await withFolderLock(dir, async () => undefined, {
+      waitMs: silentMs + 1000,
+      silentMs,
+      onBusy: () => {
+        busy = true;
+        throw new Error('busy');
+      },
+    }).catch(() => undefined);
+    expect(busy).toBe(true);
+  }, 30_000);
 
   it('NEW-L: a built stylesheet cut short is built again by show', async () => {
     await themeEditNew('cut', {cwd});
