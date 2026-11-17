@@ -8,9 +8,9 @@
  *   `evictOldest(dir, counts)`, which deletes the folder's oldest counted
  *   files until it holds at most that, and says when the oldest file it
  *   kept was last used.
- * @position Used by gather-cache.mjs for the kept catalogs and by
- *   jiti-cache.mjs for jiti's transpiled code. Each folder has its own limit
- *   of this size.
+ * @position Used by gather-cache.mjs for the kept catalogs. jiti-cache.mjs
+ *   keeps the copies of transpiled code within a limit of the same size,
+ *   trimming one subfolder at a time.
  */
 
 import * as fs from 'node:fs';

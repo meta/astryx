@@ -83,9 +83,11 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       "the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported)",
     );
-    // The bound on the folder, and on jiti's folder beside it.
+    // The bound on the folder, and on the transpile cache beside it.
     expect(plain).toContain('at most 64 MB');
-    expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
+    expect(plain).toContain(
+      `the transpile cache in ${path.join(tmp, 'astryx', 'transpiled')} keeps its copies in 256 subfolders, each holding at most 1/256 of that, and drops the copies made longest ago first.`,
+    );
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;

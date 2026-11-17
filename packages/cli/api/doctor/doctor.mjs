@@ -27,6 +27,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
+import {
+  SUBFOLDERS,
+  oldTranspileCacheDir,
+  transpiledCacheDir,
+} from '../../foundation/fs/jiti-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -2833,8 +2838,46 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies of transpiled
+ * code, which this CLI never reads, and the command that removes it. Found by
+ * one stat, never a listing: that folder can hold so many files that reading
+ * it takes minutes.
+ * @param {import('../../foundation/env/user-dirs.mjs').UserDirOptions} [options]
+ * @returns {DoctorCheck | null}
+ */
+export function checkOldTranspileCache(options) {
+  const dir = oldTranspileCacheDir(options);
+  try {
+    if (!fs.lstatSync(dir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const remove = removeFolderCommand(dir, options?.platform);
+  return {
+    id: 'old-transpile-cache',
+    label: 'Old transpile cache',
+    status: 'info',
+    message: `An earlier Astryx CLI left transpiled copies in ${dir}. This CLI keeps its copies in ${transpiledCacheDir(options)} and never reads the old folder.`,
+    fix: `To remove it, run: ${remove}. An earlier CLI that still runs on this computer makes it again.`,
+  };
+}
+
+/**
+ * The command that removes a folder and all it holds: PowerShell's on
+ * Windows, a POSIX shell's elsewhere, the path quoted as each shell reads it.
+ * @param {string} dir
+ * @param {string} [platform]
+ * @returns {string}
+ */
+export function removeFolderCommand(dir, platform = process.platform) {
+  return platform === 'win32'
+    ? `Remove-Item -Recurse -Force -LiteralPath '${dir.replaceAll("'", "''")}'`
+    : `rm -rf '${dir.replaceAll("'", "'\\''")}'`;
 }
 
 /**
@@ -2863,6 +2906,7 @@ export const SYNC_CHECKS = [
   checkCliCommand,
   checkInstallGuidance,
   checkGatherCache,
+  () => checkOldTranspileCache(),
 ];
 
 /**

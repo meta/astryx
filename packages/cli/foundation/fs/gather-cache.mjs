@@ -85,7 +85,7 @@ import {CLI_ROOT, isCliBuildFile, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
-import {jitiCacheDir} from './jiti-cache.mjs';
+import {transpiledCacheDir} from './jiti-cache.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
@@ -235,13 +235,13 @@ function inJitiCache(file) {
 let jitiRoots;
 
 /**
- * Where jiti may keep transpiled code: the system temp folder's `jiti`, the
+ * Where transpiled code may be kept: the system temp folder's `jiti`, the
  * per-user folder (jiti-cache.mjs), and a set JITI_FS_CACHE.
  * @returns {string[]}
  */
 function jitiCacheRoots() {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
+  const roots = [path.join(os.tmpdir(), 'jiti'), transpiledCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
@@ -1560,16 +1560,17 @@ export function runsUnderPnp() {
 /**
  * The cache folder and how much it holds, for `doctor`: null when the CLI
  * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null}
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null}
  *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp);
- *   `limitBytes`: the most the folder, and jiti's folder `jitiDir`, holds
+ *   `limitBytes`: the most the folder holds, and the copies of transpiled
+ *   code in `transpiledDir` (jiti-cache.mjs) share
  */
 export function gatherCacheSummary() {
   // The cache's own bookkeeping, never an input of what it keeps.
   return withoutRecording(summarize);
 }
 
-/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null} */
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null} */
 function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
@@ -1595,6 +1596,6 @@ function summarize() {
     entries,
     pnp: runsUnderPnp(),
     limitBytes: CACHE_LIMIT_BYTES,
-    jitiDir: jitiCacheDir(),
+    transpiledDir: transpiledCacheDir(),
   };
 }
