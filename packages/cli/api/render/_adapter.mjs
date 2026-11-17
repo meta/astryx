@@ -873,17 +873,17 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // whatever its name.
       const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
       // A file the render could not carry is missing too, also when no
-      // import here names it (an alias this reverse cannot resolve). One the
-      // imports already name, with or without its extension, is named once.
+      // import here names it (an alias this reverse cannot resolve). One an
+      // import already names is named once: as written, without an extension
+      // an extensionless import resolves to, or as its folder's index file.
       const named = new Set(unreached);
       const missing = [...unreached];
       for (const file of Array.isArray(source.notCarried) ? source.notCarried : []) {
         if (typeof file !== 'string' || file === '') continue;
-        const bare = file.replace(/\.[^./]+$/, '');
-        // An import names a folder by its index file: `../lib/rows` for
-        // `../lib/rows/index.ts`.
-        const folder = /\/index$/.test(bare) ? bare.slice(0, -'/index'.length) : null;
-        if (named.has(file) || named.has(bare) || (folder && named.has(folder))) continue;
+        const ext = path.posix.extname(file);
+        const bare = MODULE_EXTENSIONS.includes(ext) ? file.slice(0, -ext.length) : null;
+        const folder = bare?.endsWith('/index') ? bare.slice(0, -'/index'.length) : null;
+        if (named.has(file) || (bare && named.has(bare)) || (folder && named.has(folder))) continue;
         named.add(file);
         missing.push(file);
       }

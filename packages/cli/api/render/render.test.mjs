@@ -2630,6 +2630,24 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
   }, 60_000);
 
+  it('keeps a recorded image that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.tsx'), "export const Rows = () => <img src=\"../lib/rows.png\" alt=\"\" />;\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {Rows} from '../lib/rows';\nexport default function Page() {\n  return <main><Rows /></main>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.png', '../lib/rows.tsx']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.png']);
+  }, 60_000);
+
   it('in a project, tells the reader to move a file from outside the project inside it', () => {
     const tree = path.join(away, 'outside-project');
     fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
