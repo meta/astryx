@@ -552,9 +552,7 @@ export function useLayerKeyboardClearance(
       avoid(transition.to);
     });
     // The guide drops a report that keeps the keyboard's height. A pan arrives
-    // as such a report, so the runtime reads the pan here. It is the one
-    // shared keyboard listener; Selector and other layers do not listen to the
-    // visual viewport themselves.
+    // as such a report, so the runtime reads the pan here.
     let lastKeyboardReportHeight = getKeyboardHeight(view);
     const unsubscribeKeyboardReports = subscribeKeyboardHeight(view, event => {
       if (event.type !== 'viewport') {
