@@ -27,13 +27,14 @@ export interface Hotkey {
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
-   * by a final key compared case-insensitively against event.key. On macOS,
-   * where Option changes the typed character, an 'alt' combo whose final key
+   * by a final key compared case-insensitively against event.key. On Apple
+   * platforms (macOS, and iPadOS or iOS with a hardware keyboard), where
+   * Option changes the typed character, an 'alt' combo whose final key
    * is a letter, digit, punctuation key or space also matches that key's US
    * position (event.code), whatever the layout, when Option typed a dead key
    * or a non-ASCII character. When Option types a plain ASCII character, the
    * combo matches that character: on a German Mac Option+L types '@', so it
-   * fires 'alt+@', not 'alt+l'. On macOS, name punctuation that shift changes
+   * fires 'alt+@', not 'alt+l'. On Apple platforms, name punctuation that shift changes
    * with shift: 'alt+shift+/', not 'alt+?'.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
@@ -170,7 +171,8 @@ function matchesCombo(
   if (event.key.toLowerCase() === expected) {
     return true;
   }
-  // On macOS, Option changes the character a key types: Option+A types "å",
+  // On Apple platforms (macOS, and iPadOS or iOS with a hardware keyboard),
+  // Option changes the character a key types: Option+A types "å",
   // Option+1 types "¡", and some keys are dead keys. Elsewhere Alt changes no
   // character, and AltGr (Ctrl+Alt) types letters that must not fire
   // shortcuts.
