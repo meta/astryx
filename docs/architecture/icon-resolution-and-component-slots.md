@@ -324,6 +324,19 @@ Consumer icon props remain documented as component API. They are not listed as
 `componentIcons` slots unless the component also promises a separate stable
 theme-level role.
 
+## Deprecation and cleanup records
+
+### CLN-0030 — A complete `IconRegistry` maps `drag`
+
+| Field     | Value                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id        | `CLN-0030`                                                                                                                                                                                                               |
+| lifecycle | No deprecation: the staged `[breaking]` change that INV10 schedules for the `drag` `IconName` (`spec:AST-017` FR7)                                                                                                       |
+| delta     | `IconRegistry` becomes `Record<IconName, ReactNode>` again, so a registry typed as a complete `IconRegistry` without a `drag` entry is a TypeScript error; an omitted `drag` still resolves the default grip at run time |
+| migration | Add a `drag` entry to every registry typed as `IconRegistry`; a theme or icon set that already maps `drag` changes nothing                                                                                               |
+| rollback  | Restore the optional `drag` key in `IconRegistry` from the final-patch baseline                                                                                                                                          |
+| state     | `pending` — lands in 0.8.0, the next minor, with its `[breaking]` Changeset                                                                                                                                              |
+
 ## Change coupling
 
 - Adding a Core slot updates `ComponentIconSlotMap` in the public
