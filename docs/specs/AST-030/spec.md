@@ -250,7 +250,7 @@ they are separately named.
   scope and spec-location mapping the labelled run uses. Then, in the time
   left and for at most one minute of it, it runs the `scoped` and
   `release-only` spec files of the component folders that render a touched
-  component through their source value imports, nearest first. It runs no unchanged `audit` or `always` spec. `.a11y.browser.spec.ts` files run in Chromium in CI; their WebKit project runs locally and in the weekly WebKit run, which reports their failures without failing (DEC-24). For a shared primitive named in `.github/a11y-shared-primitives.json`, FR12's touched-component rule also runs a dependent-audits leg on every pull-request CI run that includes a change to it: at most three legs, each at most 10 minutes, covering the audits of components that use it. The list starts with Button and IconButton. Layer joins when a Layer change breaks release-check or a dependent audit at release; other additions are a CI & Release and chief-of-staff call. A change to a component's source also runs that component's own audit specs in the same leg, on every pull-request CI run that includes the change, within the same three legs of ten minutes. Audits beyond that budget are listed by name as not yet run, and they run on a later run at the same head, which may use more legs; merge-guard merges only on a run at the exact head that ran every owed audit. When GitHub cannot list a pull request's changed files, every audit is owed and no run at that head is complete, so merge-guard does not merge it; the pull request must be split. A main-only dispatch may run every owed audit at a pull request's exact head, as untrusted code under the same limits as the pull request's own run; merge-guard accepts its record for that head as it accepts the pull request run's. With contracts requested, the same dispatch also runs, at that head, the scoped accessibility contract specs a labelled pull-request run selects; merge-guard accepts its result as that head's opt-in accessibility evidence only when every selected spec ran and passed. The contract job runs in parallel with the unit-test jobs and
+  component through their source value imports, nearest first. It runs no unchanged `audit` or `always` spec. `.a11y.browser.spec.ts` files run in Chromium in CI; their WebKit project runs locally and in the weekly WebKit run, which reports their failures without failing (DEC-24). For a shared primitive named in `.github/a11y-shared-primitives.json`, FR12's touched-component rule also runs a dependent-audits leg on every pull-request CI run that runs the heavy suites (FR20) and includes a change to it: at most three legs, each at most 10 minutes, covering the audits of components that use it. The list starts with Button and IconButton. Layer joins when a Layer change breaks release-check or a dependent audit at release; other additions are a CI & Release and chief-of-staff call. A change to a component's source also runs that component's own audit specs in the same leg, on each such run that includes the change, within the same three legs of ten minutes. Audits beyond that budget are listed by name as not yet run, and they run on a later run at the same head, which may use more legs; merge-guard merges only on a run at the exact head that ran every owed audit. When GitHub cannot list a pull request's changed files, every audit is owed and no run at that head is complete, so merge-guard does not merge it; the pull request must be split. A main-only dispatch may run every owed audit at a pull request's exact head, as untrusted code under the same limits as the pull request's own run; merge-guard accepts its record for that head as it accepts the pull request run's. With contracts requested, the same dispatch also runs, at that head, the scoped accessibility contract specs a labelled pull-request run selects; merge-guard accepts its result as that head's opt-in accessibility evidence only when every selected spec ran and passed. The contract job runs in parallel with the unit-test jobs and
   MUST NOT become the pull request's critical path: it starts after the
   Storybook build and MUST finish before the slowest unit-test job, so the
   time until the required `test` join reports does not grow. It stops after
@@ -396,13 +396,14 @@ they are separately named.
   a day. Engineering owners listed in `.github/ENGOWNERS`, as the pull request's
   base commit lists them, are exempt from all of these limits, the shared
   login's included, and so are bot accounts. Apart from these limits, an author has at most three
-  pull-request CI runs active at once, engineering owners included; a run over
-  that cap waits until one of that author's runs finishes, and is not turned
-  away at its longest wait (DEC-31). A `release-critical`
+  pull-request CI runs active at once, engineering owners included, and every
+  pull request from the shared agent login counts toward one three-run cap for
+  that login as a whole. A run over that cap waits, before it waits for room,
+  until one of that author's runs finishes; that wait has no longest wait and
+  never stops the run, and the run then waits for room as any run does, its
+  stop without room at its longest wait included (DEC-31). A `release-critical`
   pull request's run is outside that cap, as it is outside these limits
-  (DEC-30). Every pull
-  request from the shared agent login counts toward one three-run cap for that
-  login as a whole. A held suite's check fails with
+  (DEC-30). A held suite's check fails with
   "Queued behind your 15 oldest PRs: runs on a push once it is among them, or at
   the pre-merge re-run.", "Queued behind the shared login's 5 oldest PRs: runs
   on a push once it is among them, or at the pre-merge re-run." or "Daily
@@ -450,15 +451,16 @@ they are separately named.
   fail with the reason when it is no longer the run's head.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
-  starts its pull-request run, which runs what the change reaches (FR13,
-  DEC-6). A pull request runs CI when its head branch lives in this repository,
+  starts its pull-request run, which runs the fast checks and defers the heavy
+  suites until the head's review and spec gates pass (FR20); the heavy suites
+  then run what the change reaches (FR13, DEC-6). A pull request runs CI when its head branch lives in this repository,
   which pushing needs write access for, or when it carries the
   maintainer-applied `ci:run` label. Applying or removing a label starts no run by itself; the label takes effect on the next push, a close and reopen, or marking the pull request ready. For a pull
   request that may not run CI, the required contexts (FR7) report failure with
   "Waiting for a maintainer's ci:run label", never success, because a skipped
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
-  code never runs with the repository's secrets. The contributor job of FR29 starts a run the same way: the label plus a draft-and-ready toggle.
+  code never runs with the repository's secrets. The contributor job of FR29 starts a run the same way: the label plus a draft-and-ready toggle. A fork's run, once admitted with `ci:run`, follows FR20: typecheck until the head's review and spec gates pass, then the heavy suites.
 - **FR18 — Runtime performance has one nightly lane, outside the pull-request
   surfaces.** `perf-nightly.yml` measures a fixed set of Sandbox perf scenes in
   Chromium on every nightly run of `main` and on manual dispatch: mount long
@@ -505,17 +507,18 @@ they are separately named.
   passes and before merge.** A push to a pull request into `main` from any
   author (the shared agent login, engineering owners and forks alike), in its
   run's first attempt, runs only typecheck in the CI workflow (lint keeps its
-  own workflow) until the review and spec gates (FR15) pass at that head,
-  unless its trusted classification is spec-only or Lab-only (FR26); the
-  path-filtered workflows (FR14) are unaffected. Its heavy jobs skip, and the
-  required contexts `test`, `build` and `docsite-test` (FR7) report failure
-  with "Heavy CI deferred: runs when review passes and before merge", never
-  success, so nothing merges on that run; the PR report says the same. The
-  first head at which the review and spec gates pass, and any later attempt of
-  its run (the pre-merge re-run of all jobs), run every suite at that head.
-  Marking the pull request ready, opening it and reopening it start no heavy
-  suite. A release merge-back, a release-branch pull request and the
-  heavy-suite caps (FR16) are unaffected (DEC-14, DEC-31).
+  own workflow), unless its trusted classification is spec-only or Lab-only
+  (FR26); the path-filtered workflows (FR14) are unaffected. Its heavy jobs
+  skip, and the required contexts `test`, `build` and `docsite-test` (FR7)
+  report failure with "Heavy CI deferred: runs when review passes and before
+  merge", never success, so nothing merges on that run; the PR report says the
+  same. When the review and spec gates (FR15) pass at a head, that event runs
+  every suite at that head (the review-pass run). Each head whose gates pass
+  gets its own review-pass run, a later head as well as an earlier one. Any
+  later attempt of a run (the pre-merge re-run of all jobs) also runs every
+  suite at that head. Marking the pull request ready, opening it and reopening
+  it start no heavy suite. A release merge-back, a release-branch pull request
+  and the heavy-suite caps (FR16) are unaffected (DEC-14, DEC-31).
 
 - **FR21 — Main's full unit run is about hourly and always finishes.** The
   Main workflow runs its unit suites (every Vitest project of every package,
@@ -609,7 +612,7 @@ they are separately named.
   below), no full typecheck, no
   Build-package tests, no interaction proofs, no touched-components check,
   and no visual, accessibility or RTL suite unless a maintainer's label runs
-  one (FR12), and an agent lane's push defers
+  one (FR12), and a push defers
   nothing (FR20). The required `build`, `test` and `docsite-test` contexts
   report success with the notice "Lab-only: Lab tests + Storybook build",
   never a skip. A Lab component's entry files are its routes in
@@ -655,7 +658,7 @@ they are separately named.
   `interaction-check/` branch also qualifies; the prefix is reserved for the
   release tooling. Such pull requests stay non-mergeable, and this widens the
   scope of no other pull request (DEC-24).
-- **FR29 — A stable contribution runs CI without a maintainer.** A stable contribution from a fork runs CI without a maintainer. An automated job starts CI for a fork pull request without `ci:run` (a branch in another repository, so CI doesn't run on its pushes under FR17) when all of these hold: it isn't a draft; its CLA check passes; its head has had no push for 4 hours; the review bot's (`astracat-bot[bot]`) review at that exact head is APPROVED, or COMMENTED with no finding the review marks as blocking (its body or inline comments contain "**Blocking", "Requesting changes" or "Changes requested"); CHANGES_REQUESTED, or no review at the head, never counts; the link guard passes (merge-guard's `external-links` status at the head is success or absent, and the pull request has no `needs-human:external-link` label); GitHub doesn't report it as conflicting with its base; its last push is no more than 30 days old; and it changes no workflow or CI path (`.github/**`, CI scripts). To start the run, the job adds `ci:run` and marks the pull request draft and then ready again, so the ready event starts a run at that exact head (FR17). The same ready event re-requests a human reviewer whose latest review requested changes, as a maintainer's own toggle does. Once the run has started it removes the label, but only when the latest `ci:run` label event is its own, so a later push runs nothing until it is vetted again. The job starts a head at most once, and a new head becomes eligible when it meets the same conditions. It starts a run only when the capacity tool has no release-check or main-break waiter queued in the capacity tool, and room for one more pull-request run under the CI job ceiling, at most one start per sweep, in a contributor class with its own daily runner-minute budget set by the owner, first in, first out by how long each head has been stable; the run is then admitted under FR16 like any pull request run. A daily report shows the minutes used against the budget, flags eligible heads that waited more than 2 days, and lists eligible-but-stale heads (over 30 days since the last push) for triage as needing a rebase. A maintainer can still start CI by hand: `ci:run` with a draft-and-ready toggle, a push, or a reopen runs it outside the stability conditions and the contributor budget, admitted under FR16; the automated job never removes or re-adds a label a maintainer set. (DEC-26)
+- **FR29 — A stable contribution runs CI without a maintainer.** A stable contribution from a fork runs CI without a maintainer. An automated job starts CI for a fork pull request without `ci:run` (a branch in another repository, so CI doesn't run on its pushes under FR17) when all of these hold: it isn't a draft; its CLA check passes; its head has had no push for 4 hours; the review bot's (`astracat-bot[bot]`) review at that exact head is APPROVED, or COMMENTED with no finding the review marks as blocking (its body or inline comments contain "**Blocking", "Requesting changes" or "Changes requested"); CHANGES_REQUESTED, or no review at the head, never counts; the link guard passes (merge-guard's `external-links` status at the head is success or absent, and the pull request has no `needs-human:external-link` label); GitHub doesn't report it as conflicting with its base; its last push is no more than 30 days old; and it changes no workflow or CI path (`.github/**`, CI scripts). To start the run, the job adds `ci:run` and marks the pull request draft and then ready again, so the ready event starts a run at that exact head (FR17). That run follows FR20: typecheck until the head's review and spec gates pass, then the heavy suites at that same head, which its admission still covers after the job removes the label. The same ready event re-requests a human reviewer whose latest review requested changes, as a maintainer's own toggle does. Once the run has started it removes the label, but only when the latest `ci:run` label event is its own, so a later push runs nothing until it is vetted again. The job starts a head at most once, and a new head becomes eligible when it meets the same conditions. It starts a run only when the capacity tool has no release-check or main-break waiter queued in the capacity tool, and room for one more pull-request run under the CI job ceiling, at most one start per sweep, in a contributor class with its own daily runner-minute budget set by the owner, first in, first out by how long each head has been stable; the run is then admitted under FR16 like any pull request run. A daily report shows the minutes used against the budget, flags eligible heads that waited more than 2 days, and lists eligible-but-stale heads (over 30 days since the last push) for triage as needing a rebase. A maintainer can still start CI by hand: `ci:run` with a draft-and-ready toggle, a push, or a reopen runs it outside the stability conditions and the contributor budget, admitted under FR16; the automated job never removes or re-adds a label a maintainer set. (DEC-26)
 - **FR30 — A non-generated release-branch candidate runs broad CI.** The
   generated version pull request keeps its narrow bookkeeping lane only when
   every changed path is one of its generated outputs. Any other pull request to
@@ -756,14 +759,15 @@ the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
 The nightly perf lane is the one scheduled measurement outside them (FR18).
 
-Current-state gap: the CI workflows defer the heavy suites only for the shared
-agent login and start them when a pull request is marked ready, and they turn
-a run away at its longest wait; FR20 and FR16's three-run cap (DEC-31) state
-the required behavior.
-Current-state gap in the three-run cap: a fork pull request's runs are not
-counted, because a fork's pull-request run has a read-only token and can
-neither set the cap's commit status nor cancel itself (a fork's run starts only
-after a maintainer's `ci:run` label, FR17).
+FR20 gap: the CI workflows defer the heavy suites only for the shared agent
+login's pushes, and run them when a pull request is marked ready, opened or
+reopened rather than when the review and spec gates pass at a head.
+FR16 gap: no cap limits how many pull-request CI runs one author has active at
+once.
+FR16 gap: a fork pull request's runs do not count toward its author's
+three-run cap, because a fork's pull-request run has only a read-only token (a
+fork's run starts only with the `ci:run` label, which a maintainer or FR29's
+contributor job adds, FR17).
 
 ## Verification
 
@@ -790,12 +794,13 @@ after a maintainer's `ci:run` label, FR17).
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract; `ci-admission.test.mjs`                                                                                                        | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup; a run with room, without room, past its longest wait, beside a waiting `main` check, as a draft or unlabelled fork, with opt-in labels, labelled `release-critical` by write access, by someone without it, and by someone who cannot be looked up, beside small workflows past their measured most, and with the API unreadable; each workflow's most jobs; every required context's rule; a full queue: the capacity tool and admission agree there is no room | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head, a run that is not `release-critical` and starts without room before its longest wait, a pull-request run that is not `release-critical` and starts while `main` has waited under fifteen minutes, a `release-critical` run that waits, a run whose label was last applied without write access or by someone who cannot be looked up that does not wait, a job admission could skip, a peak below the jobs its run holds, or a job on a slim runner planned past its fifteen-minute cap fails |
 | FR16     | `ci-admission.test.mjs` cases for one start at the longest wait at a time and the workflow contract                                                                                           | a pull-request run at its longest wait alone, within ten minutes of another pull-request run's start there and after them, behind a run that waited longer and ahead of a younger one; another run that found room earlier, a fork's stopped run and a `main` run that waited its longest; a `main` run and a merge-queue entry at their longest wait; the rest of a run whose Storybook build found room; ten runs out of time together; the required contexts and ci-full for either wait; a pull-request run that finds ten others waiting and room only for its Storybook build, and one at its longest wait behind more than ten that waited longer; two waiting `main` dispatches, the older and the younger, and two that began in the same second (each counting the other's peak fails)               | two pull-request runs start at their longest wait within ten minutes, a younger run starts ahead of a longer waiter, a `main` run or merge-queue entry stops, a run CI is full for builds, or a required context passes or skips                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR16     | `ci-admission.test.mjs` re-run case                                                                                                                                                           | a run stopped for no room; a re-run of its failed jobs; a re-run of the second wait alone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a re-run of the failed jobs that reuses an earlier attempt's room result or clock                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| FR16     | `ci-admission.test.mjs` three-run cap cases                                                                                                                                                   | an engineering owner's fourth active run; a fourth run from the shared agent login across three branch prefixes; a `release-critical` run beside three active runs of its author; a waiting fourth run when one of its author's three runs finishes; one author's three active runs beside another author's run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | an engineering owner's or the agent login's fourth run starts while three of its author's runs are active, a run is stopped or fails for the cap, a `release-critical` run waits for the cap, a waiting run does not go on to wait for room once one of its author's runs finishes, or one author's runs hold back another author's run                                                                                                                                                                                                                                                                                                                                                                        |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                                                                                            | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR18     | `perf-nightly-workflow.test.mjs`, `perf-trend.test.mjs` and `run-labels.test.mjs`                                                                                                             | nightly and dispatch; labelled, unlabelled, draft and unvouched-fork pull requests; write, read and no access; newest label event; failed lookup; 10% boundary; metric floors; seven-day window edges; fewer than three runs; a metric over once, twice in a row, or a different metric before; recorded and pull request runs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a run on an unlabelled pull request, a label honoured from read access, a regression called at exactly 10%, under its floor or on one run alone, a run outside the window in the baseline, a pull request run that records, or a second regression issue fails                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR18     | `overlay-churn-settled` on one commit, five samples per run                                                                                                                                   | medians within 1% between a standard run and a `PERF_CPU_THROTTLE=4` run on the same runner (Chromium's CPU slowed four times)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | interaction-layout medians more than 1% apart fail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | FR18     | `perf-trend.test.mjs` same-CPU cases                                                                                                                                                          | a run on a second CPU model whose timing metrics are about 75% higher on the same commit; a timing regression on one CPU model; a count metric across CPU models; a first run, and a run with no CPU model, with no timing baseline                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | a slower CPU model reported as a regression, a same-CPU timing regression missed, a count metric compared on one CPU model only, or a timing metric with no baseline that passes silently fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template                                                                                                                      | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| FR20     | `ci-heavy-deferral.test.mjs` over ci.yml, lint.yml and pr-comment.yml                                                                                                                         | agent push; marked ready; opened; reopened; re-run; another author; release branch; merge-back; spec-only change; Lab-only change; a release-check and an opt-in label run, where the decision skips; a failed-jobs re-run of a deferred push                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a heavy job runs on a deferred push, a required context passes or skips on one, a ready, reopened or re-run pull request defers, a spec-only or Lab-only change defers, the report hides the deferral, or a job below the decision skips because it skipped                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR20     | `ci-heavy-deferral.test.mjs` over ci.yml, lint.yml and pr-comment.yml                                                                                                                         | a push from the shared agent login, from an engineering owner and from a fork with `ci:run`; marked ready; opened; reopened; the review and spec gates passing at a head, and again at a later head; the pre-merge re-run; release branch; merge-back; spec-only change; Lab-only change; a release-check and an opt-in label run, where the decision skips; a failed-jobs re-run of a deferred push                                                                                                                                                                                                                                                                                                                                                                                                           | a heavy job runs on a deferred push from any author, a required context passes or skips on one, marking ready, opening or reopening starts a heavy suite, a head whose review and spec gates pass, the first or a later one, does not run every suite, the pre-merge re-run defers, a spec-only or Lab-only change defers, the report hides the deferral, or a job below the decision skips because it skipped                                                                                                                                                                                                                                                                                                 |
 | FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs`                                                                          | push run; dispatched unit run; tip with the scheduler's or a person's release-check, or a person's maintenance capture; unit run cancelled, skipped or timed out; newer recheck or person's run of the tip; a person's validation of an older commit; cut commit with and without a passing unit run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | FR21     | `ci-heavy-lanes.test.mjs` issue-closing cases                                                                                                                                                 | a newest unit run that succeeded with the bot's issue open; a person's issue with the same title; no open issue; a newest run that did not complete; a failed lookup; a named run whose event commit differs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the bot's issue stays open after a success, a person's issue closes, a call runs with no open issue, the issue closes on an incomplete run, a failed lookup fails the dispatcher, or the comment names the event commit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` and `vitest-node-legs.test.mjs` over the recorded Node times            | six UI legs and as many Node legs as shorten the slowest one, at most twelve, the slowest under twelve minutes on a runner 1.28 times slower than measured; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`; a pull request's Node plan over the recorded suite, a suite past its budget at twelve legs and a file past one leg's budget; Main's Node plan with the swizzle proof's slices, even files and one file that sets the floor, past its budget                                     | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, a split that depends on collection order, or a pull request's Node plan past its budget that does not fail its legs, or a Main plan past its budget that fails its legs, fails                                                                                                                                                                         |
@@ -1084,9 +1089,9 @@ job's check run of the same name is ambiguous to branch protection); deferring
 spec-only changes (their heavy jobs already do nothing, and every push would
 then need a re-run to merge).
 
-Amended by DEC-31: the deferral covers every author, and the heavy suites
-start at the first head whose review gates pass instead of when the pull
-request is marked ready.
+Amended by DEC-31: the deferral covers every author, and the heavy suites run
+at each head whose review and spec gates pass, and at the pre-merge re-run,
+instead of when the pull request is marked ready.
 
 ### DEC-15 — Main's unit suites run about hourly, in full, to completion
 
@@ -1107,10 +1112,6 @@ Rejected: running the unit suites on main's push cadence with a scope (a
 scoped run on main would miss the cross-change break it exists for);
 cancelling an older unit run for a newer push (a run that never finishes
 covers nothing).
-
-Amended by DEC-31: a pull-request run over its author's three-run cap
-(FR16) waits for one of that author's runs to finish instead of stopping at
-its longest wait.
 
 ### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
 
@@ -1218,6 +1219,11 @@ stalled the pull-request queue); starting `main`'s checks at once (a burst would
 pass ninety); a check in every job (it spent the shared API budget); admitting
 the small workflows too (one or two slim jobs a run do not repay two API calls
 each).
+
+Amended by DEC-31: before it waits for room, a pull-request run over its
+author's three-run cap (FR16) waits for one of that author's runs to finish,
+with no longest wait; its wait for room, and its stop without room at the
+longest wait, stay as above.
 
 ### DEC-18 — A release re-check takes main's lanes
 
@@ -1407,9 +1413,9 @@ accessibility status, is unchanged.
 A change to shared Button's disabled state passed every pull-request check and
 then failed the release check in a Chat component's `audit` spec, which no
 pull request runs. A change to a shared primitive that
-`.github/a11y-shared-primitives.json` lists now runs the `audit` specs of the
+`.github/a11y-shared-primitives.json` lists runs the `audit` specs of the
 components that use it, on every pull-request CI run that includes the
-change, in at most three legs of about ten minutes each (FR12). The list starts
+change and runs the heavy suites (FR20), in at most three legs of about ten minutes each (FR12). The list starts
 with Button and IconButton. A Button change runs about 20 audit spec files in
 two legs of about five minutes each, about 11 runner-minutes a run. The legs
 start after the Storybook build and end before the slowest unit-test job, so
@@ -1424,8 +1430,8 @@ component's own audits join the leg. A first run fits what it can into the same
 three legs and lists the rest by name; a later run at the same head runs every
 owed audit, and merge-guard merges only on a run that ran them all.
 
-Rejected: running the audits only when the pull request is marked ready and on
-a re-run (a push after ready merges without them); every audit spec on every
+Rejected: running the audits on fewer of those runs than the other heavy suites
+(a head would merge without them); every audit spec on every
 Layer change (about 37 minutes of recorded time on a change that lands about
 four times a day).
 
@@ -1435,6 +1441,10 @@ four times a day).
 **Decider:** `cixzhang`, `2026-11-09`
 
 The owner asked for "some system that will activate ci:run on contribution PRs that are stable", "Or we have some contrib lane that runs off a budget", and "plus ci:run to override?" (FR29). She approved the budget with "Ok 600": The owner set the budget at 600 runner-minutes per UTC day; unused minutes don't carry over.
+
+Amended by DEC-31: a run the job starts follows FR20 like any pull request's
+run: typecheck until the head's review and spec gates pass, then the heavy
+suites at that head.
 
 ### DEC-27 — A release test repair runs every ordinary pull-request lane
 
@@ -1512,16 +1522,18 @@ them (a release change needs its full checks).
 
 Most heavy runs are on heads that never merge, and a few authors' runs can
 hold most of CI's room while approved pull requests wait. Two rules answer
-that. First, for every author, the heavy suites run only at
-the heads that decide a merge: the first head whose review and spec gates
-pass, and the pre-merge re-run; marking ready, opening and reopening start
-none of them, and typecheck and lint run on every push (FR20, amending
-DEC-14). Second, an author has at most three pull-request CI runs active at
-once, engineering owners included, which FR16's owner exemption no longer
-covers; a run over that cap waits for one of that author's own runs to finish
-rather than being turned away after twelve minutes (FR16, amending DEC-16).
-The shared agent login is one author for this cap: all agent lanes together
-share three runs (decided `2026-11-17 08:36 PT`).
+that. First, for every author, the heavy suites run only at the heads that
+can merge: each head whose review and spec gates pass, and the pre-merge
+re-run; marking ready, opening and reopening start none of them, and
+typecheck and lint run on every push (FR20, amending DEC-14). A fork's run
+admitted with `ci:run` follows the same rule (FR17, FR29). Second, an author
+has at most three pull-request CI runs active at once, engineering owners
+included, though FR16's other limits exempt them; a run over that cap waits
+for one of that author's own runs to finish instead of being turned away, and
+then waits for room as any run does (FR16, amending DEC-16). The shared agent
+login is one author for this cap: all agent lanes together share three runs
+(decided `2026-11-17 08:36 PT`). A `release-critical` run is outside the cap
+(DEC-30).
 
 Rejected: letting main-red and flaky-test fixes skip the queue as
 `release-critical` pull requests do (DEC-30).
