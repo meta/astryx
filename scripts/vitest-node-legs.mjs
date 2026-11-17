@@ -71,16 +71,19 @@ export const WALL_SECONDS =
 export const LEG_BUDGET_SECONDS =
   (WALL_SECONDS * TEST_SECONDS_PER_WALL_SECOND) / RECORD_DRIFT;
 
-// The most Node legs a run starts. Past it the suite itself must get faster:
-// a run of eight legs already holds eight of CI's ninety jobs.
-export const MAX_NODE_LEGS = 8;
-
 // The most Node legs Main's unit run starts (spec:AST-030 FR22, DEC-17). Main
 // runs about once an hour, so it may hold more of the ceiling to finish inside
 // its legs' limit: on the recorded suite with the swizzle proof's slices,
 // twelve legs keep the slowest under about eleven minutes on a runner 1.28
 // times slower than measured, where eight legs reach the fifteen-minute limit.
 export const MAX_MAIN_NODE_LEGS = 12;
+
+// The most Node legs a pull request's run starts: as many as Main's, so a
+// suite that grows past one count of legs takes more legs instead of failing
+// every pull request. A pull request still starts only as many as its legs
+// need to fit their budget, at the widths admission picks, so it never grows
+// to finish sooner. Past this count the suite itself must get faster.
+export const MAX_NODE_LEGS = MAX_MAIN_NODE_LEGS;
 
 // How much slower than measured a runner may be, and how long Main's slowest
 // Node leg may take on it before main's validation warns, ahead of the

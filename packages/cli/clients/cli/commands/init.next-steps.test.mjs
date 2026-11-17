@@ -99,3 +99,16 @@ describe('init Next steps when the lockfiles disagree', () => {
     expect(text).toContain('pnpm add @astryxdesign/theme-neutral\n');
   });
 });
+
+describe('init in an app that is already set up', () => {
+  it('names the build and search commands, not the install steps', async () => {
+    const {getWorkflowSteps} = await import('../../../api/init/init.mjs');
+    const text = getWorkflowSteps('pnpm exec astryx').join('\n');
+    expect(text).toContain('Astryx is already set up here');
+    expect(text).toContain('pnpm exec astryx build "<what you\'re building>"');
+    expect(text).toContain('pnpm exec astryx search <query>');
+    expect(text).toContain('pnpm exec astryx docs getting-started');
+    expect(text).not.toContain('Next steps');
+    expect(text).not.toContain('theme-neutral');
+  });
+});

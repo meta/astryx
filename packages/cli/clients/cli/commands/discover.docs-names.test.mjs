@@ -263,7 +263,7 @@ describe('astryx discover: a doc that cannot be read', () => {
 
 describe('astryx discover: an icon set beside docs', () => {
   it(
-    'lists an icon set’s own icon definitions with the set, never as docs',
+    'lists an icon set’s own icon definitions with the set, never as docs; its one doc is its section of icons',
     async () => {
       // The set ships an icon definition of its own, a typed doc the docs tree
       // places; the Acme kit beside it ships docs, so the catalog is built.
@@ -285,7 +285,9 @@ describe('astryx discover: an icon set beside docs', () => {
         (/** @type {{name: string}} */ each) => each.name === '@acme/glyphs',
       );
       expect(glyphs.iconSets).toEqual(['glyphs']);
-      expect(glyphs.docs ?? []).toEqual([]);
+      // Its only doc is the section the project's set adds to `icons`, in
+      // the set package's name; its own definitions are never docs.
+      expect(glyphs.docs ?? []).toEqual(['icons']);
     },
     SLOW,
   );
