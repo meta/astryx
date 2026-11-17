@@ -463,6 +463,22 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  * }
  * ```
  */
+/**
+ * The scheme a Theme of `mode` draws in: `light` or `dark` as forced, else
+ * the scheme the page draws in (the root's, else its color-scheme meta), else
+ * the reader's preference. With `watchRoot` false it reads the preference
+ * alone and subscribes to no document change.
+ */
+export function useResolvedScheme(
+  mode: ThemeMode,
+  watchRoot: boolean,
+): 'light' | 'dark' {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const forced = mode === 'light' || mode === 'dark';
+  const rootScheme = useRootScheme(!forced && watchRoot);
+  return forced ? mode : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
+}
+
 export function useTheme(): UseThemeReturn {
   const ctx = use(ThemeContext);
   const systemScheme = use(SystemSchemeContext);
@@ -474,19 +490,13 @@ export function useTheme(): UseThemeReturn {
   const rootAttrMode = useRootModeAttr(hasCtx);
   const rootThemeName = useRootThemeNameAttr(hasCtx);
 
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-
   const mode = ctx?.mode ?? rootAttrMode ?? 'system';
   const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
 
   // Anything outside light|dark (a stale persisted preference cast to
   // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
   // sync already treats it, so the declared return type holds.
-  const forced = mode === 'light' || mode === 'dark';
-  const rootScheme = useRootScheme(!forced && systemScheme === 'root');
-  const effectiveMode: 'light' | 'dark' = forced
-    ? mode
-    : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
+  const effectiveMode = useResolvedScheme(mode, systemScheme === 'root');
 
   // Build the full resolved map, memoized on theme + effective mode
   const tokens = useMemo(

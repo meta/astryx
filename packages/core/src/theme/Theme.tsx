@@ -49,7 +49,7 @@ import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {SystemSchemeContext, ThemeContext} from './useTheme';
+import {SystemSchemeContext, ThemeContext, useResolvedScheme} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -273,11 +273,13 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  * Hook to sync theme attributes to document.documentElement for the root provider.
  * Skipped for nested Theme instances.
  *
- * Syncs two attributes:
+ * Syncs three attributes:
  * - `data-theme` (light/dark) — reset.css maps this to color-scheme, controlling
  *   browser chrome (scrollbars, native form controls, date pickers).
  * - `data-astryx-theme` (theme name) — enables @scope'd theme CSS to reach elements
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
+ * - `data-astryx-scheme` (light/dark) — the scheme the root Theme draws in, so
+ *   a theme's color-mode blocks under a system root follow the page.
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
  * - 'system' → removes data-theme (reset.css defaults the root to
@@ -292,6 +294,7 @@ function useRootThemeSync(
   mode: ThemeMode,
   themeName: string,
   reducesMotion: boolean,
+  scheme: 'light' | 'dark',
 ): void {
   // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
@@ -311,6 +314,9 @@ function useRootThemeSync(
 
     // Sync theme name so @scope rules reach portals/fallback viewports.
     document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    // The scheme the root Theme draws in, so a theme's color-mode blocks
+    // under a system root follow the page, not only the reader's preference.
+    document.documentElement.setAttribute(dataAttr('scheme'), scheme);
     setRootReducedMotionMark(document.documentElement, reducesMotion);
     if (reducesMotion) {
       document.documentElement.style.setProperty(REDUCED_MOTION_PROPERTY, '1');
@@ -321,10 +327,11 @@ function useRootThemeSync(
     return () => {
       document.documentElement.removeAttribute('data-theme');
       document.documentElement.removeAttribute(dataAttr('theme'));
+      document.documentElement.removeAttribute(dataAttr('scheme'));
       setRootReducedMotionMark(document.documentElement, false);
       document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
     };
-  }, [isNested, mode, themeName, reducesMotion]);
+  }, [isNested, mode, themeName, reducesMotion, scheme]);
 }
 
 /**
@@ -376,7 +383,9 @@ export function Theme({
   // marks its root.
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
-  useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+  // The root reads the page's scheme to sync it; a nested Theme reads none.
+  const rootScheme = useResolvedScheme(mode, !isNested);
+  useRootThemeSync(isNested, mode, theme.name, reducesMotion, rootScheme);
   useRootTextSizeSync(isNested);
 
   // A system Theme takes the scheme around it. That is the page root's, or a

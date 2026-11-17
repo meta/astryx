@@ -40,6 +40,7 @@ describe('Theme', () => {
     // Clean up documentElement state before each test
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-astryx-theme');
+    document.documentElement.removeAttribute('data-astryx-scheme');
     generateThemeCSSSpy.mockClear();
   });
 
@@ -130,6 +131,35 @@ describe('Theme', () => {
       </Theme>,
     );
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('syncs the scheme the root provider draws in to <html>, and removes it on unmount', () => {
+    for (const mode of ['dark', 'light'] as const) {
+      const {unmount} = render(
+        <Theme theme={testTheme} mode={mode}>
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        mode,
+      );
+      unmount();
+      expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+        false,
+      );
+    }
+    // A system root with no scheme on the page and no dark preference: light.
+    render(
+      <Theme theme={testTheme} mode="system">
+        <Theme theme={testTheme} mode="dark">
+          <span>child</span>
+        </Theme>
+      </Theme>,
+    );
+    // A nested Theme never writes it.
+    expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+      'light',
+    );
   });
 
   it('removes data-theme from <html> when root provider unmounts', () => {
