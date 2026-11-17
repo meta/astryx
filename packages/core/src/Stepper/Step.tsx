@@ -346,6 +346,11 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    // A flex item's default `min-width: auto` floors the body at its
+    // content's min-content width, so a wide field in an expanded step
+    // pushes the body past the step and the page scrolls sideways. Zeroing
+    // the floor keeps the body, and the content inside it, within the step.
+    minWidth: 0,
   },
 
   // ===================== HORIZONTAL LAYOUT =====================
