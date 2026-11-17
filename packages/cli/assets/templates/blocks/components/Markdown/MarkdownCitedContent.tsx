@@ -4,12 +4,15 @@
 
 import {Center} from '@astryxdesign/core/Center';
 import {Markdown} from '@astryxdesign/core/Markdown';
+import {Icon} from '@astryxdesign/core/Icon';
+import {BookOpenIcon} from '@heroicons/react/24/outline';
+import {NewspaperIcon} from '@heroicons/react/24/outline';
 
 const sources = {
   abc1: {
     title: 'Tokyo - Wikipedia',
     url: 'https://en.wikipedia.org/wiki/Tokyo',
-    icon: 'https://en.wikipedia.org/favicon.ico',
+    icon: <Icon icon={BookOpenIcon} size="xsm" />,
   },
   def2: {
     title: 'Japan Statistics Bureau - Population',
@@ -22,7 +25,7 @@ const sources = {
   jkl4: {
     title: 'Reuters — Tokyo GDP',
     url: 'https://www.reuters.com/markets/',
-    icon: 'https://www.reuters.com/favicon.ico',
+    icon: <Icon icon={NewspaperIcon} size="xsm" />,
   },
   mno5: {
     title: 'UN Urbanization Prospects',
