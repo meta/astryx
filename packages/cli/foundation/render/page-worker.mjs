@@ -1599,10 +1599,15 @@ async function missingNamedExports() {
       const target = importedFile(spec, file);
       const local = Boolean(target && path.isAbsolute(target) && isLocal(target) && /\.[cm]?[jt]sx?$/.test(target));
       if (!local && !spec.startsWith('@astryxdesign/') && !/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
-      // A plain re-export (`export {ButtonProps}`) breaks nothing while it
-      // loads, and TypeScript cannot tell it from a type's, so it is no use.
+      // In TypeScript a plain re-export (`export {ButtonProps}`) may name a
+      // type, which the module cannot tell from a value's, so it is no use.
+      // In JavaScript it names a value, which a build refuses when missing.
+      const typed = /\.[cm]?tsx?$/.test(file);
       const needed = bindings
-        .map(({specifier, values}) => ({specifier, values: values.filter(ref => !ref.parentPath.isExportSpecifier())}))
+        .map(({specifier, values}) => ({
+          specifier,
+          values: typed ? values.filter(ref => !ref.parentPath.isExportSpecifier()) : values,
+        }))
         .filter(({specifier, values}) => specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' && values.length > 0);
       if (needed.length === 0) continue;
       /** @type {any} */

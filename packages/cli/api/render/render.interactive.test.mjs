@@ -686,6 +686,22 @@ export default function Page() {
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
+    // In JavaScript a plain re-export names a value, so a missing one is refused.
+    put(
+      'src/lib-js.js',
+      "import {Nope} from '@astryxdesign/core';\nexport {Nope};\nexport const ok = 'ok';\n",
+    );
+    put(
+      'src/js-re.tsx',
+      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\n",
+    );
+    const jsRe = await errorOf(() =>
+      render('src/js-re.tsx', {cwd: dir, out: 'js-re.html'}),
+    );
+    expect(jsRe?.code).toBe('ERR_RENDER_COMPILE');
+    expect(jsRe?.message).toContain(
+      '(src/lib-js.js, line 1): @astryxdesign/core has no export Nope',
+    );
     // A package subpath the package does not export is refused as a build
     // refuses it, with no installed path in the message.
     put(
