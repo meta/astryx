@@ -10,6 +10,7 @@ import {
 } from './tokens';
 import {colorDefaults} from './tokens.stylex';
 import {domainTokenDefaults} from './domainTokens';
+import {contrastRatio} from './contrast';
 
 const testTheme = defineTheme({
   name: 'test',
@@ -438,4 +439,28 @@ describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
       expect(shapes.some(shape => shape.test(name))).toBe(false);
     }
   });
+});
+
+describe('muted background reads as a tint', () => {
+  const modes = (token: keyof typeof colorDefaults) => {
+    const match = /^light-dark\((.+), (.+)\)$/.exec(colorDefaults[token]);
+    if (match == null) throw new Error(`${token} is not a light-dark() pair`);
+    return {light: match[1], dark: match[2]};
+  };
+  const muted = modes('--color-background-muted');
+
+  // Muted fills sit on the page body (a column Card) and on a surface (a
+  // ProgressBar track in a Card), so each mode needs a visible step on both.
+  for (const mode of ['light', 'dark'] as const) {
+    for (const backdrop of [
+      '--color-background-body',
+      '--color-background-surface',
+    ] as const) {
+      it(`is visible over ${backdrop} in ${mode} mode`, () => {
+        expect(
+          contrastRatio(muted[mode], modes(backdrop)[mode]),
+        ).toBeGreaterThanOrEqual(1.05);
+      });
+    }
+  }
 });

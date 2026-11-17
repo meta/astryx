@@ -34,7 +34,7 @@ export const colorDefaults = {
   '--color-overlay': 'light-dark(#01122866, #11111299)',
   '--color-overlay-hover': 'light-dark(#0536590C, #FFFFFF0C)',
   '--color-overlay-pressed': 'light-dark(#05365919, #FFFFFF19)',
-  '--color-background-muted': 'light-dark(#0536590C, #1111127F)',
+  '--color-background-muted': 'light-dark(#0536590C, #FFFFFF0C)',
 
   // Text
   '--color-text-primary': 'light-dark(#0A1317, #DFE2E5)',

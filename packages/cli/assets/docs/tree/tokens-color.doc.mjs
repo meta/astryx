@@ -131,7 +131,7 @@ export const docs = {
             [
               "--color-background-muted",
               "#0536590C",
-              "#1111127F"
+              "#FFFFFF0C"
             ],
             [
               "--color-text-primary",
