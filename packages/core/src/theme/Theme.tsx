@@ -50,7 +50,7 @@ import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
 import {SystemSchemeContext, ThemeContext, useRootScheme} from './useTheme';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
@@ -58,6 +58,10 @@ import {
 } from '../privateAttributes/reducedMotion.stylex';
 import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * Theme provider props
@@ -371,6 +375,13 @@ export function Theme({
   mode = 'system',
   children,
 }: ThemeProps): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && theme == null) {
+    throw devPropError(
+      'Theme',
+      'theme',
+      "is required: a theme from defineTheme() or a theme package, for example <Theme theme={neutralTheme}> with import {neutralTheme} from '@astryxdesign/theme-neutral'. For the default look, leave out <Theme>.",
+    );
+  }
   const isNested = use(ThemeNestingContext);
   const parentMode = use(ThemeContext)?.mode;
   const parentForces = parentMode === 'light' || parentMode === 'dark';
