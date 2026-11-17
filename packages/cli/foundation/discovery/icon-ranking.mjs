@@ -64,9 +64,9 @@
  * an icon's most telling tags first). Remaining ties keep id order, so the
  * same installation always answers the same way.
  *
- * Ranking reads every icon of every searched set in each pass. Each set's
- * icons, with the words they match by, are worked out once per set object
- * and kept for every later pass and query on that set.
+ * Ranking reads every icon of every searched set in each pass, and one
+ * search makes up to four passes. Each set's icons, with the words they
+ * match by, are worked out once per search and shared by its passes.
  *
  * @position foundation/discovery — read by api/icon and icon-set-checks
  */
@@ -494,22 +494,24 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * @returns {IconMatchEntry[]}
  */
 export function rankIcons(sets, query, {words = false} = {}) {
+  /** @type {SearchableIcons} */
+  const searchable = new Map();
   const typed = typedQuery(query);
-  const asTyped = rankTerm(sets, typed);
+  const asTyped = rankTerm(sets, typed, searchable);
   if (asTyped.some(each => each.score >= 80)) return asTyped;
   const named = iconQuery(query);
-  const asNamed = named === typed ? asTyped : rankTerm(sets, named);
+  const asNamed = named === typed ? asTyped : rankTerm(sets, named, searchable);
   const answered = asNamed.length > 0 ? asNamed : asTyped;
   const spelled = iconQuery(exportNameWords(query));
   const asSpelled =
     spelled === '' || spelled === named || spelled === typed
       ? []
-      : rankTerm(sets, spelled);
+      : rankTerm(sets, spelled, searchable);
   const best = topScore(asSpelled) > topScore(answered) ? asSpelled : answered;
   if (best.length > 0) return best;
   if (!words) return [];
   const asked = [...new Set([...named.split(' '), ...spelled.split(' ')])];
-  return asked.length > 1 ? rankWords(sets, asked.join(' ')) : [];
+  return asked.length > 1 ? rankWords(sets, asked.join(' '), searchable) : [];
 }
 
 /**
@@ -532,18 +534,19 @@ const WORD_MATCH_SCORE = 20;
  * ({@link mappedNameWords}).
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} term lower-case words, filler words left out
+ * @param {SearchableIcons} searchable this search's worked-out sets
  * @returns {IconMatchEntry[]}
  */
-function rankWords(sets, term) {
+function rankWords(sets, term, searchable) {
   const words = [...new Set(term.split(' '))];
   let total = 0;
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], named: string[], setIndex: number}>} */
   const hits = [];
   sets.forEach((set, setIndex) => {
-    for (const searchable of searchableIcons(set)) {
-      const {icon, definitions} = searchable;
+    for (const each of searchableIcons(set, searchable)) {
+      const {icon, definitions} = each;
       total++;
-      const terms = (searchable.terms ??= iconTerms(searchable.ready.icon));
+      const terms = (each.terms ??= iconTerms(each.ready.icon));
       const carried = words.filter(word =>
         terms.some(each => each === word || sameWord(each, word)),
       );
@@ -631,21 +634,23 @@ function iconTerms(icon) {
 }
 
 /**
- * Each icon of a set with the words it matches by and its ready forms
- * ({@link readyIcon}), kept for each set object. A set is data that does not
- * change once read, and every ranking pass reads every icon, so the work is
- * done once per set rather than once per pass.
- * @type {WeakMap<object, Array<{icon: IconSetIcon, definitions: string[], ready: ReadyIcon, terms?: string[]}>>}
+ * The sets one search has worked out ({@link searchableIcons}), by set
+ * object. Each search starts its own, so a set that a caller edits between
+ * searches is read again.
+ * @typedef {Map<object, Array<{icon: IconSetIcon, definitions: string[], ready: ReadyIcon, terms?: string[]}>>} SearchableIcons
  */
-const SEARCHABLE = new WeakMap();
 
 /**
+ * Each icon of a set with the words it matches by and its ready forms
+ * ({@link readyIcon}). Every pass of a search reads every icon, so the work
+ * is done once per search rather than once per pass.
  * @param {DiscoveredIconSet} set
+ * @param {SearchableIcons} kept this search's worked-out sets
  * @returns {Array<{icon: IconSetIcon, definitions: string[], ready: ReadyIcon, terms?: string[]}>}
  */
-function searchableIcons(set) {
-  const kept = SEARCHABLE.get(set);
-  if (kept) return kept;
+function searchableIcons(set, kept) {
+  const known = kept.get(set);
+  if (known) return known;
   const astryx = astryxDefinitionsByName();
   const byIcon = definitionsByIcon(set.data);
   const own = new Map(
@@ -660,7 +665,7 @@ function searchableIcons(set) {
     );
     return {icon, definitions, ready: readyIcon(searchable, definitions)};
   });
-  SEARCHABLE.set(set, list);
+  kept.set(set, list);
   return list;
 }
 
@@ -668,14 +673,15 @@ function searchableIcons(set) {
  * {@link rankIcons} for one normalized query.
  * @param {DiscoveredIconSet[]} sets
  * @param {string} term
+ * @param {SearchableIcons} searchable this search's worked-out sets
  * @returns {IconMatchEntry[]}
  */
-function rankTerm(sets, term) {
+function rankTerm(sets, term, searchable) {
   const query = readyQuery(term);
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], match: IconMatch, setIndex: number}>} */
   const hits = [];
   sets.forEach((set, setIndex) => {
-    for (const {icon, definitions, ready} of searchableIcons(set)) {
+    for (const {icon, definitions, ready} of searchableIcons(set, searchable)) {
       const match = matchReady(query, ready);
       if (match) hits.push({set, icon, definitions, match, setIndex});
     }
