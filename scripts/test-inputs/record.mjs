@@ -39,13 +39,19 @@ if (OUT && !globalThis.__astryxTestInputs) {
   const realDirs = new Map();
   const {realpathSync} = fs;
   const owner = () => process.env.ASTRYX_TEST_INPUTS_FOR;
+  // A process or worker that a recorded one started inherits its owner;
+  // Vitest's own workers start with none and take one per test file.
+  const started = Boolean(owner());
   // Each line is its own file, written whole and then renamed into place, so
   // a process killed while writing leaves no cut-short line. These are the
   // functions before the wrappers below, so writing a line records nothing.
   const {writeFileSync, renameSync} = fs;
   let lineCount = 0;
   const writeLine = (who, entry) => {
-    const file = path.join(OUT, `${process.pid}.${lineCount++}.jsonl`);
+    const file = path.join(
+      OUT,
+      `${process.pid}.${workerThreads.threadId}.${lineCount++}.jsonl`,
+    );
     writeFileSync(
       `${file}.part`,
       `${JSON.stringify({
@@ -86,6 +92,10 @@ if (OUT && !globalThis.__astryxTestInputs) {
   };
   const note = (set, target) => {
     if (!owner()) return;
+    // A started process (a child or a worker) tells its starter what it found
+    // only by what it writes or sends, so its lines so far are written first:
+    // stopped later, it loses only what it never passed on.
+    if (set === writes && started) flushSoFar({inputsOnly: true});
     if (target instanceof URL) target = fileURLToPath(target);
     else if (Buffer.isBuffer(target)) target = target.toString();
     if (typeof target === 'string' && target !== '') set.add(resolved(target));
@@ -263,15 +273,20 @@ if (OUT && !globalThis.__astryxTestInputs) {
     rest.find(
       arg => arg != null && typeof arg === 'object' && !Array.isArray(arg),
     ) ?? {};
-  // A recorded Node child writes its lines when it exits. One stopped by a
-  // signal (a host killed once it answered) writes none, so its owner cannot
-  // see what it read. The owner is the one when the child started: a test
-  // may have ended by the time it stops.
+  // A recorded Node child writes what it found before each message it sends
+  // and each file it writes, so a child stopped by a signal once it answered
+  // (a page host) loses nothing it passed on. Its standard output is the one
+  // channel it can pass things on without that, so a child stopped by a
+  // signal while its starter read that output (or, run synchronously, kept
+  // it) marks its owner unseen. The owner is the one when the child started:
+  // a test may have ended by the time it stops.
   const stoppedBefore = program =>
     `stops ${program} before it writes its record`;
   const watchStop = (who, program, child) => {
     child?.on?.('exit', (_code, signal) => {
-      if (signal) writeLine(who, {unseen: [stoppedBefore(program)]});
+      if (signal && (child.stdout != null || child.stderr != null)) {
+        writeLine(who, {unseen: [stoppedBefore(program)]});
+      }
     });
     return child;
   };
@@ -392,6 +407,31 @@ if (OUT && !globalThis.__astryxTestInputs) {
     unseen.clear();
   };
   process.on('exit', flush);
+  // What a started process found so far, written before it passes anything
+  // on. An owner with nothing new writes nothing here; before a write, only
+  // new inputs count, so a process that writes many files in a row writes
+  // one line for them, not one each.
+  const flushSoFar = ({inputsOnly = false} = {}) => {
+    const inputs = reads.size + probes.size + lists.size + unseen.size;
+    if (inputs > 0 || (!inputsOnly && writes.size > 0)) flush();
+  };
+  if (started) {
+    if (typeof process.send === 'function') {
+      const send = process.send;
+      process.send = function (...args) {
+        flushSoFar();
+        return send.apply(this, args);
+      };
+    }
+    const port = workerThreads.parentPort;
+    if (port != null) {
+      const postMessage = port.postMessage;
+      port.postMessage = function (...args) {
+        flushSoFar();
+        return postMessage.apply(this, args);
+      };
+    }
+  }
 
   globalThis.__astryxTestInputs = {
     /** Ends the current owner's lines and records for `next` from now on. */

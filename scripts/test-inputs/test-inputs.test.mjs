@@ -46,6 +46,11 @@ describe('the recorder', () => {
     fs.mkdirSync(path.join(work, 'tree'));
     fs.writeFileSync(path.join(work, 'tree', 'fixture.json'), '{}');
     fs.writeFileSync(path.join(work, 'fork-read.txt'), 'f');
+    fs.writeFileSync(path.join(work, 'host-read.txt'), 'h');
+    fs.writeFileSync(
+      path.join(work, 'host.mjs'),
+      `import fs from 'node:fs'; fs.readFileSync(${JSON.stringify(path.join(work, 'host-read.txt'))}); process.send('ready'); setInterval(() => {}, 1000);`,
+    );
     fs.writeFileSync(
       path.join(work, 'forked.mjs'),
       `import fs from 'node:fs'; fs.readFileSync(${JSON.stringify(path.join(work, 'fork-read.txt'))});`,
@@ -73,7 +78,14 @@ describe('the recorder', () => {
       const done = child => new Promise(resolve => child.on('exit', resolve));
       await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: []}));
       await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: [], env: {PATH: process.env.PATH}}));
-      // A recorded Node child stopped by a signal writes no lines of its own.
+      // A host that answers over IPC and is then killed has written what it
+      // read before it answered.
+      const answering = fork(${JSON.stringify(path.join(work, 'host.mjs'))}, [], {execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc']});
+      await new Promise(resolve => answering.once('message', resolve));
+      answering.kill('SIGKILL');
+      await done(answering);
+      // A recorded Node child stopped by a signal while its output was read
+      // marks its owner unseen.
       const {spawn} = await import('node:child_process');
       const host = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -114,6 +126,7 @@ describe('the recorder', () => {
       false,
     );
     expect(all('reads')).toContain(path.join(work, 'fork-read.txt'));
+    expect(all('reads')).toContain(path.join(work, 'host-read.txt'));
     // The Node child read the file too, under the same owner.
     expect(
       lines.filter(line => line.reads.includes(path.join(work, 'a.txt')))
