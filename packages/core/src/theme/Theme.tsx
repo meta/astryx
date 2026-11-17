@@ -50,7 +50,12 @@ import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {SystemSchemeContext, ThemeContext, useRootScheme} from './useTheme';
+import {
+  SystemSchemeContext,
+  ThemeContext,
+  ThemeModeContext,
+  useRootScheme,
+} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -363,7 +368,7 @@ function useRootTextSizeSync(isNested: boolean): void {
 
 const MODE_NAMES: ReadonlySet<string> = new Set(['light', 'dark', 'system']);
 
-/** Warn once per kind of value that `theme` got something defineTheme() did not make. */
+/** Warns once for each kind of value that is not a defined theme. */
 function warnNotATheme(value: unknown): void {
   const got =
     typeof value === 'string'
@@ -378,7 +383,7 @@ function warnNotATheme(value: unknown): void {
       ? `To set the color mode, use mode="${value}".`
       : 'Pass a theme from defineTheme() or a theme package.';
   warnOnce(
-    `theme-not-a-theme:${typeof value === 'string' ? value : typeof value}`,
+    `theme-not-a-theme:${typeof value === 'string' ? value : value === null ? 'null' : typeof value}`,
     'Theme',
     `\`theme\` takes a theme from defineTheme(), but got ${got}. ${fix} ` +
       'Until then, this Theme applies no theme of its own.',
@@ -409,16 +414,15 @@ export function Theme({
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
   const parent = use(ThemeContext);
-  const parentMode = parent?.mode;
+  const parentMode = use(ThemeModeContext);
   const parentForces = parentMode === 'light' || parentMode === 'dark';
   const aroundScheme = use(SystemSchemeContext);
   const systemScheme = parentForces ? 'preference' : aroundScheme;
 
-  // A value that is not a defined theme (an untyped caller's mode string,
-  // such as "light", or a plain object) applies no theme of its own: the
-  // subtree keeps the theme around it, or Core's default tokens at the root.
-  // The server and the browser make the same choice, so they render the same
-  // markup, and nothing compiles CSS from it.
+  // A value that is not a defined theme applies no theme of its own. The
+  // subtree keeps the theme around it, or Core's default tokens at the root,
+  // and still takes this Theme's mode. The server and the browser make the
+  // same choice, so the markup matches.
   const ownTheme = isDefinedTheme(theme) ? theme : null;
   if (ownTheme == null) {
     warnNotATheme(theme);
@@ -481,11 +485,13 @@ export function Theme({
     </ThemeNestingContext>
   );
 
-  // With no theme to provide, the context is null: descendants read the mode
-  // from `<html>`, as they do with no Theme above them.
+  // With no theme to provide, ThemeContext is null, and descendants read the
+  // mode from ThemeModeContext.
   return (
     <SystemSchemeContext value={systemScheme}>
-      <ThemeContext value={ctxValue}>{wrapper}</ThemeContext>
+      <ThemeModeContext value={mode}>
+        <ThemeContext value={ctxValue}>{wrapper}</ThemeContext>
+      </ThemeModeContext>
     </SystemSchemeContext>
   );
 }

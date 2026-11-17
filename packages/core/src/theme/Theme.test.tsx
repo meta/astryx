@@ -934,6 +934,54 @@ describe('a theme value that is not a defined theme', () => {
     }
   });
 
+  it('keeps its mode for the Themes and readers below it when no theme surrounds it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {getByTestId} = render(
+        <Theme theme={'light' as never} mode="dark">
+          <div data-testid="forced">
+            <Probe />
+          </div>
+          <Theme theme={testTheme} mode="system">
+            <div data-testid="system">
+              <Probe />
+            </div>
+          </Theme>
+          <Theme theme={{} as never} mode="light">
+            <div data-testid="nested">
+              <Probe />
+            </div>
+          </Theme>
+        </Theme>,
+      );
+      expect(getByTestId('forced').textContent).toBe('default dark');
+      // A system Theme under one that forces dark follows the reader's
+      // preference (light here), not the forced root.
+      expect(getByTestId('system').textContent).toBe('test light');
+      expect(getByTestId('nested').textContent).toBe('default light');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('warns for null and for a plain object separately', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<Theme theme={null as never}>x</Theme>);
+      render(<Theme theme={{} as never}>y</Theme>);
+      const messages = warn.mock.calls
+        .map(args => String(args[0]))
+        .filter(m => m.includes('takes a theme from defineTheme()'));
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toContain('got null');
+      expect(messages[1]).toContain(
+        'an object that defineTheme() did not make',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('applies a defined theme once the value becomes one, without remounting the subtree', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {

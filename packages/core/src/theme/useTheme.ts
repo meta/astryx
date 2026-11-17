@@ -68,6 +68,19 @@ export const ThemeContext = createSharedContext<ThemeContextValue | null>(
 ThemeContext.displayName = 'ThemeContext';
 
 /**
+ * The nearest Theme's mode, also when that Theme applies no theme of its own
+ * (its `theme` is not a defined theme, so it provides no ThemeContext).
+ * null when no Theme is above.
+ * @internal Not exported from the theme barrel.
+ */
+export const ThemeModeContext = createSharedContext<ThemeMode | null>(
+  'ThemeModeContext',
+  1,
+  null,
+);
+ThemeModeContext.displayName = 'ThemeModeContext';
+
+/**
  * What a `system` mode follows here: the page root's scheme, or the OS
  * preference below a Theme that forces light or dark. Theme provides it.
  * @internal Not exported from the theme barrel.
@@ -490,16 +503,17 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  */
 export function useTheme(): UseThemeReturn {
   const ctx = use(ThemeContext);
+  const nearestMode = use(ThemeModeContext);
   const systemScheme = use(SystemSchemeContext);
 
   // Falls back to the root Theme's mode via <html data-theme> when there's
-  // no ThemeContext ancestor (e.g. useToast's detached fallback viewport).
-  // Resolves to null when `ctx` is present, so it has no effect there.
+  // no Theme above (e.g. useToast's detached fallback viewport). Resolves to
+  // null when a Theme is above, so it has no effect there.
   const hasCtx = ctx != null;
-  const rootAttrMode = useRootModeAttr(hasCtx);
+  const rootAttrMode = useRootModeAttr(hasCtx || nearestMode != null);
   const rootThemeName = useRootThemeNameAttr(hasCtx);
 
-  const mode = ctx?.mode ?? rootAttrMode ?? 'system';
+  const mode = ctx?.mode ?? nearestMode ?? rootAttrMode ?? 'system';
   const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
 
   // Anything outside light|dark (a stale persisted preference cast to
