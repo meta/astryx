@@ -1481,7 +1481,9 @@ them (a release change needs its full checks).
 **Decider:** `cixzhang`, pending
 
 Nearly every Node test reads files, so FR13's file-system rule alone runs
-almost the whole Node suite on every pull request. The theme editor's tests
+almost the whole Node suite on every pull request. This decision narrows
+DEC-6's rule that tests reading sources through the file system run whole,
+for the Node project only. The theme editor's tests
 are more than half of it, and most changes touch none of their inputs. Main's
 full unit run (FR21) records what each Node test file touches: each file it
 reads, each folder it lists or checks, each path it looks for and finds

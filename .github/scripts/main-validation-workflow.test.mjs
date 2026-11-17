@@ -83,6 +83,7 @@ describe('main validation checkouts', () => {
     // Every job that checks out code: none is left unbounded.
     expect(jobs.map(([id]) => id).sort()).toEqual([
       'main-commit',
+      'node-test-inputs',
       'sync-exports',
       'test-node',
       'test-ui',

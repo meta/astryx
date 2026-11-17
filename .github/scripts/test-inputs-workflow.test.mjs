@@ -31,7 +31,6 @@ const {
   failedTests,
   mergedPullRequests,
   skippedFailures,
-  testedCommit,
 } = require('./lib/skipped-test-alarm.cjs');
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -53,6 +52,9 @@ describe("Main's record", () => {
     expect(run.run).toContain(
       '--outputFile.json="$RUNNER_TEMP/node-results.json"',
     );
+    // Named reporters turn off the automatic GitHub annotations, so a failing
+    // test on main still gets one only when this reporter is named.
+    expect(run.run).toContain('--reporter=github-actions');
     expect(stepNamed(legs, "Keep this leg's recorded inputs").with.name).toBe(
       'node-test-inputs-leg-${{ matrix.shard }}',
     );
@@ -278,7 +280,13 @@ describe('the alarm', () => {
           listWorkflowRuns: async () => ({
             data: {
               workflow_runs: [
-                {id: 9, head_sha: now, display_title: 'Main'},
+                {
+                  id: 9,
+                  head_sha: now,
+                  display_title: `Main validation of ${now}`,
+                },
+                // A run that names no commit says nothing of what it tested.
+                {id: 10, head_sha: dispatched, display_title: 'Main'},
                 {
                   id: 8,
                   head_sha: dispatched,
@@ -322,14 +330,14 @@ describe('the alarm', () => {
         download: () => ['a.test.mjs', 'c.test.mjs'],
       });
       expect(found).toEqual([{test: 'a.test.mjs', pr: 5}]);
-      // The comparison starts at the commit that run tested, not the one it
-      // was dispatched on.
+      // The comparison starts at the commit the last passing run named as
+      // tested, not the one it was dispatched on, and skips a run that names
+      // none.
       expect(bases).toEqual([`${tested}...${now}`]);
     } finally {
       if (previous == null) delete process.env.GITHUB_WORKSPACE;
       else process.env.GITHUB_WORKSPACE = previous;
       fs.rmSync(dir, {recursive: true, force: true});
     }
-    expect(testedCommit({head_sha: now, display_title: 'Main'})).toBe(now);
   });
 });

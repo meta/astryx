@@ -16,6 +16,7 @@
 'use strict';
 
 const {execFileSync} = require('node:child_process');
+const {testedSha} = require('../../../scripts/lib/main-run-commit.cjs');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -51,15 +52,6 @@ function mergedPullRequests(messages) {
     if (match) numbers.add(Number(match[1]));
   }
   return [...numbers];
-}
-
-// The commit a Main run tested: a dispatch that names a commit says so in its
-// run name; any other run tests the commit it ran on.
-function testedCommit(run) {
-  const named = /^Main validation of ([0-9a-f]{40})$/.exec(
-    run.display_title ?? '',
-  );
-  return named ? named[1] : run.head_sha;
 }
 
 // The tests a pull request's CI run left out, from its artifact.
@@ -106,15 +98,18 @@ async function skippedFailures({
     status: 'success',
     per_page: 20,
   });
-  const previous = runs.workflow_runs.find(
-    run => testedCommit(run) !== sha && run.id !== runId,
-  );
+  // Only a run that names its commit says what it tested; a run that names
+  // none is passed over.
+  const previous = runs.workflow_runs.find(run => {
+    const tested = testedSha(run);
+    return tested != null && tested !== sha && run.id !== runId;
+  });
   if (previous == null) return [];
   const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead(
     {
       owner,
       repo,
-      basehead: `${testedCommit(previous)}...${sha}`,
+      basehead: `${testedSha(previous)}...${sha}`,
     },
   );
   const found = [];
@@ -156,5 +151,4 @@ module.exports = {
   failedTests,
   mergedPullRequests,
   skippedFailures,
-  testedCommit,
 };

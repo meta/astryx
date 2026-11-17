@@ -328,11 +328,13 @@ jobs:
       # The full run records what each Node test file touches, for the record
       # a pull request selects its file-reading tests by (scripts/test-inputs,
       # spec:AST-030 FR13). Each leg's JSON results name the files that fail.
+      # Naming reporters turns off Vitest's automatic GitHub annotations, so
+      # the github-actions reporter is named too.
       - name: Run this shard of the Node tests, recording their inputs
         run: |
           mkdir -p "$ASTRYX_TEST_INPUTS_DIR"
           pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
-            --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/node-results.json"
+            --reporter=default --reporter=github-actions --reporter=json --outputFile.json="$RUNNER_TEMP/node-results.json"
         env:
           ASTRYX_TEST_INPUTS_DIR: ${{ runner.temp }}/node-test-inputs
           # A release re-check proves every swizzle target, in Chromium too
@@ -375,10 +377,32 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that stalls stops at five minutes and is tried once more,
+      # instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
           persist-credentials: false
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       # The record only narrows pull requests' tests; without it they run
       # every file-reading test. So a failure to make or keep it leaves

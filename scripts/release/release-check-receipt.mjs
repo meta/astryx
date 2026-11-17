@@ -9,6 +9,8 @@
  * @position read by release.yml's stable publish before anything is built
  */
 
+import {testedSha} from '../lib/main-run-commit.cjs';
+
 /**
  * Whether a ci.yml run is a passing canonical release-check: its
  * `release-check` join succeeded. A maintenance capture, also a dispatch of
@@ -118,19 +120,6 @@ async function passedUnitRun({github, owner, repo, run}) {
     prefix =>
       legs(prefix).length > 0 &&
       legs(prefix).every(job => job.conclusion === 'success'),
-  );
-}
-
-/**
- * The commit a Main run names (`Main validation of <sha>`, a dispatch with
- * `sha`), or null. A run without one tests main's tip when it starts, which
- * can be later than its event's commit, so it is no receipt for any commit
- * (spec:AST-030 FR21, FR22).
- */
-function testedSha(run) {
-  return (
-    /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ??
-    null
   );
 }
 
