@@ -43,9 +43,11 @@ describe("a missed line's status colors", () => {
     const missed = /** @type {Array<{part: string, line: string}>} */ (
       /** @type {any} */ (await themeEditShow('t', {cwd})).data.missed ?? []
     );
-    const line = missed.find(m => / set t warning '/.test(m.line))?.line;
-    expect(line).toBeDefined();
-    for (const one of /** @type {string} */ (line).split(' && ')) {
+    // (A theme whose status colors follow the vibrancy has no such line.)
+    const lines = missed
+      .map(m => m.line)
+      .filter(l => / set t (info|success|warning|danger) '/.test(l));
+    for (const one of lines.flatMap(l => l.split(' && '))) {
       const run = await runCli(
         [
           .../** @type {string[]} */ (

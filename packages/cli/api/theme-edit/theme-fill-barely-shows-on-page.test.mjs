@@ -61,6 +61,23 @@ describe('a fill that barely differs from the page', () => {
   );
 
   it(
+    'a part filled exactly as the page is meant to be the page: nothing said',
+    async () => {
+      const r = /** @type {any} */ (
+        await themeEditSet('t', 'background-color', '#fef3c7', {
+          cwd,
+          on: 'layout-content',
+          mode: 'light',
+        })
+      ).data;
+      expect(
+        /** @type {string[]} */ (r.notes).filter(n => /barely shows/.test(n)),
+      ).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'a fill that stands out says nothing of it',
     async () => {
       const r = /** @type {any} */ (
