@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * Astryx Theme System
  *
@@ -44,6 +42,7 @@ export type {
   TokenName,
   TokenValue,
   ComponentStyleMap,
+  StyleBlock,
   StyleOverrides,
 } from './defineTheme';
 

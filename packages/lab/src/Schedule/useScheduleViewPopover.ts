@@ -6,9 +6,10 @@
  * @file useScheduleViewPopover.ts
  * @input The dialog name for the open trigger's key, or for no open trigger,
  *   and where focus goes when the open trigger stops being painted
- * @output One view-owned Popover with its open key, trigger props, the press
- *   model that lets one gesture switch triggers, a switch of the open content
- *   inside the popover, and a close when the open trigger is no longer painted
+ * @output One view-owned Popover with its open key, trigger props, a switch
+ *   of the open content inside the popover, the press that returns a trigger
+ *   to its own content, and a close when the open trigger is no longer
+ *   painted
  * @position Internal hook for Schedule views that own a popover (the month
  *   view's popover, component:Schedule FR17, FR20); not exported
  */
@@ -34,7 +35,6 @@ export interface ScheduleViewPopover {
   /** Spread on an element that contains every trigger. */
   readonly containerProps: {
     onPointerDownCapture: (event: ReactPointerEvent<HTMLElement>) => void;
-    onKeyDownCapture: () => void;
   };
   /**
    * Props of one trigger button. Calling it also marks the trigger as painted
@@ -76,8 +76,6 @@ export function useScheduleViewPopover(
   onTriggerLost?: (key: string) => void,
 ): ScheduleViewPopover {
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const openKeyRef = useRef(openKey);
-  openKeyRef.current = openKey;
   const popover = usePopover({
     dialogLabel: dialogLabelFor(openKey),
     // Popover's own defaults, spelled out where the hook's differ.
@@ -90,44 +88,35 @@ export function useScheduleViewPopover(
       setOpenKey(null);
     }, []),
   });
-  const popoverRef = useRef(popover);
-  popoverRef.current = popover;
 
-  // A pointer press on a trigger while the popover is open would close it by
-  // the browser's light dismiss before the click arrives, and the layer then
-  // absorbs a show() from that same press. So the press itself decides: a
-  // press on another trigger closes the popover here, ahead of the browser,
-  // and the click that follows opens the pressed trigger; a press on the open
-  // trigger is remembered so its click ends closed, whichever of the two
-  // closed it. A key press starts a new gesture and forgets the press.
-  const openKeyAtPressRef = useRef<string | null>(null);
+  // A press on the open trigger while it shows content switched to from
+  // inside the popover (an event handed from a busy day's list) shows the
+  // trigger's own content again. The layer cannot tell that press from one
+  // that closes it, so the popover closes here, ahead of the browser's light
+  // dismiss, and the click that follows opens it.
   const onPointerDownCapture = (event: ReactPointerEvent<HTMLElement>) => {
-    const target = event.target as Element | null;
-    const pressedKey =
-      target
-        ?.closest(`[${TRIGGER_ATTRIBUTE}]`)
-        ?.getAttribute(TRIGGER_ATTRIBUTE) ?? null;
-    const currentKey = openKeyRef.current;
-    openKeyAtPressRef.current = pressedKey == null ? null : currentKey;
+    const trigger = (event.target as Element | null)?.closest(
+      `[${TRIGGER_ATTRIBUTE}]`,
+    );
+    const pressedKey = trigger?.getAttribute(TRIGGER_ATTRIBUTE) ?? null;
     if (
       pressedKey != null &&
-      currentKey != null &&
-      pressedKey !== currentKey &&
-      popover.isOpen
+      pressedKey !== openKey &&
+      popover.isOpen &&
+      trigger?.getAttribute('aria-expanded') === 'true'
     ) {
       popover.hide();
     }
   };
-  const onKeyDownCapture = () => {
-    openKeyAtPressRef.current = null;
-  };
+
+  // A press on another trigger while the popover is open: the browser's
+  // light dismiss closes it as the press ends, and this show from the other
+  // trigger opens it there. A press on the open trigger ends closed: its
+  // light dismiss closes the popover, and the layer absorbs the show from
+  // that same trigger.
   const toggle = (key: string, button: HTMLButtonElement) => {
-    const openAtPress = openKeyAtPressRef.current;
-    openKeyAtPressRef.current = null;
-    if (openAtPress === key || (openKeyRef.current === key && popover.isOpen)) {
-      if (popover.isOpen) {
-        popover.hide();
-      }
+    if (openKey === key && popover.isOpen) {
+      popover.hide();
       return;
     }
     setOpenKey(key);
@@ -151,7 +140,7 @@ export function useScheduleViewPopover(
     }
     focusSwitchedContentRef.current = false;
     const frame = requestAnimationFrame(() => {
-      const content = popoverRef.current.contentRef.current;
+      const content = popover.contentRef.current;
       if (content == null) {
         return;
       }
@@ -161,7 +150,7 @@ export function useScheduleViewPopover(
       (first ?? content).focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [openKey]);
+  }, [openKey, popover.contentRef]);
 
   // Triggers painted this render; the popover may stay open only for one of
   // them. When its trigger is gone, focus — inside the popover, or dropped
@@ -170,13 +159,13 @@ export function useScheduleViewPopover(
   const paintedKeys = new Set<string>();
   useEffect(() => {
     if (openKey != null && !paintedKeys.has(openKey)) {
-      const content = popoverRef.current.contentRef.current;
+      const content = popover.contentRef.current;
       const active = document.activeElement;
       const hadFocus =
         active == null ||
         active === document.body ||
         (content?.contains(active) ?? false);
-      popoverRef.current.hide();
+      popover.hide();
       setOpenKey(null);
       if (hadFocus) {
         onTriggerLost?.(openKey);
@@ -187,7 +176,7 @@ export function useScheduleViewPopover(
   return {
     popover,
     openKey,
-    containerProps: {onPointerDownCapture, onKeyDownCapture},
+    containerProps: {onPointerDownCapture},
     getTriggerProps: (key, ownsOpenKey) => {
       paintedKeys.add(key);
       const ownsOpen =

@@ -28,10 +28,15 @@ export const doc = {
     'shows: one line (brief, the default), its sections (compact), or all of it (full).',
   fn: 'docs',
   args: [
-    {name: 'topic', param: 'topic', required: false},
+    {name: 'topic', param: 'topic', required: false, names: 'topic'},
     {name: 'section', param: 'section', required: false},
   ],
   options: [
+    {
+      flag: '--list',
+      param: 'options.list',
+      description: 'List every topic (the same as giving no topic)',
+    },
     {
       flag: '--index',
       param: 'options.index',
@@ -51,6 +56,7 @@ export const doc = {
   ],
   examples: [
     {label: 'List topics', cli: 'astryx docs'},
+    {label: 'The same list, asked for by flag', cli: 'astryx docs --list'},
     {label: "A topic's sections", cli: 'astryx docs theme'},
     {label: 'A whole topic as JSON', cli: 'astryx docs spacing --json'},
     {label: 'One section', cli: 'astryx docs theme quick-start'},
@@ -72,7 +78,7 @@ export const doc = {
     {code: 0, when: 'success'},
     {
       code: 1,
-      when: 'unknown topic or route, a section that matches no section or more than one, or a --depth that is not a number of levels or all',
+      when: 'unknown topic or route, a section that matches no section or more than one, a --depth that is not a number of levels or all, or --list given a topic or section',
     },
   ],
   related: ['search', 'component', 'hook', 'template'],

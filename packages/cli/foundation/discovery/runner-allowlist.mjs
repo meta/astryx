@@ -43,6 +43,8 @@ export const RUNNER_COMMAND_ALLOWLIST = Object.freeze({
       'explains how printed commands start, the pinned `npx @astryxdesign/cli@<version>` among them',
     'packages/cli/assets/docs/tree/project-global-or-both.doc.mjs':
       'compares running the CLI with npx to installing it, and is found by searching for that command',
+    'packages/cli/assets/docs/tree/render-pages.doc.mjs':
+      'quotes the note a rendered file opens with, whose commands are pinned to `npx @astryxdesign/cli@<version>`',
     'packages/cli/assets/docs/tree/install-once.doc.mjs':
       'names a pinned release, `npx @astryxdesign/cli@<version>`, which answers as that version',
     'packages/cli/assets/docs/tree/doc-syntax.doc.mjs':

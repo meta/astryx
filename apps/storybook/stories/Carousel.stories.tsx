@@ -15,6 +15,7 @@ import {
   typographyVars,
   radiusVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const styles = stylex.create({
   pageWrapper: {
@@ -84,14 +85,14 @@ const styles = stylex.create({
 });
 
 const IMAGES = [
-  {id: 1, src: 'https://picsum.photos/id/1042/200/200', label: 'dark.jpg'},
-  {id: 2, src: 'https://picsum.photos/id/1043/200/200', label: 'light.jpg'},
-  {id: 3, src: 'https://picsum.photos/id/1044/200/200', label: 'warm.jpg'},
-  {id: 4, src: 'https://picsum.photos/id/1047/200/200', label: 'mixed.jpg'},
-  {id: 5, src: 'https://picsum.photos/id/1050/200/200', label: 'nature.jpg'},
-  {id: 6, src: 'https://picsum.photos/id/1055/200/200', label: 'city.jpg'},
-  {id: 7, src: 'https://picsum.photos/id/1060/200/200', label: 'ocean.jpg'},
-  {id: 8, src: 'https://picsum.photos/id/1069/200/200', label: 'forest.jpg'},
+  {id: 1, src: SAMPLE_IMAGES.dark200x200, label: 'dark.jpg'},
+  {id: 2, src: SAMPLE_IMAGES.light200x200, label: 'light.jpg'},
+  {id: 3, src: SAMPLE_IMAGES.warm200x200, label: 'warm.jpg'},
+  {id: 4, src: SAMPLE_IMAGES.mixed200x200, label: 'mixed.jpg'},
+  {id: 5, src: SAMPLE_IMAGES.meadow200x200, label: 'nature.jpg'},
+  {id: 6, src: SAMPLE_IMAGES.city200x200, label: 'city.jpg'},
+  {id: 7, src: SAMPLE_IMAGES.beach200x200, label: 'ocean.jpg'},
+  {id: 8, src: SAMPLE_IMAGES.forest200x200, label: 'forest.jpg'},
 ];
 
 const meta: Meta<typeof Carousel> = {
@@ -501,10 +502,12 @@ function PagingCarousel({
   layout,
   count,
   mode,
+  hasLoop = false,
 }: {
   layout: '1-up' | '3-up';
   count: number;
   mode: PagingMode;
+  hasLoop?: boolean;
 }) {
   // One value: Carousel keeps the value it first attached, and a new `pages`
   // applies from the next flick.
@@ -514,6 +517,7 @@ function PagingCarousel({
     <div {...stylex.props(styles.pagingFrame)}>
       <Carousel
         gap={layout === '1-up' ? 0 : 2}
+        hasLoop={hasLoop}
         hasSnap={hasSnap}
         aria-label="Numbered items">
         {Array.from({length: count}, (_, i) => (
@@ -541,7 +545,7 @@ const pagingArgTypes = {
   },
 };
 
-type PagingStory = StoryObj<{mode: PagingMode}>;
+type PagingStory = StoryObj<{mode: PagingMode; hasLoop?: boolean}>;
 
 export const SnapPagingOneUp: PagingStory = {
   name: 'Snap Paging: One Item per View',
@@ -554,7 +558,9 @@ export const SnapPagingThreeUp: PagingStory = {
   name: 'Snap Paging: Three Items per View',
   argTypes: pagingArgTypes,
   args: {mode: 'paging'},
-  render: ({mode}) => <PagingCarousel layout="3-up" count={9} mode={mode} />,
+  render: ({mode, hasLoop}) => (
+    <PagingCarousel layout="3-up" count={9} mode={mode} hasLoop={hasLoop} />
+  ),
 };
 
 export const SnapPagingPartialLastPage: PagingStory = {

@@ -21,6 +21,7 @@ import {TabBar, TabBarItem} from '@astryxdesign/lab';
 import {Button} from '@astryxdesign/core/Button';
 import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Icon, type IconType} from '@astryxdesign/core/Icon';
+import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 
 // =============================================================================
 // Meta
@@ -158,6 +159,128 @@ function Bar({
 /** Four tabs, a badge on Library. Choosing Home again counts a reselect. */
 export const Default: Story = {
   render: () => <Bar />,
+};
+
+/** Rows enough to scroll a panel. */
+function Rows({title, count}: {title: string; count: number}) {
+  return (
+    <>
+      {Array.from({length: count}, (_, i) => (
+        <p key={i} style={{margin: 0, padding: '12px 16px'}}>
+          {title} row {i + 1}
+        </p>
+      ))}
+    </>
+  );
+}
+
+/** A row of filter chips that scrolls only sideways. */
+function Chips() {
+  return (
+    <div style={{flexShrink: 0}}>
+      <ScrollableArea axis="inline" label="Filters">
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            padding: '8px 16px',
+            width: 'max-content',
+          }}>
+          {Array.from({length: 12}, (_, i) => (
+            <span
+              key={i}
+              style={{
+                flexShrink: 0,
+                padding: '4px 12px',
+                borderRadius: 16,
+                background: 'rgba(127, 127, 127, 0.15)',
+              }}>
+              Filter {i + 1}
+            </span>
+          ))}
+        </div>
+      </ScrollableArea>
+    </div>
+  );
+}
+
+/**
+ * Each tab's panel holds a sideways row of chips over its own scroll area,
+ * and a pinned scroller sits above the panels. The counter shows each
+ * reselect.
+ */
+function PanelsDemo() {
+  const [value, setValue] = useState('home');
+  const [reselects, setReselects] = useState(0);
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+      <ScrollableArea label="Pinned" height={120} data-testid="other-scroller">
+        <Rows title="Pinned" count={20} />
+      </ScrollableArea>
+      <p data-testid="reselects" style={{margin: 0, padding: '8px 16px'}}>
+        Reselected {reselects} times
+      </p>
+      <div style={{position: 'relative', flex: 1}}>
+        {SECTIONS.map(section => (
+          <div
+            key={section.value}
+            id={`panel-${section.value}`}
+            role="tabpanel"
+            aria-label={section.label}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              visibility: section.value === value ? 'visible' : 'hidden',
+            }}>
+            <Chips />
+            <div style={{flex: 1, minHeight: 0, display: 'flex'}}>
+              <ScrollableArea
+                label={section.label}
+                width="100%"
+                height="100%"
+                data-testid={`scroller-${section.value}`}>
+                <Rows title={section.label} count={60} />
+                <div style={{height: 104}} />
+              </ScrollableArea>
+            </div>
+          </div>
+        ))}
+      </div>
+      <TabBar
+        value={value}
+        onChange={setValue}
+        onReselect={() => setReselects(n => n + 1)}
+        label="Sections">
+        {SECTIONS.map(section => (
+          <TabBarItem
+            key={section.value}
+            value={section.value}
+            label={section.label}
+            icon={<Icon icon={section.icon} size="lg" />}
+            selectedIcon={<Icon icon={section.selectedIcon} size="lg" />}
+            panelId={`panel-${section.value}`}
+          />
+        ))}
+      </TabBar>
+    </div>
+  );
+}
+
+/**
+ * Each tab's panel scrolls on its own, under a pinned scroller. Choosing the
+ * selected tab again counts a reselect.
+ */
+export const ScrollToTop: Story = {
+  name: 'Panel scroll areas',
+  render: () => <PanelsDemo />,
 };
 
 /** Badges appear, change and disappear at once, as UIKit's do. */

@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "recipe": "astryx-oklch-v1",
+  "generatorVersion": "palette-generator-v1",
+  "candidateFormatVersion": "palette-typescript-v1",
   "candidateSha256": "a9b186bd7aaffafe34bfabd5b76116115cf667e91066e59ff8f11bcdaaee69bf",
   "request": {
     "recipe": "astryx-oklch-v1",

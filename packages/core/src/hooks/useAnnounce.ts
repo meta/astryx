@@ -17,6 +17,7 @@
 
 import {use, useCallback, useRef, type RefObject} from 'react';
 import {createSharedContext} from '../utils/sharedContext';
+import {sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * Announcement urgency:
@@ -120,48 +121,59 @@ interface LiveRegions {
  */
 const CLEAR_DELAY_MS = 2000;
 
-const clearTimers: {
-  [K in AnnouncePoliteness]: ReturnType<typeof setTimeout> | null;
-} = {
-  polite: null,
-  assertive: null,
-};
+// The announcement channel's state. Every copy of Core on the page uses this
+// one channel, so a swizzled component and the package write to the same pair
+// of live regions and join the same frame of messages.
+const channel = sharedState('hooks/use-announce/channel', 1, () => {
+  const clearTimers: {
+    [K in AnnouncePoliteness]: ReturnType<typeof setTimeout> | null;
+  } = {polite: null, assertive: null};
+  // Messages written before the region exposes them wait here. One frame
+  // exposes them together and in order, so none is dropped. An identical
+  // repeat is kept once.
+  const pendingFrames: Record<AnnouncePoliteness, number | null> = {
+    polite: null,
+    assertive: null,
+  };
+  const pendingMessages: Record<AnnouncePoliteness, PendingMessage[]> = {
+    polite: [],
+    assertive: [],
+  };
+  return {
+    clearTimers,
+    pendingFrames,
+    pendingMessages,
+    // The pending message the latest announce joined, until its announcer
+    // takes it.
+    lastJoined: null as PendingMessage | null,
+    // The live regions are created once and stay mounted (see getRegions).
+    regions: null as LiveRegions | null,
+    modalRoute: null as ModalRoute | null,
+  };
+});
 
 function cancelScheduledClear(politeness: AnnouncePoliteness): void {
-  const timer = clearTimers[politeness];
+  const timer = channel.clearTimers[politeness];
   if (timer != null) {
     clearTimeout(timer);
-    clearTimers[politeness] = null;
+    channel.clearTimers[politeness] = null;
   }
 }
 
-// Messages written before the region exposes them wait here. One frame
-// exposes them together and in order, so none is dropped. An identical repeat
-// is kept once.
-const pendingFrames: Record<AnnouncePoliteness, number | null> = {
-  polite: null,
-  assertive: null,
-};
 // Each pending message counts its waiting announcers. When one withdraws it
 // (a busy start overtaken by its outcome), the message stays for the others.
 interface PendingMessage {
   text: string;
   holders: number;
 }
-const pendingMessages: Record<AnnouncePoliteness, PendingMessage[]> = {
-  polite: [],
-  assertive: [],
-};
-// The pending message the latest announce joined, until its announcer takes it.
-let lastJoined: PendingMessage | null = null;
 
 function cancelPendingFrames(politeness: AnnouncePoliteness): void {
-  const frame = pendingFrames[politeness];
+  const frame = channel.pendingFrames[politeness];
   if (frame != null) {
     cancelAnimationFrame(frame);
-    pendingFrames[politeness] = null;
+    channel.pendingFrames[politeness] = null;
   }
-  pendingMessages[politeness] = [];
+  channel.pendingMessages[politeness] = [];
 }
 
 function scheduleClear(
@@ -169,8 +181,8 @@ function scheduleClear(
   target: HTMLElement,
 ): void {
   cancelScheduledClear(politeness);
-  clearTimers[politeness] = setTimeout(() => {
-    clearTimers[politeness] = null;
+  channel.clearTimers[politeness] = setTimeout(() => {
+    channel.clearTimers[politeness] = null;
     target.textContent = '';
   }, CLEAR_DELAY_MS);
 }
@@ -178,7 +190,6 @@ function scheduleClear(
 // The live regions are created once and stay mounted. Many screen readers do
 // not announce a live region that is created with its content. They do
 // announce a text change in an empty region that is already mounted.
-let regions: LiveRegions | null = null;
 
 function createRegion(politeness: AnnouncePoliteness): HTMLElement {
   const el = document.createElement('div');
@@ -195,21 +206,21 @@ function getRegions(): LiveRegions | null {
   if (typeof document === 'undefined') {
     return null;
   }
-  if (regions) {
+  if (channel.regions) {
     // A test cleanup can remove a region from the DOM. Attach it again.
-    if (!regions.polite.isConnected) {
-      document.body.appendChild(regions.polite);
+    if (!channel.regions.polite.isConnected) {
+      document.body.appendChild(channel.regions.polite);
     }
-    if (!regions.assertive.isConnected) {
-      document.body.appendChild(regions.assertive);
+    if (!channel.regions.assertive.isConnected) {
+      document.body.appendChild(channel.regions.assertive);
     }
-    return regions;
+    return channel.regions;
   }
-  regions = {
+  channel.regions = {
     polite: createRegion('polite'),
     assertive: createRegion('assertive'),
   };
-  return regions;
+  return channel.regions;
 }
 
 /**
@@ -225,29 +236,29 @@ export function announceMessage(
     return null;
   }
   const target = politeness === 'assertive' ? r.assertive : r.polite;
-  const repeat = pendingMessages[politeness].find(
+  const repeat = channel.pendingMessages[politeness].find(
     pending => pending.text === message,
   );
   if (repeat != null) {
     repeat.holders += 1;
-    lastJoined = repeat;
+    channel.lastJoined = repeat;
     return () => withdrawPendingAnnouncement(repeat, politeness);
   }
   const pending = {text: message, holders: 1};
-  pendingMessages[politeness].push(pending);
-  lastJoined = pending;
-  if (pendingFrames[politeness] == null) {
+  channel.pendingMessages[politeness].push(pending);
+  channel.lastJoined = pending;
+  if (channel.pendingFrames[politeness] == null) {
     // Clear first, so the change is seen when the new text equals the old
     // text. Some assistive technology ignores identical content.
     target.textContent = '';
     // Some assistive technology merges an immediate re-set with the clear. A
     // re-set in the next frame is more reliable.
-    pendingFrames[politeness] = requestAnimationFrame(() => {
-      pendingFrames[politeness] = null;
-      target.textContent = pendingMessages[politeness]
+    channel.pendingFrames[politeness] = requestAnimationFrame(() => {
+      channel.pendingFrames[politeness] = null;
+      target.textContent = channel.pendingMessages[politeness]
         .map(pending => pending.text)
         .join(' ');
-      pendingMessages[politeness] = [];
+      channel.pendingMessages[politeness] = [];
     });
   }
   // The clear keeps the last message out of the accessibility tree. Each
@@ -264,11 +275,13 @@ export function announceMessage(
 export function clearRegion(politeness: AnnouncePoliteness): void {
   cancelPendingFrames(politeness);
   cancelScheduledClear(politeness);
-  if (!regions) {
+  if (!channel.regions) {
     return;
   }
   const target =
-    politeness === 'assertive' ? regions.assertive : regions.polite;
+    politeness === 'assertive'
+      ? channel.regions.assertive
+      : channel.regions.polite;
   target.textContent = '';
 }
 
@@ -318,8 +331,8 @@ export function useAnnounce({
       let written: WithdrawAnnouncement | null;
       // `modal` is non-null only below a provider, and a provider loads the
       // route. The route decides where the caller is heard.
-      if (modal != null && modalRoute != null) {
-        written = modalRoute.announce(modal, message, politeness);
+      if (modal != null && channel.modalRoute != null) {
+        written = channel.modalRoute.announce(modal, message, politeness);
       } else if (!message) {
         // An empty message clears the region, with the messages that are
         // not yet exposed.
@@ -390,11 +403,9 @@ export interface ModalRoute {
   ): WithdrawAnnouncement | null;
 }
 
-let modalRoute: ModalRoute | null = null;
-
 /** Called once by `modalAnnounce.ts` as it loads. @internal */
 export function installModalRoute(route: ModalRoute): void {
-  modalRoute = route;
+  channel.modalRoute = route;
 }
 
 /** Whether `dialog` is open as a native modal right now. */
@@ -438,8 +449,8 @@ export function announceInModal(
   message: string,
   politeness: AnnouncePoliteness = 'polite',
 ): WithdrawAnnouncement | null {
-  if (modalRoute != null) {
-    return modalRoute.announceInModal(dialog, message, politeness);
+  if (channel.modalRoute != null) {
+    return channel.modalRoute.announceInModal(dialog, message, politeness);
   }
   if (isOpenModal(dialog)) {
     return writeModalRegion(dialog, message, politeness);
@@ -469,7 +480,10 @@ interface ModalPending {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-const pendingByRegion = new WeakMap<HTMLElement, ModalPending>();
+const pendingByRegion = sharedWeakMap<HTMLElement, ModalPending>(
+  'hooks/use-announce/pending-by-region',
+  1,
+);
 
 function cancelPending(pending: ModalPending): void {
   if (pending.frame != null) {
@@ -677,8 +691,8 @@ export function clearModalRegion(
  * @internal
  */
 export function takeJoinedAnnouncement(): object | null {
-  const joined = lastJoined;
-  lastJoined = null;
+  const joined = channel.lastJoined;
+  channel.lastJoined = null;
   return joined;
 }
 
@@ -694,7 +708,7 @@ export function withdrawPendingAnnouncement(
   joined: object,
   politeness: AnnouncePoliteness,
 ): void {
-  const pending = pendingMessages[politeness];
+  const pending = channel.pendingMessages[politeness];
   const index = pending.indexOf(joined as PendingMessage);
   if (index < 0) {
     return;
@@ -716,10 +730,10 @@ export function __resetLiveRegionsForTest(): void {
   cancelPendingFrames('assertive');
   cancelScheduledClear('polite');
   cancelScheduledClear('assertive');
-  lastJoined = null;
-  if (regions) {
-    regions.polite.remove();
-    regions.assertive.remove();
-    regions = null;
+  channel.lastJoined = null;
+  if (channel.regions) {
+    channel.regions.polite.remove();
+    channel.regions.assertive.remove();
+    channel.regions = null;
   }
 }

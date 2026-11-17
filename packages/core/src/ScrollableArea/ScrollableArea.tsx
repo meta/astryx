@@ -32,6 +32,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from '../Layout/padding.stylex';
+import {containerBlockBleedStyles} from '../Layout/containerBlockBleed.stylex';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {
   useScrollableArea,
@@ -49,7 +50,6 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     maxInlineSize: '100%',
     maxBlockSize: '100%',
-    WebkitOverflowScrolling: 'touch',
     scrollbarColor: {
       default: `${colorVars['--color-neutral']} transparent`,
       // Touch screens keep the platform's own scroll indicator, which iOS
@@ -58,8 +58,6 @@ const styles = stylex.create({
       '@media (pointer: coarse)': 'auto',
       '@media (forced-colors: active)': 'auto',
     },
-    scrollbarWidth: 'auto',
-    scrollbarGutter: 'auto',
     // Chromium can resolve CSS-only stuck/edge presentation for descendants.
     // Unsupported engines keep the hook state as the behavior source of truth.
     containerType: {
@@ -253,6 +251,7 @@ export function ScrollableArea({
             paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
             paddingBlockEnd != null &&
               containerPaddingBlockEndVarStyles[paddingBlockEnd],
+            containerBlockBleedStyles.publish,
           ),
         })}>
         {children}

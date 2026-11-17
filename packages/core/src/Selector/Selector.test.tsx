@@ -21,6 +21,7 @@ import {
 import {readFileSync} from 'node:fs';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -29,7 +30,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import type {ReactNode} from 'react';
 import {Selector} from './Selector';
 import {SelectorOption} from './SelectorOption';
@@ -644,6 +645,56 @@ describe('Selector', () => {
     }
   });
 
+  it.each([
+    ['below its anchor', 'marginBlockEnd'],
+    ['already flipped above its anchor', 'marginBlockStart'],
+  ])(
+    "keeps the overlay out of the layer's viewport gutter, the layer %s",
+    async (_, gutterMargin) => {
+      const restoreRects = mockSelectorRects();
+      // The layer keeps a 16 px gutter from the viewport's block end.
+      const realGetComputedStyle = window.getComputedStyle.bind(window);
+      const styleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((element, pseudo) => {
+          const style = realGetComputedStyle(element, pseudo);
+          if (
+            element instanceof HTMLElement &&
+            element.hasAttribute('popover')
+          ) {
+            Object.defineProperty(style, gutterMargin, {value: '16px'});
+          }
+          return style;
+        });
+      const user = userEvent.setup();
+      try {
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        const popover = screen
+          .getByRole('listbox', {hidden: true})
+          .closest('[popover]');
+        // 16 px higher than without the gutter (110 px), so the list ends at
+        // the gutter in the 200 px viewport.
+        await waitFor(() => {
+          expect(popover?.getAttribute('style')).toContain(
+            '--_selector-overlay-margin: min(-126px,',
+          );
+        });
+      } finally {
+        styleSpy.mockRestore();
+        restoreRects();
+      }
+    },
+  );
+
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
       anchor: rect({top: 160, bottom: 192, height: 32}),
@@ -1072,6 +1123,42 @@ describe('Selector', () => {
   });
 
   describe('hasSearch', () => {
+    it('focuses the search input on open after React discards a render without search', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const field = (hasSearch: boolean, isPending = false) => (
+        <Suspense fallback={null}>
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Apple"
+            onChange={() => {}}
+            hasSearch={hasSearch}
+          />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      const user = userEvent.setup();
+      const {rerender} = render(field(true));
+      await act(async () => {
+        startTransition(() => {
+          rerender(field(false, true));
+        });
+      });
+
+      await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
+
+      // The committed selector has search, so its show focuses the input.
+      await waitFor(() =>
+        expect(screen.getByRole('combobox', h)).toHaveFocus(),
+      );
+    });
+
     it('renders search input when hasSearch is true', async () => {
       const user = userEvent.setup();
       render(
@@ -2910,6 +2997,50 @@ describe('Selector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(<Selector label="Fruit" options={OPTIONS} isDefaultOpen />);
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed on mount when disabled and read-only', () => {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <Selector label="Fruit" options={OPTIONS} isDefaultOpen />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},
@@ -4462,6 +4593,249 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     });
     closeByLightDismiss();
 
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick that moved focus to a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    // The press on the option moved focus to the container before the pick.
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a press on a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    act(() => {
+      screen.getByTestId('container').focus();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field a press moved it to inside the same focusable container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <input aria-label="Notes" />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    closeByLightDismiss();
+
+    expect(notes).toHaveFocus();
+  });
+
+  it('leaves focus on a Tab-stop container that a press outside the list moved it to', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const container = screen.getByTestId('container');
+    await user.click(container);
+    closeByLightDismiss();
+
+    expect(container).toHaveFocus();
+  });
+
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    closeByLightDismiss();
+
+    expect(nextTab).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick inside a Tab-stop container', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a closed shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a keyboard pick from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    await user.tab();
+    const trigger = document.activeElement as HTMLElement;
+    await user.keyboard('c');
+    const search = screen.getByPlaceholderText('Search…');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('Cherry');
     expect(trigger).toHaveFocus();
   });
 });

@@ -56,7 +56,7 @@ export const docs = {
       name: 'collapsible',
       type: 'boolean',
       description:
-        'Whether a drag lifted below the collapsed threshold collapses the region to zero.',
+        'Whether a lift or a key step below the collapsed threshold collapses the region to zero.',
       default: 'false',
     },
     {
@@ -81,13 +81,13 @@ export const docs = {
       name: 'isCollapsed',
       type: 'boolean',
       description:
-        'Controlled collapse state. collapse(), expand() and a drag past the threshold then report through onCollapseChange instead of changing state internally.',
+        'Controlled collapse state. collapse(), expand(), a lift or a key step past the threshold, and a drag that reopens the region then report through onCollapseChange instead of changing state internally.',
     },
     {
       name: 'onCollapseChange',
       type: '(isCollapsed: boolean) => void',
       description:
-        'Called once per collapse state change, via drag or programmatically.',
+        'Called once per collapse state change: a lift or a key step that closes the region, a drag or a key that reopens it, Enter, a double-click, or a call to collapse(), expand() or resize().',
     },
   ],
   returns: [
@@ -179,14 +179,14 @@ export const docsDense = {
     containerRef: 'the element a percentage is a share of.',
     direction: 'which axis to resize along.',
     collapsible:
-      'whether a drag lifted below collapsed threshold collapses region to zero.',
+      'whether a lift or key step below collapsed threshold collapses region to zero.',
     snaps: 'px values to snap to during drag.',
     autoSaveId:
       'key for localStorage persistence of size + collapse state across sessions.',
     defaultIsCollapsed:
       'initial collapse state (uncontrolled); persisted entry wins.',
     isCollapsed:
-      'controlled collapse state; collapse()/expand()/drag report instead of mutating.',
+      'controlled collapse state; collapse()/expand()/lift/key step/reopening drag report instead of mutating.',
     onCollapseChange: 'called once per collapse state change.',
   },
   returnDescriptions: {

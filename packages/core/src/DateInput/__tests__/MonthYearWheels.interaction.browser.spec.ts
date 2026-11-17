@@ -22,6 +22,7 @@ import {
 import {
   drag,
   openStory,
+  settlesAt,
   touchDriver,
   withStorybook,
   type TouchDriver,
@@ -29,43 +30,6 @@ import {
 import {WHEEL_ROW_HEIGHT} from '../wheelOptions';
 
 const storybook = withStorybook(test);
-
-/**
- * Resolves once `locator`'s element shows `property` at `value` and no
- * animation inside it is left unfinished. The page checks the value once a
- * frame, then awaits each animation's own `finished` promise. It sets no
- * deadline of its own, so a starved runner only makes it later.
- */
-async function settlesAt(locator: Locator, property: string, value: string) {
-  await locator.evaluate(
-    async (element, [name, expected]) => {
-      await new Promise<void>(resolve => {
-        const check = () => {
-          if (getComputedStyle(element).getPropertyValue(name) === expected) {
-            resolve();
-          } else {
-            requestAnimationFrame(check);
-          }
-        };
-        check();
-      });
-      for (;;) {
-        const unfinished = element
-          .getAnimations({subtree: true})
-          .filter(animation => animation.playState !== 'finished');
-        if (unfinished.length === 0) {
-          return;
-        }
-        await Promise.all(
-          unfinished.map(async animation =>
-            animation.finished.catch(() => undefined),
-          ),
-        );
-      }
-    },
-    [property, value] as const,
-  );
-}
 
 async function openWheels(page: Page) {
   await openStory(

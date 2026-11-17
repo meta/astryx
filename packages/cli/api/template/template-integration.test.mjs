@@ -13,6 +13,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./template.mjs')} */
@@ -32,7 +33,7 @@ let tmpDir;
 let originalCwd;
 
 function makeConsumer() {
-  const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-template-it-'));
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-template-it-'));
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({name: 'consumer'}),
@@ -475,9 +476,8 @@ describe('integration template discovery', () => {
     const renderedBuild = await runCli(['build', 'shell-side-nav'], tmpDir);
     expect(renderedBuild.status).toBe(0);
     expect(renderedBuild.stdout).toContain(
-      'template shell-side-nav --type page <path>',
+      'template shell-side-nav --type page src/pages/shell-top-nav',
     );
-    expect(renderedBuild.stdout).not.toContain('template shell-top-nav <path>');
 
     const listed = await template(undefined, {list: true, cwd: tmpDir});
     expect(listed.data).toEqual(
@@ -1209,7 +1209,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'acme-app-shell',
-      command: 'astryx template shell-side-nav --type page <path>',
+      command:
+        'astryx template shell-side-nav --type page src/pages/acme-app-shell',
     });
     const selected = await template('shell-side-nav', {
       type: 'page',
@@ -1228,7 +1229,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
-      command: 'astryx template contact-form --type page <path>',
+      command:
+        'astryx template contact-form --type page src/pages/contact-form',
     });
     const selected = await template('contact-form', {
       type: 'page',

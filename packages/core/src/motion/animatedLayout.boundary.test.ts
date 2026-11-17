@@ -149,6 +149,20 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     ]);
   });
 
+  it("keeps the inert clone to the copy mechanism and the reorder's preview", () => {
+    const users = sourceFiles(coreSrc)
+      .filter(path =>
+        /from '[./]+(motion\/)?inertClone'/.test(readFileSync(path, 'utf8')),
+      )
+      .map(path => relative(coreSrc, path))
+      .sort();
+    expect(users).toEqual([
+      'List/listReorderEngine.tsx',
+      'motion/animatedLayout.ts',
+      'motion/transientCopy.ts',
+    ]);
+  });
+
   it('is used only by the hook and the components that adopt it', () => {
     const users = sourceFiles(coreSrc)
       .filter(path => path !== join(here, 'animatedLayout.ts'))

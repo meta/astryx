@@ -16,6 +16,7 @@ import {useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, typeScaleVars} from '../../../theme/tokens.stylex';
 
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
 import type {TableColumn, TablePlugin} from '../../types';
 
 /**
@@ -55,6 +56,19 @@ const styles = stylex.create({
   },
 });
 
+function createRowIndexLookup<T>(data: T[], getRowKey?: (item: T) => string) {
+  let map: Map<unknown, number> | undefined;
+  return (item: T): number | undefined => {
+    if (map == null) {
+      map = new Map();
+      for (let index = 0; index < data.length; index++) {
+        map.set(getRowKey ? getRowKey(data[index]) : data[index], index);
+      }
+    }
+    return map.get(getRowKey ? getRowKey(item) : item);
+  };
+}
+
 /**
  * Returns a {@link TablePlugin} that prepends a right-aligned, monospaced
  * row-number column. Numbering follows the rows the table renders, so it
@@ -71,26 +85,32 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
 ): TablePlugin<T> {
   const {data, getRowKey, label = '#', startFrom = 1} = config;
 
-  // The lookup into a caller's `data`. Keyed by getRowKey when provided
-  // (stable across new object identities), otherwise by object reference.
-  const lookup = useMemo(() => {
-    if (data == null) {
-      return null;
-    }
-    const map = new Map<unknown, number>();
-    for (let i = 0; i < data.length; i++) {
-      const item = data[i];
-      map.set(getRowKey ? getRowKey(item) : item, i);
-    }
-    return (item: T): number | undefined =>
-      map.get(getRowKey ? getRowKey(item) : item);
-  }, [data, getRowKey]);
+  const lookup = useMemo(
+    () => (data == null ? null : createRowIndexLookup(data, getRowKey)),
+    [data, getRowKey],
+  );
 
   return useMemo((): TablePlugin<T> => {
-    // Table runs each cell's transforms just before it renders that cell. So
-    // the index cell's renderer reads the position that its own transform
-    // stored.
     const positions = new WeakMap<T, number>();
+    // One column object per plugin, so a Table re-render keeps its resolved
+    // columns and leaves unchanged rows alone.
+    const indexColumn: TableColumn<T> = {
+      key: INDEX_COLUMN_KEY,
+      header: label,
+      width: INDEX_COLUMN_WIDTH,
+      align: 'end',
+      resizable: false,
+      renderCell: (item: T) => {
+        const idx = lookup == null ? positions.get(item) : lookup(item);
+        if (idx == null) {
+          return null;
+        }
+        return <span {...stylex.props(styles.index)}>{idx + startFrom}</span>;
+      },
+    };
+    registerFixedHeightColumn(indexColumn, startFrom === 1, logicalIndex => (
+      <span {...stylex.props(styles.index)}>{logicalIndex + 1}</span>
+    ));
     return {
       rowModel: 'flat',
       transformBodyCell(props, column, item, _columnIndex, _columns, context) {
@@ -100,22 +120,6 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
         return props;
       },
       transformColumns(columns) {
-        const indexColumn: TableColumn<T> = {
-          key: INDEX_COLUMN_KEY,
-          header: label,
-          width: INDEX_COLUMN_WIDTH,
-          align: 'end',
-          resizable: false,
-          renderCell: (item: T) => {
-            const idx = lookup == null ? positions.get(item) : lookup(item);
-            if (idx == null) {
-              return null;
-            }
-            return (
-              <span {...stylex.props(styles.index)}>{idx + startFrom}</span>
-            );
-          },
-        };
         return [indexColumn, ...columns];
       },
     };

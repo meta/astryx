@@ -17,7 +17,7 @@
  *   astryx search dark mode              Every word is part of the query
  *   astryx search modal --type component Filter to a single domain
  *   astryx search forms --limit 5        Cap the result count
- *   astryx search button --verbose       Also print score / reason
+ *   astryx search button --verbose       Also print score / reason, whole descriptions
  *   astryx search button --json          Typed JSON envelope
  */
 
@@ -29,9 +29,11 @@ import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
 import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -177,12 +179,16 @@ export function registerSearch(program) {
             ? `Results for "${q}" (${results.length} of ${matchCount})`
             : `Results for "${q}" (${results.length})`,
         ),
-        records(results, {
+        records(results.map(withNotReadyKind), {
           fields,
           format: {
             command: formatCliCommand,
             parent: formatCliCommand,
             deprecated: formatDeprecation,
+            // The text view keeps a description's first sentence. A
+            // component, hook or doc result's command prints the whole doc;
+            // --verbose and --json keep the description whole.
+            ...(options.verbose ? {} : {description: firstSentence}),
           },
         }),
         ...note,
@@ -191,6 +197,17 @@ export function registerSearch(program) {
       return answered;
     },
   });
+}
+
+/**
+ * The text view of a result: an unready template's kind reads
+ * `page (not ready)`. The JSON carries the same fact as `isReady: false`.
+ * @param {import('../../../api/search/search.type.mjs').SearchResultEntry} result
+ */
+function withNotReadyKind(result) {
+  return result.isReady === false
+    ? {...result, kind: markNotReady(String(result.kind), false)}
+    : result;
 }
 
 /**

@@ -846,6 +846,33 @@ describe('TopNavMegaMenuItem', () => {
     expect(screen.getByRole('link', {name: /Analytics/})).toBeInTheDocument();
   });
 
+  it('makes a desktop onClick-only item a keyboard-operable non-submit button', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavMegaMenuItem title="Request a demo" onClick={onClick} ref={ref} />,
+    );
+    const action = screen.getByRole('button', {name: 'Request a demo'});
+    expect(ref.current).toBe(action);
+    expect(action).toHaveAttribute('type', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a desktop item without a destination or action non-interactive', () => {
+    render(<TopNavMegaMenuItem title="Overview" />);
+    expect(screen.getByText('Overview')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   it('renders description in desktop mode', () => {
     render(
       <TopNavMegaMenuItem

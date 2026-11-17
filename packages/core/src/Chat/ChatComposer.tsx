@@ -40,12 +40,12 @@ import {
   spacingVars,
   radiusVars,
   shadowVars,
-  durationVars,
   easeVars,
   borderVars,
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
+import {inputWrapperStyles} from '../Field/inputStyles.stylex';
 import {mergeProps} from '../utils';
 import {Icon} from '../Icon';
 import {ChatComposerInput} from './ChatComposerInput';
@@ -172,7 +172,8 @@ const styles = stylex.create({
       default: 'text',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transition: `box-shadow ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}, border-color ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transitionProperty: 'box-shadow, border-color',
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
   header: {
     display: 'flex',
@@ -573,6 +574,7 @@ export function ChatComposer(props: ChatComposerProps) {
           onBlurCapture={handleBodyBlurCapture}
           {...stylex.props(
             styles.body,
+            inputWrapperStyles.textField,
             elevationStyles[elevation],
             hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
             density === 'compact' && styles.compact,

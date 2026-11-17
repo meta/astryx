@@ -21,6 +21,7 @@ import {
   mergeTopic,
   problemsInTopic,
 } from './docs-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -54,7 +55,7 @@ function integration(name, topics, {docsDir = 'docs'} = {}) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-docs-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-docs-test-'));
 });
 
 afterEach(() => {
@@ -168,9 +169,7 @@ describe('discoverIntegrationDocs', () => {
             {
               id: 'steps',
               title: 'Steps',
-              content: [
-                {type: 'collection', source: {slot: 'guides'}},
-              ],
+              content: [{type: 'collection', source: {slot: 'guides'}}],
             },
           ],
         }),
@@ -454,6 +453,34 @@ describe('DocsCatalog', () => {
       '@acme/later is configured later, so it wins',
     );
     expect(catalog.resolve('tokens').package).toBe('@acme/later');
+  });
+
+  it('keeps an extension when a package configured later replaces its topic', () => {
+    // Configured order alone must not decide whether an extension shows: a
+    // theme package's sections on `theme` stay when the app's base library,
+    // configured after it, replaces `theme`.
+    const catalog = DocsCatalog.fromBuiltins({theme: '/cli/theme.doc.mjs'});
+    catalog.add(
+      record({
+        name: 'glyph-theme',
+        package: '@acme/glyph-theme',
+        path: '/glyph/docs/glyph-theme.doc.mjs',
+        extendsTopic: 'theme',
+      }),
+    );
+    catalog.add(
+      record({
+        name: 'theme',
+        package: '@acme/base',
+        path: '/base/docs/theme.doc.mjs',
+        replaces: 'theme',
+      }),
+    );
+    const theme = catalog.resolve('theme');
+    expect(theme.package).toBe('@acme/base');
+    expect(theme.extensions).toEqual([
+      {package: '@acme/glyph-theme', path: '/glyph/docs/glyph-theme.doc.mjs'},
+    ]);
   });
 
   it('records an extension against its target rather than adding a topic', () => {

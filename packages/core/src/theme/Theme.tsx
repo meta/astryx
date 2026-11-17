@@ -18,6 +18,11 @@
  * - `data-astryx-theme` — enables @scope'd theme CSS to reach elements rendered
  *   outside the Theme wrapper (portals, toast fallback viewports).
  *
+ * The root Theme also reads the reader's text size (iOS Dynamic Type) from a
+ * hidden, empty `font: -apple-system-body` probe and keeps the page's scales
+ * in an adopted stylesheet; every theme's font sizes follow them, and no
+ * attribute is written (see dynamicType.ts).
+ *
  * For RSC / SSR, set `data-theme` on `<html>` in your root server layout
  * to avoid a flash of wrong theme before hydration:
  *
@@ -43,7 +48,8 @@ import {colorVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
-import {ThemeContext} from './useTheme';
+import {syncReaderTextSize} from './dynamicType';
+import {SystemSchemeContext, ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -58,7 +64,10 @@ import {createSharedContext} from '../utils/sharedContext';
 interface ThemeProps {
   /** Theme from defineTheme() */
   theme: DefinedTheme;
-  /** Color mode - 'system' follows OS preference */
+  /**
+   * Color mode. `system` takes the page's light or dark scheme: the reader's
+   * preference, unless the page or its host sets the root's scheme.
+   */
   mode?: ThemeMode;
   /** Children to render */
   children: React.ReactNode;
@@ -198,16 +207,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     const themeKey = `astryx-theme-${theme.name}`;
     let entry = injectedThemes.get(themeKey);
     if (entry == null) {
-      // One-time perf hint per theme
+      // A theme records no package or file, so the hint names neither.
       warnOnce(
         `theme-injection:${theme.name}`,
         'Theme',
         `"${theme.name}" is using runtime style injection. ` +
-          `For better performance, use the pre-built theme:\n\n` +
-          `  import {${theme.name}Theme} from '@astryxdesign/theme-${theme.name}/built';\n` +
-          `  import '@astryxdesign/theme-${theme.name}/theme.css';\n\n` +
-          `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
-          `the built artifacts.`,
+          `For better performance, build the theme:\n\n` +
+          `  npx @astryxdesign/cli theme build <the file that defines it> --detail full\n\n` +
+          `and use the import lines it prints for the built .js and .css. ` +
+          `A theme from an Astryx theme package ships both built: its ` +
+          `/built entry and its theme.css (see the package README).`,
       );
       entry = {
         users: new Map(),
@@ -271,7 +280,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ * - 'system' → removes data-theme (Core's stylesheet and reset.css default the
+ *   root to color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -317,6 +327,20 @@ function useRootThemeSync(
   }, [isNested, mode, themeName, reducesMotion]);
 }
 
+/**
+ * Hook to keep the page's text size scales on the reader's text size (iOS
+ * Dynamic Type, or `env(preferred-text-scale)` elsewhere) for the root
+ * provider; see dynamicType.ts. Skipped for nested Theme instances.
+ */
+function useRootTextSizeSync(isNested: boolean): void {
+  useIsomorphicLayoutEffect(() => {
+    if (isNested || typeof document === 'undefined') {
+      return;
+    }
+    return syncReaderTextSize(document);
+  }, [isNested]);
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -340,6 +364,10 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
+  const parentMode = use(ThemeContext)?.mode;
+  const parentForces = parentMode === 'light' || parentMode === 'dark';
+  const aroundScheme = use(SystemSchemeContext);
+  const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   registerTheme(theme);
 
@@ -349,34 +377,43 @@ export function Theme({
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+  useRootTextSizeSync(isNested);
 
-  // Get color-scheme style
+  // A system Theme takes the scheme around it. That is the page root's, or a
+  // system Theme's above it. Core's stylesheet and reset.css make the root
+  // follow the reader's preference, and a host can set its own. Under a Theme
+  // that forces light or dark, a system Theme declares `light dark`. Then it
+  // follows the reader's preference again.
   const colorSchemeStyle =
     mode === 'dark'
       ? wrapperStyles.dark
       : mode === 'light'
         ? wrapperStyles.light
-        : wrapperStyles.system;
+        : parentForces
+          ? wrapperStyles.system
+          : null;
 
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
 
   return (
-    <ThemeContext value={ctxValue}>
-      <ThemeNestingContext value={true}>
-        <div
-          {...stylex.props(
-            wrapperStyles.base,
-            colorSchemeStyle,
-            reducesMotion && wrapperStyles.reducedMotion,
-          )}
-          data-astryx-theme={theme.name}
-          {...reducedMotionMarkProps(reducesMotion)}
-          data-theme={mode === 'system' ? undefined : mode}>
-          {children}
-        </div>
-      </ThemeNestingContext>
-    </ThemeContext>
+    <SystemSchemeContext value={systemScheme}>
+      <ThemeContext value={ctxValue}>
+        <ThemeNestingContext value={true}>
+          <div
+            {...stylex.props(
+              wrapperStyles.base,
+              colorSchemeStyle,
+              reducesMotion && wrapperStyles.reducedMotion,
+            )}
+            data-astryx-theme={theme.name}
+            {...reducedMotionMarkProps(reducesMotion)}
+            data-theme={mode === 'system' ? undefined : mode}>
+            {children}
+          </div>
+        </ThemeNestingContext>
+      </ThemeContext>
+    </SystemSchemeContext>
   );
 }
 

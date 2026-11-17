@@ -12,6 +12,10 @@ export const docs = {
     defaults: {
       label: 'Navigation',
       heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+      children: [
+        {__element: 'TopNavItem', props: {label: 'Home', href: '#', isSelected: true}},
+        {__element: 'TopNavItem', props: {label: 'Projects', href: '#'}},
+      ],
     },
   },
   theming: {
@@ -73,7 +77,7 @@ export const docs = {
     {
       name: 'centerContent',
       type: 'ReactNode',
-      description: 'Center content slot (tabs, search bar, primary navigation): when provided, switches the layout to a three-column CSS grid for true horizontal centering.',
+      description: 'Center content slot (tabs, search bar, primary navigation): when provided, switches the layout to three regions that keep it at the middle of the bar while they fit one row; the bar wraps when they do not.',
       slotElements: [
         {
           __element: 'Text',

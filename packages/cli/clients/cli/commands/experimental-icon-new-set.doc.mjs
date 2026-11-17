@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start an icon set in your integration package',
   description:
-    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. A library whose export names end in looks (XOutline24WGHT500Icon) gives one icon per glyph, by its glyph id (x), in the look the default variant names, else the library's usual default. Run it again with --from to refresh. --variants and --default-variant declare the set's variants; over an existing set without --from, they, --display-name and --description update the set in place and leave its icons as they are; a set with icons changes its default variant only with --from, and only in a library whose export names encode looks. Experimental: it may change or be removed in a patch release.",
+    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. A library whose export names end in looks (XOutline24WGHT500Icon) gives one icon per glyph, by its glyph id (x), in the look the default variant names, else the library's usual default. Run it again with --from to refresh. A library whose icons are data objects or SVG strings needs --adapter, a function in your package that turns one into a component. --variants and --default-variant declare the set's variants; over an existing set without --from, they, --display-name and --description update the set in place and leave its icons as they are; a set with icons changes its default variant only with --from, and only in a library whose export names encode looks. Experimental: it may change or be removed in a patch release.",
   fn: 'iconNewSet',
   args: [
     {
@@ -38,6 +38,12 @@ export const doc = {
       param: 'options.exclude',
       description:
         'With --from: comma-separated export names of the library that are not icons',
+    },
+    {
+      flag: '--adapter <module>#<export>',
+      param: 'options.adapter',
+      description:
+        "A function in your package that turns one icon export that is not a component (an icon data object, an SVG string) into one, as ./<path>#<export>; it is declared in the set's data file, and with --from every data export of the library becomes an icon through it",
     },
     {
       flag: '--variants <list>',

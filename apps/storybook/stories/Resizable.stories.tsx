@@ -138,7 +138,7 @@ export const VerticalSplit: Story = {
   },
 };
 
-/** Collapsible sidebar — drag past threshold or double-click to collapse. */
+/** Collapsible sidebar: a lift or a key step past the threshold, or a double-click, collapses it. */
 export const Collapsible: Story = {
   render: () => {
     const resizable = useResizable({

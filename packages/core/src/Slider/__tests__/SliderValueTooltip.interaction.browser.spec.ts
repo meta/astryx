@@ -25,7 +25,7 @@ import {
   openStory,
   startScreencast,
   touchDriver,
-  trackMarker,
+  trackMarkers,
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -438,8 +438,9 @@ test.describe('with a finger', () => {
       record.on = false;
       return record.frames;
     });
-    const thumbs = await trackMarker(page, shot);
-    const tooltips = await trackMarker(page, shot, {rgb: CONTROL_RGB});
+    const [thumbs, tooltips] = await trackMarkers(page, shot, {
+      colors: [MARKER_RGB, CONTROL_RGB],
+    });
     const pairs = thumbs.flatMap((frame, index) => {
       const other = tooltips[index]?.box;
       return frame.box != null && other != null

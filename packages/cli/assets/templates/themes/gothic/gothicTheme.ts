@@ -160,6 +160,11 @@ export const gothicTheme = defineTheme({
     '--color-success': green.dark[75],
     '--color-success-muted': green.dark[75],
     '--color-error': red.dark[75],
+    // The error toast's surface, the same in both modes as every gothic
+    // surface. Core's dark-mode red is too bright for gothic's pale text.
+    // This step keeps that text at 4.97:1, and the card at 3.28:1 against
+    // the page.
+    '--color-background-error-inverted': red.dark[45],
     '--color-error-muted': red.dark[75],
     '--color-warning': yellow.dark[75],
     '--color-warning-muted': yellow.dark[75],
@@ -392,6 +397,22 @@ export const gothicTheme = defineTheme({
         fontFamily:
           '"Manufacturing Consent", "UnifrakturMaguntia", "Old English Text MT", serif',
       },
+    },
+  },
+
+  // Gothic's accent text and icons are one light color. On a media surface
+  // they follow that surface's accent, so a dark surface inside a light one
+  // gets its light accent back.
+  onDark: {
+    tokens: {
+      '--color-text-accent': 'var(--color-accent)',
+      '--color-icon-accent': 'var(--color-accent)',
+    },
+  },
+  onLight: {
+    tokens: {
+      '--color-text-accent': 'var(--color-accent)',
+      '--color-icon-accent': 'var(--color-accent)',
     },
   },
 

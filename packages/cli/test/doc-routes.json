@@ -4425,7 +4425,7 @@
       "kind": "block",
       "id": "@astryxdesign/core/block",
       "provider": "@astryxdesign/core",
-      "count": 669,
+      "count": 670,
       "oldCliRoute": "astryx template <id> --type block",
       "oldDocsiteUrl": null,
       "placement": "generated:@astryxdesign/core/block",

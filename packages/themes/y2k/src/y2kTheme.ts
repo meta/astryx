@@ -182,7 +182,7 @@ export const y2kTheme = defineTheme({
 
     // Text
     '--color-text-primary': [neutral.light[15], neutral.dark[95]],
-    '--color-text-secondary': [neutral.light[40], neutral.dark[70]],
+    '--color-text-secondary': [neutral.light[35], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[80], neutral.dark[35]],
     '--color-text-accent': [neutral.light[15], neutral.dark[95]],
     '--color-on-dark': neutral.light[100],
@@ -228,7 +228,7 @@ export const y2kTheme = defineTheme({
     '--color-border-emphasized': [neutral.light[20], neutral.dark[45]],
 
     // Effects
-    '--color-skeleton': [neutral.light[80], neutral.dark[25]],
+    '--color-skeleton': [neutral.light[75], neutral.dark[25]],
     '--color-shadow': [
       withAlpha(neutral.light[15], '1A'),
       withAlpha(neutral.dark[0], '4D'),

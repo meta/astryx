@@ -36,7 +36,7 @@
 #     (workflow_dispatch with channel=canary, for example the release-time
 #     provenance proof). A tip that already has its canary publishes nothing.
 #     Main normally declares the next planned version, so this publishes
-#     <declared>-canary.<short-sha> to the `canary` dist-tag. The trusted
+#     <declared>-canary.g<short-sha> to the `canary` dist-tag. The trusted
 #     release merge-back briefly leaves main equal to the stable tag; that tip
 #     publishes no canary and waits for the separate next-plan PR:
 #       npm install @astryxdesign/core@canary
@@ -423,7 +423,7 @@ jobs:
         id: fresh
         run: |
           set -eu
-          CANARY_VERSION="$(node -p "require('./packages/core/package.json').version")-canary.${GITHUB_SHA:0:7}"
+          CANARY_VERSION="$(node -p "require('./packages/core/package.json').version")-canary.g${GITHUB_SHA:0:7}"
           echo "version=${CANARY_VERSION}" >> "$GITHUB_OUTPUT"
           node scripts/npm/canary-pending.mjs --version "$CANARY_VERSION"
           if grep -qx 'pending=0' "$GITHUB_OUTPUT"; then

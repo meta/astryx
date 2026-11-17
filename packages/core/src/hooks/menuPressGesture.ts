@@ -29,7 +29,7 @@ export const MENU_PRESS_HANDOFF_PX: number = UIKIT_MENU_PRESS_HANDOFF_PX;
 
 export type MenuPressPointerType = 'mouse' | 'touch' | 'pen';
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressState<T> =
   | {phase: 'idle'}
   | {
@@ -55,9 +55,24 @@ export type MenuPressState<T> =
       origin: 'trigger' | 'menu';
       /** The enabled row currently under the pointer, if any. */
       row: T | null;
+    }
+  /**
+   * The window lost focus under a finger. The gesture is still tracked, so its
+   * document listeners stay its own until its release or cancel. Nothing it
+   * does highlights or acts.
+   * @internal Not public contract.
+   */
+  | {
+      phase: 'withdrawn';
+      pointerType: MenuPressPointerType;
+      /**
+       * Withdrawn while it was still a press on the trigger: its tap's click
+       * is what opens the menu, so its release lets that click through.
+       */
+      fromTrigger?: true;
     };
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressInput<T> =
   | {
       type: 'down';
@@ -97,9 +112,16 @@ export type MenuPressInput<T> =
       y?: number;
     }
   /** The browser took the gesture: pointercancel, a second pointer, a scroll. */
-  | {type: 'cancel'};
+  | {type: 'cancel'}
+  /**
+   * The window lost focus mid-press. A finger's or pen's gesture is withdrawn,
+   * tracked to its release with nothing acting; a mouse's ends as a cancel
+   * does.
+   * @internal Not public contract.
+   */
+  | {type: 'withdraw'};
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressOutcome<T> =
   | {type: 'none'}
   /** A mouse pressed the trigger: open the menu now, under the held pointer. */
@@ -110,17 +132,28 @@ export type MenuPressOutcome<T> =
   /**
    * The gesture ended without a row acting. `stray` says whether the browser
    * will still report a `click` for this gesture that must not act; `dismiss`
-   * says the menu should close: a mouse released outside it.
+   * says the menu should close: a mouse released outside it. `clear`
+   * (@internal) says a row a finger lit loses its highlight (the browser took
+   * the press).
    */
-  | {type: 'settle'; stray: boolean; dismiss: boolean};
+  | {type: 'settle'; stray: boolean; dismiss: boolean; clear?: true}
+  /**
+   * The gesture was withdrawn and is still live: stop what drives it (the
+   * hold, the autoscroll, the page lock). `clear` says a row a finger lit
+   * loses its highlight.
+   * @internal Not public contract.
+   */
+  | {type: 'withdraw'; clear?: true};
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export interface MenuPressTransition<T> {
   gesture: MenuPressState<T>;
   effect: MenuPressOutcome<T>;
 }
 
-export const IDLE_MENU_PRESS: MenuPressState<never> = {phase: 'idle'};
+// The idle gesture: both the released and the internal shape.
+export const IDLE_MENU_PRESS: MenuPressGesture<never> & MenuPressState<never> =
+  {phase: 'idle'};
 
 const NONE: MenuPressOutcome<never> = {type: 'none'};
 
@@ -200,8 +233,7 @@ function release<T>(
  * pointer, or `null` over a divider, a heading, a disabled row, or outside
  * the menu.
  *
- * @internal The machine's own shape, with the finger's handoff; not public
- * contract.
+ * @internal
  */
 export function menuPressTransition<T>(
   gesture: MenuPressState<T>,
@@ -216,6 +248,55 @@ export function menuPressTransition<T>(
       return stepOpen(gesture, event);
     case 'tracking':
       return stepTracking(gesture, event);
+    case 'withdrawn':
+      return stepWithdrawn(gesture, event);
+  }
+}
+
+/**
+ * A finger's or pen's gesture withdrawn by the window's blur, or a mouse's
+ * ended as a cancel, which keeps its click.
+ */
+function withdraw<T>(
+  pointerType: MenuPressPointerType,
+  litRow: T | null,
+  fromTrigger = false,
+): MenuPressTransition<T> {
+  if (!isFinger(pointerType)) {
+    return idle({type: 'settle', stray: false, dismiss: false});
+  }
+  return {
+    gesture: fromTrigger
+      ? {phase: 'withdrawn', pointerType, fromTrigger: true}
+      : {phase: 'withdrawn', pointerType},
+    effect:
+      litRow != null ? {type: 'withdraw', clear: true} : {type: 'withdraw'},
+  };
+}
+
+function stepWithdrawn<T>(
+  gesture: Extract<MenuPressState<T>, {phase: 'withdrawn'}>,
+  event: MenuPressInput<T>,
+): MenuPressTransition<T> {
+  switch (event.type) {
+    case 'up':
+      // The withdrawn finger lifts: nothing acts, and the click the browser
+      // reports for it is still this gesture's, so it is swallowed. Its
+      // listeners come off as the gesture ends. A tap on the trigger keeps
+      // its click, which opens the menu: the pointer model's open, or a
+      // scroll view's open at the lift.
+      return idle({
+        type: 'settle',
+        stray: gesture.fromTrigger !== true,
+        dismiss: false,
+      });
+    case 'cancel':
+      return idle({type: 'settle', stray: false, dismiss: false});
+    case 'down':
+    case 'move':
+    case 'opened':
+    case 'withdraw':
+      return {gesture, effect: NONE};
   }
 }
 
@@ -281,6 +362,8 @@ function stepTriggerPress<T>(
       // touchmove preventer, and only the end of a gesture removes it. No
       // click follows a cancelled pointer.
       return idle({type: 'settle', stray: false, dismiss: false});
+    case 'withdraw':
+      return withdraw<T>(gesture.pointerType, null, true);
     case 'down':
     case 'move':
       return {gesture, effect: NONE};
@@ -349,6 +432,8 @@ function stepOpen<T>(
       // As above: the gesture ends, so its document listeners come off. The
       // menu stays open: a cancelled pointer did not ask to close it.
       return idle({type: 'settle', stray: false, dismiss: false});
+    case 'withdraw':
+      return withdraw<T>(gesture.pointerType, null);
     case 'down':
     case 'opened':
       return {gesture, effect: NONE};
@@ -372,8 +457,19 @@ function stepTracking<T>(
       return release(gesture.pointerType, event);
     case 'cancel':
       // The browser took the gesture (a scroll, a second finger): nothing
-      // acts, the menu stays, and no click follows a cancelled pointer.
-      return idle({type: 'settle', stray: false, dismiss: false});
+      // acts, the menu stays, and no click follows a cancelled pointer. A
+      // row a finger lit loses its highlight, as UIKit clears it when the
+      // list starts scrolling. A mouse's highlight stays where it was.
+      return idle({
+        type: 'settle',
+        stray: false,
+        dismiss: false,
+        ...(gesture.row != null && isFinger(gesture.pointerType)
+          ? {clear: true as const}
+          : {}),
+      });
+    case 'withdraw':
+      return withdraw(gesture.pointerType, gesture.row);
     case 'down':
     case 'opened':
       return {gesture, effect: NONE};
@@ -381,9 +477,10 @@ function stepTracking<T>(
 }
 
 // ---------------------------------------------------------------------------
-// The released public shape (`@astryxdesign/core/hooks`). The handoff
-// positions and `handoffFrom` stay internal: a caller of
-// `menuPressStep` keeps the settle rule, as released.
+// The released public shape (`@astryxdesign/core/hooks`). The machine's own
+// types above carry the finger's handoff and are not public contract. The
+// handoff positions, `handoffFrom` and the settle `clear` stay internal: a
+// caller of `menuPressStep` keeps the settle rule, as released.
 // ---------------------------------------------------------------------------
 
 export type MenuPressGesture<T> =
@@ -470,11 +567,21 @@ export function menuPressStep<T>(
   );
   return {
     gesture: publicGesture(next),
-    effect,
+    effect:
+      effect.type === 'settle'
+        ? {type: 'settle', stray: effect.stray, dismiss: effect.dismiss}
+        : effect.type === 'withdraw'
+          ? // Unreachable from the released events, which carry no `withdraw`.
+            {type: 'none'}
+          : effect,
   };
 }
 
 function publicGesture<T>(gesture: MenuPressState<T>): MenuPressGesture<T> {
+  if (gesture.phase === 'withdrawn') {
+    // Unreachable from the released events, which carry no `withdraw`.
+    return {phase: 'idle'};
+  }
   if (gesture.phase !== 'open') {
     return gesture;
   }

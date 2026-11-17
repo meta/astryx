@@ -14,6 +14,7 @@ verified_by:
     packages/themes/y2k/src/y2kColorMapping.test.ts,
     packages/themes/y2k/src/y2kPalettes.test.ts,
     scripts/generate-y2k-palette-refs.test.mjs,
+    scripts/check-secondary-text-contrast.test.mjs,
   ]
 package: '@astryxdesign/theme-y2k'
 source_theme: packages/themes/y2k/src/y2kTheme.ts
@@ -91,9 +92,9 @@ Y2K-specific mapping and rendered-component evidence covers light and dark
 semantic and categorical states. A palette stop alone is not an accessibility
 claim; contextual component evidence remains authoritative.
 
-The known light-mode text exception is secondary text
-(`--color-text-secondary`) on the Periwinkle body
-(`--color-background-body`), which measures 4.25:1.
+Light secondary text (`--color-text-secondary`, Neutral Light 35) measures
+5.14:1 on the Periwinkle body (`--color-background-body`) and 7.78:1 on the
+surface and card.
 
 The dark neutral border audit suppresses each border and checks whether another
 visible cue still identifies the component or state:

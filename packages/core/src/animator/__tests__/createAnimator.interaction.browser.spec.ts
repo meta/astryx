@@ -4,7 +4,8 @@
  * @file createAnimator.interaction.browser.spec.ts
  * @input The public animator (createAnimator), bundled with esbuild onto a
  *   blank fixture page. Chromium and WebKit run it on the phone profile, and
- *   a desktop context gives a fine pointer.
+ *   a desktop context gives a fine pointer. The interaction harness holds
+ *   and samples its motion.
  * @output Proof of the public animator in a real engine. `animate` plays the
  *   `springs.stateChange` curve on screen, seeked frame by frame. It rests on
  *   its target when its promise resolves. `decay` coasts to the analytic rest
@@ -17,6 +18,7 @@
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {armHold, sampleCurve} from '@astryxdesign/interaction-harness';
 import {build} from 'esbuild';
 import type * as Bundle from './animatorBundle';
 import type {Animator} from '../createAnimator';
@@ -75,32 +77,37 @@ test('animate plays the springs.stateChange curve on screen, seeked frame by fra
   page,
 }) => {
   await open(page);
-  const rows = await page.evaluate(async travel => {
+  const card = page.locator('#card');
+  // The animator retires an animation once its own time passes the curve's
+  // end. So the page holds the motion as soon as the browser has started it,
+  // before a starved runner's late frame can reach that end.
+  const hold = await armHold(page, card, {
+    judges: {target: card, property: 'translate'},
+    minProgressMs: 1,
+  });
+  await page.evaluate(travel => {
     void window.card.animate({x: travel});
-    // Let the browser commit the motion, then hold it to seek.
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
-    const animations = document.getAnimations();
-    for (const animation of animations) {
-      animation.pause();
-    }
-    const {solveSpring, toSpring, springs} = window.PublicAnimator;
-    const curve = solveSpring(toSpring(springs.stateChange), {
-      from: 0,
-      to: travel,
-    });
-    const card = document.getElementById('card') as HTMLElement;
-    return [40, 120, 250, 400, 650].map(ms => {
-      for (const animation of animations) {
-        animation.currentTime = ms;
-      }
-      return {
-        ms,
-        onScreen: card.getBoundingClientRect().left,
-        expected: curve.value(ms / 1000),
-      };
-    });
   }, TRAVEL);
+  await hold.held();
+  const times = [40, 120, 250, 400, 650];
+  const samples = await sampleCurve(card, times);
+  const curve = await page.evaluate(
+    ([travel, ms]) => {
+      const {solveSpring, toSpring, springs} = window.PublicAnimator;
+      const spring = solveSpring(toSpring(springs.stateChange), {
+        from: 0,
+        to: travel,
+      });
+      return ms.map(t => spring.value(t / 1000));
+    },
+    [TRAVEL, times] as const,
+  );
+  const rows = samples.map((sample, index) => ({
+    ms: sample.t,
+    // The card sits at the left edge, so its translate is where it shows.
+    onScreen: sample.transform.translateX,
+    expected: curve[index],
+  }));
   for (const {ms, onScreen, expected} of rows) {
     expect(Math.abs(onScreen - expected), `at ${ms} ms`).toBeLessThan(0.5);
   }

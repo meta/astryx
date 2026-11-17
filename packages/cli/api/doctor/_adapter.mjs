@@ -10,9 +10,11 @@ import {
   stateLockHolder,
 } from '../../foundation/release/global-state.mjs';
 import {
+  addVerbFor,
   alignCliAndCore,
   cliInstallAdvice,
   installFolder,
+  listedPackageInstall,
   projectAddCommand,
   globalBehind,
   globalUpgradeCommand,
@@ -39,9 +41,25 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
-import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {createRequire} from 'node:module';
+import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {
+  iconUseCommand,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {
+  elementPropOrigins,
+  rendersElement,
+} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
+import {
+  persistedGather,
+  recordedRun,
+} from '../../foundation/fs/gather-cache.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -57,15 +75,111 @@ import {
   findProjectCoreDir,
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
+import {
+  filesOnDisk,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
-export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
+export {
+  fileMark,
+  generatedSourceCommand,
+  isPrivateVarRefusal,
+  missingThemePackage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from '../theme/build/build.mjs';
+export {
+  installCommandFor as packageInstallCommand,
+  installStepFor as packageInstallStep,
+} from '../../foundation/discovery/template-needs.mjs';
+export {addMatchingCore} from '../../foundation/release/notices.mjs';
+export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
+export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
+
+/** A doctor check record, kept as it is. */
+const CHECK_CODEC = {
+  encode: (/** @type {any} */ check) => check,
+  decode: (/** @type {any} */ check) => check,
+  /** A check record: its id, label, status and message. */
+  valid: (/** @type {any} */ check) =>
+    check != null &&
+    typeof check === 'object' &&
+    typeof check.id === 'string' &&
+    typeof check.label === 'string' &&
+    typeof check.status === 'string' &&
+    typeof check.message === 'string',
+};
+
+/**
+ * A doctor check that reads only files, kept between runs through the kept
+ * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
+ * folder, module and environment variable it read unchanged reads the check
+ * back. Only the docs checks and the theme-wiring scan go through here; a
+ * check that depends on the time, the network or anything else the stamps do
+ * not see never does.
+ * @template T
+ * @param {{name: string, cwd: string, coreDir: string | null}} where - The
+ *   check, the project folder, and the Core folder the project loads.
+ * @param {() => Promise<T>} check
+ * @param {{encode: (value: any) => any, decode: (stored: any) => any, valid?: (value: any) => boolean}} [codec]
+ *   How the value is kept: a check record unless given.
+ * @returns {Promise<T>}
+ */
+export function keptFileCheck(
+  {name, cwd, coreDir},
+  check,
+  codec = CHECK_CODEC,
+) {
+  // Only a recorded run (`doctor` from the bin, with or without `--built`)
+  // reads or keeps one: a hosted run names its commands its own way, so it
+  // always checks.
+  if (!recordedRun()) return check();
+  return persistedGather(
+    // With the command name the checks print commands with.
+    ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
+    check,
+    codec,
+  );
+}
+
+/**
+ * The theme-wiring scan's result ({@link themeImportWiring}), kept exactly,
+ * with its shape.
+ */
+export const THEME_WIRING_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.wired) &&
+    Array.isArray(value.unconfirmed) &&
+    value.wired.every(
+      (/** @type {any} */ w) =>
+        w != null &&
+        typeof w.slug === 'string' &&
+        typeof w.owner === 'string' &&
+        typeof w.file === 'string',
+    ) &&
+    value.unconfirmed.every(
+      (/** @type {any} */ u) => u != null && typeof u.file === 'string',
+    ),
+};
 
 /**
  * Package written to the generated app record for one discovered theme.
@@ -150,6 +264,43 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
   return files;
 }
 
+/**
+ * Each file in the project's own source that still uses the placeholder
+ * component the CLI writes for a missing icon: the file, the component's
+ * name, the meanings its uses name (null when none names one), and how many
+ * uses it has. A file reads only as a syntax tree, so a commented-out or
+ * quoted copy never counts. Read without executing app code.
+ * @param {string} projectDir
+ * @returns {Array<{file: string, local: string, meanings: string[] | null, uses: number}>}
+ */
+export function findIconPlaceholders(projectDir) {
+  /** @type {Array<{file: string, local: string, meanings: string[] | null, uses: number}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    // Only a file with the placeholder's dash pattern is parsed.
+    if (!source.includes('3 2.33')) continue;
+    const uses = placeholderUses(source);
+    if (!uses || uses.length === 0) continue;
+    const shown = path.relative(projectDir, file).split(path.sep).join('/');
+    const meanings = [
+      ...new Set(uses.flatMap(each => each.meanings ?? [])),
+    ].sort();
+    found.push({
+      file: shown,
+      local: uses[0].local,
+      meanings: meanings.length > 0 ? meanings : null,
+      uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => compareText(a.file, b.file));
+}
+
 /** @param {string} projectDir */
 export async function discoverDoctorThemes(projectDir) {
   const project = await Project.load(projectDir, {core: 'project'});
@@ -163,6 +314,38 @@ export async function discoverDoctorThemes(projectDir) {
  */
 export function resolveDoctorThemeImports(theme, options) {
   return resolveThemeImports(theme, options);
+}
+
+/**
+ * A finding for each relative import of a package theme's built module and
+ * stylesheets that names no file its package ships (see
+ * `shippedImportFindings`). A local theme is no package: none.
+ * @param {import('../../foundation/config/theme-state.mjs').ResolvedAppTheme} theme
+ * @returns {import('../../foundation/integrations/shipped-imports.mjs').ShippedImportFinding[]}
+ */
+export function themeShippedImportFindings(theme) {
+  if (theme.source === 'local') return [];
+  const moduleFile = realDoctorFile(theme.moduleFile);
+  if (!moduleFile) return [];
+  // The package that ships the module: the nearest package.json with a name
+  // (a build folder may hold one that only sets "type").
+  let packageDir = path.dirname(moduleFile);
+  for (;;) {
+    const name = readPackageJson(path.join(packageDir, 'package.json'))?.name;
+    if (typeof name === 'string' && name !== '') break;
+    const parent = path.dirname(packageDir);
+    if (parent === packageDir) return [];
+    packageDir = parent;
+  }
+  // The app's bundler builds from the package's files where they are,
+  // installed or linked, so those files are what it ships here; doctor never
+  // asks npm.
+  return shippedImportFindings(packageDir, {
+    files: filesOnDisk(packageDir),
+    entries: [theme.moduleFile, theme.stylesheetFile, theme.fontStylesheetFile]
+      .filter(file => typeof file === 'string')
+      .map(file => realDoctorFile(file) ?? file),
+  }).findings;
 }
 
 /** @param {string} projectDir */
@@ -194,6 +377,16 @@ export function doctorElementPropOrigins(file, element) {
 }
 
 /**
+ * Whether a module renders an element imported by name from a module (see
+ * `rendersElement`).
+ * @param {string} file
+ * @param {Parameters<typeof rendersElement>[1]} element
+ */
+export function doctorRendersElement(file, element) {
+  return rendersElement(file, element);
+}
+
+/**
  * The `@import` specifiers of a stylesheet, quoted or in `url()`, in any case
  * (see `cssImports`); empty for CSS that does not parse.
  * @param {string} css
@@ -201,6 +394,70 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The file a local stylesheet `@import` names, from the stylesheet that
+ * imports it: a relative path, or a package's file as Node resolves it
+ * (`@fontsource/inter/index.css`). Null for a URL (http, https, `//`) or an
+ * import that does not resolve.
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+export function doctorStylesheetImportFile(specifier, fromFile) {
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(specifier)) return null;
+  const isFile = (/** @type {string} */ f) => {
+    try {
+      return fs.statSync(f).isFile();
+    } catch {
+      return false;
+    }
+  };
+  // A bare name is a file beside the stylesheet first (`@import
+  // "faces.css"`, as a browser reads it), then a package.
+  const beside = path.resolve(path.dirname(fromFile), specifier);
+  if (isFile(beside)) return beside;
+  if (/^\.{1,2}\//.test(specifier)) return null;
+  try {
+    // Packages resolve from where the stylesheet really is (a linked
+    // install, as pnpm makes, keeps its own dependencies there).
+    let real = fromFile;
+    try {
+      real = fs.realpathSync(fromFile);
+    } catch {
+      real = fromFile;
+    }
+    const file = createRequire(real).resolve(specifier);
+    return isFile(file) ? file : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `@astryxdesign/core` range a package's peerDependencies declare, and
+ * whether it accepts `coreVersion` (spec:AST-017/FR12). The one rule every
+ * doctor check uses to compare a package with the installed Core:
+ * `theme-core-peers` for added theme packages, `integration-core-range` for
+ * every other loaded integration.
+ * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
+ * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
+ * @returns {{range: string | null, accepts: boolean}}
+ */
+export function corePeerRange(pkg, coreVersion) {
+  const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
+  const range = typeof raw === 'string' ? raw.trim() : null;
+  return {
+    range,
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
+  };
 }
 
 /** @param {string} projectDir */
@@ -447,14 +704,17 @@ export function projectHasOwnCli(cwd) {
  * The command that adds the CLI at `version` with the project's package
  * manager, and the Core it matches: from a folder whose package.json declares
  * no Astryx package, in the Astryx project above at that project's Core; null
- * when there is none (see `cliInstallAdvice`).
+ * when there is none (see `cliInstallAdvice`). For a project that declares
+ * the CLI already, the command installs its dependencies (`declared`).
  * @param {string} cwd
  * @param {string} version
- * @returns {{command: string, core: string} | null}
+ * @returns {{command: string, core: string, declared: boolean} | null}
  */
 export function addCliCommandFor(cwd, version) {
   const advice = cliInstallAdvice({cwd, core: version});
-  return advice?.command ? {command: advice.command, core: advice.core} : null;
+  return advice?.command
+    ? {command: advice.command, core: advice.core, declared: advice.declared}
+    : null;
 }
 
 /**
@@ -466,6 +726,31 @@ export function addCliCommandFor(cwd, version) {
  */
 export function installCommandFor(cwd) {
   return projectAddCommand(cwd);
+}
+
+/**
+ * The command that installs the project's dependencies, when the project
+ * `cwd` belongs to lists `name`, so a `name` that is not installed comes from
+ * installing them; null otherwise (see `listedPackageInstall`).
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function dependencyInstallFor(cwd, name) {
+  return listedPackageInstall(cwd, name);
+}
+
+/**
+ * The command that installs the Core a theme's peer range accepts, with the
+ * project's package manager; one version is saved exactly in a project that
+ * pins its Core (see `addVerbFor`), and a range is quoted for the shell.
+ * @param {string} projectDir
+ * @param {string} range
+ * @returns {string}
+ */
+export function coreAddCommand(projectDir, range) {
+  const spec = `@astryxdesign/core@${range}`;
+  return `${addVerbFor(projectDir, range)} ${isValidSemver(range) ? spec : `'${spec}'`}`;
 }
 
 /**
@@ -488,6 +773,35 @@ const BUILD_OUTPUT_DIRS = new Set(['.next', 'dist', 'build', 'out', '.output']);
 export const BUILT_FILE_LIMIT = 20000;
 export const BUILT_FILE_MAX_MB = 5;
 const BUILT_FILE_MAX_BYTES = BUILT_FILE_MAX_MB * 1024 * 1024;
+
+/**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when one of them names nothing on disk: the path itself when there is
+ * one, else the folder that holds them all. That folder must be `cwd` or a
+ * folder in it, so the check never reaches past the project. Relative to
+ * `cwd`; `.` is `cwd`.
+ * @param {string} cwd
+ * @param {string[]} paths
+ * @returns {string | null}
+ */
+export function builtTargetOf(cwd, paths) {
+  const resolved = paths.map(p => path.resolve(cwd, p));
+  if (resolved.length === 0 || !resolved.every(p => fs.existsSync(p)))
+    return null;
+  if (paths.length === 1) return paths[0];
+  const root = path.resolve(cwd);
+  const inside = (/** @type {string} */ folder, /** @type {string} */ p) =>
+    p === folder ||
+    p.startsWith(folder.endsWith(path.sep) ? folder : `${folder}${path.sep}`);
+  const folders = resolved.map(p =>
+    fs.statSync(p).isDirectory() ? p : path.dirname(p),
+  );
+  if (!folders.every(f => inside(root, f))) return null;
+  let shared = folders[0];
+  while (shared !== root && !folders.every(f => inside(shared, f)))
+    shared = path.dirname(shared);
+  return path.relative(root, shared) || '.';
+}
 
 /**
  * The absolute path `doctor --built` checks, or null when it does not exist.
@@ -597,7 +911,7 @@ export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
     } catch {
       continue;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    entries.sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -645,4 +959,31 @@ export function builtIntegrationPackages(target, cwd) {
     }
     if (path.dirname(at) === at) return [];
   }
+}
+
+/**
+ * The install line for the font families a known package loads (an open
+ * font the editor's table names), in the project's package manager, and
+ * whether it loads every family given. A family no known package loads (a
+ * self-hosted face) gets none: its package name would be a guess.
+ * @param {string} projectDir
+ * @param {string[]} families
+ * @returns {Promise<{line: string | null, coversAll: boolean}>}
+ */
+export async function fontPackagesInstallLine(projectDir, families) {
+  const {fontsourceSuggestion} = await import('../theme-edit/_settings.mjs');
+  const {installLine} = await import('../theme-edit/_project.mjs');
+  const known = families.map(family => {
+    const s = fontsourceSuggestion(family);
+    return s?.known ? s.pkg : null;
+  });
+  const packages = [
+    ...new Set(
+      known.filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
+    ),
+  ];
+  return {
+    line: packages.length ? installLine(projectDir, packages) : null,
+    coversAll: known.every(Boolean),
+  };
 }
