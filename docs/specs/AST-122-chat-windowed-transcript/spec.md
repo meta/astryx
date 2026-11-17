@@ -176,11 +176,13 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
   cause until that scroll ends, the list writes no scroll position for a row
   anchor's correction (FR8): the element that holds the rows moves by the
   correction instead, whatever its size, so the reader's row stays in place.
-  Such a scroll comes from a finger and its momentum, a wheel, a scrollbar,
-  keys, or the follow. The scroll ends at its `scrollend` event, or 150 ms
-  after its last scroll event where no `scrollend` fires. Then the element
-  returns to its place and the list moves the position by the same amount,
-  in one frame. An end anchor's correction (FR7) is written at once.
+  Such a scroll comes from a finger and its momentum, a wheel, a scrollbar
+  or keys. The scroll ends at its `scrollend` event, or 150 ms after its
+  last scroll event where no `scrollend` fires. Then the element returns to
+  its place and the list moves the position by the same amount, in one
+  frame. While the stream scroll follows the newest message, the end is the
+  anchor (FR7): its correction is written at once and moves the follow with
+  it (FR9).
 - **FR13 — Older history.** `scrollToTopAction` keeps its sentinel above the
   first item. It fires when the reader reaches the top of the list, and the
   items it loads keep the reader's item in place (FR8).
@@ -250,10 +252,7 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
 - `component:ChatLayout`: its public shape does not change. A windowed list
   registers its newest row through `ChatLayoutContext.contentRef`. The
   stream scroll gains a private shift and a listener for the position it
-  reads on each scroll event (FR9). INV19 amendment: the stream
-  scroll's follow keeps its own frame loop, because the shared animator
-  animates compositor properties (translate, rotate, scale and opacity)
-  through Web Animations, and a scroll position is none of them.
+  reads on each scroll event (FR9).
 - `architecture:list-windowing`: the block axis has measured rows beside one
   shared pitch, the last item can stay mounted beside the focus island, and
   Chat's message list windows through the shared module. INV3 amendment:
