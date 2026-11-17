@@ -54,8 +54,9 @@
 # auto-merge on fork PRs. An engineering owner's owner command
 # (`/approve-spec`, `/revoke-spec`, an issue_comment in the base context) also
 # runs it, so the command re-evaluates the code half on a fork PR whose review
-# event GitHub held for approval. It reads the PR file list, diff text, and changed Core
-# base/head source bytes as inert API data. The approval helper comes from the
+# event GitHub held for approval. It reads the PR file list, diff text, changed Core
+# base/head source bytes, and the base/head bytes of each changed file that holds a
+# CSS-named line (the classifier's style-context test) as inert API data. The approval helper comes from the
 # trusted workflow SHA; the visual classifier comes from the PR base ref. It reads
 # eng/design owner lists from repository VARIABLES (vars.ENGOWNERS /
 # vars.DESIGNOWNERS) — no checkout and no execution of PR-controlled code.
@@ -556,9 +557,35 @@ jobs:
                   ]);
                   sources[file.filename] = {base: baseSource, head: headSource};
                 }
+                // A CSS-named key scores only in a style context of its file
+                // at its own revision (the classifier's styleContextLines),
+                // so read each file that holds one, at each side it changed.
+                // A file that cannot be read keeps scoring as a style edit.
+                const styleSources = {};
+                // A classifier from a base older than the style-context test
+                // has no styleContextPaths; it then counts as it did.
+                const needed =
+                  typeof mod.exports.styleContextPaths === 'function'
+                    ? mod.exports.styleContextPaths(String(diff), {ignorePath: isSafeSpace})
+                    : {};
+                for (const [filePath, sides] of Object.entries(needed)) {
+                  styleSources[filePath] = {};
+                  for (const [side, repoName, ref] of [
+                    ['base', pr.base.repo.full_name, pr.base.sha],
+                    ['head', pr.head.repo.full_name, pr.head.sha],
+                  ]) {
+                    if (!sides[side]) continue;
+                    try {
+                      styleSources[filePath][side] = await readSource(repoName, ref, filePath);
+                    } catch (e) {
+                      core.info(`No ${side} bytes for ${filePath}: ${e.message}`);
+                    }
+                  }
+                }
                 visualClassification = mod.exports.classifyVisualDiff(String(diff), {
                   ignorePath: isSafeSpace,
                   sources,
+                  styleSources,
                 });
                 core.info(`visual content score: ${visualClassification.score} (${visualClassification.bucket}); appearanceOnly=${visualClassification.appearanceOnly}`);
                 if (

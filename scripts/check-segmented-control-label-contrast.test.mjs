@@ -36,11 +36,6 @@ const PAGE_BACKGROUNDS = [
 const KNOWN_GAPS = new Set([
   // The track lifts the dark card under secondary text (5.99:1 on the card).
   'butter dark on --color-background-card',
-  // Chocolate light secondary text is under 4.5:1 (WCAG 1.4.3) on its own
-  // backgrounds; its colour is an owner decision.
-  'chocolate light on --color-background-surface',
-  'chocolate light on --color-background-body',
-  'chocolate light on --color-background-card',
 ]);
 
 function measurements() {

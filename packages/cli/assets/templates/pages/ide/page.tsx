@@ -435,7 +435,7 @@ export default function ResizableWorkspacePage() {
                                       onClick={() =>
                                         // Demo only: replace this toast with the call that performs the action.
                                         showToast({
-                                          body: `${activeFile} formatted`,
+                                          body: `Demo: ${activeFile} would be formatted here`,
                                           uniqueID: 'format',
                                         })
                                       }
@@ -444,11 +444,25 @@ export default function ResizableWorkspacePage() {
                                       label="Go to Definition"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the definition would open here',
+                                          uniqueID: 'go-to-definition',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Find References"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: references would be listed here',
+                                          uniqueID: 'find-references',
+                                        })
+                                      }
                                     />
                                   </Stack>
                                 </Stack>

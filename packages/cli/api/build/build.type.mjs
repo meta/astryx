@@ -49,6 +49,7 @@
  * @property {number} [fit] For a start that is a page template (not the app shell): the page-pick model's probability for the start among the ready page templates, 0 to 1. A high value means the pick model clearly prefers this template; a low one means several templates fit about as well. At or above 0.4 the choice is clear: below it, the pick model's start agrees with labeled requests less than half the time. Absent for a template the word tables do not list. Absent for an app-shell start and in a project without word weights.
  * @property {BuildAlternative[]} alternatives The next closest page templates (≤2), for when the start's layout is wrong: for a whole page in the page-pick model's order, else in the ranker's.
  * @property {string[]} [notes] Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Present only when the start template imports packages the project does not have or needs a StyleX compiler the project has not configured.
+ * @property {boolean} isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out). Build starts only from a ready template.
  */
 
 /**
@@ -60,6 +61,7 @@
  * @property {string} description What the page is: its layout and the ideas it serves.
  * @property {string} package The npm package that owns this template.
  * @property {string} command The scaffold command, in the same form as the start's.
+ * @property {boolean} isReady Whether the template is ready, as for the start.
  */
 
 /**
@@ -74,14 +76,14 @@
  * @property {object} data
  * @property {string} data.query
  * @property {boolean} data.hasResults False when search returned nothing. The kit still names a template in `start`.
- * @property {number} data.matchCount Total ranked search matches for the query — counted before the search `limit`, the kit's score floors, and its per-group caps, so it is never a cap read back. It is search's own total, so it also counts page templates that are not ready yet.
+ * @property {number} data.matchCount Total ranked search matches for the query — counted before the search `limit`, the kit's score floors, and its per-group caps, so it is never a cap read back.
  * @property {boolean} data.directMatch True when the first entry of `pages` is search's confident direct match. Build reads only ready page templates from search, so a template that is not ready yet is never the direct match.
  * @property {BuildStart | null} data.start The page template to start from (see `BuildStart.basis`), else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search that build could start from (≤3): a template the catalog holds as not ready is left out. Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.domain Idea-specific components/hooks (≤6), excluding frame/foundation.
- * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them.
- * @property {string[]} data.foundation Always-on layout/typography/action component names. Every page template already uses them.
+ * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them. Empty when the active base is not Core.
+ * @property {string[]} data.foundation Always-on layout/typography/action component names. Every page template already uses them. Empty when the active base is not Core.
  * @property {{reason: string, commands: string[]}} [data.hint] Present only when the kit is thin. `reason` says why, `commands` are bare subcommands (e.g. `component --list`) for the caller to render with its own invocation — so a reader is never handed a command that does not resolve in their project.
  */
 

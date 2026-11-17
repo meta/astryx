@@ -341,6 +341,10 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 640,
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     // A hairline on the three edges that face the scrim. In dark mode the
     // surface and the scrim are only a few RGB steps apart, and the shadow is
     // black on near-black, so the side edges disappear. The block-end edge

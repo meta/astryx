@@ -31,7 +31,9 @@ describe('the Node legs inside their job limit', () => {
     );
     // Both the scoped and the full run pass the watchdog.
     expect(
-      step.run.match(/pnpm test:node [^\n]*"\$\{WATCHDOG\[@\]\}"/g),
+      step.run.match(
+        /(?:pnpm test:node|pnpm exec vitest run --project node) [^\n]*"\$\{WATCHDOG\[@\]\}"/g,
+      ),
     ).toHaveLength(2);
     expect(step.env.VITEST_SHARD_TIMES_FILE).toBe(
       '${{ runner.temp }}/node-file-times.json',

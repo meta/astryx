@@ -15,6 +15,7 @@ applies_to:
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
+    packages/core/src/privateAttributes/scheme.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
@@ -244,9 +245,24 @@ Platform-specific details stay inside that compiler.
 - **INV18 — A color-mode block applies only in its mode.** The web compiler
   writes a component style key's `@light` or `@dark` block (properties,
   pseudo-class overrides, and pseudo-elements) as rules that match only where
-  the element's color mode is that mode, as Theme resolves it. Outside media
-  surfaces the theme root's `data-theme` decides, and a root mode other than
-  `light` or `dark` follows the system preference. Inside the theme's media
+  the element's color mode is that mode. Outside media surfaces the theme
+  root's `data-theme` decides. Under a root mode other than `light` or `dark`
+  and no Theme that forces one, a block follows the scheme the page root draws
+  in: the root's `color-scheme`, else its `<meta name="color-scheme">`. A
+  `color-scheme` set on `body` or on an element around the Theme does not
+  count. When the page draws in one scheme, the root Theme names it on `<html>` in a
+  private attribute (`architecture:public-component-api` INV23). Its owner is
+  `privateAttributes/scheme.ts`, which the root Theme writes it through and the
+  theme engine reads its selectors from; no existing owner module serves,
+  since each names one attribute. A block
+  applies where that scheme is its mode, whatever the reader prefers. While
+  no scheme is named, a block applies where the reader's preference
+  (`prefers-color-scheme`) is its mode: on a page that follows the reader,
+  and at the first paint of a server-rendered page, before the root Theme
+  mounts. So on a page that names no scheme, which draws light, once the
+  root Theme has mounted the `@light` block applies for every reader and the
+  `@dark` block for none. Under a Theme that forces a mode, a system root
+  follows the reader's preference. Inside the theme's media
   surfaces the nearest surface decides: a block applies where the closest
   media surface around the element is of its mode, so a light surface inside
   a dark one takes only the light block. This holds for up to five surfaces

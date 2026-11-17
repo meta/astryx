@@ -16,6 +16,11 @@ import {
   formatCliCommand,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
+import {
+  helpBase,
+  optionAvailable,
+  servedSubcommands,
+} from './base-gate.mjs';
 
 /**
  * The part of a Commander option this module reads.
@@ -49,7 +54,7 @@ function pathOf(cmd) {
  * @param {(option: OptionLike) => boolean} keep
  * @returns {OptionLike[]}
  */
-function optionsInReach(cmd, keep) {
+export function optionsInReach(cmd, keep) {
   /** @type {OptionLike[]} */
   const options = [];
   for (
@@ -59,8 +64,13 @@ function optionsInReach(cmd, keep) {
   ) {
     // Commander keeps the help option apart from the others.
     const help = /** @type {any} */ (node)._getHelpOption?.();
+    const base = helpBase();
+    const served = /** @param {OptionLike} o */ o =>
+      optionAvailable(/** @type {any} */ (node), /** @type {any} */ (o), base);
     options.push(
-      ...[...(node.options ?? []), ...(help ? [help] : [])].filter(keep),
+      ...[...(node.options ?? []), ...(help ? [help] : [])].filter(
+        o => keep(o) && served(o),
+      ),
     );
   }
   return options;
@@ -236,9 +246,7 @@ function runAsMeant(cmd, path, stray, message, words, offered) {
       : null;
   const name = stray.replace(/^--?/, '').split('=')[0].toLowerCase();
   const similar = /\(Did you mean (--[\w-]+)\?\)/.exec(message)?.[1] ?? null;
-  const subcommands = (cmd.commands ?? []).filter(
-    c => !c._hidden && c.name() !== 'help',
-  );
+  const subcommands = servedSubcommands(cmd);
   const found = meant({name, value, attached}, offered, subcommands, similar);
   if (!found) return null;
   /** @param {OptionLike} o */
@@ -271,6 +279,19 @@ function runAsMeant(cmd, path, stray, message, words, offered) {
 }
 
 /**
+ * Options a command no longer takes, which older docs and agents still pass:
+ * each answers what to do instead, not only that it is unknown.
+ * @type {Record<string, Record<string, string>>}
+ */
+const REMOVED_OPTIONS = {
+  'experimental render': {
+    '--static': "--static is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
+    '--interactive':
+      "--interactive is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
+  },
+};
+
+/**
  * The answer to an option a command does not take.
  *
  * The message names the options the command takes, and a group's
@@ -295,6 +316,19 @@ export function strayOptionAnswer(
   const stray = /unknown option '([^']+)'/.exec(message)?.[1];
   if (!stray) return undefined;
   const path = pathOf(cmd);
+  const removed = REMOVED_OPTIONS[path.join(' ')]?.[stray.split('=')[0]];
+  if (removed) {
+    const run = words.filter(word => word.split('=')[0] !== stray.split('=')[0]);
+    return {
+      message: removed,
+      suggestions: [
+        {
+          name: formatCliCommand(run.map(w => quoteCommandArgument(w)).join(' ')),
+          reason: 'the same command without the flag',
+        },
+      ],
+    };
+  }
   const json = path.length === 0 || jsonSupported(path.join(' '));
   const offered = optionsInReach(
     cmd,
@@ -304,15 +338,20 @@ export function strayOptionAnswer(
       o.long !== '--help' &&
       (o.long !== '--json' || json),
   );
+  const base = helpBase();
   const own = (cmd.options ?? [])
-    .filter(o => !o.hidden && o.long && o.long !== '--help')
+    .filter(
+      o =>
+        !o.hidden &&
+        o.long &&
+        o.long !== '--help' &&
+        optionAvailable(/** @type {any} */ (cmd), /** @type {any} */ (o), base),
+    )
     .map(o => /** @type {string} */ (o.long));
   if (json && !own.includes('--json') && offered.some(o => o.long === '--json'))
     own.push('--json');
   const subcommands = path.length
-    ? (cmd.commands ?? [])
-        .filter(c => !c._hidden && c.name() !== 'help')
-        .map(c => c.name())
+    ? servedSubcommands(cmd).map(c => c.name())
     : [];
   const label = path.length ? path.join(' ') : 'astryx';
   const takes = [
