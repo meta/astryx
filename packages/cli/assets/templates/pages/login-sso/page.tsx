@@ -176,7 +176,7 @@ export default function LoginSSO() {
             <>
               <VStack gap={2} hAlign="center">
                 <Avatar name={provider.name} size={48} />
-                <Text type="display-3" as="h2">
+                <Text type="display-3" as="h1">
                   Sign in with {provider.name}
                 </Text>
                 <Text type="body" color="secondary" size="sm">

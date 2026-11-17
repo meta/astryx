@@ -120,6 +120,7 @@ export default function LoginTwoColumn() {
                     <Center axis="vertical" height="100%">
                       {isSuccess ? (
                         <EmptyState
+                          headingLevel={1}
                           title="You're signed in"
                           description="Redirecting to your dashboard…"
                           icon={<Icon icon={CheckCircleIcon} size="lg" />}
