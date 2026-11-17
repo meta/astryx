@@ -8,7 +8,6 @@ import {Button} from '@astryxdesign/core/Button';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Divider} from '@astryxdesign/core/Divider';
-import {useToast} from '@astryxdesign/core/Toast';
 
 // Image fill is a plain inline style so it renders without any CSS compiler
 // (works in the playground preview's runtime TS compile too).
@@ -95,7 +94,6 @@ function ImageGrid() {
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function SideGalleryTemplate() {
-  const showToast = useToast();
   return (
     <Layout
       height="fill"
@@ -121,13 +119,7 @@ export default function SideGalleryTemplate() {
               </VStack>
 
               <HStack gap={3} vAlign="center">
-                <Button
-                  label="Explore"
-                  variant="primary"
-                  onClick={() =>
-                    showToast({body: 'Demo: the full gallery would open here'})
-                  }
-                />
+                <Button label="Explore" variant="primary" href="#" />
               </HStack>
 
               <VStack gap={4}>

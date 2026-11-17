@@ -232,11 +232,7 @@ export default function DocumentationOverviewPage() {
                         label="Get started"
                         variant="primary"
                         size="lg"
-                        onClick={() =>
-                          showToast({
-                            body: 'Demo: the getting-started guide would open here',
-                          })
-                        }
+                        href="#"
                       />
                     </HStack>
                   </VStack>

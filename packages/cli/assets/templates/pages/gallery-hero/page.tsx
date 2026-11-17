@@ -10,7 +10,6 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Grid} from '@astryxdesign/core/Grid';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {rtlStyles} from '@astryxdesign/core/utils';
-import {useToast} from '@astryxdesign/core/Toast';
 import {ArrowRightIcon} from '@heroicons/react/20/solid';
 
 const IMAGES = [
@@ -44,7 +43,6 @@ const galleryImageClip: CSSProperties = {
 };
 
 export default function GalleryHero() {
-  const showToast = useToast();
   return (
     <Layout
       content={
@@ -72,6 +70,7 @@ export default function GalleryHero() {
                 <Button
                   label="Get started"
                   variant="primary"
+                  href="#"
                   endContent={
                     <Icon
                       icon={ArrowRightIcon}
@@ -80,17 +79,8 @@ export default function GalleryHero() {
                       xstyle={rtlStyles.mirror}
                     />
                   }
-                  onClick={() =>
-                    showToast({body: 'Demo: sign-up would start here'})
-                  }
                 />
-                <Button
-                  label="Learn more"
-                  variant="secondary"
-                  onClick={() =>
-                    showToast({body: 'Demo: the product tour would open here'})
-                  }
-                />
+                <Button label="Learn more" variant="secondary" href="#" />
               </HStack>
             </VStack>
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>

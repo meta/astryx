@@ -5,9 +5,11 @@
 import {Button} from '@astryxdesign/core/Button';
 import {Stack} from '@astryxdesign/core/Layout';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 
 export default function ButtonShowcase() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Stack direction="horizontal" gap={3} vAlign="center">
       <Button
@@ -35,9 +37,19 @@ export default function ButtonShowcase() {
         label="Destructive"
         variant="destructive"
         onClick={() =>
-          showToast({body: 'Demo: the destructive action would run here'})
+          confirm.show({
+            title: 'Run the destructive action?',
+            description: "This demo won't change anything.",
+            actionLabel: 'Continue',
+            onAction: () => {
+              confirm.hide();
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({body: 'Demo: the destructive action would run here'});
+            },
+          })
         }
       />
+      {confirm.element}
     </Stack>
   );
 }

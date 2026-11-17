@@ -14,6 +14,7 @@ import {
 } from '@astryxdesign/core/Table';
 import {Stack} from '@astryxdesign/core/Layout';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {TrashIcon, ArchiveBoxIcon} from '@heroicons/react/24/outline';
 
 const DATA = [
@@ -26,6 +27,7 @@ const DATA = [
 
 export default function ToolbarBulkActions() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(['1', '3', '5']),
   );
@@ -56,8 +58,17 @@ export default function ToolbarBulkActions() {
                 icon={<Icon icon={TrashIcon} />}
                 isIconOnly
                 onClick={() =>
-                  showToast({
-                    body: 'Demo: the selected rows would be deleted here',
+                  confirm.show({
+                    title: `Delete ${selectedKeys.size} rows?`,
+                    description: "This demo won't delete anything.",
+                    actionLabel: 'Delete',
+                    onAction: () => {
+                      confirm.hide();
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: the selected rows would be deleted here',
+                      });
+                    },
                   })
                 }
               />
@@ -67,8 +78,17 @@ export default function ToolbarBulkActions() {
                 icon={<Icon icon={ArchiveBoxIcon} />}
                 isIconOnly
                 onClick={() =>
-                  showToast({
-                    body: 'Demo: the selected rows would be archived here',
+                  confirm.show({
+                    title: `Archive ${selectedKeys.size} rows?`,
+                    description: "This demo won't archive anything.",
+                    actionLabel: 'Archive',
+                    onAction: () => {
+                      confirm.hide();
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: the selected rows would be archived here',
+                      });
+                    },
                   })
                 }
               />
@@ -93,6 +113,7 @@ export default function ToolbarBulkActions() {
         data={DATA}
         plugins={{selection: selectionPlugin}}
       />
+      {confirm.element}
     </Stack>
   );
 }
