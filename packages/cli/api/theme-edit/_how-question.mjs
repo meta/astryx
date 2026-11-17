@@ -3008,7 +3008,26 @@ function clausesOf(q, partWords) {
       );
     const cornerWords = /\b(round|corner|radius|shape|circular)/.test(text);
     for (const [re, part] of partWords) {
-      const m = re.exec(rest);
+      // (A part word is a word of its own, never one half of a hyphenated
+      // compound, "field-service", "card-like": a match with a letter
+      // joined to it by a hyphen names no part. A part's own name written
+      // with a hyphen, "date-picker", is one match and counts whole.)
+      const all = new RegExp(
+        re.source,
+        re.flags.includes('g') ? re.flags : `${re.flags}g`,
+      );
+      /** @type {RegExpExecArray | null} */
+      let m = null;
+      for (const x of rest.matchAll(all)) {
+        const at = /** @type {number} */ (x.index);
+        if (
+          /[a-z]-$/i.test(rest.slice(0, at)) ||
+          /^-[a-z]/i.test(rest.slice(at + x[0].length))
+        )
+          continue;
+        m = x;
+        break;
+      }
       if (!m) continue;
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
@@ -3020,7 +3039,7 @@ function clausesOf(q, partWords) {
       if (p.on === 'banner' && status)
         p.when = `status:${status === 'danger' ? 'error' : status}`;
       parts.push(p);
-      rest = rest.replace(re, ' ');
+      rest = `${rest.slice(0, m.index)} ${rest.slice(/** @type {number} */ (m.index) + m[0].length)}`;
     }
     // "the sidebar the page color", "the header the card color", "cards
     // the color of the page": a part named as its color after another part
