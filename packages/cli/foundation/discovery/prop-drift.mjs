@@ -920,12 +920,24 @@ function deprecatedLiterals(ts, checker, declarations) {
   // A node is read once as current and once as deprecated: a deprecated
   // overload and a current one can name the same alias.
   const seen = {current: new Set(), deprecated: new Set()};
-  /** @param {any} node */
-  const commentDeprecates = node => {
-    const text = node.getSourceFile().text;
-    return (ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []).some(
-      (/** @type {any} */ range) =>
-        text.slice(range.pos, range.end).includes('@deprecated'),
+  // A union member's comments sit between the member before it and itself:
+  // on their own line before a leading `|`, or on the line after the `|`.
+  // TypeScript's leading ranges start after the first line break (a comment
+  // on the line before belongs to that line's member); its trailing ranges
+  // hold the comments on the line itself.
+  /** @type {(member: any, previous: any, union: any) => boolean} */
+  const commentDeprecates = (member, previous, union) => {
+    const text = member.getSourceFile().text;
+    const start = member.getFullStart();
+    return [
+      ...(ts.getLeadingCommentRanges(
+        text,
+        previous ? previous.end : union.getFullStart(),
+      ) ?? []),
+      ...(ts.getLeadingCommentRanges(text, start) ?? []),
+      ...(ts.getTrailingCommentRanges(text, start) ?? []),
+    ].some((/** @type {any} */ range) =>
+      text.slice(range.pos, range.end).includes('@deprecated'),
     );
   };
   /** @type {(node: any, inDeprecated: boolean) => void} */
@@ -935,9 +947,12 @@ function deprecatedLiterals(ts, checker, declarations) {
     read.add(node);
     if (ts.isParenthesizedTypeNode(node)) return visit(node.type, inDeprecated);
     if (ts.isUnionTypeNode(node)) {
-      for (const member of node.types) {
-        visit(member, inDeprecated || commentDeprecates(member));
-      }
+      node.types.forEach((/** @type {any} */ member, /** @type {number} */ i) =>
+        visit(
+          member,
+          inDeprecated || commentDeprecates(member, node.types[i - 1], node),
+        ),
+      );
       return;
     }
     if (ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal)) {

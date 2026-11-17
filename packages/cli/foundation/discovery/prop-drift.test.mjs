@@ -1081,6 +1081,38 @@ export const Forwarded = forwardRef(function Forwarded({variant = 'solid'}: {var
     ]);
   });
 
+  it('reads a deprecated union member in every layout prettier writes, and leaves a comment on the line before to that member', async () => {
+    withTypeScript();
+    const source = [
+      // Own line, before a leading `|`.
+      'type Size =',
+      "  | 'sm'",
+      "  | 'md'",
+      '  /** @deprecated Use md. */',
+      "  | 'lg';",
+      // Inline, after the `|`.
+      'type Gap =',
+      "  | 'tight'",
+      "  | /** @deprecated Use tight. */ 'loose'",
+      "  | 'wide';",
+      // On the line of 'a': it says nothing about 'b'.
+      'type Pad =',
+      "  | 'a' // @deprecated note about a",
+      "  | 'b';",
+      'export function Box(props: {size?: Size; gap?: Gap; pad?: Pad}) { return null; }',
+    ].join('\n');
+    const box = component('Box', source, {
+      props: [
+        prop('size', "'sm' | 'md'"),
+        prop('gap', "'tight' | 'wide'"),
+        // Leaves out 'b', which is still current.
+        prop('pad', "'a'"),
+      ],
+    });
+
+    expect(kinds(await compare([box]))).toEqual(['Box.pad type_mismatch']);
+  });
+
   it('keeps a deprecated value required when a current source gives it through a form the walk does not read', async () => {
     withTypeScript();
     const source = [
