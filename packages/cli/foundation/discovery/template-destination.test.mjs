@@ -61,7 +61,7 @@ describe('templateDestination', () => {
 
   it('puts a page in src/pages in a project that is not a Next app', () => {
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
-      'src/pages/dashboard',
+      'src/pages/dashboard.tsx',
     );
   });
 
@@ -111,7 +111,7 @@ describe('templateDestination', () => {
     mkdir('app');
     mkdir('src/app');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
-      'src/pages/dashboard',
+      'src/pages/dashboard.tsx',
     );
   });
 
@@ -119,7 +119,7 @@ describe('templateDestination', () => {
     nextApp();
     fs.writeFileSync(path.join(dir, 'app'), '');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
-      'src/pages/dashboard',
+      'src/pages/dashboard.tsx',
     );
   });
 
@@ -127,7 +127,7 @@ describe('templateDestination', () => {
     nextApp();
     mkdir('app');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
-      'app/components/ButtonShowcase',
+      'app/components/ButtonShowcase.tsx',
     );
   });
 
@@ -135,30 +135,37 @@ describe('templateDestination', () => {
     nextApp();
     mkdir('pages');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
-      'components/ButtonShowcase',
+      'components/ButtonShowcase.tsx',
     );
   });
 
   it('puts a block in src/components in every other project', () => {
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
-      'src/components/ButtonShowcase',
+      'src/components/ButtonShowcase.tsx',
     );
     nextApp();
     mkdir('src/app');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
-      'src/components/ButtonShowcase',
+      'src/components/ButtonShowcase.tsx',
     );
   });
 
-  it('skips a folder that already exists, so the command runs as printed', () => {
+  it('skips a path that already exists, so the command runs as printed', () => {
     nextApp();
     mkdir('app/settings');
     mkdir('app/settings-2');
     fs.writeFileSync(path.join(dir, 'app', 'settings-3'), '');
     expect(templateDestination(dir, 'page', 'settings')).toBe('app/settings-4');
-    mkdir('app/components/CardShowcase');
+    write('app/components/CardShowcase.tsx');
     expect(templateDestination(dir, 'block', 'CardShowcase')).toBe(
-      'app/components/CardShowcase-2',
+      'app/components/CardShowcase-2.tsx',
+    );
+  });
+
+  it('skips a page file that already exists in a project that is not a Next app', () => {
+    write('src/pages/settings.tsx');
+    expect(templateDestination(dir, 'page', 'settings')).toBe(
+      'src/pages/settings-2.tsx',
     );
   });
 });
