@@ -247,8 +247,10 @@ Platform-specific details stay inside that compiler.
   pseudo-class overrides, and pseudo-elements) as rules that match only where
   the element's color mode is that mode. Outside media surfaces the theme
   root's `data-theme` decides. Under a root mode other than `light` or `dark`
-  and no Theme that forces one, a block follows the scheme the page draws in.
-  When the page draws in one scheme, the root Theme names it on `<html>` in a
+  and no Theme that forces one, a block follows the scheme the page root draws
+  in: the root's `color-scheme`, else its `<meta name="color-scheme">`. A
+  `color-scheme` set on `body` or on an element around the Theme does not
+  count. When the page draws in one scheme, the root Theme names it on `<html>` in a
   private attribute (`architecture:public-component-api` INV23). Its owner is
   `privateAttributes/scheme.ts`, which the root Theme writes it through and the
   theme engine reads its selectors from; no existing owner module serves,
