@@ -155,7 +155,7 @@
   },
   {
     "component": "core/Code",
-    "reason": "Code is an inline typographic treatment with a monospace font, symmetric background/radius, and logical padding. The code string owns its own bidi content; the component adds no directional visual, positioning, ordering, interaction, or overlay."
+    "reason": "Code is an inline typographic treatment with a monospace font, symmetric background/radius, and logical padding. It isolates its content as left-to-right (dir=\"ltr\") so code reads in source order inside right-to-left text; the component adds no directional visual, positioning, ordering, interaction, or overlay."
   },
   {
     "component": "core/Divider",
@@ -187,7 +187,7 @@
   },
   {
     "component": "core/Markdown",
-    "reason": "Markdown delegates bidi text, semantic list markers, links, and caller-authored content to browser semantics and shared components. Its own prose styling uses logical block/inline properties and it owns no directional control, physical placement, drag, scroll action, or overlay."
+    "reason": "Markdown sets each prose block's and table cell's dir from its own text, so a Hebrew paragraph in a left-to-right document starts at the right edge; its unit tests and a mixed-direction story cover that. Semantic list markers, links, and caller-authored content follow browser semantics and shared components. Its own prose styling uses logical block/inline properties, a table's sideways scroll belongs to the nested Table, and it owns no directional icon, control order, physical placement, drag, or overlay."
   },
   {
     "component": "core/Section",
@@ -460,5 +460,9 @@
       "packages/core/src/Kbd/Kbd.tsx": "sha256:e64111634e63600c9a145f18b6e3e2a947bf3b39185ffbdffb0db3578d5e4f24",
       "packages/core/src/Kbd/index.ts": "sha256:9e1e3942034e17a48c67b4a46161e8c44af9c16360a8d42e5fbb570135a975c2"
     }
+  },
+  {
+    "component": "core/MobileNavToggle",
+    "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row)."
   }
 ]

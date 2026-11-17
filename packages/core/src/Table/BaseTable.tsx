@@ -126,6 +126,18 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     minWidth: 0,
+    // The row may use the header cell's inline-end padding, but not cross the
+    // cell's edge.
+    maxWidth: 'calc(100% + var(--_table-header-end-room, 0px))',
+  },
+  // The label gives up width first, so the "after" controls stay inside the
+  // cell and can be reached when the column is narrow. The row already took
+  // the cell's end room, so the label's content gets none.
+  headerLabel: {
+    '--_table-header-end-room': '0px',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
 });
 
@@ -195,6 +207,109 @@ function applyRowPlugins<
 // Stable empty array to avoid creating new reference on each render
 const EMPTY_PLUGINS: TablePlugin<Record<string, unknown>>[] = [];
 
+interface TableBodyCellProps<T extends Record<string, unknown>> {
+  item: T;
+  column: TableColumn<T>;
+  columnIndex: number;
+  columns: TableColumn<T>[];
+  plugins: TablePlugin<T>[];
+  context: TableRowContext;
+  textOverflow: 'wrap' | 'truncate';
+  CellComponent: React.ComponentType<TableCellComponentProps>;
+  /** A windowed row renders row numbers from its logical position. */
+  hasLogicalPosition: boolean;
+  /** While columns window, a cell carries its full-table column position. */
+  hasColumnPosition: boolean;
+}
+
+/** One body cell. Equal props skip the cell's plugin transforms and render. */
+function TableBodyCell<T extends Record<string, unknown>>({
+  item,
+  column: col,
+  columnIndex,
+  columns,
+  plugins,
+  context,
+  textOverflow,
+  CellComponent,
+  hasLogicalPosition,
+  hasColumnPosition,
+}: TableBodyCellProps<T>): ReactElement {
+  // Apply column alignment to body cells
+  const initialCellHtmlProps: Record<string, unknown> = hasColumnPosition
+    ? {'aria-colindex': columnIndex + 1}
+    : {};
+  if (col.align) {
+    initialCellHtmlProps.style = {textAlign: col.align};
+  }
+
+  const initialBodyCellRenderProps: BodyCellRenderProps = {
+    htmlProps: initialCellHtmlProps,
+    xstyle: [],
+    columnIndex,
+    columns: columns as ReadonlyArray<TableColumn<Record<string, unknown>>>,
+  };
+  const cellRenderProps = applyRowPlugins(
+    plugins,
+    p => p.transformBodyCell,
+    initialBodyCellRenderProps,
+    context,
+    col,
+    item,
+    columnIndex,
+    columns,
+  );
+
+  const isDefaultRenderer = !col.renderCell;
+  let rawContent: ReactNode = null;
+  if (!cellRenderProps.isContentSuppressed) {
+    const renderLogicalPosition = hasLogicalPosition
+      ? getLogicalPositionRenderer(col)
+      : undefined;
+    rawContent =
+      renderLogicalPosition != null
+        ? renderLogicalPosition(context.logicalIndex)
+        : isDefaultRenderer
+          ? defaultCellRenderer(item, col.key)
+          : (col.renderCell?.(item) ?? null);
+  }
+
+  // In truncate mode, wrap default-rendered string content in
+  // <Text maxLines={1}> for smart tooltips that only appear
+  // when text is actually overflowing. In wrap mode (default),
+  // content renders as-is — the cell's CSS handles wrapping.
+  let content: ReactNode;
+  if (
+    isDefaultRenderer &&
+    textOverflow === 'truncate' &&
+    typeof rawContent === 'string' &&
+    rawContent.length > 0
+  ) {
+    content = (
+      <Text type="body" maxLines={1}>
+        {rawContent}
+      </Text>
+    );
+  } else {
+    content = rawContent;
+  }
+
+  return (
+    <CellComponent
+      {...cellRenderProps.htmlProps}
+      contextMenuActions={cellRenderProps.contextMenuActions}
+      xstyle={cellRenderProps.xstyle}>
+      {content}
+    </CellComponent>
+  );
+}
+
+const MemoizedTableBodyCell = memo(TableBodyCell) as <
+  T extends Record<string, unknown>,
+>(
+  props: TableBodyCellProps<T>,
+) => ReactElement;
+
 interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
   rowIndex: number;
@@ -258,75 +373,24 @@ function TableRowInner<T extends Record<string, unknown>>({
       }),
     [contextIdentity, rowIndex, renderContext],
   );
-  // Build cells first
-  const renderCell = (col: TableColumn<T>, columnIndex: number) => {
-    // Apply column alignment to body cells
-    const initialCellHtmlProps: Record<string, unknown> =
-      columnLayout == null ? {} : {'aria-colindex': columnIndex + 1};
-    if (col.align) {
-      initialCellHtmlProps.style = {textAlign: col.align};
-    }
-
-    const initialBodyCellRenderProps: BodyCellRenderProps = {
-      htmlProps: initialCellHtmlProps,
-      xstyle: [],
-      columnIndex,
-      columns: columns as ReadonlyArray<TableColumn<Record<string, unknown>>>,
-    };
-    const cellRenderProps = applyRowPlugins(
-      plugins,
-      p => p.transformBodyCell,
-      initialBodyCellRenderProps,
-      context,
-      col,
-      item,
-      columnIndex,
-      columns,
-    );
-
-    const isDefaultRenderer = !col.renderCell;
-    let rawContent: ReactNode = null;
-    if (!cellRenderProps.isContentSuppressed) {
-      const renderLogicalPosition =
-        rowHeight == null ? undefined : getLogicalPositionRenderer(col);
-      rawContent =
-        renderLogicalPosition != null
-          ? renderLogicalPosition(context.logicalIndex)
-          : isDefaultRenderer
-            ? defaultCellRenderer(item, col.key)
-            : (col.renderCell?.(item) ?? null);
-    }
-
-    // In truncate mode, wrap default-rendered string content in
-    // <Text maxLines={1}> for smart tooltips that only appear
-    // when text is actually overflowing. In wrap mode (default),
-    // content renders as-is — the cell's CSS handles wrapping.
-    let content: ReactNode;
-    if (
-      isDefaultRenderer &&
-      textOverflow === 'truncate' &&
-      typeof rawContent === 'string' &&
-      rawContent.length > 0
-    ) {
-      content = (
-        <Text type="body" maxLines={1}>
-          {rawContent}
-        </Text>
-      );
-    } else {
-      content = rawContent;
-    }
-
-    return (
-      <CellComponent
-        key={col.key}
-        {...cellRenderProps.htmlProps}
-        contextMenuActions={cellRenderProps.contextMenuActions}
-        xstyle={cellRenderProps.xstyle}>
-        {content}
-      </CellComponent>
-    );
-  };
+  // Each cell is its own memoized element. A column range change re-renders
+  // the row with new spacers, and cells that stay mounted keep equal props,
+  // so only the cells that enter render.
+  const renderCell = (col: TableColumn<T>, columnIndex: number) => (
+    <MemoizedTableBodyCell<T>
+      key={col.key}
+      item={item}
+      column={col}
+      columnIndex={columnIndex}
+      columns={columns}
+      plugins={plugins}
+      context={context}
+      textOverflow={textOverflow}
+      CellComponent={CellComponent}
+      hasLogicalPosition={rowHeight != null}
+      hasColumnPosition={columnLayout != null}
+    />
+  );
   const cells =
     columnLayout == null
       ? columns.map(renderCell)
@@ -747,9 +811,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // the last logical row, before that row mounts, so a number never clips.
   // Fixed layout sizes columns from the header, so rows keep their columns;
   // pinned offsets read the extra width from a table variable.
-  const sizedColumns = withLogicalPositionWidths(
-    resolvedColumns,
-    windowPlan.logicalPositionWidths,
+  // Column pitches and the inline anchor compare this array by identity.
+  const sizedColumns = useMemo(
+    () =>
+      withLogicalPositionWidths(
+        resolvedColumns,
+        windowPlan.logicalPositionWidths,
+      ),
+    [resolvedColumns, windowPlan.logicalPositionWidths],
   );
   const resolvedWidths = resolveColumnWidths(sizedColumns);
   const logicalExtraStyle: Record<string, string> = {};
@@ -853,7 +922,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          {resolvedContent}
+          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
           {after}
         </div>
       ) : (
@@ -923,6 +992,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
     );
 
     // --- Render ---
+    // A row gap spans every cell of a mounted row: pinned cells, spacers and
+    // mounted columns.
+    const mountedCellCount = columnLayout?.cellCount ?? resolvedColumns.length;
     const hasColumns = resolvedColumns.length > 0;
 
     // The table is at least as wide as the column floors require and at least
@@ -1016,7 +1088,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                           key={`gap:${segment.start}:${segment.end}`}
                           aria-hidden="true">
                           <td
-                            colSpan={resolvedColumns.length}
+                            colSpan={mountedCellCount}
                             {...stylex.props(styles.spacer(segment.height))}
                           />
                         </tr>,
@@ -1077,7 +1149,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   // would be wrong. Caller-owned empty content still shows.
                   !(isLoading && emptyState == null) && (
                     <tr>
-                      <td colSpan={resolvedColumns.length}>
+                      <td colSpan={mountedCellCount}>
                         {emptyState ?? (
                           <EmptyState
                             title={t('@astryx.table.noData')}
@@ -1105,7 +1177,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
         input={{
           fallbackReason: sharedFallbackReason,
           hasFixedHeightColumns,
-          isRowsWindowing: config != null,
           columns: sizedColumns,
           plugins,
           minWidth: mergedStyle.minWidth,

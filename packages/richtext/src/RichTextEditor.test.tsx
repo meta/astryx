@@ -5,7 +5,8 @@
  * @input Uses vitest, @testing-library/react, RichTextEditor + RichTextView
  * @output Unit tests for the opt-in Lexical editor components, including
  *   accessible label wiring, shared input visuals/status variants, theme-target
- *   metadata, placeholder semantics, canonical link-dialog layout, top-toolbar
+ *   metadata, placeholder semantics, the link popover in place of the browser
+ *   prompt, top-toolbar
  *   ordering and horizontal scrolling, and the read-only vs disabled split
  *   with editable-state sync across prop toggles
  * @position Testing; validates RichTextEditor.tsx and RichTextView.tsx
@@ -14,7 +15,7 @@
  */
 
 import {$createLinkNode} from '@lexical/link';
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {
   render,
   screen,
@@ -75,46 +76,6 @@ import {docs as richTextEditorDoc} from './RichTextEditor.doc.mjs';
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
 const h = {hidden: true} as const;
-
-const originalShowModal = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'showModal',
-);
-const originalDialogClose = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'close',
-);
-
-beforeAll(() => {
-  // JSDOM does not implement the native dialog lifecycle used by Dialog.
-  HTMLDialogElement.prototype.showModal = function () {
-    this.setAttribute('open', '');
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.removeAttribute('open');
-  };
-});
-
-afterAll(() => {
-  if (originalShowModal) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'showModal',
-      originalShowModal,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {showModal?: unknown}).showModal;
-  }
-  if (originalDialogClose) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'close',
-      originalDialogClose,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {close?: unknown}).close;
-  }
-});
 
 // jsdom's Range does not implement getBoundingClientRect, which Lexical
 // calls (via scroll-into-view) whenever it reconciles a selection while the
@@ -1409,7 +1370,9 @@ describe('RichTextEditorToolbar', () => {
     const textbox = screen.getByRole('textbox');
     const editor = container.querySelector('.astryx-rich-text-editor');
     const toolbarRegion = toolbar.parentElement?.parentElement;
-    const editorBody = toolbarRegion?.nextElementSibling;
+    // The toolbar's link popover renders beside it, hidden while closed, so
+    // the body is found from the editable text it holds.
+    const editorBody = textbox.parentElement?.parentElement;
 
     expect(toolbar).toHaveClass('astryx-toolbar');
     expect(toolbar).toHaveAttribute('data-size', 'sm');
@@ -1424,6 +1387,7 @@ describe('RichTextEditorToolbar', () => {
     expect(toolbarRegion?.parentElement).toBe(editor);
     expect(toolbarRegion).toBeInstanceOf(HTMLElement);
     expect(editorBody).toBeInstanceOf(HTMLElement);
+    expect(editorBody?.parentElement).toBe(editor);
     // The compact gutter is emitted by StyleX; do not regress to a component
     // inline-style escape hatch. Browser coverage below owns the geometry.
     expect(toolbarRegion).not.toHaveAttribute('style');
@@ -1634,9 +1598,21 @@ describe('linkUtils', () => {
       expect(sanitizeUrl('example.com')).toBe('https://example.com/');
     });
 
+    it('defaults a scheme-less host with a port to https', () => {
+      expect(sanitizeUrl('example.com:8080')).toBe('https://example.com:8080/');
+      expect(sanitizeUrl('example.com:8080/docs?q=1')).toBe(
+        'https://example.com:8080/docs?q=1',
+      );
+      expect(sanitizeUrl('www.example.com:8080')).toBe(
+        'https://www.example.com:8080/',
+      );
+      expect(sanitizeUrl('localhost:3000')).toBe('https://localhost:3000/');
+    });
+
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
+      expect(sanitizeUrl('tel:911')).toBe('tel:911');
     });
 
     it('rejects javascript: and other unsafe schemes as about:blank', () => {
@@ -1656,6 +1632,9 @@ describe('linkUtils', () => {
       expect(validateUrl('https://example.com')).toBe(true);
       expect(validateUrl('example.com')).toBe(true);
       expect(validateUrl('mailto:a@b.com')).toBe(true);
+      expect(validateUrl('example.com:8080')).toBe(true);
+      expect(validateUrl('localhost:3000')).toBe(true);
+      expect(validateUrl('tel:911')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
@@ -1673,7 +1652,8 @@ describe('RichTextEditorToolbar — links', () => {
     expect(screen.getByRole('button', {name: 'Link'})).toBeInTheDocument();
   });
 
-  it('opens an Astryx Dialog instead of the browser prompt by default', async () => {
+  // RichTextEditorToolbarLink.test.tsx covers the popover's behavior.
+  it('opens the link popover instead of the browser prompt by default', async () => {
     const browserPrompt = vi.spyOn(window, 'prompt').mockReturnValue(null);
     try {
       render(
@@ -1683,20 +1663,13 @@ describe('RichTextEditorToolbar — links', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Link'}));
 
       expect(browserPrompt).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(
-          screen.getByRole('dialog', {name: 'Insert link', ...h}),
-        ).toBeInTheDocument(),
-      );
-      const dialog = screen.getByRole('dialog', {
+      const popover = await screen.findByRole('dialog', {
         name: 'Insert link',
         ...h,
       });
-      expect(dialog.querySelector('.astryx-layout-header')).toBeInTheDocument();
-      expect(
-        dialog.querySelector('.astryx-layout-content'),
-      ).toBeInTheDocument();
-      expect(dialog.querySelector('.astryx-layout-footer')).toBeInTheDocument();
+      // A popover, not a modal dialog.
+      expect(popover).not.toHaveAttribute('aria-modal');
+      expect(document.querySelector('dialog')).toBeNull();
       expect(
         screen.getByRole('textbox', {name: 'URL', ...h}),
       ).toBeInTheDocument();

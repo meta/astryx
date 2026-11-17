@@ -28,9 +28,10 @@ import {
   useInlineListWindow,
   type InlineListWindowGeometrySource,
 } from '../../../virtualization/useInlineListWindow';
-import type {
-  TableColumnFocusProps,
-  TableColumnSegment,
+import {
+  getCellColumnIndex,
+  type TableColumnFocusProps,
+  type TableColumnSegment,
 } from '../../tableColumnWindowing';
 
 export interface UseTableColumnWindowOptions {
@@ -75,11 +76,7 @@ function getColumnViolation(table: HTMLTableElement): string | undefined {
   return undefined;
 }
 
-/**
- * The cell that holds `target`, and its full-table column index. A windowed
- * cell carries its position; an unwindowed row has no spacers, so there the
- * cell index is the column index.
- */
+/** The cell that holds `target`, and its full-table column index. */
 function getFocusedCell(
   table: HTMLTableElement,
   target: EventTarget,
@@ -89,18 +86,11 @@ function getFocusedCell(
     return undefined;
   }
   const cell = target.closest('td, th');
-  if (
-    !(cell instanceof view.HTMLTableCellElement) ||
-    !table.contains(cell) ||
-    cell.getAttribute('aria-hidden') === 'true'
-  ) {
+  if (!(cell instanceof view.HTMLTableCellElement) || !table.contains(cell)) {
     return undefined;
   }
-  const position = cell.getAttribute('aria-colindex');
-  return {
-    cell,
-    index: position == null ? cell.cellIndex : Number(position) - 1,
-  };
+  const index = getCellColumnIndex(cell);
+  return index === undefined ? undefined : {cell, index};
 }
 
 export function useTableColumnWindow({

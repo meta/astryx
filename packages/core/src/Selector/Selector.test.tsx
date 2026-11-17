@@ -21,6 +21,7 @@ import {
 import {readFileSync} from 'node:fs';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -645,13 +646,19 @@ describe('Selector', () => {
   });
 
   it.each([
-    ['below its anchor', 'marginBlockEnd'],
-    ['already flipped above its anchor', 'marginBlockStart'],
+    ['below its anchor', 'marginBlockEnd', null],
+    [
+      'already flipped above its anchor',
+      'marginBlockStart',
+      'self-block-start span-self-inline-end',
+    ],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin) => {
+    async (_, gutterMargin, flippedArea) => {
       const restoreRects = mockSelectorRects();
-      // The layer keeps a 16 px gutter from the viewport's block end.
+      // The layer keeps a 16 px gutter from the viewport's block end. A flip
+      // moves it to the block-start margin and names the block-start side in
+      // the layer's position area.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -662,6 +669,13 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
+            if (flippedArea != null) {
+              const read = style.getPropertyValue.bind(style);
+              Object.defineProperty(style, 'getPropertyValue', {
+                value: (name: string) =>
+                  name === 'position-area' ? flippedArea : read(name),
+              });
+            }
           }
           return style;
         });
@@ -861,6 +875,29 @@ describe('Selector', () => {
           spacingVars['--spacing-1'],
         );
       });
+    });
+
+    it('opens the selected-item overlay without a flush inside its commit', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const user = userEvent.setup();
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await screen.findByRole('listbox', {hidden: true});
+        // The list's resize report at registration runs inside the open's
+        // commit, where React cannot flush and warns.
+        expect(error.mock.calls.flat().join(' ')).not.toContain('flushSync');
+      } finally {
+        error.mockRestore();
+      }
     });
 
     it('stays flush in the default selected-item overlay', async () => {
@@ -2996,6 +3033,50 @@ describe('Selector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(<Selector label="Fruit" options={OPTIONS} isDefaultOpen />);
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed on mount when disabled and read-only', () => {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <Selector label="Fruit" options={OPTIONS} isDefaultOpen />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},
@@ -4548,6 +4629,249 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     });
     closeByLightDismiss();
 
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick that moved focus to a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    // The press on the option moved focus to the container before the pick.
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a press on a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    act(() => {
+      screen.getByTestId('container').focus();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field a press moved it to inside the same focusable container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <input aria-label="Notes" />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    closeByLightDismiss();
+
+    expect(notes).toHaveFocus();
+  });
+
+  it('leaves focus on a Tab-stop container that a press outside the list moved it to', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const container = screen.getByTestId('container');
+    await user.click(container);
+    closeByLightDismiss();
+
+    expect(container).toHaveFocus();
+  });
+
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    closeByLightDismiss();
+
+    expect(nextTab).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick inside a Tab-stop container', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={0} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a closed shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
+
+  it('returns focus to the trigger after a keyboard pick from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    await user.tab();
+    const trigger = document.activeElement as HTMLElement;
+    await user.keyboard('c');
+    const search = screen.getByPlaceholderText('Search…');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('Cherry');
     expect(trigger).toHaveFocus();
   });
 });

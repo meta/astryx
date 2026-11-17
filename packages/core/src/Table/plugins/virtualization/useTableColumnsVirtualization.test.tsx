@@ -429,20 +429,6 @@ describe('column windowing admission', () => {
     expect(warnings(warn).join('\n')).toContain('min-width');
   });
 
-  it('keeps row windowing, renders every column and names the later release when both capabilities are present', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {container} = render(<Fixture hasRows />);
-    expectEveryColumn(container);
-    // Rows still window: ceil(240 / 48) plus four of overscan.
-    const rows = Array.from(container.querySelectorAll('tbody > tr')).filter(
-      row => row.getAttribute('aria-hidden') !== 'true',
-    );
-    expect(rows).toHaveLength(9);
-    expect(warnings(warn).join('\n')).toContain(
-      'windowing rows and columns together',
-    );
-  });
-
   it('accepts a list with one rows capability alone', () => {
     function RowsList() {
       const rows = useTableRowsVirtualization({
@@ -509,6 +495,20 @@ describe('column windowing admission', () => {
  * A measured scroll area whose inline position the test moves. A write to
  * scrollLeft records the anchor's request and lands, as a browser scroll does.
  */
+/**
+ * Runs two animation frames. A scroll that lands while the scroll area has a
+ * measurement pending is published by that measurement's frame, and the rows
+ * it mounts are measured in the next one. Reading after a fixed delay instead
+ * races those frames on a busy machine.
+ */
+async function settleFrames() {
+  for (let frame = 0; frame < 2; frame++) {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+}
+
 function controlledViewport(width = 500) {
   let left = 0;
   const writes: number[] = [];
@@ -533,6 +533,20 @@ function controlledViewport(width = 500) {
   ) {
     return isArea(this) ? left : 0;
   });
+  let top = 0;
+  vi.spyOn(Element.prototype, 'scrollTop', 'get').mockImplementation(function (
+    this: Element,
+  ) {
+    return isArea(this) ? top : 0;
+  });
+  vi.spyOn(Element.prototype, 'scrollTop', 'set').mockImplementation(function (
+    this: Element,
+    value: number,
+  ) {
+    if (isArea(this)) {
+      top = value;
+    }
+  });
   vi.spyOn(Element.prototype, 'scrollLeft', 'set').mockImplementation(function (
     this: Element,
     value: number,
@@ -542,24 +556,48 @@ function controlledViewport(width = 500) {
       left = value;
     }
   });
+  // Content inside the scroll area moves up as the area scrolls, as in a
+  // browser. A full measurement after a scroll then reads the same body
+  // origin as before it.
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+    function (this: Element) {
+      const area = this.closest('[role="group"]');
+      const y = area != null && area !== this ? -top : 0;
+      return {
+        x: 0,
+        y,
+        top: y,
+        left: 0,
+        right: 0,
+        bottom: y,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      };
+    },
+  );
   async function scrollTo(next: number) {
     left = next;
     await act(async () => {
       document
         .querySelector('[role="group"]')
         ?.dispatchEvent(new Event('scroll'));
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await settleFrames();
     });
+  }
+  async function scrollBoth(nextLeft: number, nextTop: number) {
+    top = nextTop;
+    await scrollTo(nextLeft);
   }
   async function landWrites() {
     await act(async () => {
       document
         .querySelector('[role="group"]')
         ?.dispatchEvent(new Event('scroll'));
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await settleFrames();
     });
   }
-  return {scrollTo, landWrites, writes, getLeft: () => left};
+  return {scrollTo, scrollBoth, landWrites, writes, getLeft: () => left};
 }
 
 /** Body cells take focus, as a cell control would. */
@@ -660,6 +698,72 @@ describe('retained focused column', () => {
     expect(document.activeElement).toBe(
       container.querySelector('[role="group"]'),
     );
+  });
+});
+
+describe('column range changes', () => {
+  it('builds only the cells of columns that enter the window', async () => {
+    const viewport = controlledViewport();
+    const built: string[] = [];
+    // Each body cell runs every plugin's cell transform when it is built.
+    const recorder: TablePlugin<Item> = {
+      rowModel: 'flat',
+      transformBodyCell: (props, column) => {
+        built.push(column.key);
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(200);
+    const before = mountedKeys(container);
+    built.length = 0;
+    // One more column enters at the inline end.
+    await viewport.scrollTo(300);
+    const after = mountedKeys(container);
+    const entering = after.filter(key => !before.includes(key));
+    expect(entering.length).toBeGreaterThan(0);
+    expect(after.length).toBeGreaterThan(entering.length);
+    expect([...new Set(built)].sort()).toEqual([...entering].sort());
+    expect(built).toHaveLength(entering.length * ROW_COUNT);
+  });
+});
+
+describe('pinning a mounted column', () => {
+  function pinnedState(container: HTMLElement, key: string) {
+    const header = container.querySelector(
+      `thead [data-column-key="${key}"]`,
+    ) as HTMLElement;
+    const index = header.getAttribute('aria-colindex');
+    const body = Array.from(
+      container.querySelectorAll(`tbody td[aria-colindex="${index}"]`),
+    );
+    return {
+      header: header.hasAttribute('data-astryx-table-pinned'),
+      body: body.map(cell => cell.hasAttribute('data-astryx-table-pinned')),
+    };
+  }
+
+  it('pins and unpins the header and body cells of a mounted column together', async () => {
+    controlledViewport();
+    const {container, rerender} = render(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
+    rerender(<Fixture startKeys={['c0', 'c1']} />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: true,
+      body: Array(ROW_COUNT).fill(true),
+    });
+    rerender(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
   });
 });
 
@@ -815,5 +919,115 @@ describe('column windowing boundary', () => {
     rerender(<Toggle isOn={false} />);
     expect(container.querySelector('table')).not.toBe(windowed);
     expect(mountedKeys(container)).toHaveLength(COLUMN_COUNT);
+  });
+});
+
+describe('rows and columns windowing together', () => {
+  const manyRows: Item[] = Array.from({length: 100}, (_, row) => {
+    const item: Item = {id: `many-${row}`};
+    for (let i = 0; i < COLUMN_COUNT; i++) {
+      item[`c${i}`] = `${row}:${i}`;
+    }
+    return item;
+  });
+  function mountedRows(container: HTMLElement): HTMLTableRowElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLTableRowElement>('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+  }
+  function gapCells(container: HTMLElement): HTMLTableCellElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLTableCellElement>(
+        'tbody > tr[aria-hidden="true"] > td',
+      ),
+    );
+  }
+
+  it('windows both axes with full-table row and column positions, and no fallback warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = render(<Fixture hasRows items={manyRows} />);
+    const table = container.querySelector('table');
+    expect(table).toHaveAttribute('aria-rowcount', '101');
+    expect(table).toHaveAttribute('aria-colcount', String(COLUMN_COUNT));
+    const rows = mountedRows(container);
+    // ceil(240 / 48) rows plus four of overscan; five columns plus two.
+    expect(rows).toHaveLength(9);
+    expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
+    expect(rows[8]).toHaveAttribute('aria-rowindex', '10');
+    expect(
+      Array.from(rows[3].cells)
+        .filter(cell => !isSpacer(cell))
+        .map(cell => cell.getAttribute('aria-colindex')),
+    ).toEqual(range(1, 8).map(String));
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 7)));
+    expect(
+      warn.mock.calls.map(call => call.join(' ')).join('\n'),
+    ).not.toContain('Column windowing');
+  });
+
+  it('spans each row gap across exactly the mounted column structure', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(
+      <Fixture hasRows items={manyRows} startKeys={['c0']} endKeys={['c39']} />,
+    );
+    const seedCells = headerCells(container).length;
+    expect(gapCells(container).map(cell => cell.colSpan)).toEqual([seedCells]);
+    await settle();
+    await viewport.scrollBoth(2000, 2400);
+    const header = headerCells(container);
+    // Pinned c0, a spacer, the range, a spacer and pinned c39.
+    expect(header.filter(isSpacer)).toHaveLength(2);
+    const gaps = gapCells(container);
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const gap of gaps) {
+      expect(gap.colSpan).toBe(header.length);
+      expect(gap.textContent).toBe('');
+    }
+    for (const row of mountedRows(container)) {
+      expect(Array.from(row.cells).map(isSpacer)).toEqual(header.map(isSpacer));
+    }
+  });
+
+  it('moves the row window for a scroll that lands while a measurement is pending, however late the frame runs', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(<Fixture hasRows items={manyRows} />);
+    await settle();
+    // Frames run later than any fixed wait would allow, as on a busy machine.
+    const runFrame = window.requestAnimationFrame.bind(window);
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback =>
+      runFrame(() => {
+        setTimeout(() => callback(performance.now()), 80);
+      }),
+    );
+    // A content change leaves a measurement pending when the scroll lands.
+    await act(async () => {
+      container.querySelector('tbody td')?.append(document.createTextNode(''));
+      await Promise.resolve();
+    });
+    await viewport.scrollBoth(2000, 2400);
+    expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '48');
+  });
+
+  it('keeps a focused cell row and column when both scroll away, and the same element when they return', async () => {
+    const viewport = controlledViewport();
+    const {container} = render(
+      <Fixture hasRows items={manyRows} extraPlugins={{focusableCells}} />,
+    );
+    await settle();
+    const cell = bodyCell(container, 0, 1);
+    expect(cell).not.toBeNull();
+    act(() => cell?.focus());
+    await viewport.scrollBoth(2000, 2400);
+    const rows = mountedRows(container);
+    // Row 1 stays as the island before the window from row 47.
+    expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
+    expect(rows[1]).toHaveAttribute('aria-rowindex', '48');
+    expect(rows[0].contains(cell)).toBe(true);
+    expect(mountedKeys(container)).toEqual(keys(1, ...range(18, 27)));
+    expect(document.activeElement).toBe(cell);
+    expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
+    await viewport.scrollBoth(0, 0);
+    expect(document.activeElement).toBe(cell);
+    expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });
 });

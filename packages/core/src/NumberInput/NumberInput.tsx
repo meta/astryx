@@ -5,7 +5,7 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
+ * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError, EntryErrorBehavior; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -230,6 +230,8 @@ export type {
   InputStatus as NumberInputStatus,
   InputStatusType as NumberInputStatusType,
 } from '../Field';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {isImeKeyEvent, mergeProps, mergeRefs} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -410,6 +412,22 @@ interface NumberInputPropsBase extends Omit<
    * ```
    */
   onEntryErrorChange?: (error: NumberInputEntryError | null) => void;
+  /**
+   * When the field shows its own entry error: typed text that it rejects,
+   * which `onEntryErrorChange` reports. It sets when the error shows, not when
+   * validation runs, so it is not React Aria's `validationBehavior` (native
+   * versus ARIA validation). It does not change a caller's `status`.
+   *
+   * A typed number is complete only at Enter or blur, so both values behave
+   * the same: `'complete'` and `'blur-or-enter'` show the message,
+   * `aria-invalid`, the invalid styling, the announcement, and the
+   * `onEntryErrorChange` report together at Enter or blur, never while a
+   * person types. An edit that makes the text valid or empty clears the error
+   * at once.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -679,6 +697,9 @@ export function NumberInput({
   labelIcon,
   status,
   onEntryErrorChange,
+  // Both values show a typed number's rejection only at Enter or blur. The
+  // field reads neither the prop nor a form default.
+  entryErrorBehavior: _entryErrorBehavior,
   statusVariant = 'attached',
   size: sizeProp,
   onChange,

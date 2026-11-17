@@ -238,6 +238,10 @@ describe.each(Object.entries(WORKFLOWS))(
         );
         expect(node.run.trim()).toBe(
           [
+            "started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')",
+            'VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))',
+            'export VITEST_SHARD_WATCHDOG_SECONDS',
+            'WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)',
             'if [ "$SCOPED" = true ]; then',
             '  # One run covers the tests the change reaches and the tests no',
             '  # module graph relates to it: guards that read sources, and tests',
@@ -252,10 +256,10 @@ describe.each(Object.entries(WORKFLOWS))(
             '  .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"',
             '  mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"',
             '  if [ "${#TESTS[@]}" -gt 0 ]; then',
-            `    .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${TESTS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${WATCHDOG[@]}" "\${TESTS[@]}"`,
             '  fi',
             'else',
-            `  pnpm test:node ${SHARD_ARG}`,
+            `  pnpm test:node ${SHARD_ARG} "\${WATCHDOG[@]}"`,
             'fi',
           ].join('\n'),
         );
@@ -283,9 +287,22 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(vitestLanes).toEqual(['test-ui', 'test-node']);
         for (const lane of vitestLanes) {
           const job = workflow.jobs[lane];
-          const legs = job.strategy?.matrix?.shard;
-          expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(true);
+          const shard = job.strategy?.matrix?.shard;
+          if (typeof shard === 'string') {
+            // Planned Node legs are as many as the workflow's planning job
+            // gives (ci.yml's room, the Main workflow's main-commit), which
+            // numbers them 1..n (vitest-node-legs.test.mjs); the fallback is
+            // the widest matrix.
+            expect(shard).toMatch(
+              /^\$\{\{ fromJSON\(needs\.(room|main-commit)\.outputs\.node-shards \|\| '\[[\d, ]+\]'\) \}\}$/,
+            );
+          } else {
+            expect(Array.isArray(shard), `${lane} has no shard matrix`).toBe(
+              true,
+            );
+          }
           // Legs are numbered 1..n exactly once, so --shard i/n covers all n.
+          const legs = matrixFor(shard, 'workflow_dispatch');
           expect(legs).toEqual(
             Array.from({length: legs.length}, (_, index) => index + 1),
           );

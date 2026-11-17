@@ -207,6 +207,11 @@ export const doc = {
       value: 'ERR_WRITE_FAILED',
       description: 'Writing output files failed (and was rolled back).',
     },
+    {
+      value: 'ERR_READ_FAILED',
+      description:
+        'An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system.',
+    },
 
     // Theme build
     {
@@ -296,6 +301,23 @@ export const doc = {
         'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
     },
 
+    // Bases
+    {
+      value: 'ERR_BASE_CAPABILITY',
+      description:
+        "The command, or an option or argument value given to it, needs a step the run's base does not serve. Nothing was written. The envelope's `requirement` names the command, the steps, and the base.",
+    },
+    {
+      value: 'ERR_BASE_NOT_FOUND',
+      description:
+        '`--base` names a package that is not installed where the run can read it, or that is not Core and does not declare `base`. Nothing was done.',
+    },
+    {
+      value: 'ERR_BASE_AMBIGUOUS',
+      description:
+        'The project installs two or more bases and no Core, and the run named none with `--base`. Nothing was done.',
+    },
+
     // Render (experimental: may change or be removed in a patch release)
     {
       value: 'ERR_RENDER_COMPILE',
@@ -313,7 +335,7 @@ export const doc = {
       value: 'ERR_RENDER_MISSING_DEPENDENCY',
       stability: 'experimental',
       description:
-        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+        "The page imports a package that is not installed where the page is, or the esbuild the CLI depends on to build the page's script is missing from the CLI's install (install the CLI again). Nothing was written. For a package the page imports, the suggestion is the install command. Raised only by the experimental render command.",
     },
     {
       value: 'ERR_RENDER_BROWSER_API',
@@ -349,7 +371,19 @@ export const doc = {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from) or is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NEWER_FORMAT',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_SCRIPT',
+      stability: 'experimental',
+      description:
+        "`render` could not build the page's script for the browser: a module the page loads needs Node (such as `fs` or `path`), or cannot be found or compiled for the browser. Nothing was written. The message names the module. Raised only by the experimental render command.",
     },
     {
       value: 'ERR_THEME_BAD_VALUE',

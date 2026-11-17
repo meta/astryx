@@ -23,7 +23,13 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {useState, type ReactElement} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ReactElement,
+} from 'react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import type * as UseAnnounceModule from '../hooks/useAnnounce';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
@@ -195,6 +201,37 @@ describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
     fireEvent.pointerUp(document.body, {pointerType: 'mouse'});
     expect(shows()).toBe(false);
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a press outside closes a shown tooltip after React discards a render that controls it', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Screen({isPending}: {isPending: boolean}) {
+      return (
+        <Suspense fallback={null}>
+          <ToggleTip isOpen={isPending ? false : undefined} />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    const {rerender} = render(<Screen isPending={false} />);
+    click(trigger());
+    expect(shows()).toBe(true);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen isPending />);
+      });
+    });
+
+    fireEvent.pointerDown(document.body, {pointerType: 'mouse'});
+    fireEvent.pointerUp(document.body, {pointerType: 'mouse'});
+
+    expect(shows()).toBe(false);
   });
 
   it('focus leaving the trigger for another control closes a shown tooltip', () => {

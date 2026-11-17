@@ -124,6 +124,14 @@ export const docs = {
         "Called each time the field's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before min or after max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection; it reports null when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With it, an error status with a message replaces the field's own message, and a rejection that starts under an unchanged error message announces that message once. The native and touch pickers take no typed text, so it never reports a rejection there.",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the field shows its own entry error: a typed date it rejects, as onEntryErrorChange reports it. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. 'complete' shows a date the calendar does not have, or one outside min, max, or dateConstraints, as soon as the typed date is complete, and unreadable or unfinished text at Enter or blur. 'blur-or-enter' holds every rejection until Enter or blur: the message, aria-invalid, the invalid styling, the announcement, and the onEntryErrorChange report then appear together. Under both values, an edit that makes the text a date or empties it clears the error at once; under 'blur-or-enter', an edit that leaves the text wrong keeps the shown error until the next Enter or blur. A date the native control refuses shows at Enter or blur under both values. The field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
+    },
+    {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
@@ -509,6 +517,14 @@ export const docsZh = {
         "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 或晚于 max）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时若输入字段被替换（例如展示方式或指针类型改变而显示原生或触控选择器），会传入 null。传入此回调后，带消息的 error 状态会替代字段自身的错误消息；若拒绝开始时该错误消息未变，字段会再播报一次该消息。原生和触控选择器不接受输入文本，因此不会报告拒绝。",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "字段何时显示自身的输入错误：即字段拒绝的输入日期，也就是 onEntryErrorChange 报告的拒绝。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。'complete' 在输入的日期完整后立即显示日历中不存在的日期，或超出 min、max 或 dateConstraints 的日期；无法识别或未完成的文本在按 Enter 或失焦时显示。'blur-or-enter' 将每个拒绝保留到按 Enter 或失焦：届时消息、aria-invalid、无效样式、播报和 onEntryErrorChange 报告一起出现。两种取值下，使文本成为有效日期或清空文本的编辑都会立即清除错误；在 'blur-or-enter' 下，文本仍然错误的编辑会保留已显示的错误，直到下一次按 Enter 或失焦。原生控件拒绝的日期在两种取值下都在按 Enter 或失焦时显示。字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
+    },
+    {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
@@ -710,6 +726,8 @@ export const docsDense = {
       'error/warning/success status w/ message; a rejected date (typed or native) or kept unreadable/unfinished text shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message',
     onEntryErrorChange:
       "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when the field's own rejection shows (not when validation runs; not React Aria validationBehavior; never changes status). complete: nonexistent/out-of-range date as soon as complete, unreadable/unfinished at Enter/blur. blur-or-enter: message, aria-invalid, styling, announcement and onEntryErrorChange report all wait for Enter/blur. Valid or emptied text clears at once; still-wrong edit keeps a shown error (blur-or-enter). Native refusals wait for Enter/blur under both. Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'tooltip text via info icon at label end',

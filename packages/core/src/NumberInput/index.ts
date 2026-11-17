@@ -16,4 +16,5 @@ export type {
   NumberInputStatus,
   NumberInputStatusType,
   NumberInputEntryError,
+  EntryErrorBehavior,
 } from './NumberInput';
