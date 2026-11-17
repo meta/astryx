@@ -36,7 +36,7 @@ export const doc = {
       flag: '--on <where>',
       param: 'options.on',
       description:
-        "Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a group (inputs, containers, checks, menus, or a family the census reads from each part's structure: button-like, overlays, option-rows, selected-items, accent-fills, inset-fields; how --list groups), or for font a role (body, heading, code)",
+        "Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a group (inputs, containers, checks, menus, or a family the census reads from each part's structure: button-like, overlays, option-rows, selected-items, accent-fills, inset-fields, status-surfaces, overlay-headers; how --list groups), or for font a role (body, heading, code)",
     },
     {
       flag: '--when <prop:value>',
