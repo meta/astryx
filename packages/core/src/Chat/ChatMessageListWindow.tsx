@@ -25,7 +25,6 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isPositiveFinite} from '../virtualization/listWindow';
 import {useMeasuredListWindow} from '../virtualization/useMeasuredListWindow';
 import type {ListWindowKey} from '../virtualization/useListFocusIsland';
@@ -39,10 +38,10 @@ import type {
   ChatMessageListWindowProps,
 } from './chatMessageListVirtualization';
 import {
-  streamScrollPositionListeners,
+  isFollowingNewest,
+  streamScrollPositions,
   streamScrollShifts,
 } from './chatStreamScrollChannel';
-import {isFollowingNewest} from './useChatStreamScroll';
 
 /** The size of a message that has not rendered yet, in CSS px. */
 const DEFAULT_ITEM_SIZE = 96;
@@ -106,10 +105,10 @@ function subscribePosition(
   scroller: HTMLElement,
   listener: (top: number) => void,
 ): () => void {
-  let listeners = streamScrollPositionListeners.get(scroller);
+  let listeners = streamScrollPositions.get(scroller);
   if (listeners == null) {
     listeners = new Set();
-    streamScrollPositionListeners.set(scroller, listeners);
+    streamScrollPositions.set(scroller, listeners);
   }
   const subscribed = listeners;
   subscribed.add(listener);
@@ -142,23 +141,20 @@ const WindowRow = memo(function WindowRow({
   onItemBlur,
   contentRef,
 }: WindowRowProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  // Syncs the row's size measurement with its element.
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    return element == null ? undefined : observeItem(itemKey, element);
-  }, [itemKey, observeItem]);
-  // Syncs ChatLayout's content observer with the newest item's row. Its
-  // growth is new content, and a new row there is a new message; a
-  // correction above it changes neither.
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    if (contentRef == null || element == null) {
-      return undefined;
-    }
-    contentRef(element);
-    return () => contentRef(null);
-  }, [contentRef]);
+  // Attaches the row to the size measurement and, for the newest item's row,
+  // to ChatLayout's content observer. That row's growth is new content, and a
+  // new row there is a new message; a correction above it changes neither.
+  const attach = useCallback(
+    (element: HTMLDivElement) => {
+      const stopMeasure = observeItem(itemKey, element);
+      contentRef?.(element);
+      return () => {
+        stopMeasure();
+        contentRef?.(null);
+      };
+    },
+    [itemKey, observeItem, contentRef],
+  );
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     onItemFocus(itemKey, event.target);
   };
@@ -169,7 +165,7 @@ const WindowRow = memo(function WindowRow({
   };
   return (
     <div
-      ref={ref}
+      ref={attach}
       onFocus={onFocus}
       onBlur={onBlur}
       {...stylex.props(styles.row, index > 0 && gapStyle)}>

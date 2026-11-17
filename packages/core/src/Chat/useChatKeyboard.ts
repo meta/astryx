@@ -47,10 +47,8 @@ import {focusForLastInputTemporarily} from '../utils/focusReturn';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {
-  isFollowingNewest,
-  type UseChatStreamScrollReturn,
-} from './useChatStreamScroll';
+import {isFollowingNewest} from './chatStreamScrollChannel';
+import type {UseChatStreamScrollReturn} from './useChatStreamScroll';
 
 export interface UseChatKeyboardOptions {
   /** ChatLayout's root. */

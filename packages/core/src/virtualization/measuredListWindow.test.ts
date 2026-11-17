@@ -3,7 +3,7 @@
 /**
  * @file measuredListWindow.test.ts
  * @input The measured block-axis math of the private list-windowing module
- * @output Offset, range, gap, survivor and reveal-offset assertions
+ * @output Offset, range, gap and reveal-offset assertions
  * @position Colocated tests for the private list-windowing module
  */
 import {describe, expect, it} from 'vitest';
@@ -11,8 +11,6 @@ import {
   buildItemOffsets,
   calculateMeasuredRange,
   createMeasuredSegments,
-  findSurvivingIndex,
-  itemAtOffset,
   revealOffset,
 } from './measuredListWindow';
 
@@ -24,15 +22,6 @@ describe('measured list window math', () => {
       0, 100, 150, 350, 430, 550, 610,
     ]);
     expect(buildItemOffsets(0, () => 10)).toEqual([0]);
-  });
-
-  it('finds the item that holds a position, and the first item above the list', () => {
-    const offsets = buildItemOffsets(sizes.length, index => sizes[index]);
-    expect(itemAtOffset(offsets, -40)).toBe(0);
-    expect(itemAtOffset(offsets, 0)).toBe(0);
-    expect(itemAtOffset(offsets, 149)).toBe(1);
-    expect(itemAtOffset(offsets, 150)).toBe(2);
-    expect(itemAtOffset(offsets, 10_000)).toBe(5);
   });
 
   it('mounts the items that cover the scrollport plus pixel overscan on each side', () => {
@@ -78,16 +67,6 @@ describe('measured list window math', () => {
       {type: 'gap', start: 6, end: 9, height: 300},
       {type: 'rows', start: 9, end: 10},
     ]);
-  });
-
-  it('resolves a removed anchor to its first surviving successor, then its predecessor', () => {
-    const previous = ['a', 'b', 'c', 'd'];
-    const map = (keys: string[]) =>
-      new Map(keys.map((key, index) => [key, index]));
-    expect(findSurvivingIndex(previous, 1, map(['x', 'a', 'b', 'c']))).toBe(2);
-    expect(findSurvivingIndex(previous, 1, map(['a', 'c', 'd']))).toBe(1);
-    expect(findSurvivingIndex(previous, 3, map(['a', 'b']))).toBe(1);
-    expect(findSurvivingIndex(previous, 1, map(['x', 'y']))).toBeUndefined();
   });
 
   it('places a revealed item at the start, the center or the end of the scrollport', () => {

@@ -31,7 +31,10 @@ async function distanceFromEnd(page: Page): Promise<number> {
   });
 }
 
-/** Streams the story's reply and waits until its last word has arrived. */
+/**
+ * Streams the story's reply and waits until its last word has arrived. The
+ * follow can take one more spring frame to reach the end, so callers poll.
+ */
 async function streamReply(page: Page): Promise<void> {
   const button = page.getByRole('button', {name: 'Stream a reply'});
   await button.click();
@@ -68,7 +71,7 @@ test('opens at the newest message and follows a streamed reply', async ({
   await openStory(page, storybook(), STORY);
   expect(await distanceFromEnd(page)).toBeLessThan(1);
   await streamReply(page);
-  expect(await distanceFromEnd(page)).toBeLessThan(1);
+  await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
 });
 
 test('keeps the end in place when a message above the newest gets shorter', async ({
@@ -92,7 +95,7 @@ test('keeps the end in place when a message above the newest gets shorter', asyn
   });
   await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
   await streamReply(page);
-  expect(await distanceFromEnd(page)).toBeLessThan(1);
+  await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
 });
 
 test('reveals a message that is not mounted when its rows are shorter than their estimates', async ({

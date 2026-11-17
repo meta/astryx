@@ -5,8 +5,8 @@
  * @input Item sizes, measured or estimated, and scroll positions in the
  *   list's own coordinates
  * @output Item start offsets, the mounted range with overscan in CSS px, row
- *   and gap segments, the item at a position, the anchor that survives a key
- *   change, and the anchor offset that reveals an item
+ *   and gap segments, and the anchor offset that reveals an item; the item at
+ *   a position and the anchor that survives a key change come from listWindow
  * @position Pure block-axis math of the private list-windowing module for
  *   items that report their own size. `useMeasuredListWindow` drives it.
  */
@@ -15,7 +15,6 @@ import {
   createListWindowSegments,
   type ListWindowSegment,
 } from './listWindow';
-import type {ListWindowKey} from './useListFocusIsland';
 
 /** Where a revealed item rests in the scrollport. */
 export type MeasuredRevealAlign = 'start' | 'center' | 'end';
@@ -31,24 +30,6 @@ export function buildItemOffsets(
     offsets[index + 1] = offsets[index] + Math.max(0, sizeAt(index));
   }
   return offsets;
-}
-
-/** The last item that starts at or before `position`; 0 above the list. */
-export function itemAtOffset(
-  offsets: ReadonlyArray<number>,
-  position: number,
-): number {
-  let low = 0;
-  let high = Math.max(0, offsets.length - 2);
-  while (low < high) {
-    const middle = (low + high + 1) >> 1;
-    if (offsets[middle] <= position) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return low;
 }
 
 export interface MeasuredRangeOptions {
@@ -108,35 +89,6 @@ export function createMeasuredSegments(
       ? {...segment, height: offsets[segment.end] - offsets[segment.start]}
       : segment,
   );
-}
-
-/**
- * The index of an anchor item after a key change: the item itself, else the
- * first surviving successor in the old order, else the nearest surviving
- * predecessor. Undefined when no old item survives.
- */
-export function findSurvivingIndex(
-  previousKeys: ReadonlyArray<ListWindowKey>,
-  previousIndex: number,
-  indices: ReadonlyMap<ListWindowKey, number>,
-): number | undefined {
-  const own = indices.get(previousKeys[previousIndex]);
-  if (own !== undefined) {
-    return own;
-  }
-  for (let i = previousIndex + 1; i < previousKeys.length; i++) {
-    const index = indices.get(previousKeys[i]);
-    if (index !== undefined) {
-      return index;
-    }
-  }
-  for (let i = Math.min(previousIndex, previousKeys.length) - 1; i >= 0; i--) {
-    const index = indices.get(previousKeys[i]);
-    if (index !== undefined) {
-      return index;
-    }
-  }
-  return undefined;
 }
 
 /** The distance from the scrollport's top to an item's top at `align`. */

@@ -25,13 +25,15 @@ import {
   scrollsPage,
 } from '../utils/pageScroller';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
-import type {ListWindowSegment} from './listWindow';
+import {
+  findSurvivingIndex,
+  itemAtOffset,
+  type ListWindowSegment,
+} from './listWindow';
 import {
   buildItemOffsets,
   calculateMeasuredRange,
   createMeasuredSegments,
-  findSurvivingIndex,
-  itemAtOffset,
   revealOffset,
   type MeasuredRevealAlign,
 } from './measuredListWindow';
@@ -185,7 +187,7 @@ function createMeasuredListEngine() {
   let offsets: number[] = [0];
   let range = {start: 0, end: 0};
 
-  // Geometry. `listTop` is the holder's top without its offset.
+  // `listTop` is the holder's top without its offset.
   let isMeasured = false;
   let scrollTop = 0;
   let viewportSize = 0;
@@ -206,8 +208,8 @@ function createMeasuredListEngine() {
   let revealInset = 0;
   let busyFrame = 0;
   let isBusy = false;
-  // Another writer moves the position: the reader's scroll and its momentum,
-  // or the follow. A write now would stop or fight that motion.
+  // Another writer moves the position: the reader, or the stream scroll. A
+  // row anchor's write now would stop a finger's momentum.
   let isMoving = false;
   let motionTimer: ReturnType<typeof setTimeout> | undefined;
   // The position to keep when the holder gives back the correction it held.

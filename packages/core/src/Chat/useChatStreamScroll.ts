@@ -7,9 +7,8 @@
  * @input Uses React refs, state, callbacks, useMediaQuery, the page-scroller
  *   rules, and the input stream's document scroll events when the page itself
  *   scrolls
- * @output Exports useChatStreamScroll hook for AI chat scroll behavior; a
- *   windowed list on the same container shifts the position and reads it
- *   through chatStreamScrollChannel
+ * @output Exports useChatStreamScroll hook for AI chat scroll behavior; its
+ *   follow mark, shift and positions reach other Chat modules through a channel
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
  * Spring-based scroll-to-bottom with lock/unlock:
@@ -37,7 +36,6 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
   scrollEventTarget,
@@ -45,7 +43,8 @@ import {
   scrollsPage,
 } from '../utils/pageScroller';
 import {
-  streamScrollPositionListeners,
+  markFollowing,
+  streamScrollPositions,
   streamScrollShifts,
 } from './chatStreamScrollChannel';
 
@@ -142,29 +141,6 @@ export interface UseChatStreamScrollReturn {
 // =============================================================================
 
 const SIXTY_FPS_MS = 1000 / 60;
-
-// The scrollers whose hook follows the newest message now, kept in step with
-// each hook's lock.
-const following = new WeakSet<Element>();
-
-/**
- * Whether the stream scroll on `scroller` follows its newest message now, as
- * its lock says. Internal to Chat.
- */
-export function isFollowingNewest(scroller: Element): boolean {
-  return following.has(scroller);
-}
-
-// The lock's marks on the scroller: anchoring off while the hook follows, and
-// the state `isFollowingNewest` reads.
-function markFollowing(el: Element, locked: boolean): void {
-  setScrollAnchoringOff(el, locked);
-  if (locked) {
-    following.add(el);
-  } else {
-    following.delete(el);
-  }
-}
 
 export function useChatStreamScroll({
   scrollRef,
@@ -350,21 +326,6 @@ export function useChatStreamScroll({
     animatingRef.current = false;
   }, [setLocked]);
 
-  const shiftBy = useCallback(
-    (delta: number) => {
-      const el = scrollRef.current;
-      if (!el) {
-        return;
-      }
-      if (animatingRef.current && springPositionRef.current !== undefined) {
-        springPositionRef.current += delta;
-      }
-      el.scrollTop += delta;
-      lastScrollTopRef.current = el.scrollTop;
-    },
-    [scrollRef],
-  );
-
   const scrollIfLocked = useCallback(() => {
     if (!enabled) {
       return;
@@ -391,9 +352,8 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
-  // Syncs the scroll and scrollend listeners, and the shift a windowed list
-  // on the container writes through, with `enabled`: the stream container's
-  // own listeners, or the document's when the container scrolls the page.
+  // Syncs the scroll listeners and the channel's shift with `enabled`: the
+  // container's own listeners, or the document's when it scrolls the page.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
@@ -402,7 +362,16 @@ export function useChatStreamScroll({
 
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
-    streamScrollShifts.set(el, {shiftBy, unlock});
+    streamScrollShifts.set(el, {
+      shiftBy: delta => {
+        if (animatingRef.current && springPositionRef.current !== undefined) {
+          springPositionRef.current += delta;
+        }
+        el.scrollTop += delta;
+        lastScrollTopRef.current = el.scrollTop;
+      },
+      unlock,
+    });
     const doc = el.ownerDocument;
     const isPage = scrollsPage(el);
     // The root's offsetHeight is the page's height. Its clientHeight is the
@@ -429,9 +398,7 @@ export function useChatStreamScroll({
         setLocked(false);
         animatingRef.current = false;
       }
-      streamScrollPositionListeners
-        .get(el)
-        ?.forEach(listener => listener(scrollTop));
+      streamScrollPositions.get(el)?.forEach(listener => listener(scrollTop));
     };
 
     const onScrollEnd = () => {
@@ -478,15 +445,7 @@ export function useChatStreamScroll({
       markFollowing(el, false);
       streamScrollShifts.delete(el);
     };
-  }, [
-    scrollRef,
-    enabled,
-    lockThreshold,
-    buttonThreshold,
-    setLocked,
-    shiftBy,
-    unlock,
-  ]);
+  }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked, unlock]);
 
   return {
     isScrolledUp,

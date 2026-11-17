@@ -4,7 +4,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {
-  streamScrollPositionListeners,
+  streamScrollPositions,
   streamScrollShifts,
 } from './chatStreamScrollChannel';
 
@@ -568,12 +568,12 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     flushRaf();
     const tops: number[] = [];
     const listener = (top: number) => tops.push(top);
-    streamScrollPositionListeners.set(el, new Set([listener]));
+    streamScrollPositions.set(el, new Set([listener]));
     el.scrollTop = 250;
     act(() => {
       el.dispatchEvent(new Event('scroll'));
     });
-    streamScrollPositionListeners.delete(el);
+    streamScrollPositions.delete(el);
     el.scrollTop = 100;
     act(() => {
       el.dispatchEvent(new Event('scroll'));

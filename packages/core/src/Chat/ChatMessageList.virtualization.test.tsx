@@ -25,7 +25,7 @@ import {ChatLayout} from './ChatLayout';
 import {ChatMessage} from './ChatMessage';
 import {ChatMessageList, type ChatMessageListHandle} from './ChatMessageList';
 import {useChatMessageListVirtualization} from './useChatMessageListVirtualization';
-import {isFollowingNewest} from './useChatStreamScroll';
+import {isFollowingNewest} from './chatStreamScrollChannel';
 
 // ---------------------------------------------------------------------------
 // A scripted layout. jsdom lays nothing out, so the scroller, the windowed
