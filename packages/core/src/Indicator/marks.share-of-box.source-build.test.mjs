@@ -70,7 +70,10 @@ const SHARE =
  * @param {string} value
  */
 function shareOfBox(value) {
-  const m = SHARE.exec(value.trim());
+  // (The dot's share is also written rounded to whole pixels, with the exact
+  // share as the fallback; both are the same share.)
+  const exact = value.trim().replace(/^round\((.*),\s*1px\)$/, '$1');
+  const m = SHARE.exec(exact);
   if (!m) return null;
   return m[3] ? 1 / Number(m[3]) : Number(m[1]) / Number(m[2]);
 }
@@ -113,13 +116,26 @@ describe('the built-in marks', () => {
   it('size the radio dot as a share of the circle', async () => {
     const css = await compiledCss('RadioIndicator.tsx');
     const shares = [...lengths(css, 'width'), ...lengths(css, 'height')].filter(
-      v => v.startsWith('calc('),
+      v => /^(?:round\()?calc\(/.test(v),
     );
     expect(new Set(shares.map(v => shareOfBox(v)))).toEqual(
       new Set([8 / 20, 10 / 24]),
     );
-    expect(drawn(shares.find(v => shareOfBox(v) === 8 / 20), 20)).toBe(8);
-    expect(drawn(shares.find(v => shareOfBox(v) === 10 / 24), 24)).toBe(10);
+    // Rounded to whole pixels where the browser can (a fractional dot draws
+    // as a rounded square), the exact share as the fallback.
+    expect(shares.filter(v => v.startsWith('round(')).length).toBe(4);
+    expect(
+      drawn(
+        shares.find(v => shareOfBox(v) === 8 / 20),
+        20,
+      ),
+    ).toBe(8);
+    expect(
+      drawn(
+        shares.find(v => shareOfBox(v) === 10 / 24),
+        24,
+      ),
+    ).toBe(10);
   });
 
   it('keep every mark inside a box a theme shrinks to 13px', async () => {
@@ -128,7 +144,7 @@ describe('the built-in marks', () => {
       await compiledCss('RadioIndicator.tsx'),
     ].join('\n');
     const marks = [...lengths(css, 'width'), ...lengths(css, 'height')].filter(
-      v => v.startsWith('calc('),
+      v => /^(?:round\()?calc\(/.test(v),
     );
     // check sm and md, the dash, the dot sm and md
     expect(marks.length).toBeGreaterThanOrEqual(5);

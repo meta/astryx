@@ -113,15 +113,24 @@ const circleSizeStyles = stylex.create({
 // (`radio-indicator` width and height) gets a dot that stays centered inside
 // it. A percentage reads the circle's content box, so the border is added back
 // first: at the shipped 20px and 24px circles the dot stays exactly 8px and
-// 10px, whatever `--border-width` a theme sets.
+// 10px, whatever `--border-width` a theme sets. The share is rounded to whole
+// pixels: Chromium draws a dot of a fractional size (a 13px circle, or a
+// border set directly rather than through the token) as a rounded square
+// despite its 50% radius. A browser without `round()` keeps the exact share.
+const dotShare = (share: string) =>
+  stylex.firstThatWorks(
+    `round(calc((100% + 2 * ${borderVars['--border-width']}) * ${share}), 1px)`,
+    `calc((100% + 2 * ${borderVars['--border-width']}) * ${share})`,
+  );
+
 const dotSizeStyles = stylex.create({
   sm: {
-    width: `calc((100% + 2 * ${borderVars['--border-width']}) * 8 / 20)`,
-    height: `calc((100% + 2 * ${borderVars['--border-width']}) * 8 / 20)`,
+    width: dotShare('8 / 20'),
+    height: dotShare('8 / 20'),
   },
   md: {
-    width: `calc((100% + 2 * ${borderVars['--border-width']}) * 10 / 24)`,
-    height: `calc((100% + 2 * ${borderVars['--border-width']}) * 10 / 24)`,
+    width: dotShare('10 / 24'),
+    height: dotShare('10 / 24'),
   },
 });
 
