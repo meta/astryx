@@ -320,6 +320,29 @@ describe('DropdownMenu', () => {
     });
   });
 
+  it('shows a disabled item reason in the bottom-sheet row', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            label: 'Export CSV',
+            isDisabled: true,
+            disabledMessage: 'There is nothing to export',
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+
+    const reason = screen.getByText('There is nothing to export');
+    expect(reason.closest('li')).toHaveTextContent('Export CSV');
+  });
+
   it('renders nothing of the sheet at rest and keeps it through its exit', async () => {
     await warmMenuBottomSheet();
     const user = userEvent.setup();
@@ -2407,6 +2430,40 @@ describe('DropdownMenu compound mode', () => {
     ).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('exposes a disabled compound item reason on keyboard focus', async () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem
+          label="Export CSV"
+          onClick={() => {}}
+          isDisabled
+          disabledMessage="There is nothing to export"
+        />
+      </DropdownMenu>,
+    );
+
+    const item = screen.getByRole('menuitem', {
+      name: 'Export CSV',
+      hidden: true,
+    });
+    const describedBy = item.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(describedBy?.split(' ')).toHaveLength(1);
+
+    const realMatches = item.matches.bind(item);
+    vi.spyOn(item, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+    fireEvent.focusIn(item);
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(
+        tooltip.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(true);
+    });
+  });
+
   it('supports mixed static and dynamic compound children', () => {
     const showExtra = true;
     render(
@@ -3145,6 +3202,37 @@ describe('DropdownMenu data/compound parity', () => {
     const item = screen.getByRole('menuitem', {hidden: true});
     expect(item).toHaveTextContent('Find anything');
     expect(item).toContainElement(screen.getByTestId('shortcut'));
+  });
+
+  it('carries disabledMessage through the data API', async () => {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        isMenuOpen
+        items={[
+          {
+            label: 'Export CSV',
+            isDisabled: true,
+            disabledMessage: 'There is nothing to export',
+          },
+        ]}
+      />,
+    );
+
+    const item = screen.getByRole('menuitem', {
+      name: 'Export CSV',
+      hidden: true,
+    });
+    expect(item.getAttribute('aria-describedby')).toBeTruthy();
+
+    fireEvent.mouseEnter(item);
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(
+        tooltip.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(true);
+    });
   });
 
   it('takes a ReactNode label through the items data API', () => {

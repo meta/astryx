@@ -24,6 +24,7 @@ import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
 import {visibleText} from '../utils/accessibleName';
+import {isRenderable} from '../utils/isRenderable';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
@@ -92,6 +93,20 @@ export function MenuBottomSheetActionList({
     const isSubmenu = item.items != null && item.items.length > 0;
     const isDestructive = item.variant === 'destructive';
     const isLink = !isSubmenu && item.href != null;
+    const description =
+      item.isDisabled && item.disabledMessage != null ? (
+        isRenderable(item.description) ? (
+          <>
+            {item.description}
+            <br />
+            {item.disabledMessage}
+          </>
+        ) : (
+          item.disabledMessage
+        )
+      ) : (
+        item.description
+      );
     // A sub-menu row's node label renders in its own element, so the level
     // it opens can take the label's text as its title.
     const labelId = `${labelIdPrefix}-label-${rowPath}`;
@@ -133,7 +148,7 @@ export function MenuBottomSheetActionList({
         label={
           hasNodeLabel ? <span id={labelId}>{item.label}</span> : item.label
         }
-        description={item.description}
+        description={description}
         startContent={
           item.icon
             ? renderIconSlot(item.icon, {

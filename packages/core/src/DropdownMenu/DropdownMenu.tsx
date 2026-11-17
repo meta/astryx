@@ -314,6 +314,7 @@ export interface DropdownMenuItemData extends Pick<
   | 'icon'
   | 'onClick'
   | 'isDisabled'
+  | 'disabledMessage'
   | 'variant'
   | 'description'
   | 'endContent'

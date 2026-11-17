@@ -107,6 +107,12 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'disabledMessage',
+      type: 'string',
+      description:
+        'Why the row is unavailable. When isDisabled is true, the reason is shown in a tooltip on hover and keyboard focus and is exposed through aria-describedby.',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description:
@@ -193,6 +199,12 @@ export const docsZh = {
       default: 'false',
     },
     {
+      name: 'disabledMessage',
+      type: 'string',
+      description:
+        '该行不可用的原因。isDisabled 为 true 时，鼠标悬停或键盘聚焦会显示提示，并通过 aria-describedby 暴露该原因。',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description: '在标签和描述之后渲染的非交互式附加内容。',
@@ -239,6 +251,8 @@ export const docsDense = {
     target: "link target ('_blank' | '_self'), with href",
     rel: 'link rel; noopener noreferrer added for _blank',
     isDisabled: 'unavailable; removes destinations and suppresses activation',
+    disabledMessage:
+      'why the row is unavailable; shown on hover/focus and exposed through aria-describedby when disabled',
     endContent: 'non-interactive content after label+description',
     hasCloseOnSelect:
       'false keeps the menu open on activation (in-place result on the item)',
