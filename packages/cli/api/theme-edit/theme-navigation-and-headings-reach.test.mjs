@@ -5,8 +5,9 @@
  * "top navigation" are those parts, a selection said of a part is its
  * selected items, a role word right before a written color names that
  * color, a color and its part said after another color and part is an item
- * of its own, a top bar's text reaches the component Core's docs call a top
- * bar, and a heading's text color reaches every part drawn as a heading
+ * of its own, a top bar's fill and text reach the component Core's docs call
+ * a top bar, a word beginning one component's name before a part noun names
+ * that component, the items a bar holds are its own after a ";", and a heading's text color reaches every part drawn as a heading
  * element. Against real bundled base themes.
  */
 
@@ -84,8 +85,11 @@ describe('navigation and headings', () => {
       'n',
     );
     // (The text reaches the top nav too, which Core's docs call a top bar.)
+    // (The top nav takes the bar's fill with its text, so the text reads
+    // wherever the top nav sits.)
     expect(brand.writes).toEqual([
       "set n background-color '#1e3a8a' --on app-shell-header",
+      "set n background-color '#1e3a8a' --on top-nav",
       "set n --color-text-primary '#ffffff' --on app-shell-header",
       "set n --color-text-secondary '#ffffff' --on app-shell-header",
       "set n --color-text-primary '#ffffff' --on top-nav",
@@ -95,6 +99,38 @@ describe('navigation and headings', () => {
     expect((await answer('make the header brand color', 'n')).writes).toEqual([
       "set n background-color 'var(--color-accent)' --on app-shell-header",
     ]);
+  }, 240_000);
+
+  it('reads a qualified part noun and the items a bar holds', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('s', {cwd, like: 'neutral'});
+    const seg = await answer(
+      'segmented buttons: pill shaped, 1px #79747e border, and #e8def8 when selected',
+      's',
+    );
+    expect(seg.writes).toEqual([
+      'set s corners pill --on segmented-control',
+      "set s border '1px solid #79747e' --on segmented-control",
+      "set s background-color '#e8def8' --on segmented-control-item --state selected --mode light",
+    ]);
+    // (A word that is a part itself is no qualifier.)
+    expect((await answer('radio buttons bold', 's')).parts).toEqual([
+      'radio-indicator',
+    ]);
+    const bar = await answer(
+      'navigation bar: #f3edf7 background, 80px tall; the selected item gets a #e8def8 pill',
+      's',
+    );
+    expect(bar.writes).toEqual([
+      "set s background-color '#f3edf7' --on app-shell-header --mode light",
+      'set s min-height 80px --on app-shell-header',
+      'set s corners pill --on top-nav-item --state selected',
+      "set s background-color '#e8def8' --on top-nav-item --state selected --mode light",
+    ]);
+    // (A part of another component inside a place stays kept apart.)
+    expect(
+      (await answer('make the buttons inside cards blue', 's')).writes,
+    ).toEqual([]);
   }, 240_000);
 
   it("reaches every heading element with a heading's text color", async ctx => {
