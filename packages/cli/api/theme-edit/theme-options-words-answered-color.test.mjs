@@ -163,8 +163,17 @@ describe('an option or words a command does not take', () => {
 
 describe('a color on a part whose color comes from its color prop', () => {
   it(
-    "offers the prop's default token, else each color token the part reads",
+    "goes into the prop's default token, else the main and supporting text tokens, on that part",
     async () => {
+      fs.writeFileSync(file(), fresh);
+      const css = () =>
+        fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+      /** @param {string} cls */
+      const on = cls =>
+        [...css().matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+          .filter(m => m[1].includes(cls))
+          .map(m => m[2])
+          .join('\n');
       const text = await cli([
         ...ED,
         'set',
@@ -174,21 +183,10 @@ describe('a color on a part whose color comes from its color prop', () => {
         '--on',
         'text',
       ]);
-      expect(names(text)).toEqual([
-        expect.stringMatching(
-          / editor set t --color-text-primary '#123456' --on text$/,
-        ),
-        expect.stringMatching(
-          / editor set t --color-text-secondary '#123456' --on text$/,
-        ),
-        expect.stringMatching(
-          / editor set t --color-text-disabled '#123456' --on text$/,
-        ),
-        expect.stringMatching(
-          / editor set t --color-text-accent '#123456' --on text$/,
-        ),
-      ]);
-      expect((await follow(names(text)[0])).error).toBeUndefined();
+      expect(text.error).toBeUndefined();
+      expect(on('.astryx-text')).toMatch(/--color-text-primary: #123456/);
+      expect(on('.astryx-text')).toMatch(/--color-text-secondary: #123456/);
+      expect(on('.astryx-text')).not.toMatch(/--color-text-disabled: #123456/);
       const link = await cli([
         ...ED,
         'set',
@@ -198,11 +196,19 @@ describe('a color on a part whose color comes from its color prop', () => {
         '--on',
         'link',
       ]);
-      expect(names(link)).toEqual([
-        expect.stringMatching(
-          / editor set t --color-text-accent '#123456' --on link$/,
-        ),
-      ]);
+      expect(link.error).toBeUndefined();
+      expect(on('.astryx-link')).toMatch(/--color-text-accent: #123456/);
+    },
+    T,
+  );
+
+  it(
+    'refuses a value that is no color, never echoing it into a line',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      const r = await cli([...ED, 'set', 't', 'color', '12px', '--on', 'link']);
+      expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+      expect(names(r).join('\n')).not.toContain('12px');
     },
     T,
   );

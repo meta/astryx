@@ -83,6 +83,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
   SHOWCASE_GROUPS,
+  COLOR_PROP_PARTS,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -7395,16 +7396,16 @@ export function compileTheme(ctx, data, base) {
         );
       }
       for (const t of [...parts, ...pageParts]) {
-        // A heading takes its color from its color prop, which reads the
-        // text color tokens after part styles: the color goes into those
-        // tokens on the heading (a named color prop's own token for
+        // A text, heading or link takes its color from its color prop, which
+        // reads the text color tokens after part styles: the color goes into
+        // those tokens on that part (a named color prop's own token for
         // --when color:<name>), so it shows there and nowhere else.
-        if (t === 'heading' && kebab(s.thing) === 'color') {
+        const propTokens =
+          kebab(s.thing) === 'color' ? colorPropTokens(ctx, t, s.when) : [];
+        if (propTokens.length) {
           const named = /^color:([\w-]+)$/.exec(s.when ?? '')?.[1];
           const scope = named ? {...s, when: undefined} : s;
-          for (const tok of named
-            ? [`--color-text-${named}`]
-            : ['--color-text-primary', '--color-text-secondary'])
+          for (const tok of propTokens)
             // A value naming one of these tokens (the secondary text color)
             // leaves that token as it is: it would read itself.
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
@@ -7426,8 +7427,20 @@ export function compileTheme(ctx, data, base) {
           for (const tok of ['--color-on-dark', '--color-on-light'])
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
               putComp(s, t, tok, s.value);
+        // A text size, weight, line height or letter spacing on a part whose
+        // text is drawn by elements inside it that read one token for it (a
+        // banner's text size) goes into that token on the part.
+        if (
+          !s.state &&
+          ['font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
+            kebab(s.thing),
+          )
+        ) {
+          const toks = innerPropTokens(ctx.C, t, kebab(s.thing));
+          if (toks.length === 1) putComp(s, t, toks[0], s.value);
+        }
         if (kebab(s.thing) === 'color')
-          for (const tok of innerTextTokens(ctx.C, t))
+          for (const tok of colorTokensReached(ctx.C, t))
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
               putComp(s, t, tok, s.value);
         // A padding on a part whose box reads Core's padding variables is
@@ -10588,22 +10601,31 @@ export async function contrastProblems(ctx, data, res) {
     // through the part around it, a colored card's text, is that token
     // there: a setting of it on that part wins, below.)
     if (ofBase(p, 'fg', m, res, false) != null) return null;
+    // A text token set on a part around the text, or a color set there that
+    // goes into that token (colorTokensReached: a top bar's color reaches
+    // its items' text), reaches the text as CSS inherits it.
+    /** @param {Setting} x @param {string | null} t */
+    const textTokenOn = (x, t) =>
+      on(x, t) &&
+      (x.source === 'token'
+        ? tokens.includes(x.thing)
+        : x.source === 'property' &&
+          x.thing === 'color' &&
+          colorTokensReached(ctx.C, /** @type {string} */ (t)).some(k =>
+            tokens.includes(k),
+          ));
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
     const viaGround = latest(
-      x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
+      x => textTokenOn(x, around),
       /** @type {any} */ (p).groundWhen ?? when,
     );
     if (viaGround) return viaGround;
-    // A token set on the region the text and its ground sit in (a top
-    // bar's text color) reaches it the same way, as CSS inherits it.
+    // The region the text and its ground sit in (a top bar) reaches it the
+    // same way.
     const region = /** @type {any} */ (p).over?.target ?? null;
     return region && region !== around && region !== own
-      ? latest(
-          x =>
-            x.source === 'token' && tokens.includes(x.thing) && on(x, region),
-          null,
-        )
+      ? latest(x => textTokenOn(x, region), null)
       : null;
   };
   /**
@@ -14036,6 +14058,112 @@ export function innerTextTokens(C, part, deep = false) {
           out.add(tok);
     }
   return [...out].sort();
+}
+
+/**
+ * The colors a part's color prop may show when none is given: its default
+ * as its doc gives it; with none (Text's depends on its type), each value
+ * of the prop whose text token the part's own color reads, in the order
+ * the prop lists them. Empty with no color prop.
+ * @param {{type?: string, default?: string | null} | undefined} prop
+ * @param {Record<string, unknown> | undefined} reads the tokens the part's color reads (its part data)
+ * @returns {string[]}
+ */
+function colorPropDefaults(prop, reads) {
+  if (!prop) return [];
+  const own = /^'([\w-]+)'$/.exec(String(prop.default ?? '').trim())?.[1];
+  if (own) return [own];
+  return [...String(prop.type ?? '').matchAll(/'([\w-]+)'/g)]
+    .map(m => m[1])
+    .filter(v => Object.hasOwn(reads ?? {}, `--color-text-${v}`));
+}
+
+/**
+ * The text color tokens a text, heading or link part's color prop reads, so a
+ * color set on that part goes into them there: the token of the color named
+ * with --when color:<name>; a heading's main and supporting text tokens; else
+ * the tokens of the colors the prop shows by default (colorPropDefaults: a
+ * link's accent). Empty for any other part.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string | null} [when]
+ * @returns {string[]}
+ */
+export function colorPropTokens(ctx, part, when) {
+  if (!COLOR_PROP_PARTS.includes(part)) return [];
+  const named = /^color:([\w-]+)$/.exec(when ?? '')?.[1];
+  if (named) return [`--color-text-${named}`];
+  if (part === 'heading') return ['--color-text-primary', '--color-text-secondary'];
+  const prop = partComponentDocs(ctx, part)
+    .map(d => d.doc.props?.color)
+    .find(Boolean);
+  // (With no default, Text's depends on its type: its main and supporting
+  // text, never the disabled or accent text, which mark a state or a role.)
+  const all = colorPropDefaults(prop, ctx.C.MAP[part]?.own?.color?.tokens);
+  return (
+    /^'[\w-]+'$/.test(String(prop?.default ?? '').trim())
+      ? all
+      : all.filter(c => c === 'primary' || c === 'secondary')
+  ).map(c => `--color-text-${c}`);
+}
+
+/**
+ * The tokens elements inside a part read for a text property the part does
+ * not set itself (a top nav heading's title size, --text-large-size), so
+ * the property set on the part never reaches that text; or, for a part
+ * whose own box reads no tokens and holds only parts that each set the
+ * property, the tokens those parts read (a dialog's title block). Empty
+ * when the part sets the property itself.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {string} prop
+ * @returns {string[]}
+ */
+export function innerPropTokens(C, part, prop) {
+  const rec = C.MAP[part];
+  if (!rec || rec.own?.[prop]) return [];
+  // (A color only through the parts inside it: elements inside a part that
+  // read a color token take the color through colorTokensReached.)
+  let toks =
+    prop === 'color'
+      ? []
+      : Object.entries(rec.inside ?? {})
+          .filter(([, props]) => /** @type {string[]} */ (props).includes(prop))
+          .map(([tok]) => tok);
+  const held = (rec.contains ?? []).map((/** @type {string} */ x) => C.MAP[x]);
+  if (
+    !toks.length &&
+    !Object.keys(rec.inside ?? {}).length &&
+    held.length &&
+    held.every((/** @type {any} */ x) => x?.own?.[prop])
+  )
+    toks = [
+      ...new Set(
+        held.flatMap((/** @type {any} */ x) =>
+          Object.keys(x.own[prop].tokens ?? {}),
+        ),
+      ),
+    ]
+      .filter(tok => !/disabled|placeholder|accent/.test(tok))
+      .slice(0, 4);
+  return toks;
+}
+
+/**
+ * The text color tokens a color set on a part also goes into, so the text
+ * it means shows that color: the tokens Core's elements inside the part read
+ * (innerTextTokens). A part that draws no text of its own (an app shell
+ * header, a top nav) holds only parts with their own text, which read these
+ * tokens and not the inherited color; there the tokens of the parts inside
+ * it count, on the part alone.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function colorTokensReached(C, part) {
+  const inner = innerTextTokens(C, part);
+  if (inner.length || C.MAP[part]?.own?.color) return inner;
+  return innerTextTokens(C, part, true);
 }
 
 /**
