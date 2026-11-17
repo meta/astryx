@@ -11,7 +11,7 @@ import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage, withCarriedPaths} from './render-page.mjs';
+import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -243,3 +243,15 @@ describe('withCarriedPaths', () => {
     );
   });
 });
+
+describe('withUncarriedImages', () => {
+  it('writes in the data: URI of an image the embedded source does not carry', () => {
+    const kept = 'a'.repeat(64);
+    const left = 'b'.repeat(64);
+    const script = `x=c("${kept}","data:image/png;base64");y=c('${left}','data:image/png;base64')`;
+    expect(
+      withUncarriedImages(script, new Set([kept]), (sha, prefix) => (sha === left ? `${prefix},QUJD` : null)),
+    ).toBe(`x=c("${kept}","data:image/png;base64");y="data:image/png;base64,QUJD"`);
+  });
+});
+

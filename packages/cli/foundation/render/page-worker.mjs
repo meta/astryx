@@ -46,10 +46,10 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {createHash} from 'node:crypto';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
+import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
@@ -811,7 +811,7 @@ function pagePlugin(filename, browser = false) {
             return;
           }
           // In the browser the image comes from the embedded source, which
-          // carries it; a data: URI that is not base64 (an SVG as text) stays.
+          // carries it; the render inlines one the source leaves out.
           const base64 = browser ? /^(data:[^,]*;base64),/.exec(uri) : null;
           p.replaceWith(
             t.variableDeclaration('const', [
@@ -819,7 +819,7 @@ function pagePlugin(filename, browser = false) {
                 t.identifier(local.local.name),
                 base64
                   ? t.callExpression(carriedName(p, t), [
-                      t.stringLiteral(createHash('sha256').update(fs.readFileSync(file)).digest('hex')),
+                      t.stringLiteral(sha256(fs.readFileSync(file))),
                       t.stringLiteral(base64[1]),
                     ])
                   : t.stringLiteral(uri),
