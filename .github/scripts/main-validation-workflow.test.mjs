@@ -337,3 +337,28 @@ describe('main validation dispatch', () => {
     ).rejects.toThrow('full 40-character commit SHA');
   });
 });
+
+describe("main validation's Node watchdog", () => {
+  it('names the files still running before the job limit without ending the leg, so an overrun stays incomplete and is run again', () => {
+    const job = workflow.jobs['test-node'];
+    const step = job.steps.find(each =>
+      /pnpm test:node --shard=/.test(each.run ?? ''),
+    );
+    expect(step.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ');
+    expect(step.run).toContain('export VITEST_SHARD_WATCHDOG_SECONDS');
+    expect(step.run).toContain(
+      '--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs',
+    );
+    // Name-only: the reporter warns and the job limit cancels the leg.
+    expect(step.env.VITEST_SHARD_WATCHDOG_NAME_ONLY).toBe('1');
+    expect(job['timeout-minutes']).toBe(15);
+    // A cancelled unit run is incomplete to the scheduler, which dispatches
+    // the next one and reports it (spec:AST-030 FR21).
+    const heavy = fs.readFileSync(
+      new URL('../workflows/main-heavy-lanes.yml', import.meta.url),
+      'utf8',
+    );
+    const incomplete = /const INCOMPLETE = \[([^\]]+)\]/.exec(heavy)?.[1] ?? '';
+    expect(incomplete).toContain("'cancelled'");
+  });
+});
