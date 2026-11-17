@@ -85,7 +85,7 @@ const SAMPLE_CALLS = {
 };
 
 /**
- * Call every tool the folder's server lists, in one batch, and fail unless
+ * Call every tool the folder's server lists, one at a time, and fail unless
  * each one answers without an error and for the documented Core.
  * @param {import('../src/lib/mcpBridge.mjs').McpRuntime} runtime
  * @param {string} coreVersion
@@ -102,21 +102,18 @@ async function checkEveryTool(runtime, coreVersion) {
       `The MCP folder lists tools with no sample call: ${missing.join(', ') || '(none listed)'}`,
     );
   }
-  const replies = JSON.parse(
-    await askMcpServer(
-      runtime,
-      names.map((name, index) => ({
+  /** @type {{cli: string, core: string} | null} */
+  let answeredBy = null;
+  // The server takes one message at a time, as the endpoint sends them.
+  for (const [index, name] of names.entries()) {
+    const reply = JSON.parse(
+      await askMcpServer(runtime, {
         jsonrpc: '2.0',
         id: index + 1,
         method: 'tools/call',
         params: {name, arguments: SAMPLE_CALLS[name]},
-      })),
-    ),
-  );
-  /** @type {{cli: string, core: string} | null} */
-  let answeredBy = null;
-  for (const reply of replies) {
-    const name = names[reply.id - 1];
+      }),
+    );
     const text = reply.result?.content?.[0]?.text ?? '';
     if (reply.result?.isError !== false) {
       throw new Error(

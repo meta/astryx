@@ -11,9 +11,18 @@
  */
 
 import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {DELETE, GET, POST} from '../app/mcp/route';
-import {commandEnv, mcpRuntime} from '../lib/mcpBridge.mjs';
+import {
+  askMcpServer,
+  commandEnv,
+  handleMcpPost,
+  mcpRuntime,
+} from '../lib/mcpBridge.mjs';
+import {DEMO_CONTENT_MODULE} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {DOCS_ONLY_COMMANDS} from '../../../../packages/cli/clients/cli/lib/mcp-tools.mjs';
 
 /**
@@ -113,23 +122,141 @@ describe('the docs site MCP endpoint', () => {
       arguments: {name: 'settings', path: 'src/app'},
     });
     expect(pathInput.result).toEqual({
-      content: [{type: 'text', text: 'template takes no path on this server'}],
+      content: [
+        {type: 'text', text: 'template takes no "path" on this server'},
+      ],
       isError: true,
     });
   }, 60_000);
 
-  it('accepts a notification with no reply, and refuses a body that is not JSON', async () => {
-    const notification = await post({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized',
+  it('hands out example source as the CLI commands do (spec:AST-033 FR23)', async () => {
+    // The component tool keeps a showcase's fixture media; the template tool
+    // answers as a copy writes it, with media and demo contents replaced.
+    const showcase = await ask('tools/call', {
+      name: 'component',
+      arguments: {names: ['AspectRatio'], showcase: true},
     });
-    expect(notification.status).toBe(202);
-    expect(await notification.text()).toBe('');
+    const showcaseText = showcase.result?.content?.[0]?.text ?? '';
+    expect(showcaseText).toContain('/template-assets/');
+    expect(showcaseText).not.toContain(DEMO_CONTENT_MODULE);
+
+    const media = await ask('tools/call', {
+      name: 'template',
+      arguments: {name: 'AspectRatioCircleImage'},
+    });
+    const mediaAnswer = JSON.parse(media.result?.content?.[0]?.text ?? '{}');
+    expect(mediaAnswer.data.demoMediaReplaced).toBeGreaterThan(0);
+    expect(mediaAnswer.data.source).not.toContain('/template-assets/');
+
+    const demo = await ask('tools/call', {
+      name: 'template',
+      arguments: {name: 'usePressFeedbackHookUsage'},
+    });
+    const demoAnswer = JSON.parse(demo.result?.content?.[0]?.text ?? '{}');
+    expect(demoAnswer.data.demoContentReplaced).toBeGreaterThan(0);
+    expect(demoAnswer.data.source).not.toContain(DEMO_CONTENT_MODULE);
+  }, 60_000);
+
+  it('answers a batch and an invalid message as the server does', async () => {
+    const batch = await post([
+      {jsonrpc: '2.0', id: 1, method: 'ping'},
+      {jsonrpc: '2.0', id: 2, method: 'ping'},
+    ]);
+    expect(batch.status).toBe(200);
+    expect(await batch.json()).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32600,
+        message: 'This server takes one message at a time, not a batch',
+      },
+    });
+
+    const invalid = await post({jsonrpc: '2.0'});
+    expect(invalid.status).toBe(200);
+    expect(await invalid.json()).toMatchObject({
+      id: null,
+      error: {code: -32600},
+    });
+  }, 60_000);
+
+  it('takes a notification and a response with 202 and starts no server, and refuses a body that is not JSON', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mcp-bridge-'));
+    try {
+      const started = path.join(dir, 'started');
+      const bin = path.join(dir, 'server.mjs');
+      fs.writeFileSync(
+        bin,
+        `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(started)}, '');\n`,
+      );
+      for (const message of [
+        {jsonrpc: '2.0', method: 'notifications/initialized'},
+        {jsonrpc: '2.0', id: 3, result: {}},
+        {jsonrpc: '2.0', id: null, error: {code: -32603, message: 'x'}},
+      ]) {
+        const response = await handleMcpPost(
+          new Request('https://astryx.atmeta.com/mcp', {
+            method: 'POST',
+            body: JSON.stringify(message),
+          }),
+          {bin, cwd: dir},
+        );
+        expect(response.status).toBe(202);
+        expect(await response.text()).toBe('');
+      }
+      expect(fs.existsSync(started)).toBe(false);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
 
     const broken = await post('{not json');
     expect(broken.status).toBe(400);
     expect(await broken.json()).toMatchObject({error: {code: -32700}});
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'stops the server and every command it started when no answer comes in time',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mcp-bridge-'));
+      try {
+        const pidFile = path.join(dir, 'command.pid');
+        const bin = path.join(dir, 'server.mjs');
+        // A server that starts a command and never answers.
+        fs.writeFileSync(
+          bin,
+          [
+            "import {spawn} from 'node:child_process';",
+            "import {writeFileSync} from 'node:fs';",
+            "const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio: 'ignore'});",
+            `writeFileSync(${JSON.stringify(pidFile)}, String(command.pid));`,
+            'setInterval(() => {}, 1000);',
+            '',
+          ].join('\n'),
+        );
+        await expect(
+          askMcpServer(
+            {bin, cwd: dir},
+            {jsonrpc: '2.0', id: 1, method: 'ping'},
+            {timeoutMs: 1500},
+          ),
+        ).rejects.toThrow('astryx mcp gave no answer in 1.5 s');
+        const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        const running = () => {
+          const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+            encoding: 'utf8',
+          }).stdout.trim();
+          return state !== '' && !state.startsWith('Z');
+        };
+        for (let tries = 0; running() && tries < 50; tries += 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        expect(running()).toBe(false);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    30_000,
+  );
 
   it('opens no event stream and keeps no session', () => {
     for (const response of [GET(), DELETE()]) {

@@ -167,7 +167,7 @@ describe('a docs-only server', () => {
     expect(names).toEqual(tools.map(t => t.words.join(' ')).filter(name => DOCS_ONLY_COMMANDS.includes(name)));
   });
 
-  it('takes no folder, and none of the inputs that name a package or a file to write', () => {
+  it('takes no folder, and none of the inputs that name a file to write or a package to read', () => {
     for (const tool of docsTools) {
       const inputs = Object.keys(tool.inputSchema.properties);
       expect(inputs).not.toContain(CWD_INPUT);
@@ -179,7 +179,13 @@ describe('a docs-only server', () => {
 
   it('refuses an input a tool does not list, and runs every call in the folder served', () => {
     const template = /** @type {import('./mcp-tools.mjs').McpTool} */ (docsTools.find(t => t.name === 'template'));
-    for (const input of [{path: 'src'}, {cwd: 'sub'}, {overwrite: true}, {package: '@astryxdesign/core'}]) {
+    for (const input of [
+      {path: 'src'},
+      {cwd: 'sub'},
+      {overwrite: true},
+      {package: '@astryxdesign/core'},
+      {base: '@astryxdesign/core'},
+    ]) {
       expect(() => commandLine(template, {name: 'settings', ...input}, {root: '/srv'})).toThrow(McpInputError);
     }
     expect(commandLine(template, {name: 'settings', skeleton: true}, {root: '/srv'})).toEqual({
@@ -333,11 +339,20 @@ describe('commandLine', () => {
     ]);
   });
 
-  it('takes one string for a list, and passes an input the tool does not declare to the command', () => {
+  it('takes one string for a list', () => {
     const search = /** @type {import('./mcp-tools.mjs').McpTool} */ (tools.find(t => t.name === 'search'));
-    expect(
-      commandLine(search, {query: 'dark mode', bogus: 'x', limit: 3}, {root: '/p'}).argv,
-    ).toEqual(['search', '--limit=3', '--bogus=x', '--json', '--', 'dark mode']);
+    expect(commandLine(search, {query: 'dark mode', limit: 3}, {root: '/p'}).argv).toEqual([
+      'search', '--limit=3', '--json', '--', 'dark mode',
+    ]);
+  });
+
+  it('refuses an input the tool does not declare, as its schema says, and runs nothing', () => {
+    const search = /** @type {import('./mcp-tools.mjs').McpTool} */ (tools.find(t => t.name === 'search'));
+    for (const input of [{bogus: 'x'}, {'': true}, {bogus: null}, {bogus: false}]) {
+      expect(() => commandLine(search, {query: ['x'], ...input}, {root: '/p'})).toThrow(
+        new McpInputError(`search takes no ${JSON.stringify(Object.keys(input)[0])}`),
+      );
+    }
   });
 
   it('refuses an argument after a missing one, and a folder outside the one served', () => {
@@ -349,5 +364,28 @@ describe('commandLine', () => {
     expect(commandLine(docs, {[CWD_INPUT]: 'apps/web'}, {root: '/p'}).cwd).toBe(
       path.resolve('/p', 'apps/web'),
     );
+  });
+
+  it('refuses a folder that a symbolic link inside the one served leads out of it', () => {
+    const docs = /** @type {import('./mcp-tools.mjs').McpTool} */ (tools.find(t => t.name === 'docs'));
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mcp-cwd-'));
+    try {
+      const root = path.join(base, 'project');
+      const outside = path.join(base, 'outside');
+      fs.mkdirSync(path.join(root, 'apps', 'web'), {recursive: true});
+      fs.mkdirSync(outside);
+      fs.symlinkSync(outside, path.join(root, 'link'), 'dir');
+      fs.symlinkSync(path.join(root, 'apps'), path.join(root, 'apps-link'), 'dir');
+      expect(() => commandLine(docs, {[CWD_INPUT]: 'link'}, {root})).toThrow(McpInputError);
+      expect(() => commandLine(docs, {[CWD_INPUT]: path.join(root, 'link')}, {root})).toThrow(
+        McpInputError,
+      );
+      // A link that stays inside is a folder inside.
+      expect(commandLine(docs, {[CWD_INPUT]: 'apps-link/web'}, {root}).cwd).toBe(
+        path.join(root, 'apps-link', 'web'),
+      );
+    } finally {
+      fs.rmSync(base, {recursive: true, force: true});
+    }
   });
 });

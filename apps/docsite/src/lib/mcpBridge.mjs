@@ -4,10 +4,12 @@
  * @file The docs site's MCP endpoint: `astryx mcp --docs-only`, reached over
  * Streamable HTTP.
  *
- * Each POST runs that command once, writes the request to its standard input,
- * and answers with the line the command replies. The tools, what a call runs
- * and the server instructions are the command's own; this file only carries
- * the messages. The server keeps no session, so a request needs no
+ * A POST carries one JSON-RPC message. A notification or a response gets 202
+ * with no body, and nothing runs, as Streamable HTTP has it. Any other message
+ * runs that command once, in a process group of its own, and the answer is the
+ * line the command replies. The tools, what a call runs, and how the server
+ * answers a batch or an invalid message are the command's own; this file only
+ * carries the messages. The server keeps no session, so a request needs no
  * `initialize` before it.
  *
  * The command runs in the folder the build prepares
@@ -15,8 +17,8 @@
  * documents. A checkout without that folder runs the workspace CLI outside any
  * project. The command gets no variable of the site's environment.
  *
- * @input an MCP request: a POST whose body is one JSON-RPC message or a batch
- * @output the command's reply as JSON; 202 when no message asks for a reply
+ * @input an MCP request: a POST whose body is one JSON-RPC message
+ * @output the command's reply as JSON; 202 for a notification or a response
  * @position src/lib — read by app/mcp/route.ts and scripts/build-mcp-runtime.mjs
  */
 
@@ -78,38 +80,68 @@ export function commandEnv() {
 }
 
 /**
- * Whether a message, or any message of a batch, is a request: it has a method
- * and an id, so the server replies to it.
+ * Whether Streamable HTTP takes a message without an answer: a notification (a
+ * method and no id) or a response (a result or an error, and no method). The
+ * server answers every other message, a batch and an invalid one included.
  * @param {unknown} message
  * @returns {boolean}
  */
-function asksForReply(message) {
-  if (Array.isArray(message))
-    return message.length === 0 || message.some(asksForReply);
-  if (message === null || typeof message !== 'object') return true;
+function needsNoAnswer(message) {
+  if (
+    message === null ||
+    typeof message !== 'object' ||
+    Array.isArray(message)
+  ) {
+    return false;
+  }
   const {id, method} = /** @type {{id?: unknown, method?: unknown}} */ (
     message
   );
-  return method === undefined || (id !== undefined && id !== null);
+  if (typeof method === 'string') return id === undefined || id === null;
+  return 'result' in message || 'error' in message;
 }
 
 /**
  * Run `astryx mcp --docs-only` once, send it one message, and resolve with the
- * line it replies.
+ * line it replies. The server runs in a process group of its own, so a run
+ * that gives no answer in time, or whose request is cancelled, is stopped with
+ * every command it started.
  * @param {McpRuntime} runtime
  * @param {unknown} message
+ * @param {{timeoutMs?: number, signal?: AbortSignal}} [options]
  * @returns {Promise<string>}
  */
-export function askMcpServer({bin, cwd}, message) {
+export function askMcpServer(
+  {bin, cwd},
+  message,
+  {timeoutMs = REPLY_TIMEOUT_MS, signal} = {},
+) {
   return new Promise((resolve, reject) => {
+    // Windows has no process groups; there the server alone is stopped.
+    const ownGroup = process.platform !== 'win32';
     const child = spawn(process.execPath, [bin, 'mcp', '--docs-only'], {
       cwd,
       env: commandEnv(),
       stdio: ['pipe', 'pipe', 'ignore'],
       windowsHide: true,
+      detached: ownGroup,
     });
     let output = '';
     let settled = false;
+    /** @type {NodeJS.Timeout | undefined} */
+    let timer;
+    const stopGroup = () => {
+      try {
+        if (ownGroup && child.pid !== undefined) {
+          process.kill(-child.pid, 'SIGKILL');
+        } else {
+          child.kill('SIGKILL');
+        }
+      } catch {
+        // The group has exited already.
+      }
+    };
+    const onAbort = () => finish(new Error('the request was cancelled'));
     /**
      * @param {Error | null} error
      * @param {string} [line]
@@ -118,24 +150,23 @@ export function askMcpServer({bin, cwd}, message) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      // Closing standard input ends the server once it has answered.
-      child.stdin.end();
+      signal?.removeEventListener('abort', onAbort);
       if (error) {
-        child.kill();
+        stopGroup();
         reject(error);
       } else {
+        // Closing standard input ends the server once it has answered.
+        child.stdin.end();
         resolve(/** @type {string} */ (line));
       }
     };
-    const timer = setTimeout(
+    timer = setTimeout(
       () =>
-        finish(
-          new Error(
-            `astryx mcp gave no answer in ${REPLY_TIMEOUT_MS / 1000} s`,
-          ),
-        ),
-      REPLY_TIMEOUT_MS,
+        finish(new Error(`astryx mcp gave no answer in ${timeoutMs / 1000} s`)),
+      timeoutMs,
     );
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, {once: true});
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       output += chunk;
@@ -183,16 +214,18 @@ export async function handleMcpPost(request, runtime) {
       error: {code: -32700, message: 'Parse error'},
     });
   }
-  if (!asksForReply(message)) return new Response(null, {status: 202});
+  if (needsNoAnswer(message)) return new Response(null, {status: 202});
   try {
     return jsonResponse(
       200,
-      await askMcpServer(runtime ?? mcpRuntime(), message),
+      await askMcpServer(runtime ?? mcpRuntime(), message, {
+        signal: request.signal,
+      }),
     );
   } catch (error) {
     const id =
       !Array.isArray(message) && message && typeof message === 'object'
-        ? /** @type {{id?: unknown}} */ ((message).id ?? null)
+        ? /** @type {{id?: unknown}} */ (message.id ?? null)
         : null;
     return jsonResponse(500, {
       jsonrpc: '2.0',

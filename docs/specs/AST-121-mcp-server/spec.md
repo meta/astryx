@@ -56,8 +56,11 @@ docs-only server that the docs site runs (FR7).
   over standard input and output, one JSON-RPC 2.0 message per line. It answers
   `initialize` with the protocol version the client asks for when it speaks
   that version, and with its newest version otherwise, and it declares the
-  tools capability only. It never asks a question, and standard output carries
-  protocol messages only. It serves until the client closes standard input;
+  tools capability only. It answers every message that is not a notification or
+  a response: a message without a method is an invalid request, with its id or
+  null, and a response gets no answer, because the server sends no request. It
+  never asks a question, and standard output carries protocol messages only.
+  It serves until the client closes standard input;
   then it stops every command it started and exits 0. `astryx mcp --json` is
   refused before it serves, because standard output carries the protocol
   (`architecture:cli-surface` INV9).
@@ -90,10 +93,9 @@ docs-only server that the docs site runs (FR7).
   and the server instructions describe the root options once (FR5). Every root
   option except `--json` and `--version` is an input of every tool, as the CLI
   accepts it on every command. The input `cwd` names the folder the command runs
-  in, inside the folder the server serves. An input that the tool does not
-  declare reaches the command as `--<name>`, so the command answers it as it
-  answers that option on a command line. A docs-only tool differs in both
-  (FR7).
+  in, inside the folder the server serves, symbolic links followed; a docs-only
+  tool has no `cwd` (FR7). The inputs are exactly those of the tool's schema,
+  which allows no other property.
 - **FR4 — A tool call runs its command and answers with the command's output,
   unchanged.** A call runs the same copy of the CLI as a separate process, with
   the command's words, the options it was given, `--json`, then `--` and the
@@ -102,8 +104,9 @@ docs-only server that the docs site runs (FR7).
   standard error when the run wrote any, and `isError` is true exactly when the
   run exits non-zero. The server adds, removes and changes nothing in that
   output, retries no run, and sets no time limit on one. A call that cannot
-  become a command line (an argument given after a missing one, or a `cwd`
-  outside the folder served) answers as a tool error that says why, and runs
+  become a command line (an argument given after a missing one, an input the
+  tool does not declare, or a `cwd` whose folder is outside the one served,
+  symbolic links followed) answers as a tool error that says why, and runs
   nothing. A call that the client cancels stops its run and gets no answer.
 - **FR5 — The server introduces the CLI once.** `initialize` names the server
   `astryx`, with the CLI's version, and gives instructions: the project's agent
@@ -119,16 +122,21 @@ docs-only server that the docs site runs (FR7).
   docs, and the docs site's endpoint is that server.** Its tools are the FR2
   tools of `search`, `build`, `component`, `hook`, `docs`, `template`,
   `discover`, `theme list` and `theme targets`: each answers from Astryx's docs
-  and the Core the folder has, writes nothing, reads no path a caller names, and
-  reaches no other service. A docs-only tool has no `cwd` input and leaves out
-  the inputs `package`, `path`, `cdn` and `overwrite`; a call that gives an
-  input the tool does not list is a tool error that names the input, and runs
-  nothing; every call runs in the folder served. The instructions say that the
-  server answers for the release it has. The docs site's MCP endpoint takes
-  requests over Streamable HTTP and keeps no session: each request runs `astryx
-mcp --docs-only` in a folder that holds the CLI and the Core the site
-  documents, and the endpoint answers with the server's reply. It has no tools
-  of its own.
+  and the Core the folder has, writes nothing, reads no path or package a
+  caller names, and reaches no other service. A docs-only tool has no `cwd`
+  input and leaves out the inputs `package`, `base`, `path`, `cdn` and
+  `overwrite`; a call that gives one is a tool error that names it, and runs
+  nothing; every call runs in the folder served. The server takes one message
+  at a time: a batch is an invalid request, and none of it runs. The
+  instructions say that the server answers for the release it has. The docs
+  site's MCP endpoint takes one JSON-RPC message per request over Streamable
+  HTTP and keeps no session. A notification or a response gets 202 with no
+  body, and nothing runs; any other message runs `astryx mcp --docs-only` once,
+  in its own process group, in a folder that holds the CLI and the Core the
+  site documents, and the endpoint answers with the server's reply. A run that
+  gives no answer in 55 seconds, or whose request is cancelled, is stopped with
+  every command it started, and the request gets an internal error. The
+  endpoint has no tools of its own.
 
 ### Admission
 
@@ -144,9 +152,10 @@ mcp --docs-only` in a folder that holds the CLI and the Core the site
 - **One job.** It serves the CLI's commands as MCP tools.
 - **Data, not prose.** Each answer is a command's `--json` envelope, and the
   tool list is the manifest's commands in the shape MCP reads.
-- **Function.** Like the capability manifest, it wraps no function: it does no
-  operation of its own, and each call runs a command whose function does the
-  operation (`spec:AST-042` FR1).
+- **Function.** Like the capability manifest, it wraps no function: each call
+  runs a command whose function does the operation (`spec:AST-042` FR1), and
+  the handler reads only the agent docs that `astryx init` renders, with the
+  same renderer, for the server instructions (FR5, DEC-3).
 
 ### Platform support
 
@@ -171,14 +180,14 @@ mcp --docs-only` in a folder that holds the CLI and the Core the site
 
 ## Verification
 
-| Contract | Verification                                                                                                                    | Representative states                                                                                                                                                                                                 | Mutation or failure expectation                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| FR1      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin                                                                                                               | answering another version, a stray stdout line, or a run left running fails       |
-| FR2      | `clients/cli/lib/mcp-tools.test.mjs`, `test/packed-manifest.test.mjs`                                                           | every manifest command; groups; `mcp`; experimental commands; the packed package's stored manifest; a command and an option unavailable on the run's base                                                             | a missing, extra or renamed tool fails                                            |
-| FR3      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string                                                          | an input that parses to another value, or a flag with no input, fails             |
-| FR4      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                                                                                   | any change to the output, or an answer to a cancelled call, fails                 |
-| FR5      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | the instructions with and without agent docs in reach                                                                                                                                                                 | a root option missing from the instructions fails                                 |
-| FR7      | `clients/cli/lib/mcp-tools.test.mjs`, `clients/cli/lib/mcp-server.test.mjs`, the docs site's `src/__tests__/mcp-server.test.ts` | the docs-only tool list; each left-out input and `cwd`; the real bin with `--docs-only`; a call through the docs site's endpoint compared byte for byte with the command run directly; a notification; GET and DELETE | an extra tool, a left-out input that reaches a command, or a changed answer fails |
+| Contract | Verification                                                                                                                    | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                 | Mutation or failure expectation                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin; a message with no method, with and without an id; a response; a batch on a server that takes one message at a time                                                                                                                                                                                                           | answering another version, a stray stdout line, or a run left running fails; an unanswered invalid message, an answered response, or a batch call that runs fails             |
+| FR2      | `clients/cli/lib/mcp-tools.test.mjs`, `test/packed-manifest.test.mjs`                                                           | every manifest command; groups; `mcp`; experimental commands; the packed package's stored manifest; a command and an option unavailable on the run's base                                                                                                                                                                                                                                                                             | a missing, extra or renamed tool fails                                                                                                                                        |
+| FR3      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string; a `cwd` through a symbolic link that leads out and one that stays inside; an input the tool does not declare                                                                                                                                                            | an input that parses to another value, or a flag with no input, fails; a `cwd` that leaves through a link, or an undeclared input that reaches a command, fails               |
+| FR4      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                                                                                                                                                                                                                                                                                                   | any change to the output, or an answer to a cancelled call, fails                                                                                                             |
+| FR5      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | the instructions with and without agent docs in reach                                                                                                                                                                                                                                                                                                                                                                                 | a root option missing from the instructions fails                                                                                                                             |
+| FR7      | `clients/cli/lib/mcp-tools.test.mjs`, `clients/cli/lib/mcp-server.test.mjs`, the docs site's `src/__tests__/mcp-server.test.ts` | the docs-only tool list; each left-out input and `cwd`; the real bin with `--docs-only`; a call through the docs site's endpoint compared byte for byte with the command run directly; a notification; GET and DELETE; `base`; a batch; a message with no method; a notification and a response, which start no server; a run with no answer in time, and the command it started; component and template answers through the endpoint | an extra tool, a left-out input that reaches a command, or a changed answer fails; a started server for a notification, or a command left running after the time limit, fails |
 
 ## Decision log
 

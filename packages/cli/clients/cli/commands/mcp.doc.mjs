@@ -20,7 +20,7 @@ export const doc = {
     'An agent that can run commands runs astryx itself, which is the usual way to use Astryx. ' +
     'Starts an MCP server on standard input and output, for an MCP client to launch. ' +
     'Each command that answers with --json is one tool, named by its words (theme build is theme_build), ' +
-    'with the command\'s arguments and options as its inputs under their CLI names. ' +
+    'with the command\'s arguments and options as its inputs under their CLI names; an input a tool does not list is refused. ' +
     'A tool call runs that command with --json in this folder, or in the folder a call names inside it, ' +
     'and answers with the command\'s output unchanged; a command that exits non-zero answers as an error. ' +
     'The tools come from the same command definitions as --help and the manifest, so they always match this CLI. ' +
@@ -31,7 +31,7 @@ export const doc = {
       flag: '--docs-only',
       cliOnly: true,
       description:
-        'Serve only the commands that read the docs (search, build, component, hook, docs, template, discover, theme list and theme targets), without a folder input or the inputs that name a package or a file to write, and refuse any input a tool does not list',
+        'Serve only the commands that read the docs (search, build, component, hook, docs, template, discover, theme list and theme targets), one message at a time, without the inputs that name a folder, a file to write or a package to read',
     },
   ],
   examples: [

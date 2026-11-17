@@ -30,7 +30,7 @@ const SEARCH = {
  * A server on in-memory streams, with a fake command runner.
  * @param {(argv: string[], options: {cwd: string, signal: AbortSignal}) => Promise<any>} run
  */
-function start(run) {
+function start(run, {batches = true} = {}) {
   const input = new PassThrough();
   const output = new PassThrough();
   /** @type {any[]} */
@@ -52,6 +52,7 @@ function start(run) {
     input,
     output,
     run: /** @type {any} */ (run),
+    batches,
   });
   /** @param {unknown} message */
   const send = message => input.write(`${JSON.stringify(message)}\n`);
@@ -142,6 +143,43 @@ describe('serveMcp', () => {
     await server.done;
   });
 
+  it('answers a message with no method as invalid, with or without an id, and never answers a response', async () => {
+    const server = start(finished({}));
+    expect(await server.raw('{"jsonrpc":"2.0"}')).toMatchObject({id: null, error: {code: -32600}});
+    expect((await server.ask({jsonrpc: '2.0', id: 4, params: {}})).error.code).toBe(-32600);
+    server.send({jsonrpc: '2.0', id: 5, result: {}});
+    server.send({jsonrpc: '2.0', id: null, error: {code: -32603, message: 'x'}});
+    expect((await server.ask({jsonrpc: '2.0', id: 6, method: 'ping'})).result).toEqual({});
+    server.close();
+    await server.done;
+    expect(server.replies.map(reply => reply.id)).toEqual([null, 4, 6]);
+  });
+
+  it('answers a batch as an invalid request, and runs none of it, when it takes one message at a time', async () => {
+    let runs = 0;
+    const server = start(
+      async () => {
+        runs += 1;
+        return {stdout: '', stderr: '', exitCode: 0, signal: null};
+      },
+      {batches: false},
+    );
+    const reply = await server.raw(
+      JSON.stringify([
+        {jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name: 'search', arguments: {query: ['x']}}},
+        {jsonrpc: '2.0', id: 2, method: 'tools/call', params: {name: 'search', arguments: {query: ['y']}}},
+      ]),
+    );
+    expect(reply).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: {code: -32600, message: 'This server takes one message at a time, not a batch'},
+    });
+    server.close();
+    await server.done;
+    expect(runs).toBe(0);
+  });
+
   it('answers a call it cannot turn into a command line as a tool error', async () => {
     const server = start(finished({}));
     const reply = await server.ask({
@@ -151,7 +189,7 @@ describe('serveMcp', () => {
       params: {name: 'search', arguments: {query: ['x'], cwd: '../outside'}},
     });
     expect(reply.result.isError).toBe(true);
-    expect(reply.result.content[0].text).toContain('cwd must be inside /project');
+    expect(reply.result.content[0].text).toContain('Invalid cwd "../outside": resolves outside the project root (/project)');
     server.close();
     await server.done;
   });
@@ -274,7 +312,7 @@ describe('astryx mcp, the real bin', () => {
       DOCS_ONLY_COMMANDS.map(name => name.replaceAll(' ', '_')).sort(),
     );
     expect(replies.get(2).result).toEqual({
-      content: [{type: 'text', text: 'template takes no path on this server'}],
+      content: [{type: 'text', text: 'template takes no "path" on this server'}],
       isError: true,
     });
     expect(replies.get(3).error.message).toBe('Unknown tool: init');

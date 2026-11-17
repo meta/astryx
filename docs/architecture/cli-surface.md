@@ -89,7 +89,8 @@ rather than left to the command author.
    contract; INV20–INV22 fix where each part lives.
 5. **Render.** Exactly one of two paths. In `--json` mode, `jsonOut` writes a
    single envelope. Otherwise the formatters render the same values as text,
-   from a closed set of blocks (INV23). Nothing else may write to stdout.
+   from a closed set of blocks (INV23). Nothing else may write to stdout,
+   except the protocol messages of `astryx mcp` (INV4).
 
 Discovery of components, templates, themes, codemods and docs is not per-command. It
 goes through the `Project` seam in `foundation/config`, which resolves the
@@ -510,8 +511,10 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   renders the result through `jsonOut` or the formatter kit. It reads no files,
   loads no project, runs no discovery, and starts no subprocess or network
   request; it may phrase hints with the command name `spec:AST-081` FR5's picker
-  chooses. The `mcp` handler hands its run to the CLI's MCP server, which
-  starts one run of the CLI per tool call (`spec:AST-121` FR4). Only command
+  chooses. The `mcp` handler reads the project's agent docs as `init` renders
+  them, with the same renderer, for the server instructions (`spec:AST-121`
+  FR5), and hands its run to the CLI's MCP server, which starts one run of the
+  CLI per tool call (`spec:AST-121` FR4). Only command
   handlers, their `CommandDoc` files, and their tests live in that directory. `clients/cli/commands/blog.mjs` is the
   reference handler.
 - **INV23 — The formatter kit is closed.** Text output is built only from the

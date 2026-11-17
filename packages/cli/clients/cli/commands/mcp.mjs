@@ -41,6 +41,8 @@ export function registerMcp(program, {jsonSupported, version}) {
         tools,
         version,
         instructions: mcpInstructions(manifest, {agentText, docsOnly}),
+        // A server many people share runs at most one command per message.
+        batches: !docsOnly,
       });
       // The tools served are the result: one per command.
       return resultSet({count: tools.length, resultKind: 'command'});

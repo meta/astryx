@@ -106,7 +106,10 @@ function toolResult(run) {
  *   input?: NodeJS.ReadableStream,
  *   output?: NodeJS.WritableStream,
  *   run?: typeof runCommand,
- * }} options `root` is the folder served (default: the working folder)
+ *   batches?: boolean,
+ * }} options `root` is the folder served (default: the working folder);
+ *   `batches: false` answers a batch as an invalid request, so the server
+ *   takes one message at a time
  * @returns {Promise<void>} resolves when the client has gone and every call
  *   it started has stopped
  */
@@ -118,6 +121,7 @@ export function serveMcp({
   input = process.stdin,
   output = process.stdout,
   run = runCommand,
+  batches = true,
 }) {
   const byName = new Map(tools.map(tool => [tool.name, tool]));
   /** @type {Map<string | number, AbortController>} */
@@ -184,7 +188,10 @@ export function serveMcp({
     const {id, method, params} = message;
     const isRequest = id !== undefined && id !== null;
     if (typeof method !== 'string') {
-      return isRequest ? errorReply(id, INVALID_REQUEST, 'Invalid request') : null;
+      // A response is never answered: this server sends no request. Any other
+      // message without a method is an invalid request.
+      if ('result' in message || 'error' in message) return null;
+      return errorReply(isRequest ? id : null, INVALID_REQUEST, 'Invalid request');
     }
     if (!isRequest) {
       if (method === 'notifications/cancelled') {
@@ -241,8 +248,14 @@ export function serveMcp({
     }
     const work = (async () => {
       if (Array.isArray(message)) {
-        if (message.length === 0) {
-          send(errorReply(null, INVALID_REQUEST, 'Invalid request'));
+        if (message.length === 0 || !batches) {
+          send(
+            errorReply(
+              null,
+              INVALID_REQUEST,
+              batches ? 'Invalid request' : 'This server takes one message at a time, not a batch',
+            ),
+          );
           return;
         }
         const replies = (await Promise.all(message.map(handle))).filter(

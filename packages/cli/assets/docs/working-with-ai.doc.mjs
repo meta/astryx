@@ -225,7 +225,7 @@ args = ["@astryxdesign/cli", "mcp"]`,
         },
         {
           type: 'prose',
-          text: 'The hosted server is the CLI server with `--docs-only`, run by the docs site: its tools are search, build, component, hook, docs, template, discover, theme list and theme targets, and each answers as that command does with --json, for the latest published release, not for your project. It takes no folder, and no input that names a package or a file to write. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
+          text: 'The hosted server is the CLI server with `--docs-only`, run by the docs site: its tools are search, build, component, hook, docs, template, discover, theme list and theme targets, and each answers as that command does with --json, for the latest published release, not for your project. It takes one JSON-RPC message per request, and no input that names a folder, a file to write or a package to read. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
         },
         {
           type: 'code',

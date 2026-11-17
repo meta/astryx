@@ -11,6 +11,9 @@
 
 import {handleMcpPost, methodNotAllowed} from '../../lib/mcpBridge.mjs';
 
+/** Seconds a request may run: the bridge stops a run with no answer at 55. */
+export const maxDuration = 60;
+
 export function POST(request: Request): Promise<Response> {
   return handleMcpPost(request);
 }

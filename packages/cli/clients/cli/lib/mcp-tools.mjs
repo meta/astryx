@@ -17,10 +17,10 @@
  * @position clients/cli/lib — read by commands/mcp.mjs and lib/mcp-server.mjs
  */
 
-import * as path from 'node:path';
 import {Option} from 'commander';
 import {isAstryxPromptInReach} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {renderAgentDocsBlock} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 
 /**
  * Root options that are not tool inputs. `--json` is how every tool runs its
@@ -52,10 +52,11 @@ export const DOCS_ONLY_COMMANDS = Object.freeze([
 ]);
 
 /**
- * The inputs a docs-only tool leaves out: a package to read by name or path,
- * and the template inputs that write a file.
+ * The inputs a docs-only tool leaves out: a package to read (`package`, and
+ * the root option `base`), and the template inputs that write a file. The
+ * server answers for the one Core its folder has.
  */
-export const DOCS_ONLY_OMITTED_INPUTS = Object.freeze(['package', 'path', 'cdn', 'overwrite']);
+export const DOCS_ONLY_OMITTED_INPUTS = Object.freeze(['package', 'base', 'path', 'cdn', 'overwrite']);
 
 /**
  * @typedef {object} McpArgument
@@ -81,8 +82,7 @@ export const DOCS_ONLY_OMITTED_INPUTS = Object.freeze(['package', 'path', 'cdn',
  * @property {Record<string, unknown>} inputSchema
  * @property {McpArgument[]} args in command-line order
  * @property {McpOption[]} options the command's options, then the root options
- * @property {boolean} docsOnly a docs-only tool: it takes no folder, and it
- *   refuses an input it does not declare
+ * @property {boolean} docsOnly a docs-only tool: it takes no folder
  */
 
 /**
@@ -303,9 +303,8 @@ function listOf(value) {
 
 /**
  * The command-line arguments that run `tool` with `input`, and the folder to
- * run them in. An input the tool does not declare goes to the command as
- * `--<name>`, so the command answers it as the CLI does; a docs-only tool
- * refuses it instead, and always runs in the folder served.
+ * run them in. An input the tool does not declare is refused, as its schema
+ * says; a docs-only tool always runs in the folder served.
  *
  * @param {McpTool} tool
  * @param {Record<string, unknown>} input
@@ -356,13 +355,11 @@ export function commandLine(tool, input, {root}) {
     positionals.push(...(arg.variadic ? listOf(value) : [argText(value)]));
   }
 
-  for (const [key, value] of Object.entries(given)) {
-    if (used.has(key) || value === undefined || value === null || value === false) continue;
-    if (tool.docsOnly) {
-      throw new McpInputError(`${tool.name} takes no ${key} on this server`);
-    }
-    if (value === true) flags.push(`--${key}`);
-    else for (const item of listOf(value)) flags.push(`--${key}=${item}`);
+  for (const key of Object.keys(given)) {
+    if (used.has(key)) continue;
+    throw new McpInputError(
+      `${tool.name} takes no ${JSON.stringify(key)}${tool.docsOnly ? ' on this server' : ''}`,
+    );
   }
 
   return {
@@ -377,7 +374,8 @@ export function commandLine(tool, input, {root}) {
 }
 
 /**
- * The folder a call runs in: `root`, or a folder inside it.
+ * The folder a call runs in: `root`, or a folder inside it, also through
+ * symbolic links.
  * @param {unknown} value
  * @param {string} root
  * @returns {string}
@@ -387,12 +385,10 @@ function commandFolder(value, root) {
   if (typeof value !== 'string') {
     throw new McpInputError(`${CWD_INPUT} must be a string`);
   }
-  const folder = path.resolve(root, value);
-  const rel = path.relative(root, folder);
-  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
-    throw new McpInputError(
-      `${CWD_INPUT} must be inside ${root}; ${value} is not`,
-    );
+  try {
+    return assertWithin(value, root, {allowAbsolute: true, label: CWD_INPUT});
+  } catch (error) {
+    if (error instanceof PathSafetyError) throw new McpInputError(error.message);
+    throw error;
   }
-  return folder;
 }
