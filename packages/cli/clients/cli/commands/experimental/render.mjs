@@ -13,6 +13,7 @@
  *   astryx experimental render --reverse page.html --out page.tsx
  */
 
+import * as path from 'node:path';
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {shellArg} from '../../../../foundation/text/shell-arg.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
@@ -26,6 +27,17 @@ import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 
 /** @param {number} n */
 const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+
+/**
+ * A file rendered outside the current folder comes back into it: --reverse
+ * writes only inside the folder it runs from, so the command names a new
+ * folder here, as a restore beside the file would.
+ * @param {{output: string, files: string[]}} d
+ */
+const restoreHere = d =>
+  path.isAbsolute(d.output)
+    ? ` --out ${shellArg(`${path.basename(d.output).replace(/\.[^.]+$/, '')}-restored/${d.files[0]}`)}`
+    : '';
 
 /**
  * Register `render` under the `experimental` group.
@@ -77,7 +89,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),
-          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}`),
+          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}${restoreHere(d)}`),
         );
         return answered;
       }

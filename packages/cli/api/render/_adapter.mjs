@@ -486,6 +486,15 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     recordResolved(name, version, dir, 'package-set');
   }
   if (!elsewhere) refuseProtected([output], cwd);
+  // Elsewhere, the file named is the file written: a link there would put the
+  // render wherever the link points.
+  if (elsewhere && fs.lstatSync(output, {throwIfNoEntry: false})?.isSymbolicLink()) {
+    throw new AstryxError(
+      `${shown(cwd, output)} is a symbolic link, so it is not replaced; nothing was written. Name the file itself.`,
+      [],
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
+  }
   // An existing file is replaced only when a render wrote it.
   if (
     fs.existsSync(output) &&

@@ -1792,6 +1792,21 @@ describe('render(): every write stays inside the current folder', () => {
     }
   }, 120_000);
 
+  it('refuses a symbolic link at an absolute --out, and leaves the file it points to', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const target = path.join(elsewhere, 'precious.html');
+      fs.writeFileSync(target, '<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+      const link = path.join(elsewhere, 'page.html');
+      fs.symlinkSync(target, link);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: link}))).toBe('ERR_PATH_TRAVERSAL');
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe('<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('refuses a relative --out outside the current folder, saying an absolute path works', async () => {
     let error;
     try {
@@ -2029,6 +2044,29 @@ describe('astryx experimental render (CLI)', () => {
     expect(json.data.output).toBe('cli.html');
     expect(fs.readFileSync(path.join(dir, 'cli.html'), 'utf8')).toContain('<title>From the CLI</title>');
   }, 60_000);
+
+  it('prints a command to give back a file rendered to another folder that runs from here', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'shared report.html');
+      const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
+      expect(rendered.status, rendered.stderr).toBe(0);
+      const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
+      expect(line).toBeDefined();
+      // The printed command, run as printed after the CLI's own name.
+      const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
+      const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
+      expect(args).toEqual(['--reverse', out, '--out', 'shared report-restored/page.tsx']);
+      const back = await runCli(['experimental', 'render', ...args], dir);
+      expect(back.status, back.stderr).toBe(0);
+      expect(fs.readFileSync(path.join(dir, 'shared report-restored', 'page.tsx'), 'utf8')).toBe(
+        fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
+      );
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+      fs.rmSync(path.join(dir, 'shared report-restored'), {recursive: true, force: true});
+    }
+  }, 120_000);
 
   it('fails with exit 1 and a JSON error envelope', async () => {
     const r = await runCli(['--json', 'experimental', 'render', '--reverse', 'plain.html'], dir);
