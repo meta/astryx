@@ -3765,7 +3765,10 @@ export function coveredPaints(ctx, part, prop) {
         ? null
         : t?.states.includes(k) && (v === k || v === 'true')
           ? `--state ${k}`
-          : t?.props.includes(k)
+          : // (A prop the part's doc lists, or one the census saw it drawn
+            // with, a toast's `type`.)
+            t?.props.includes(k) ||
+              /** @type {any} */ (C.MAP[part])?.attrs?.[k]?.includes(v)
             ? `--when ${k}:${v}`
             : null;
       covered.push({token: r.token, flags, cond: cond.replace(':', '=')});
