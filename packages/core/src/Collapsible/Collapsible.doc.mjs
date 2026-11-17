@@ -103,7 +103,7 @@ export const docs = {
       name: 'hasLazyMount',
       type: 'boolean',
       description:
-        "Mount the children only while the content is open. A closed Collapsible keeps its empty content region, so the trigger's aria-controls still names it; with animatedLayout, the children stay through the close motion. Use it for long lists of closed items whose content is costly to mount. Without it, closed children stay mounted and hidden, so their state, such as typed form values, survives a close.",
+        "Mount the children only while the content is open. A closed Collapsible keeps its empty content region, so the trigger's aria-controls still names it; with animatedLayout, the children stay through the close motion. Use it for long lists of closed items whose content is costly to mount. Without hasLazyMount, closed children stay mounted and hidden, so their state, such as typed form values, survives a close.",
       default: 'false',
     },
     {

@@ -279,7 +279,7 @@ export interface CollapsibleProps extends BaseProps {
    * Mount the children only while the content is open. A closed Collapsible
    * keeps its empty content region, so the trigger's `aria-controls` still
    * names it. With `animatedLayout`, the children stay through the close
-   * motion. Without it, closed children stay mounted and hidden.
+   * motion. Without `hasLazyMount`, closed children stay mounted and hidden.
    * @default false
    */
   hasLazyMount?: boolean;
