@@ -96,8 +96,10 @@ export async function eachAtOnce(jobs, atOnce, run) {
 /**
  * The script run on a sheet before its picture: text a part cuts with an
  * ellipsis when it is narrow (a stepper's step names, a section heading)
- * gets the room it needs. Each sheet item holding such text grows by what
- * the text lacks, up to the sheet's width, a few rounds while the layout
+ * gets the room it needs, and so does a row that scrolls sideways (a
+ * carousel's slides), so its picture shows every item and cuts none at its
+ * edge. Each sheet item holding such text or row grows by what it lacks,
+ * up to the sheet's width, a few rounds while the layout
  * settles. A part whose own width is fixed keeps it, and what it still cuts
  * is the theme's to fix. A page with no sheet items is left as it is.
  */
@@ -111,7 +113,9 @@ export const FIT_CELLS = `(() => {
         // drawn in no width at all (a label only a screen reader reads) is
         // not cut: no width given to it would show it.
         if (el.clientWidth < 2 || el.scrollWidth <= el.clientWidth) continue;
-        if (getComputedStyle(el).textOverflow !== 'ellipsis') continue;
+        const cs = getComputedStyle(el);
+        const scrolls = /^(?:auto|scroll)$/.test(cs.overflowX);
+        if (cs.textOverflow !== 'ellipsis' && !scrolls) continue;
         need = Math.max(need, el.scrollWidth - el.clientWidth + 1);
       }
       if (!need) continue;

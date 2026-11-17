@@ -535,16 +535,16 @@ export async function pictures(project, shots, modes) {
    * it was drawn so in, whether keeping the part's width draws every one
    * whole, and the page's picture.
    * Keyed by part, and apart for words broken across lines and for text drawn over its neighbor.
-   * @type {Map<string, {file: string, parts: Map<string, {part: string, broken: boolean, overlaps: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   * @type {Map<string, {label: string, file: string, parts: Map<string, {part: string, broken: boolean, overlaps: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
    */
   const cut = new Map();
   /** One entry for each part on each page, from what was measured. */
   const cutShortNotes = () =>
-    [...cut].flatMap(([name, page]) =>
+    [...cut].flatMap(([, page]) =>
       [...page.parts.values()].map(
         ({part, broken, overlaps, texts, modes: drawnIn, whole}) =>
           /** @type {CutShort} */ ({
-            page: name,
+            page: page.label,
             file: page.file,
             part: part || null,
             texts: [...texts],
@@ -714,6 +714,8 @@ export async function pictures(project, shots, modes) {
       }
       r.file = path.relative(project.cwd, out).split(path.sep).join('/');
       files.push(r.file);
+      /** The pictures this one became: itself, or the pieces it is cut into. */
+      let pieces = [r.file];
       // A picture in a theme folder is recorded as the editor's, so a later
       // change removes it and never a picture of the user's.
       const slug = themeOf(out);
@@ -735,6 +737,7 @@ export async function pictures(project, shots, modes) {
             files.pop();
             files.push(...cut.files);
             r.file = cut.files[0];
+            pieces = cut.files;
           }
         }
       }
@@ -758,9 +761,19 @@ export async function pictures(project, shots, modes) {
       // every theme, so a sheet keeps only text drawn over its neighbor.
       const measured = (r.cutShort ?? []).filter(c => name || c.overlaps);
       if (measured.length) {
-        const label = name ?? 'the sheet';
-        const page = cut.get(label) ?? {file: r.file, parts: new Map()};
-        cut.set(label, page);
+        // Each sheet is its own page: its pictures (one per mode, or the
+        // pieces a tall one is cut into) are named by the first of them.
+        const key = name ?? `\0${out.replace(/-dark\.png$/, '.png')}`;
+        const shownFile =
+          pieces.length > 1
+            ? `${pieces[0]} to ${path.basename(pieces[pieces.length - 1])}`
+            : r.file;
+        const page = cut.get(key) ?? {
+          label: name ?? 'the sheet',
+          file: shownFile,
+          parts: new Map(),
+        };
+        cut.set(key, page);
         for (const {part, text, whole, broken, overlaps} of measured) {
           const key = `${part ?? ''}${broken ? '\0broken' : ''}${overlaps ? '\0overlaps' : ''}`;
           const at = page.parts.get(key) ?? {

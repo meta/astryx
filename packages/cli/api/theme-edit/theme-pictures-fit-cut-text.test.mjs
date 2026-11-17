@@ -2,8 +2,9 @@
 
 /**
  * @file A sheet item whose text a part cuts with an ellipsis when narrow (a
- * stepper's step names, a section heading) grows by what the text lacks,
- * up to the sheet's width, before its picture; both browsers run it.
+ * stepper's step names, a section heading), or that holds a row that
+ * scrolls sideways (a carousel's slides), grows by what it lacks, up to
+ * the sheet's width, before its picture; both browsers run it.
  */
 
 import * as fs from 'node:fs';
@@ -14,7 +15,7 @@ import {FIT_CELLS} from '../../foundation/render/picture-window.mjs';
 /**
  * A sheet item stand-in, its width and its texts' widths, in px.
  * @param {number} width
- * @param {Array<{scroll: number, client: number, ellipsis: boolean}>} texts
+ * @param {Array<{scroll: number, client: number, ellipsis: boolean, scrolls?: boolean}>} texts
  */
 function item(width, texts) {
   const self = {
@@ -34,6 +35,7 @@ function item(width, texts) {
           );
         },
         ellipsis: t.ellipsis,
+        scrolls: t.scrolls ?? false,
       })),
   };
   return self;
@@ -44,6 +46,7 @@ function run(items) {
   const document = {querySelectorAll: () => items};
   const getComputedStyle = (/** @type {any} */ el) => ({
     textOverflow: el.ellipsis ? 'ellipsis' : 'clip',
+    overflowX: el.scrolls ? 'auto' : 'visible',
   });
   new Function('document', 'getComputedStyle', FIT_CELLS)(
     document,
@@ -66,6 +69,15 @@ describe('text a part cuts when narrow', () => {
     expect(clipped.style.minWidth).toBeUndefined();
     expect(whole.style.minWidth).toBeUndefined();
     expect(hidden.style.minWidth).toBeUndefined();
+  });
+
+  it('a row that scrolls sideways shows every item', () => {
+    // Three slides 312 px wide in a 300 px scroller: the third is cut.
+    const carousel = item(330, [
+      {scroll: 312, client: 300, ellipsis: false, scrolls: true},
+    ]);
+    run([carousel]);
+    expect(carousel.style.minWidth).toBe('343px');
   });
 
   it('is run by both browsers before the picture', () => {

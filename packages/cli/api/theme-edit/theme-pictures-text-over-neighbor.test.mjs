@@ -57,4 +57,25 @@ describe('text the pictures draw over the text beside it', () => {
     },
     T,
   );
+
+  it(
+    'names each sheet that draws it, and names letters a fraction of a pixel over',
+    async () => {
+      if (unbuilt) return;
+      const r = /** @type {any} */ (
+        await themeEditShow('h', {cwd, section: 'inputs', png: true})
+      ).data;
+      // The inputs sheet's own pictures: a note of their own, beside the
+      // open states' one.
+      const note = /** @type {string[]} */ (r.notes).find(
+        n =>
+          /over the text beside/.test(n) &&
+          /themes\/h\/sheet-inputs-1\.png/.test(n),
+      );
+      expect(note).toBeDefined();
+      // "Tue" runs into "Mon" by about half a pixel.
+      expect(note).toMatch(/"Tue"/);
+    },
+    T,
+  );
 });
