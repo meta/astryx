@@ -436,11 +436,13 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     is built from, never the built file), the `react` and optional
     `@types/react` and `@astryxdesign/cli` peers it does not declare, and a
     `typecheck` script running `integration check --strict` when it has
-    none. A private package (`"private": true`, never published: the app
-    itself or a local package the app installs) gets none of the publishing
-    notes (peers, the script, the strict check's TypeScript, the placeholder
-    description); instead, its receipt's notes end with the
-    `experimental icon use <set>` step. `--variants` and `--default-variant` declare `variants` and
+    none. When the package's own package.json sets `"private": true` (the
+    field npm reads to refuse a publish), the receipt names none of these
+    publishing notes (peers, the script, the strict check's TypeScript, the
+    placeholder description), and its notes end with the
+    `experimental icon use <set>` step. No other signal, such as the
+    package's folder or how it is installed, changes the notes; every other
+    package gets them as above. `--variants` and `--default-variant` declare `variants` and
     `default`; `--display-name` and `--description` fill the descriptor.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a

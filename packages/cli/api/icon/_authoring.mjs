@@ -553,10 +553,11 @@ export async function addIconSet(name, options) {
     const typescript = resolveProjectTypeScript([packageDir]);
     /** @type {Record<string, any>} */
     const packageAfter = pkgUpdate ? JSON.parse(pkgUpdate.contents) : pkg;
-    // A private package is never published: it is the app itself, or a
-    // local package the app installs. Peers, the strict check, and the
-    // public description are publishing steps, so its receipt leaves them
-    // out, and its notes end with the step that turns the set on.
+    // npm refuses to publish a package whose package.json sets
+    // `"private": true`, such as an app that holds its own set. Peers, the
+    // strict check, and the public description are publishing steps, so its
+    // receipt leaves them out, and its notes end with the step that turns
+    // the set on.
     const isPrivate = packageAfter.private === true;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.
