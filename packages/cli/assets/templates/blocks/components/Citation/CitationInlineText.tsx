@@ -5,6 +5,8 @@
 import {Citation} from '@astryxdesign/core/Citation';
 import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
+import {Icon} from '@astryxdesign/core/Icon';
+import {BookOpenIcon} from '@heroicons/react/24/outline';
 
 export default function CitationInlineText() {
   return (
@@ -33,7 +35,7 @@ export default function CitationInlineText() {
           source={{
             title: 'TypeScript Documentation',
             url: 'https://www.typescriptlang.org',
-            icon: 'https://www.typescriptlang.org/favicon-32x32.png',
+            icon: <Icon icon={BookOpenIcon} size="xsm" />,
           }}
           number={3}
           variant="label"
