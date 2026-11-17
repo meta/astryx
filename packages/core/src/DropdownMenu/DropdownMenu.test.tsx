@@ -696,6 +696,35 @@ describe('DropdownMenu', () => {
     );
   });
 
+  it('opens a bottom sheet on ArrowDown and ArrowUp at the matching edge', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Edit'})).toHaveFocus(),
+    );
+
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+
+    trigger.focus();
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Delete'})).toHaveFocus(),
+    );
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
@@ -4153,6 +4182,9 @@ describe('DropdownMenu custom trigger', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     trigger.focus();
     await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowUp}');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(
       screen.queryByRole('dialog', {name: 'Project actions'}),
