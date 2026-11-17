@@ -71,7 +71,7 @@ export const docs = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        'Displays a "Required" indicator next to the label and sets aria-required. Mutually exclusive with isOptional. When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
+        'Displays a "Required" indicator next to the label and sets aria-required. Mutually exclusive with isOptional. When most fields in a form are required, set defaultOptionality="required" on FormLayout so only the fields marked isOptional show an indicator; isRequired then shows no indicator but keeps its other required behavior, such as browser validation.',
       default: 'false',
     },
     {
@@ -252,7 +252,7 @@ export const docs = {
       {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
-      {guidance: false, description: "Don't repeat a \"Required\" indicator after every label. When most fields in a form are required, set defaultOptionality=\"required\" on FormLayout so only the fields marked isOptional show an indicator; the rest still expose aria-required."},
+      {guidance: false, description: "Don't repeat a \"Required\" indicator after every label. When most fields in a form are required, set defaultOptionality=\"required\" on FormLayout so only the fields marked isOptional show an indicator; the rest still expose aria-required, and isRequired keeps browser validation without a marker."},
       {guidance: false, description: "Don't wrap a disabled TextInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself."},
     ],
     anatomy: [
@@ -332,7 +332,7 @@ export const docsZh = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        '在标签旁显示"必填"指示器并设置 aria-required。与 isOptional 互斥。如果表单中大多数字段都是必填，请改为在 FormLayout 上设置 defaultOptionality="required"，这样只有标记 isOptional 的字段显示指示器。',
+        '在标签旁显示"必填"指示器并设置 aria-required。与 isOptional 互斥。如果表单中大多数字段都是必填，请在 FormLayout 上设置 defaultOptionality="required"，这样只有标记 isOptional 的字段显示指示器；此时 isRequired 不再显示指示器，但保留其他必填行为，例如浏览器校验。',
       default: 'false',
     },
     {
@@ -495,7 +495,7 @@ export const docsZh = {
       {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
-      {guidance: false, description: "Don't repeat a \"Required\" indicator after every label. When most fields in a form are required, set defaultOptionality=\"required\" on FormLayout so only the fields marked isOptional show an indicator; the rest still expose aria-required."},
+      {guidance: false, description: "Don't repeat a \"Required\" indicator after every label. When most fields in a form are required, set defaultOptionality=\"required\" on FormLayout so only the fields marked isOptional show an indicator; the rest still expose aria-required, and isRequired keeps browser validation without a marker."},
       {guidance: false, description: "Don't wrap a disabled TextInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself."},
     ],
     anatomy: [
@@ -524,7 +524,7 @@ export const docsDense = {
       {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
-      {guidance: false, description: "Don't repeat \"Required\" after every label: most fields required → FormLayout defaultOptionality=\"required\", mark the rest isOptional."},
+      {guidance: false, description: "Don't repeat \"Required\" after every label: most fields required → FormLayout defaultOptionality=\"required\", mark the rest isOptional; isRequired keeps browser validation."},
       {guidance: false, description: "Don't wrap a disabled TextInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself."},
     ],
     anatomy: [

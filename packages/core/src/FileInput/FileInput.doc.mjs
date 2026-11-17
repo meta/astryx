@@ -78,7 +78,7 @@ export const docs = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        'Displays a "Required" indicator next to the label and adds a screen-reader-only "Required" description to the trigger (assistive tech does not reliably announce aria-required on the trigger). Mutually exclusive with isOptional. When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
+        'Displays a "Required" indicator next to the label and adds a screen-reader-only "Required" description to the trigger (assistive tech does not reliably announce aria-required on the trigger). Mutually exclusive with isOptional. When most fields in a form are required, set defaultOptionality="required" on FormLayout so only the fields marked isOptional show an indicator; isRequired then shows no indicator but keeps its other required behavior, such as browser validation.',
       default: 'false',
     },
     {
