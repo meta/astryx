@@ -158,17 +158,64 @@ export interface TransferListProps<T extends string = string> extends Omit<
 // Core List's handle is its grip alone, a 1rem box whatever icon size the
 // theme gives the grip. SYNC: core List/ListReorderHandle.tsx GRIP.
 const GRIP = '1rem';
+// Core List's handle stays clear of its row's edge by its target's reach,
+// less the row's inset: the compact rows keep Item's inset, `--spacing-2`.
+// Under a coarse pointer the finger's target reaches further. SYNC: core
+// List/ListReorderHandle.tsx EDGE_GUARD and TOUCH_EDGE_GUARD.
+const GUARD = `max(0px, calc(max(4px, (24px - ${GRIP}) / 2) - var(--_item-inset-inline, 0px)))`;
+const TOUCH_GUARD = `max(0px, calc((44px - ${GRIP}) / 2 - var(--_item-inset-inline, 0px)))`;
+// A hanging handle sits its grip and 8 px outside its row's content, and its
+// target reaches past that. A row's own inset holds 8 px of it.
+const HANG_ROOM = `calc(${GRIP} + max(4px, (24px - ${GRIP}) / 2))`;
+// A handle in its row at the start takes its grip and the row's gap.
+const START_ROOM = `calc(${GUARD} + ${GRIP} + ${spacingVars['--spacing-2']})`;
+const TOUCH_START_ROOM = `calc(${TOUCH_GUARD} + ${GRIP} + ${spacingVars['--spacing-2']})`;
 
 const styles = stylex.create({
-  // Core List's reorder handle is its grip alone, against Remove. It stays
-  // clear of the row's end by its target's reach, less the row's inset, and
-  // further under a coarse pointer. A row without one keeps its Remove clear
-  // of where a handle sits, so every Remove sits in one column. SYNC: core
-  // List/ListReorderHandle.tsx EDGE_GUARD and TOUCH_EDGE_GUARD.
-  clearsHandle: {
+  // Core List's reorder handle sits at its row's end, or its start (the
+  // owner's `handle.placement`). The panel clips. So where the handles hang
+  // outside their rows (`visibility: 'hover'`), the panel's heading and rows
+  // move in on that side by the room they take, and the labels stay under
+  // the heading. A row without a handle keeps its label, or its Remove,
+  // clear of where the handles sit in their rows, so every label and every
+  // Remove keeps its column.
+  hangRoomAtStart: {
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + ${HANG_ROOM})`,
+      '@media (pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
+  hangRoomAtEnd: {
+    paddingInlineEnd: {
+      default: `calc(${spacingVars['--spacing-3']} + ${HANG_ROOM})`,
+      '@media (pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
+  clearsHandleAtStart: {
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + ${HANG_ROOM})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + ${TOUCH_START_ROOM})`,
+    },
+  },
+  clearsShownHandleAtStart: {
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + ${START_ROOM})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + ${TOUCH_START_ROOM})`,
+    },
+  },
+  // At the end, a handle that always shows sits against Remove, in its end
+  // slot. One that shows on hover sits after the end slot, past the row's
+  // gap, where it takes a place only under a coarse pointer.
+  clearsShownHandleAtEnd: {
     marginInlineEnd: {
-      default: `calc(${GRIP} + max(0px, calc(max(4px, (24px - ${GRIP}) / 2) - var(--_item-inset-inline, 0px))))`,
-      '@media (pointer: coarse)': `calc(${GRIP} + max(0px, calc((44px - ${GRIP}) / 2 - var(--_item-inset-inline, 0px))))`,
+      default: `calc(${GRIP} + ${GUARD})`,
+      '@media (pointer: coarse)': `calc(${GRIP} + ${TOUCH_GUARD})`,
+    },
+  },
+  clearsHandleAtEnd: {
+    marginInlineEnd: {
+      default: 0,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-2']} + ${GRIP} + ${TOUCH_GUARD})`,
     },
   },
   root: {
@@ -349,18 +396,22 @@ interface DisabledHandleTooltipProps {
   rootRef: RefObject<HTMLElement | null>;
   value: string;
   content: string;
+  /** The handle starts its row (the owner's `handle.placement` is `'start'`). */
+  isAtStart: boolean;
 }
 
 /**
  * The tooltip and description of a disabled list's reorder handle, which say
  * why the row does not move. Core List renders the handle. So the tooltip
  * finds it in its row when it attaches. It takes the row's last toggle
- * button: the handle comes after the row's own content.
+ * button, or its first when the handle starts the row: the handle comes after
+ * or before the row's own content.
  */
 function DisabledHandleTooltip({
   rootRef,
   value,
   content,
+  isAtStart,
 }: DisabledHandleTooltipProps) {
   const anchorRef = useMemo(
     () => ({
@@ -368,12 +419,13 @@ function DisabledHandleTooltip({
         const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
           `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
         );
-        return toggles == null || toggles.length === 0
-          ? null
-          : toggles[toggles.length - 1];
+        if (toggles == null || toggles.length === 0) {
+          return null;
+        }
+        return isAtStart ? toggles[0] : toggles[toggles.length - 1];
       },
     }),
-    [rootRef, value],
+    [rootRef, value, isAtStart],
   );
   return <Tooltip anchorRef={anchorRef} content={content} />;
 }
@@ -617,6 +669,7 @@ export function TransferList<T extends string = string>({
   // Reordering is off while a search filters the panel. A hidden row could
   // otherwise move past the shown rows.
   const isOrdering = reorderableProp != null && normalizedQuery === '';
+  const keepsHandleRoom = reorderableProp != null;
   // The owner's object decides which values move and takes each move.
   const owner =
     reorderableProp == null ? undefined : reorderableOptions(reorderableProp);
@@ -624,6 +677,23 @@ export function TransferList<T extends string = string>({
     (optionValue: T) => owner?.isReorderable?.(optionValue) ?? true,
     [owner],
   );
+  const isHandleAtStart = owner?.handle?.placement === 'start';
+  // An ordering list is read for its order, so its handles show by default.
+  const isHandleAlwaysVisible =
+    (owner?.handle?.visibility ?? 'always') === 'always';
+  const hangRoom =
+    keepsHandleRoom && !isHandleAlwaysVisible
+      ? isHandleAtStart
+        ? styles.hangRoomAtStart
+        : styles.hangRoomAtEnd
+      : null;
+  // The selected panel's heading starts in its labels' column.
+  const headingRoom =
+    keepsHandleRoom && isHandleAtStart
+      ? isHandleAlwaysVisible
+        ? styles.clearsShownHandleAtStart
+        : styles.clearsHandleAtStart
+      : hangRoom;
   const reorderSelected = useCallback(
     ({key, to: toIndex}: ReorderMove) => {
       const shown = selectedOptions.map(option => option.value);
@@ -716,7 +786,12 @@ export function TransferList<T extends string = string>({
         // A row that keeps its place has no handle: its Remove keeps the
         // movable rows' column, clear of where their handles sit.
         xstyle={[
-          isOrdering && !canMove(option.value) && styles.clearsHandle,
+          keepsHandleRoom &&
+            !isHandleAtStart &&
+            (!isOrdering || !canMove(option.value)) &&
+            (isHandleAlwaysVisible
+              ? styles.clearsShownHandleAtEnd
+              : styles.clearsHandleAtEnd),
           isDisabled && styles.removeInDisabledRow,
         ]}
       />
@@ -729,6 +804,7 @@ export function TransferList<T extends string = string>({
         {remove}
         <DisabledHandleTooltip
           rootRef={rootRef}
+          isAtStart={isHandleAtStart}
           value={option.value}
           content={t('@astryx.transferList.reorderDisabled', {
             label: option.label,
@@ -765,7 +841,21 @@ export function TransferList<T extends string = string>({
           // A disabled list keeps each handle as a focusable disabled
           // control. Core List ends its reorder mode and sends a drag home.
           isDisabled={isDisabled}
-          xstyle={[styles.item, isDisabled && styles.disabledItem]}
+          xstyle={[
+            styles.item,
+            hangRoom,
+            // A row without a handle keeps its label in the movable rows'
+            // column, clear of where their handles sit. While a search pauses
+            // reordering, no row has a handle, and every row keeps that
+            // place, so nothing moves as the query changes.
+            keepsHandleRoom &&
+              isHandleAtStart &&
+              (!isOrdering || !canMove(option.value)) &&
+              (isHandleAlwaysVisible
+                ? styles.clearsShownHandleAtStart
+                : styles.clearsHandleAtStart),
+            isDisabled && styles.disabledItem,
+          ]}
           data-transfer-list-row={option.value}
           data-transfer-list-index={String(value.indexOf(option.value))}
           {...theme}
@@ -853,7 +943,7 @@ export function TransferList<T extends string = string>({
             themeProps('transfer-list-panel', {side: 'selected'}),
             stylex.props(focusOutlineStyles.focusVisible, styles.panel),
           )}>
-          <div {...stylex.props(styles.panelHeader)}>
+          <div {...stylex.props(styles.panelHeader, headingRoom)}>
             <Text id={selectedHeadingId} type="label" color="secondary">
               {selectedLabel}
             </Text>

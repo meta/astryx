@@ -43,6 +43,7 @@ import {
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {
+  isReorderHandle,
   ListReorderScope,
   useListReorderScope,
 } from '@astryxdesign/core/internal/reorder';
@@ -200,6 +201,14 @@ interface PendingMutationMotion<T> {
 const GRIP = '1rem';
 const HANDLE_ROOM = `calc(${GRIP} + max(4px, (24px - ${GRIP}) / 2))`;
 const TOUCH_HANDLE_ROOM = `calc(${GRIP} + (44px - ${GRIP}) / 2)`;
+// A handle that hangs before a record sits its grip and 8 px out, and its
+// target reaches past that. The group takes that room, as much of it as its
+// container's padding holds. SYNC: the HANG of core List's handle.
+const HANG_ROOM = `calc(${GRIP} + 8px + max(4px, (24px - ${GRIP}) / 2))`;
+const HANG_REACH = `min(${HANG_ROOM}, var(--container-padding-inline-start, ${HANG_ROOM}))`;
+// Past a handle's track at the record's start, and the cell's gap.
+const PAST_HANDLE = `calc(${HANDLE_ROOM} + ${spacingVars['--spacing-1']})`;
+const PAST_TOUCH_HANDLE = `calc(${TOUCH_HANDLE_ROOM} + ${spacingVars['--spacing-1']})`;
 
 const styles = stylex.create({
   group: {
@@ -210,6 +219,22 @@ const styles = stylex.create({
     width: '100%',
     containerType: 'inline-size',
     containerName: 'list-input',
+  },
+  // Where the handles start the records and show only on hover or focus,
+  // each hangs before its record. The group pads that room and reaches out
+  // into its container's padding by as much of it as the padding holds. So a
+  // clipping container never cuts a handle, and the records move in only by
+  // the room the padding lacks.
+  groupWithHangingHandles: {
+    marginInlineStart: {
+      default: `calc(-1 * ${HANG_REACH})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineStart: {default: HANG_ROOM, '@media (pointer: coarse)': 0},
+    width: {
+      default: `calc(100% + ${HANG_REACH})`,
+      '@media (pointer: coarse)': '100%',
+    },
   },
   list: {
     display: 'flex',
@@ -255,6 +280,84 @@ const styles = stylex.create({
     gridTemplateColumns: {
       default: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${HANDLE_ROOM})`,
       '@media (pointer: coarse)': `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${TOUCH_HANDLE_ROOM})`,
+    },
+  },
+  // A handle at the record's start sits before the first field's control.
+  // Where it shows only on hover or focus, it hangs there from an empty
+  // track, so the fields keep their columns. Where it shows in the record,
+  // always or under a coarse pointer, it has a track of its own, and the
+  // record's content lines up past it. A record without a handle fills the
+  // track with its `::before`, so every first field starts in one column.
+  handleControls: {
+    display: 'grid',
+    gridTemplateColumns: {
+      default: '0px minmax(0, 1fr)',
+      '@media (pointer: coarse)': `${TOUCH_HANDLE_ROOM} minmax(0, 1fr)`,
+    },
+    alignItems: 'center',
+    columnGap: {
+      default: 0,
+      '@media (pointer: coarse)': spacingVars['--spacing-1'],
+    },
+  },
+  shownHandleControls: {
+    display: 'grid',
+    gridTemplateColumns: {
+      default: `${HANDLE_ROOM} minmax(0, 1fr)`,
+      '@media (pointer: coarse)': `${TOUCH_HANDLE_ROOM} minmax(0, 1fr)`,
+    },
+    alignItems: 'center',
+    columnGap: spacingVars['--spacing-1'],
+  },
+  handleControlsWithoutHandle: {
+    '::before': {
+      content: '""',
+    },
+  },
+  // The first column's label and the content under the fields line up with
+  // the field controls, past the handle's track where it has one.
+  afterHandle: {
+    paddingInlineStart: {
+      default: 0,
+      '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+    },
+  },
+  afterShownHandle: {
+    paddingInlineStart: {
+      default: PAST_HANDLE,
+      '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+    },
+  },
+  // A record's status paints its own surface, so its box starts there too.
+  statusAfterHandle: {
+    marginInlineStart: {
+      default: 0,
+      '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+    },
+  },
+  statusAfterShownHandle: {
+    marginInlineStart: {
+      default: PAST_HANDLE,
+      '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+    },
+  },
+  // Stacked, every field lines up under the first field's control.
+  stackedAfterHandle: {
+    paddingInlineStart: {
+      default: 0,
+      '@container list-input (max-width: 640px)': {
+        default: 0,
+        '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+      },
+    },
+  },
+  stackedAfterShownHandle: {
+    paddingInlineStart: {
+      default: 0,
+      '@container list-input (max-width: 640px)': {
+        default: PAST_HANDLE,
+        '@media (pointer: coarse)': PAST_TOUCH_HANDLE,
+      },
     },
   },
   fields: {
@@ -362,8 +465,24 @@ function joinIDs(...ids: Array<string | undefined>): string | undefined {
   return resolved.length > 0 ? resolved.join(' ') : undefined;
 }
 
+// A reorder handle at the record's start, a toggle button, starts the first
+// cell. Field focus skips it.
 const focusableFieldSelector =
   '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button, [data-list-input-cell] [tabindex]:not([tabindex="-1"])';
+
+/** A record's first field control. The reorder handle in its cell is not one. */
+function firstFieldIn(
+  record: ParentNode | null | undefined,
+): HTMLElement | null {
+  for (const control of record?.querySelectorAll<HTMLElement>(
+    focusableFieldSelector,
+  ) ?? []) {
+    if (!isReorderHandle(control)) {
+      return control;
+    }
+  }
+  return null;
+}
 
 function getScrollableAncestors(element: HTMLElement): HTMLElement[] {
   const scrollRoots: HTMLElement[] = [];
@@ -607,6 +726,15 @@ export function ListInput<T>({
   );
   const canReorder = reorderScope?.options.isReorderable;
   const showReorderHandle = reorderScope != null;
+  // The owner's `handle`: the record edge the handle sits at, and when it
+  // shows. ListInput's handles show on hover or focus unless the owner's
+  // object says otherwise: a record's controls stay quiet until used. At the
+  // end, the handle reveals with Remove, in Remove's cell.
+  const isHandleAtStart = reorderScope?.options.handle?.placement === 'start';
+  const isHandleAlwaysVisible =
+    (reorderScope?.options.handle?.visibility ?? 'hover') === 'always';
+  const showStartHandle = showReorderHandle && isHandleAtStart;
+  const showEndHandle = showReorderHandle && !isHandleAtStart;
   // The handle comes with the owner's object: a list without one loads no
   // reorder code.
   const Handle = reorderScope?.session.Handle;
@@ -693,7 +821,7 @@ export function ListInput<T>({
     const focusTarget =
       pendingFocus?.target === 'first-field' &&
       pendingFocus.itemKey === pendingAnchor.itemKey
-        ? (addedRow?.querySelector<HTMLElement>(focusableFieldSelector) ?? null)
+        ? firstFieldIn(addedRow)
         : null;
     if (focusTarget != null) {
       focusTarget.focus({preventScroll: true});
@@ -821,11 +949,11 @@ export function ListInput<T>({
       target = addButtonRef.current;
     } else if (pendingFocus.itemKey != null) {
       const row = rowRefs.current.get(pendingFocus.itemKey);
-      const selector =
+      target =
         pendingFocus.target === 'remove'
-          ? '[data-list-input-remove]'
-          : focusableFieldSelector;
-      target = row?.querySelector<HTMLElement>(selector) ?? null;
+          ? (row?.querySelector<HTMLElement>('[data-list-input-remove]') ??
+            null)
+          : firstFieldIn(row);
     }
     if (target != null) {
       target.focus();
@@ -989,11 +1117,26 @@ export function ListInput<T>({
     );
   };
 
-  const rowLayoutStyle = showReorderHandle
+  const rowLayoutStyle = showEndHandle
     ? styles.rowWithRemoveAndHandle
     : showRemoveColumn
       ? styles.rowWithRemove
       : styles.rowFieldsOnly;
+  // Where the handle starts the record, the styles that line the record's
+  // content up past it.
+  const afterHandle =
+    showStartHandle &&
+    (isHandleAlwaysVisible ? styles.afterShownHandle : styles.afterHandle);
+  const statusAfterHandle =
+    showStartHandle &&
+    (isHandleAlwaysVisible
+      ? styles.statusAfterShownHandle
+      : styles.statusAfterHandle);
+  const stackedAfterHandle =
+    showStartHandle &&
+    (isHandleAlwaysVisible
+      ? styles.stackedAfterShownHandle
+      : styles.stackedAfterHandle);
   const contentGridStyle = showRemoveColumn
     ? styles.contentBeforeOneControl
     : styles.contentOnly;
@@ -1031,7 +1174,12 @@ export function ListInput<T>({
                   : undefined,
               reorderable: showReorderHandle ? 'true' : undefined,
             }),
-            stylex.props(styles.group),
+            stylex.props(
+              styles.group,
+              showStartHandle &&
+                !isHandleAlwaysVisible &&
+                styles.groupWithHangingHandles,
+            ),
           )}>
           <ListReorderScope reorder={reorderScope}>
             <ol
@@ -1133,6 +1281,8 @@ export function ListInput<T>({
                                   changeColumnKey ?? column.key,
                                 ),
                             });
+                            const isHandleCell =
+                              showStartHandle && columnIndex === 0;
                             return (
                               <div
                                 key={column.key}
@@ -1140,6 +1290,7 @@ export function ListInput<T>({
                                 {...stylex.props(
                                   styles.cellContent,
                                   styles.fieldCell,
+                                  !isHandleCell && stackedAfterHandle,
                                 )}>
                                 <span
                                   aria-hidden="true"
@@ -1150,10 +1301,36 @@ export function ListInput<T>({
                                     styles.columnLabel,
                                     isRepeatedLabel &&
                                       styles.repeatedColumnLabel,
+                                    isHandleCell && afterHandle,
                                   )}>
                                   {column.header}
                                 </span>
-                                <div {...stylex.props(styles.cellContent)}>
+                                <div
+                                  {...stylex.props(
+                                    styles.cellContent,
+                                    isHandleCell &&
+                                      (isHandleAlwaysVisible
+                                        ? styles.shownHandleControls
+                                        : styles.handleControls),
+                                    isHandleCell &&
+                                      !hasHandle &&
+                                      styles.handleControlsWithoutHandle,
+                                  )}>
+                                  {isHandleCell &&
+                                  Handle != null &&
+                                  hasHandle ? (
+                                    // Named "Reorder guest 2", like Remove.
+                                    <Handle
+                                      label={t('@astryx.listInput.itemName', {
+                                        itemName,
+                                        position: index + 1,
+                                      })}
+                                      itemKey={itemKey}
+                                      isDisabled={isDisabled || isLoading}
+                                      placement="start"
+                                      isAlwaysVisible={isHandleAlwaysVisible}
+                                    />
+                                  ) : null}
                                   {content}
                                 </div>
                               </div>
@@ -1163,10 +1340,16 @@ export function ListInput<T>({
                         {showRemoveColumn ? (
                           <div
                             {...mergeProps(
-                              // Opacity only: Remove and the reorder handle keep
-                              // their places, so the fields never shift when
-                              // they appear.
-                              getContentRevealProps({isLayoutPreserved: true}),
+                              // Opacity only: Remove and a reorder handle at the
+                              // end keep their places, so the fields never
+                              // shift when they appear. A handle that always
+                              // shows shares this cell, so the cell then
+                              // always shows too.
+                              showEndHandle && isHandleAlwaysVisible
+                                ? {}
+                                : getContentRevealProps({
+                                    isLayoutPreserved: true,
+                                  }),
                               stylex.props(
                                 styles.controlCell,
                                 styles.removeControlCell,
@@ -1194,7 +1377,7 @@ export function ListInput<T>({
                               data-list-input-remove=""
                               onClick={() => handleRemove(item)}
                             />
-                            {Handle != null && hasHandle ? (
+                            {showEndHandle && Handle != null && hasHandle ? (
                               // Named "Reorder guest 2", like Remove.
                               <Handle
                                 label={t('@astryx.listInput.itemName', {
@@ -1214,7 +1397,11 @@ export function ListInput<T>({
                             message={itemStatus.message}
                             variant="detached"
                             data-list-input-item-status=""
-                            xstyle={[styles.itemStatus, contentGridStyle]}
+                            xstyle={[
+                              styles.itemStatus,
+                              contentGridStyle,
+                              statusAfterHandle,
+                            ]}
                           />
                         ) : null}
                       </div>

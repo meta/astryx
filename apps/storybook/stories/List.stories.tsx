@@ -11,7 +11,10 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {createSwipe} from '@astryxdesign/core/Swipe';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
@@ -938,19 +941,25 @@ function ReorderDemo({
   initial,
   pinned = [],
   edge,
+  listStyle,
+  handle,
 }: {
   initial: ReadonlyArray<string>;
   pinned?: ReadonlyArray<string>;
-  edge?: 'padded' | 'flush';
+  edge?: (typeof EDGES)[number];
+  listStyle?: 'decimal';
+  handle?: ReorderHandle;
 }) {
   const [rows, setRows] = useState(initial);
   return (
     <List
       hasDividers
       edge={edge}
+      listStyle={listStyle}
       reorderable={createReorderable({
         onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
         isReorderable: key => !pinned.includes(key as string),
+        handle,
       })}>
       {rows.map(label => (
         <ListItem key={label} itemKey={label} label={label} />
@@ -983,6 +992,41 @@ export const Reorderable: Story = {
   },
 };
 
+type ReorderHandleArgs = {
+  placement: 'start' | 'end';
+  visibility: 'always' | 'hover';
+};
+
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {placement: 'end', visibility: 'always'},
+  argTypes: {
+    placement: {control: 'inline-radio', options: ['end', 'start']},
+    visibility: {control: 'inline-radio', options: ['always', 'hover']},
+  },
+  render: ({visibility, placement}) => (
+    <ReorderDemo
+      initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash']}
+      pinned={['Trash']}
+      handle={{visibility, placement}}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`createReorderable`'s `handle` option. `placement` puts each " +
+          "handle at its row's end, the default, or its start. List's " +
+          'handles always show, each in a place of its own. With ' +
+          "`visibility: 'hover'`, the handle shows while its row is hovered " +
+          "or holds the focus, and hangs outside the row's content, so the " +
+          'content keeps its place; on a touch screen it then shows in the ' +
+          'row. Trash stays put, so it has no handle; at the start it keeps ' +
+          'the handles’ room.',
+      },
+    },
+  },
+};
+
 export const ReorderFlush: Story = {
   render: () => (
     <ReorderDemo
@@ -996,6 +1040,52 @@ export const ReorderFlush: Story = {
         story:
           'With `edge="flush"` the rows have no side padding, so each ' +
           "reorder handle ends at the row's edge, inside the list.",
+      },
+    },
+  },
+};
+
+/**
+ * Reorderable lists in Cards, one per edge treatment, and a numbered list.
+ */
+export const ReorderInCard: Story = {
+  render: () => (
+    <div {...stylex.props(edgeStoryStyles.grid)}>
+      {EDGES.map(edge => (
+        <Card key={edge} data-edge={edge}>
+          <VStack gap={3}>
+            <Heading level={3}>{`edge="${edge}"`}</Heading>
+            <ReorderDemo
+              initial={['Inbox', 'Sent', 'Drafts']}
+              edge={edge}
+              handle={{placement: 'start', visibility: 'hover'}}
+            />
+          </VStack>
+        </Card>
+      ))}
+      <Card data-edge="numbered">
+        <VStack gap={3}>
+          <Heading level={3}>listStyle="decimal"</Heading>
+          <ReorderDemo
+            initial={['Inbox', 'Sent', 'Drafts']}
+            pinned={['Sent']}
+            listStyle="decimal"
+            handle={{placement: 'start', visibility: 'hover'}}
+          />
+        </VStack>
+      </Card>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "With `handle: {placement: 'start', visibility: 'hover'}`, a " +
+          "handle shows on hover and hangs before its row's text. The list " +
+          "takes that room from the card's padding, and its rows move in by " +
+          'the room the padding lacks, so the card never cuts a handle. ' +
+          "Under outset and bleed, whose rows reach the card's padding " +
+          'edge, and after a list marker, the handle sits in its row.',
       },
     },
   },

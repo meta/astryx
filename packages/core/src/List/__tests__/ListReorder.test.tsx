@@ -22,8 +22,9 @@
  *   object on two. A mouse drags past the slop, and a drag's click leaves the
  *   mode alone. A new object keeps the mode, and the next move calls the
  *   latest callback. One object serves two lists apart. The reorder adds one
- *   element to a row and no listener to a row or handle. A List without it
- *   loads no reorder module
+ *   element to a row and no listener to a row or handle. The object's
+ *   `handle` option places it at a row's end, by default, or its start, and
+ *   reveals it on hover. A List without it loads no reorder module
  * @position Tests for List/listReorderEngine.tsx, List/ListReorderHandle.tsx
  *   and reorderable/createReorderable.ts
  */
@@ -57,6 +58,7 @@ import {
 } from '../../reorderable/createReorderable';
 import {DRAG_SLOP} from '../../DateInput/usePointerDragScroll';
 import {useAnnounce} from '../../hooks/useAnnounce';
+import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {LayerDepthProvider} from '../../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../../Layer/useLayerDismissal';
 import {animatorFor} from '../../motion/animator';
@@ -547,6 +549,138 @@ describe('List reorderable', () => {
     expect(screen.queryByRole('button', {name: 'Reorder Trash'})).toBeNull();
     expect(handleOf('Inbox')).toBeInTheDocument();
     expect(trash.outerHTML).toBe(before);
+  });
+
+  it("starts each row with its handle with handle.placement 'start': the row's own child, before its slots", () => {
+    render(
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {placement: 'start'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem itemKey="sent" label="Sent" startContent={<span>S</span>} />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    expect(inbox.firstElementChild).toBe(handleOf('Inbox'));
+    expect(sent.firstElementChild).toBe(handleOf('Sent'));
+    // The end slot keeps only the end content.
+    expect(inbox.lastElementChild).toHaveTextContent('3');
+    expect(inbox.lastElementChild?.contains(handleOf('Inbox'))).toBe(false);
+  });
+
+  it("keeps the handle at the end by default: in the end slot with end content, else the row's own last child", () => {
+    render(
+      <List reorderable={createReorderable({onReorder: () => {}})}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem itemKey="sent" label="Sent" />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    expect(handleOf('Inbox').parentElement).not.toBe(inbox);
+    expect(inbox.lastElementChild?.contains(handleOf('Inbox'))).toBe(true);
+    expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+    expect(sent.lastElementChild).toBe(handleOf('Sent'));
+  });
+
+  it("puts the handle after the list marker with handle.placement 'start'", () => {
+    render(
+      <List
+        listStyle="disc"
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {placement: 'start'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const marker = inbox.firstElementChild as HTMLElement;
+    expect(marker.contains(handleOf('Inbox'))).toBe(false);
+    expect(
+      marker.compareDocumentPosition(handleOf('Inbox')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps its neighbours' handle room at the start in a row that stays put, and no room at the end", () => {
+    const classes = (row: HTMLElement) =>
+      row.getAttribute('class')?.split(/\s+/).sort() ?? [];
+    const withoutClasses = (html: string) =>
+      html.replace(/ class="[^"]*"/g, '');
+    const rows = (placement?: 'start' | 'end') => (
+      <List
+        reorderable={
+          placement == null
+            ? undefined
+            : createReorderable({
+                onReorder: () => {},
+                isReorderable: key => key !== 'trash',
+                handle: {placement},
+              })
+        }>
+        <ListItem itemKey="inbox" label="Inbox" />
+        <ListItem itemKey="trash" label="Trash" />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const trash = screen.getByText('Trash').closest('li') as HTMLElement;
+    const plain = trash.outerHTML;
+    const plainClasses = classes(trash);
+    rerender(rows('end'));
+    expect(classes(trash)).toEqual(plainClasses);
+    rerender(rows('start'));
+    expect(classes(trash)).not.toEqual(plainClasses);
+    // Only its classes change.
+    expect(withoutClasses(trash.outerHTML)).toBe(withoutClasses(plain));
+  });
+
+  it("always shows the handle by default; with handle.visibility 'hover' it fades with its row", () => {
+    // The reveal's fade, without its opacity: the tokens a shown and a
+    // fading reveal share.
+    const {result} = renderHook(() => useContainerReveal());
+    const tokens = (props: {className?: string}) =>
+      props.className?.split(/\s+/).filter(Boolean) ?? [];
+    const fading = tokens(
+      result.current.getContentRevealProps({isLayoutPreserved: true}),
+    );
+    const shown = tokens(
+      result.current.getContentRevealProps({
+        isLayoutPreserved: true,
+        forceVisibility: 'shown',
+      }),
+    );
+    const fade = fading.filter(token => shown.includes(token));
+    const container = tokens(result.current.getContainerProps());
+    expect(fade.length).toBeGreaterThan(0);
+    const rows = (visibility?: 'always' | 'hover') => (
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {visibility},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>
+    );
+    const classes = (element: Element | null) =>
+      element?.getAttribute('class')?.split(/\s+/) ?? [];
+    const {rerender} = render(rows());
+    const inbox = screen.getByText('Inbox').closest('li');
+    expect(classes(handleOf('Inbox'))).not.toEqual(
+      expect.arrayContaining(fade),
+    );
+    rerender(rows('always'));
+    expect(classes(handleOf('Inbox'))).not.toEqual(
+      expect.arrayContaining(fade),
+    );
+    rerender(rows('hover'));
+    expect(classes(handleOf('Inbox'))).toEqual(expect.arrayContaining(fade));
+    // The row is the reveal container. Hidden, the handle keeps its tab stop.
+    expect(classes(inbox)).toEqual(expect.arrayContaining(container));
+    expect(handleOf('Inbox')).not.toHaveAttribute('tabindex', '-1');
   });
 
   it('keeps a row without an item key in place, and warns in development when no row has one', () => {

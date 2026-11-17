@@ -112,6 +112,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   and crossing (FR12).
 - Its rows' menus attaching to the row's own `<li>` (FR13); the More actions
   button, focus return, and a plain row's press paint are open (OQ2).
+- The reorder handle test, `isReorderHandle`, internal to Core and reached
+  through `@astryxdesign/core/internal/reorder`. It tells whether an element
+  is a reorder handle, so a Lab collection that puts the handle beside its
+  own controls tells them apart: ListInput's field focus skips the handle.
 
 **Does not own / non-goals**
 
@@ -243,11 +247,25 @@ Consumer migration instructions belong in consumer docs and release notes.
   `componentIcons['list-reorder-handle']`; with no entry, the grip is the
   `drag` icon at the `sm` size (`spec:AST-103` DEC-7). The slot's size
   changes only the icon.
-- `spec:AST-103` owns reordering. List is its first adopter: it
+- `spec:AST-103` owns reordering. List adopts it: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one element reordering adds to a row (`spec:AST-103` FR5),
+  at its trailing edge, or at its leading edge when the reorderable's
+  `handle.placement` is `'start'`. The handle always shows and takes its
+  place in the row, unless `handle.visibility` is `'hover'`. Then, where
+  the primary pointer is fine, it shows while its row is hovered or holds the
+  focus, and hangs outside the row's content with no width, so the content
+  keeps its place. A reorderable list pads that room on that edge and
+  reaches into its host's padding by as much of it as the padding holds, so
+  the FR9 clip and a clipping host keep the handles; the rows move in only
+  by the room the padding lacks. Under a coarse pointer the handle takes its
+  place in the row, as it does after a list marker at the leading edge and
+  under `outset` and `bleed`, whose rows reach the host's padding edge.
+  Hidden, it keeps its tab stop. At the leading edge, a row that stays put
+  keeps the place its neighbours' handles take, so the labels line up. The
+  layout ships with the reorderable object (`spec:AST-103` FR2). The reorder
+  controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 

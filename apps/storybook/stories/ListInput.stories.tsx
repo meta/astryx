@@ -20,7 +20,10 @@ import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {Selector} from '@astryxdesign/core/Selector';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {pixel, proportional} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -202,10 +205,14 @@ function createTagColumns(
  */
 function useRecordReorder<T extends {id: string}>(
   setRecords: Dispatch<SetStateAction<T[]>>,
+  handle?: ReorderHandle,
 ) {
+  const visibility = handle?.visibility;
+  const placement = handle?.placement;
   return useMemo(
     () =>
       createReorderable({
+        handle: {visibility, placement},
         onReorder: ({key, to}: {key: string | number; to: number}) =>
           setRecords(current => {
             const moved = current.find(record => record.id === key);
@@ -216,13 +223,19 @@ function useRecordReorder<T extends {id: string}>(
             return [...rest.slice(0, to), moved, ...rest.slice(to)];
           }),
       }),
-    [setRecords],
+    [setRecords, visibility, placement],
   );
 }
 
-function TagOptionsExample({isReorderable}: {isReorderable?: boolean}) {
+function TagOptionsExample({
+  isReorderable,
+  handle,
+}: {
+  isReorderable?: boolean;
+  handle?: ReorderHandle;
+}) {
   const [tags, setTags] = useState(INITIAL_TAGS);
-  const reorderable = useRecordReorder(setTags);
+  const reorderable = useRecordReorder(setTags, handle);
   const {isFieldTouched, markFieldTouched} = useTouchedFields();
   const columns = useMemo(
     () => createTagColumns(markFieldTouched),
@@ -271,6 +284,23 @@ function TagOptionsExample({isReorderable}: {isReorderable?: boolean}) {
     />
   );
 }
+
+type ReorderHandleArgs = {
+  placement: 'start' | 'end';
+  visibility: 'always' | 'hover';
+};
+
+/** The reorderable's `handle` option: the handle's edge and visibility. */
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {placement: 'end', visibility: 'hover'},
+  argTypes: {
+    placement: {control: 'inline-radio', options: ['end', 'start']},
+    visibility: {control: 'inline-radio', options: ['always', 'hover']},
+  },
+  render: ({visibility, placement}) => (
+    <TagOptionsExample isReorderable handle={{visibility, placement}} />
+  ),
+};
 
 /** Controlled tag options with validation at list, item, and field scope. */
 export const TagOptions: Story = {
