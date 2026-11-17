@@ -736,3 +736,26 @@ describe('CircularProgress', () => {
     });
   });
 });
+
+describe('CircularProgress neutral and disabled colors', () => {
+  // The disabled text role sits close to the track's own color, so a neutral
+  // or disabled ring fills with the secondary text role on the muted
+  // background, which reaches 3:1 in every bundled theme and mode.
+  it.each([[{variant: 'neutral'} as const], [{isDisabled: true} as const]])(
+    'draws %o in secondary text on the muted background',
+    props => {
+      const {container} = render(
+        <CircularProgress value={60} label="Progress" {...props} />,
+      );
+      const strokes = Array.from(container.querySelectorAll('*')).map(
+        element => getComputedStyle(element).stroke,
+      );
+      const uses = (token: string) =>
+        strokes.some(stroke => stroke.includes(token));
+      expect(uses('--color-background-muted')).toBe(true);
+      expect(uses('--color-text-secondary')).toBe(true);
+      expect(uses('--color-track')).toBe(false);
+      expect(uses('--color-text-disabled')).toBe(false);
+    },
+  );
+});

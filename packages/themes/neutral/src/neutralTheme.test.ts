@@ -637,3 +637,26 @@ describe('neutral touch + narrow type pin', () => {
     );
   });
 });
+
+describe('neutral progress track', () => {
+  // A neutral or disabled bar fills with the secondary text color, so the
+  // track keeps that fill at the 3:1 non-text floor in both modes while it
+  // still stands apart from the surface.
+  const {light, dark} = neutralPalettes.neutral;
+  it('is the mapped track in both modes', () => {
+    expect(neutralTheme.components?.['progress-bar']?.base).toMatchObject({
+      '--color-background-muted': lightDark(light[85], dark[30]),
+    });
+  });
+
+  it.each([
+    {name: 'light', track: light[85], fill: light[30], surface: light[100]},
+    {name: 'dark', track: dark[30], fill: dark[65], surface: dark[15]},
+  ])(
+    'keeps a secondary-text fill at 3:1 in $name mode',
+    ({track, fill, surface}) => {
+      expect(contrastRatio(fill, track)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(track, surface)).toBeGreaterThanOrEqual(1.15);
+    },
+  );
+});

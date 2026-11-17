@@ -497,10 +497,9 @@ describe('ProgressBar', () => {
       );
     });
 
-    it('keeps one plain foreground on both sides for neutral and disabled bars', () => {
-      // The neutral/disabled fill is the muted gray — it carries no semantic
-      // weight and has no on-token, so a mark on it takes the same plain
-      // foreground it would have out on the track.
+    it('gives a neutral or disabled bar a surface-colored mark on the fill', () => {
+      // The neutral/disabled fill is the secondary text color, so a mark on
+      // it takes the surface color, not the foreground it has on the track.
       for (const props of [
         {variant: 'neutral'} as const,
         {isDisabled: true} as const,
@@ -519,17 +518,16 @@ describe('ProgressBar', () => {
         const marks = container.querySelectorAll<HTMLElement>(MARK);
         expect(marks[0]).toHaveAttribute('data-placement', 'fill');
         expect(marks[1]).toHaveAttribute('data-placement', 'track');
-        expect(styleClasses(marks[0])).toBe(styleClasses(marks[1]));
+        expect(styleClasses(marks[0])).not.toBe(styleClasses(marks[1]));
         unmount();
       }
     });
 
-    it("dims a disabled bar's marks below a live one's", () => {
+    it("dims a disabled bar's track marks below a live one's", () => {
       // A disabled bar is deliberately low-emphasis (its label and value text
-      // drop to muted colors), so its marks step down to the secondary
-      // foreground on both sides rather than shouting over the grayed-out
-      // bar. A live neutral bar — same muted gray fill — keeps the
-      // full-contrast primary foreground.
+      // drop to muted colors), so its marks on the track step down to the
+      // secondary foreground. On the fill, both take the surface color, which
+      // reads on the shared fill.
       const MARKS = [
         {value: 20, label: 'On fill'},
         {value: 90, label: 'On track'},
@@ -542,7 +540,7 @@ describe('ProgressBar', () => {
       );
       const liveMarks = live.querySelectorAll<HTMLElement>(MARK);
       const offMarks = off.querySelectorAll<HTMLElement>(MARK);
-      expect(styleClasses(offMarks[0])).not.toBe(styleClasses(liveMarks[0]));
+      expect(styleClasses(offMarks[0])).toBe(styleClasses(liveMarks[0]));
       expect(styleClasses(offMarks[1])).not.toBe(styleClasses(liveMarks[1]));
     });
 
@@ -1352,5 +1350,28 @@ describe('ProgressBar forced colors', () => {
     const css = getForcedColorsRules();
     expect(css).toContain('outline-style: solid;');
     expect(css).toContain('outline-color: canvastext;');
+  });
+});
+
+describe('ProgressBar fill colors', () => {
+  // A fill reads at 3:1 on the track only in roles a theme sets to read on
+  // its surfaces, so status fills take the status text roles and neutral and
+  // disabled fills take the secondary text role.
+  function fillColor(props: Partial<React.ComponentProps<typeof ProgressBar>>) {
+    render(<ProgressBar value={60} label="Progress" {...props} />);
+    const fill = screen.getByRole('progressbar')
+      .firstElementChild as HTMLElement;
+    return getComputedStyle(fill).backgroundColor;
+  }
+
+  it.each([
+    [{variant: 'accent'} as const, '--color-accent'],
+    [{variant: 'success'} as const, '--color-text-success'],
+    [{variant: 'warning'} as const, '--color-text-warning'],
+    [{variant: 'error'} as const, '--color-text-error'],
+    [{variant: 'neutral'} as const, '--color-text-secondary'],
+    [{isDisabled: true} as const, '--color-text-secondary'],
+  ])('fills %o with %s', (props, token) => {
+    expect(fillColor(props)).toContain(token);
   });
 });

@@ -301,11 +301,13 @@ const variantStyles = stylex.create({
   error: {
     stroke: colorVars['--color-text-error'],
   },
+  // The secondary text role reaches 3:1 on the neutral track in every bundled
+  // theme and mode; the disabled text role is close to the track's own color.
   neutral: {
-    stroke: colorVars['--color-text-disabled'],
+    stroke: colorVars['--color-text-secondary'],
   },
   disabled: {
-    stroke: colorVars['--color-text-disabled'],
+    stroke: colorVars['--color-text-secondary'],
   },
 });
 
@@ -323,7 +325,7 @@ const trackVariantStyles = stylex.create({
     stroke: colorVars['--color-error-muted'],
   },
   neutral: {
-    stroke: colorVars['--color-track'],
+    stroke: colorVars['--color-background-muted'],
   },
 });
 

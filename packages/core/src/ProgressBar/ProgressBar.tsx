@@ -129,8 +129,9 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * Target marks drawn on the track at fixed points in the same `0..max`
    * scale as `value` — e.g. a goal line. Marks stay visible whether progress
    * is below or past them, and take their color from what they sit on: a mark
-   * inside the filled area uses the fill variant's on-color (on-accent,
-   * on-warning, on-error, …), while a mark still out on the bare track uses
+   * inside the filled area uses the color that reads on the fill (on-accent
+   * on an accent fill, the surface color on the others), while a mark still
+   * out on the bare track uses
    * `--color-text-primary` (`--color-text-secondary` on a disabled bar, which
    * dims everything it draws). Each mark's required `label` names it for
    * assistive tech and is revealed via a `Tooltip` on hover/focus. Ignored when
@@ -435,20 +436,27 @@ const variantStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-accent'],
   },
+  // A status fill takes the status text role, which every theme sets to read
+  // on its surfaces. The bright status roles fall to about 1:1 on a light
+  // track in some themes; the text roles reach 3:1 on the track in every
+  // bundled theme and mode.
   success: {
-    backgroundColor: colorVars['--color-success'],
+    backgroundColor: colorVars['--color-text-success'],
   },
   warning: {
-    backgroundColor: colorVars['--color-warning'],
+    backgroundColor: colorVars['--color-text-warning'],
   },
   error: {
-    backgroundColor: colorVars['--color-error'],
+    backgroundColor: colorVars['--color-text-error'],
   },
+  // The secondary text role reaches 3:1 on the track in every bundled theme
+  // and mode. The disabled text role does not: it is the track's own color in
+  // some themes.
   neutral: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
 });
 
@@ -456,32 +464,26 @@ const variantStyles = stylex.create({
 // on-color that pairs with the fill's own variant color — the same pairing
 // Badge uses for solid semantic backgrounds.
 //
-// `neutral` and `disabled` both fill with the muted `--color-text-disabled`
-// gray, which carries no semantic weight and has no dedicated on-token, so
-// they fall back to a plain foreground. They pick different ones: a `neutral`
-// bar is live, so its mark keeps the full-contrast `--color-text-primary` a
-// mark uses out on the track; a `disabled` bar is deliberately low-emphasis —
-// its own label and value text drop to muted colors — so its mark steps down
-// to `--color-text-secondary` rather than becoming the loudest thing on a
-// grayed-out component.
+// Every fill but `accent` is a text role, which a theme sets to read on its
+// surface, so a mark on it takes the surface color.
 const markOnFillStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-on-accent'],
   },
   success: {
-    backgroundColor: colorVars['--color-on-success'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   warning: {
-    backgroundColor: colorVars['--color-on-warning'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   error: {
-    backgroundColor: colorVars['--color-on-error'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   neutral: {
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-secondary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
 });
 
