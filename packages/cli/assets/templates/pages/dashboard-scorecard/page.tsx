@@ -863,7 +863,7 @@ export default function ExecutiveReviewPage() {
                 title="Trends"
                 hint="Current vs. prior period · trailing 12 weeks"
               />
-              <Grid columns={{minWidth: 330, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 330, max: 4, repeat: 'fit'}} gap={3}>
                 {TRENDS.map(trend => (
                   <TrendChart key={trend.key} trend={trend} />
                 ))}
