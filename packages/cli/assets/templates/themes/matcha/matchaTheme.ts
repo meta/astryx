@@ -308,6 +308,13 @@ export const matchaTheme = defineTheme({
     },
     // Secondary text on a coloured or muted card steps to the nearest neutral
     // stop that reads at 4.5:1 on that fill.
+    // Secondary text on a pressed nav item over the page takes the next
+    // stop in light, which reads on the pressed fill.
+    'top-nav-item': {
+      base: {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+    },
     card: {
       base: {
         borderRadius: 'var(--radius-page)',
