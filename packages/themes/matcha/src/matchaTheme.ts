@@ -323,7 +323,7 @@ export const matchaTheme = defineTheme({
         '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:green': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[75]})`,
       },
       'variant:orange': {
         '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
@@ -338,7 +338,7 @@ export const matchaTheme = defineTheme({
         '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
       },
       'variant:teal': {
-        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[75]})`,
       },
       'variant:yellow': {
         '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[75]})`,

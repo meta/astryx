@@ -37,12 +37,10 @@ const lightDark = (light: string, dark: string): string =>
 // of its own sets again (OWN_FILL_RULES).
 /**
  * Secondary text on the accent tint (a selected row, a dropzone's hint, a
- * numbered citation): the nearest stop that reads at 4.5:1 on the tint over
- * the page, a card and the muted fill. A coloured card sets its own, dark
- * like the rest of its ink; the parts that paint a fill of their own set it
- * back.
+ * numbered citation): the nearest stop that reads on the tint over the page,
+ * a card and the muted fill. Inside a coloured card, a selected row and a
+ * numbered citation take a dark stop like the rest of the card's ink.
  */
-const LIFTED_SECONDARY = '--astryx-theme-butter-lifted-secondary';
 const LIFTED_ON_PAGE = lightDark(neutral.light[40], neutral.dark[85]);
 const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[40]);
 
@@ -50,7 +48,6 @@ const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
   '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
-  [LIFTED_SECONDARY]: LIFTED_ON_PAGE,
 };
 
 /** Core's selector for a striped table's painted rows. */
@@ -135,6 +132,37 @@ function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
   }
   return out;
 }
+
+/** The coloured card variants: a pastel fill with dark ink in both modes. */
+const COLOURED_CARDS = [
+  'blue',
+  'cyan',
+  'gray',
+  'green',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'teal',
+  'yellow',
+];
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part: string, key: string): string {
+  if (key === 'base') return `.astryx-${part}`;
+  const [name, value = name] = key.split(':');
+  return `.astryx-${part}[data-${name}="${value}"]`;
+}
+
+/**
+ * Inside a coloured card and not inside a part with a fill of its own
+ * there: where a part draws on the card's pastel fill.
+ */
+const IN_COLOURED_CARD = `:where(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"] *`,
+).join(', ')}):not(:where(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
+  .map(([part, key]) => `${ruleSelector(part, key)} *`)
+  .join(', ')}))`;
 
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
@@ -231,7 +259,6 @@ const INPUT_STATUS_VARS = {
 } as const;
 
 export const butterTheme = defineTheme({
-  localTokens: {[LIFTED_SECONDARY]: LIFTED_ON_PAGE},
   name: 'butter',
 
   typography: {
@@ -472,22 +499,25 @@ export const butterTheme = defineTheme({
     // both.
     item: {
       selected: {
-        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
       },
     },
     'tree-list-item': {
       selected: {
-        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
       },
     },
     citation: {
       'variant:number': {
-        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
       },
     },
     'file-input': {
       'mode:dropzone': {
-        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
+        '--color-text-secondary': LIFTED_ON_PAGE,
       },
     },
     // TopNav uses Butter's blue accent: the heading and the selected item are
@@ -614,61 +644,51 @@ export const butterTheme = defineTheme({
       },
       'variant:blue': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:cyan': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:gray': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:green': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:orange': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:pink': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:purple': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:red': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:teal': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:yellow': {
         '--color-text-accent': accent.light[35],
-        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },

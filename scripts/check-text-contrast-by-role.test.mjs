@@ -89,6 +89,26 @@ function rule(theme, part, key = 'base') {
   return theme.components?.[part]?.[key] ?? {};
 }
 
+/**
+ * The nested selector blocks of a rule that apply inside a card of a
+ * variant: those whose selector names that card (`.astryx-card[data-variant=
+ * "blue"]`) outside a `:not()`, merged.
+ */
+function insideCard(block, variant) {
+  return Object.assign(
+    {},
+    ...Object.entries(block)
+      .filter(
+        ([key]) =>
+          key.startsWith(':') &&
+          key
+            .split(':not(')[0]
+            .includes(`.astryx-card[data-variant="${variant}"]`),
+      )
+      .map(([, value]) => value),
+  );
+}
+
 /** The tokens a theme's card rule sets for a variant, over its base rule. */
 function cardOverrides(theme, variant) {
   return {...rule(theme, 'card'), ...rule(theme, 'card', `variant:${variant}`)};
@@ -192,54 +212,66 @@ function rows() {
         const card = themeTokens(theme, cardOverrides(theme, variant));
         const cardFill = at(card, fill);
         if (cardFill == null) continue;
-        const cardLayers = [cardFill, body];
-        roles(`${variant} card`, card, cardLayers);
-        for (const [name, {fill: inner, own, color}] of Object.entries(
-          NESTED,
-        )) {
-          const nested = themeTokens(theme, {
-            ...cardOverrides(theme, variant),
-            ...own(theme),
-          });
-          const layers = inner
-            ? [at(nested, inner), ...cardLayers]
-            : cardLayers;
-          roles(`${name} in a ${variant} card`, nested, layers);
-          // Text whose color an ancestor fixes (a table sets it on its
-          // root) reads the card's ink, unless the part sets `color` again.
-          if (color) {
-            const set = own(theme).color;
-            push({
-              ...base,
-              where: `${name} in a ${variant} card (${color})`,
-              role: 'color',
-              text: set
-                ? resolveColor(set, nested, modeIndex)
-                : at(card, '--color-text-primary'),
-              layers,
+        // A card sits on the page or on a surface: each is a ground.
+        for (const [on, ground] of [
+          ['', body],
+          [' on a surface', at(page, '--color-background-surface')],
+        ]) {
+          const cardLayers = [cardFill, ground];
+          const inCard = `a ${variant} card${on}`;
+          roles(`${variant} card${on}`, card, cardLayers);
+          for (const [name, {fill: inner, own, color}] of Object.entries(
+            NESTED,
+          )) {
+            const nested = themeTokens(theme, {
+              ...cardOverrides(theme, variant),
+              ...own(theme),
             });
+            const layers = inner
+              ? [at(nested, inner), ...cardLayers]
+              : cardLayers;
+            roles(`${name} in ${inCard}`, nested, layers);
+            // Text whose color an ancestor fixes (a table sets it on its
+            // root) reads the card's ink, unless the part sets `color` again.
+            if (color) {
+              const set = own(theme).color;
+              push({
+                ...base,
+                where: `${name} in ${inCard} (${color})`,
+                role: 'color',
+                text: set
+                  ? resolveColor(set, nested, modeIndex)
+                  : at(card, '--color-text-primary'),
+                layers,
+              });
+            }
           }
-        }
-        // Selected rows and a numbered citation inside the card: the accent
-        // tint over the card fill. (A dropzone paints its own field fill;
-        // while a file is dragged over it, Core replaces that fill with the
-        // tint and gives themes no rule for the state.)
-        for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
-          if (part === 'file-input') continue;
-          const tokens = themeTokens(theme, {
-            ...cardOverrides(theme, variant),
-            ...rule(theme, part),
-            ...rule(theme, part, key),
-          });
-          const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
-          for (const role of ['--color-text-primary', '--color-text-secondary'])
-            push({
-              ...base,
-              where: `${where} in a ${variant} card`,
-              role,
-              text: at(tokens, role),
-              layers,
+          // Selected rows and a numbered citation inside the card: the
+          // accent tint over the card fill, with the part's rule for inside
+          // this card. (A dropzone paints its own field fill; while a file
+          // is dragged over it, Core replaces that fill with the tint and
+          // gives themes no rule for the state.)
+          for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
+            if (part === 'file-input') continue;
+            const tokens = themeTokens(theme, {
+              ...cardOverrides(theme, variant),
+              ...rule(theme, part),
+              ...rule(theme, part, key),
+              ...insideCard(rule(theme, part, key), variant),
             });
+            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
+            for (const role of [
+              '--color-text-primary',
+              '--color-text-secondary',
+            ])
+              push({
+                ...base,
+                where: `${where} in ${inCard}`,
+                role,
+                text: at(tokens, role),
+                layers,
+              });
+          }
         }
       }
       for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
