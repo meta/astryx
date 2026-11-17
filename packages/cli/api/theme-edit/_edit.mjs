@@ -46,7 +46,6 @@ import {
   CSS_PSEUDO_ELEMENTS,
   ONE_COLON_PSEUDO_ELEMENTS,
   DIALS,
-  FAMILIES,
   FONT_ROLES,
   HEADING_TRACKING,
   HEADING_WEIGHTS,
@@ -151,6 +150,7 @@ import {
   OPEN_SECTION,
   FOLLOWS,
   baseRedraws,
+  groupsOf,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -2070,8 +2070,8 @@ async function labelRead(scope, cwd) {
   const target = await openProject(cwd)
     .then(p => p.target)
     .catch(() => null);
-  if (target?.has(word) || FAMILIES[word]) return {on: word};
-  const parts = [...(target?.keys() ?? []), ...Object.keys(FAMILIES)];
+  if (target?.has(word) || groupsOf(null)[word]) return {on: word};
+  const parts = [...(target?.keys() ?? []), ...Object.keys(groupsOf(null))];
   if (parts.filter(n => typoNear(word, n)).length === 1)
     return {on: scope.label.trim()};
   // A state (`(hover)`) is that state.
@@ -6408,7 +6408,7 @@ async function changeOnce(
             // the later setting wins, whichever way Core writes it.
             (x.on === s.on ||
               (s.on != null &&
-                (FAMILIES[s.on] ?? []).includes(
+                (groupsOf(ctx)[s.on] ?? []).includes(
                   /** @type {string} */ (x.on),
                 ))) &&
             x.when === s.when &&
@@ -6427,13 +6427,13 @@ async function changeOnce(
   data.settings = data.settings.filter(x => !longhands.includes(x));
   // A group setting covers part settings made before it for its members.
   const covers =
-    sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
+    sub === 'set' && s.source === 'dial' && s.on && groupsOf(ctx)[s.on]
       ? data.settings.filter(
           x =>
             x !== s &&
             x.thing === s.thing &&
             x.on &&
-            FAMILIES[/** @type {string} */ (s.on)].includes(x.on) &&
+            groupsOf(ctx)[/** @type {string} */ (s.on)].includes(x.on) &&
             (x.when ?? '') === (s.when ?? '') &&
             (x.state ?? '') === (s.state ?? ''),
         )
@@ -6899,7 +6899,7 @@ async function changeOnce(
     ...r.notes,
   ];
   const group = s.on
-    ? FAMILIES[s.on]
+    ? groupsOf(ctx)[s.on]
       ? s.on
       : parts.length > 1
         ? familyOf(s.on)
@@ -7433,7 +7433,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: !groupsOf(ctx)[s.on ?? ''] && AUTO_SPREAD.includes(group),
           }
         : null,
       changedTokens: lookCollapsed(r.changed, derivedStatusWords(data)).lines,

@@ -19,7 +19,6 @@ import {
   COLOR_PROPS,
   COMMON_PROPERTIES,
   DIALS,
-  FAMILIES,
   GROUPS,
   HOW,
   LIKE,
@@ -40,6 +39,7 @@ import {
   themeSourceParseError,
   themeSourceProblem,
   baseRedraws,
+  groupsOf,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -366,12 +366,12 @@ async function answer(subject, options, cwd) {
     const kind = listKind(key);
     return {kind: 'list', subject: '', ...(await listItems(kind, '', cwd))};
   }
-  if (Object.hasOwn(FAMILIES, key)) {
+  if (Object.hasOwn(groupsOf(ctx), key)) {
     return {
       kind: 'group',
       subject: t,
       group: key,
-      members: FAMILIES[key],
+      members: groupsOf(ctx)[key],
       spreads: AUTO_SPREAD.includes(key),
     };
   }
@@ -635,7 +635,7 @@ async function answer(subject, options, cwd) {
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
-      .map(p => (FAMILIES[p] ? FAMILIES[p][0] : p))
+      .map(p => (groupsOf(ctx)[p] ? groupsOf(ctx)[p][0] : p))
       .filter(p => ctx.project.target.has(p))
       .map(p => {
         const toks = (groups.length ? groups : [null]).flatMap(g =>
@@ -680,7 +680,11 @@ async function answer(subject, options, cwd) {
   if (matchAsk && env.exists) {
     const q = draftAnswer(ctx, env, t.replace(matchAsk[0], ' '));
     const parts = q.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     if (parts.length) {
       const res = await resolvedTokens(ctx, env.slug).catch(() => null);
@@ -729,7 +733,11 @@ async function answer(subject, options, cwd) {
       h.aspects.some(a => a === 'background' || a === 'text'))
   ) {
     const parts = h.parts.flatMap(p =>
-      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+      groupsOf(ctx)[p]
+        ? groupsOf(ctx)[p]
+        : ctx.project.target.has(p)
+          ? [p]
+          : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
     // (A missed entry never says otherwise than the question: where the
@@ -1131,7 +1139,7 @@ function lookupKey(t, ctx) {
     .trim();
   if (/\s/.test(k)) return t;
   const known = (/** @type {string} */ x) =>
-    Object.hasOwn(FAMILIES, x) ||
+    Object.hasOwn(groupsOf(ctx), x) ||
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
@@ -1235,7 +1243,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     components,
     recorded,
     group,
-    groupMembers: group ? FAMILIES[group] : [],
+    groupMembers: group ? groupsOf(ctx)[group] : [],
     spreads: group ? AUTO_SPREAD.includes(group) : false,
     variants: C.variantValues(key),
     states,
@@ -1841,7 +1849,7 @@ async function listItems(kind, filter, cwd) {
   if (kind === 'groups')
     return {
       list: kind,
-      items: Object.entries(FAMILIES)
+      items: Object.entries(groupsOf(await context(cwd)))
         .filter(([k, v]) => f(k) || v.some(f))
         .map(([name, members]) => ({
           name,

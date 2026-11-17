@@ -1708,3 +1708,115 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
   }
   return {map: out, pairs: [...pairs.values()]};
 }
+
+/**
+ * The family roles the census shows, each read from the parts' own
+ * structure (their tags, states, resting fills, press overlays and their
+ * component's doc category), never from their names: a look set on one
+ * member of a role reaches the others.
+ * - `button-like`: drawn as a <button> with a press overlay and a box of
+ *   its own (a fill at rest in some variant, or a pressed state), never a
+ *   selectable item;
+ * - `overlays`: an Overlay component's own surface, filled with the
+ *   surface or popover color;
+ * - `option-rows`: a row (a <div> or <li>) clear at rest that is
+ *   highlighted as you move through a list, or pressed without being
+ *   selectable;
+ * - `selected-items`: a part with a selected (or active) state whose
+ *   selected look fills it;
+ * - `accent-fills`: a part filled with the accent at rest;
+ * - `inset-fields`: the inputs and the parts filled with the track color.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {{target: Map<string, any>, components: Record<string, any>}} project
+ * @param {string[]} inputs the inputs group's members
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields', string[]>}
+ */
+export function familyRoles(C, project, inputs = []) {
+  /** @type {Record<string, string[]>} */
+  const out = {
+    'button-like': [],
+    overlays: [],
+    'option-rows': [],
+    'selected-items': [],
+    'accent-fills': [],
+    'inset-fields': [],
+  };
+  /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
+  const values = (key, prop, keep) =>
+    Object.entries(C.MAP?.[key]?.at?.[prop] ?? {})
+      .filter(([cond]) => keep(cond))
+      .map(([, v]) => String(v).trim());
+  const CLEAR = /^(?:transparent|none|rgba\(0, ?0, ?0, ?0\))$/;
+  for (const [key, tg] of project.target) {
+    const rec = C.MAP?.[key];
+    if (!rec) continue;
+    const tags = [...(rec.tags ?? [])];
+    const states = [...(tg.states ?? []), ...Object.keys(rec.attrs ?? {})].map(
+      String,
+    );
+    const selectable = states.some(st => /^(?:selected|active)$/.test(st));
+    const highlighted = states.includes('highlighted');
+    const pressed = JSON.stringify(rec.at ?? {}).includes('data-astryx-press');
+    // (At rest: a condition of visual props only, no state (a state the
+    // docs name, an ARIA state, or a boolean attribute Core writes as its
+    // own name, selected="selected"), pseudo-class or inner element.)
+    const docStates = new Set((tg.states ?? []).map(String));
+    const rest = values(
+      key,
+      'background-color',
+      cond =>
+        !/[\s:[]/.test(cond) &&
+        (cond === 'always' ||
+          cond.split(',').every(kv => {
+            const [k, v] = kv.split('=');
+            return k !== v && !docStates.has(k) && !k.startsWith('aria-');
+          })),
+    );
+    const comp = project.components?.[tg.component];
+    const own = comp?.targets?.[0]?.className === `astryx-${key}`;
+    if (
+      tags.length &&
+      tags.every(t => t === 'button') &&
+      pressed &&
+      !selectable &&
+      !highlighted &&
+      (rest.some(v => !CLEAR.test(v)) || states.some(st => /pressed/i.test(st)))
+    )
+      out['button-like'].push(key);
+    if (
+      comp?.category === 'Overlay' &&
+      own &&
+      values(key, 'background-color', cond => !/[\s:[]/.test(cond)).some(v =>
+        /--color-background-(?:surface|popover)\b/.test(v),
+      )
+    )
+      out.overlays.push(key);
+    if (
+      tags.length &&
+      tags.every(t => t === 'div' || t === 'li') &&
+      rest.length > 0 &&
+      rest.every(v => CLEAR.test(v)) &&
+      (highlighted || (pressed && !selectable))
+    )
+      out['option-rows'].push(key);
+    if (
+      selectable &&
+      values(
+        key,
+        'background-color',
+        cond =>
+          /(?:^|,)(?:selected=selected|active=active)(?:,|$)/.test(cond) &&
+          !/[\s:[]/.test(cond),
+      ).some(v => !CLEAR.test(v))
+    )
+      out['selected-items'].push(key);
+    if (rest.some(v => /^var\(--color-accent\)$/.test(v)))
+      out['accent-fills'].push(key);
+    if (
+      inputs.includes(key) ||
+      rest.some(v => /^var\(--color-track\)$/.test(v))
+    )
+      out['inset-fields'].push(key);
+  }
+  return /** @type {any} */ (out);
+}

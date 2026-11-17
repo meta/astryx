@@ -20,8 +20,9 @@ import {
   loadTheme,
   readHistory,
   themeFiles,
+  groupsOf,
 } from './_settings.mjs';
-import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {GROUPS, LIKE, P} from './_tables.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   COLOR_IN_VALUE,
@@ -612,7 +613,7 @@ function lineWay(C, was, now, tw, tn, steps, intent, visible) {
     steps
       .map(st => st.on)
       .filter(Boolean)
-      .flatMap(x => FAMILIES[String(x)] ?? [String(x)]),
+      .flatMap(x => groupsOf(null)[String(x)] ?? [String(x)]),
   );
   if (changedTokens.size)
     for (const [part, info] of Object.entries(C.MAP ?? {}))
@@ -817,7 +818,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   const tn = ownTokens(now, base, ctx.project?.core);
   const C = ctx.C;
   /** @param {string} part */
-  const members = part => FAMILIES[part] ?? [part];
+  const members = part => groupsOf(ctx)[part] ?? [part];
   // A kept part, or one state or variant of it (`part@when|state|`).
   /** @type {Array<{part: string, prefix: string}>} */
   const keeps = intent.keep.flatMap(k => {

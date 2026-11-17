@@ -138,6 +138,7 @@ import {
   modesOf,
   dialNumber,
   dialValueFits,
+  groupsOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -847,7 +848,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
       if (
         s.on &&
         !t &&
-        !FAMILIES[s.on] &&
+        !groupsOf(ctx)[s.on] &&
         !(s.thing === 'font' && FONT_ROLES.includes(s.on))
       )
         return scope(`there is no part or group "${s.on}"`);
@@ -4134,7 +4135,10 @@ export function checkSetting(
         (thing.startsWith('--') && isColorToken(thing)) ||
         (partProperty &&
           /color|^background$|^fill$|^stroke$|shadow/.test(thing));
-      const parts = [...ctx.project.target.keys(), ...Object.keys(FAMILIES)];
+      const parts = [
+        ...ctx.project.target.keys(),
+        ...Object.keys(groupsOf(ctx)),
+      ];
       // A theme with one mode: its own mode's label is the value, as the
       // theme has no other; the other mode's label names a mode it lacks.
       const only = oneModeOfTheme(data);
@@ -4524,7 +4528,7 @@ export function partNamed(ctx, w) {
   const word = String(w).trim().toLowerCase().replace(/\s+/g, '-');
   return (
     [word, word.replace(/e?s$/, ''), word.replace(/s$/, '')].find(
-      x => x && (ctx.project.target.has(x) || FAMILIES[x]),
+      x => x && (ctx.project.target.has(x) || groupsOf(ctx)[x]),
     ) ?? null
   );
 }
@@ -4858,9 +4862,9 @@ function checkOne(
   // sub-part or a member of a group that spreads only when named), it asks
   // for what the change does anyway: the change is made, without it, and
   // said, so the escape always works.
-  if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
+  if (s.only && (!s.on || TARGET.has(s.on) || groupsOf(ctx)[s.on])) {
     const fam = s.on ? familyOf(s.on) : null;
-    if (!s.on || FAMILIES[s.on])
+    if (!s.on || groupsOf(ctx)[s.on])
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
@@ -4888,7 +4892,7 @@ function checkOne(
       },
     );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
-  if (s.on && !isRole && !FAMILIES[s.on]) {
+  if (s.on && !isRole && !groupsOf(ctx)[s.on]) {
     const t = TARGET.get(s.on);
     if (!t) {
       // Another case of a part or group, its class name copied from the
@@ -4919,16 +4923,16 @@ function checkOne(
         const words = partWords();
         const candidates = [
           ...TARGET.keys(),
-          ...Object.keys(FAMILIES),
+          ...Object.keys(groupsOf(ctx)),
           ...[...words]
-            .filter(([, on]) => TARGET.has(on) || FAMILIES[on])
+            .filter(([, on]) => TARGET.has(on) || groupsOf(ctx)[on])
             .map(([w]) => w),
         ].filter(n => n !== lower && n !== dashed);
         // The one typo ranker (closestOf). A hit that is a part or group
         // name is that name (`tabel` is table); a word that is no name is
         // read as its part (`sidebr` is side-nav).
         const isName = (/** @type {string} */ n) =>
-          TARGET.has(n) || Boolean(FAMILIES[n]);
+          TARGET.has(n) || Boolean(groupsOf(ctx)[n]);
         return [
           ...new Set(
             closestOf(dashed, candidates).map(n =>
@@ -4944,7 +4948,7 @@ function checkOne(
           w.replace(/(ch|sh|x|s)es$/, '$1'),
           w.replace(/s$/, ''),
         ])
-        .find(x => x !== lower && (TARGET.has(x) || FAMILIES[x]));
+        .find(x => x !== lower && (TARGET.has(x) || groupsOf(ctx)[x]));
       // Several parts named in one --on (`button, text-input`, `button/
       // text-input`, `button and text-input`, or spaces): one command per
       // part named, each checked, never a group that one word of the list
@@ -4952,16 +4956,19 @@ function checkOne(
       const listed = /,|\/|&|\band\b/.test(lower);
       // (Words with only spaces that name one part, `text inputs`, are
       // that part.)
-      if (!(TARGET.has(dashed) || FAMILIES[dashed]) && (listed || !singular)) {
+      if (
+        !(TARGET.has(dashed) || groupsOf(ctx)[dashed]) &&
+        (listed || !singular)
+      ) {
         const pieces = lower
           .split(/\s*(?:,|\/|&|\band\b)\s*|\s+/)
           .map(x => x.trim())
           .filter(Boolean);
         const partOf = (/** @type {string} */ w) =>
-          TARGET.has(w) || FAMILIES[w]
+          TARGET.has(w) || groupsOf(ctx)[w]
             ? w
             : ([w.replace(/ies$/, 'y'), w.replace(/s$/, '')].find(
-                x => x !== w && (TARGET.has(x) || FAMILIES[x]),
+                x => x !== w && (TARGET.has(x) || groupsOf(ctx)[x]),
               ) ?? null);
         const found = pieces.map(partOf);
         const parts = [...new Set(found.filter(x => x != null))];
@@ -4983,15 +4990,15 @@ function checkOne(
           );
       }
       const named =
-        TARGET.has(lower) || FAMILIES[lower]
+        TARGET.has(lower) || groupsOf(ctx)[lower]
           ? lower
-          : TARGET.has(dashed) || FAMILIES[dashed]
+          : TARGET.has(dashed) || groupsOf(ctx)[dashed]
             ? dashed
             : singular
               ? singular
               : typoParts.length === 1
                 ? typoParts[0]
-                : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
+                : byWord && (TARGET.has(byWord) || groupsOf(ctx)[byWord])
                   ? byWord
                   : null;
       // The page (the body behind every part) is painted by the app shell.
@@ -5021,7 +5028,7 @@ function checkOne(
       // part leads with the same command on that part.
       const near = nearest(s.on.toLowerCase().replace(/s$/, ''), [
         ...TARGET.keys(),
-        ...Object.keys(FAMILIES),
+        ...Object.keys(groupsOf(ctx)),
       ]);
       const typo = near.filter(n => typoOf(lower, n));
       refuse(
@@ -5219,7 +5226,7 @@ function checkOne(
       !unset &&
       s.on &&
       !String(s.thing).startsWith('--') &&
-      !FAMILIES[s.on] &&
+      !groupsOf(ctx)[s.on] &&
       /^(background(-color)?|color)$/.test(prop)
     ) {
       const rec = ctx.C.MAP[s.on];
@@ -5470,10 +5477,12 @@ function checkOne(
       );
   }
   // On a group, a variant or state must belong to at least one member.
-  if (s.on && FAMILIES[s.on] && (s.when || s.state)) {
+  if (s.on && groupsOf(ctx)[s.on] && (s.when || s.state)) {
     const members =
       /** @type {Array<[string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget]>} */ (
-        FAMILIES[s.on].map(m => [m, TARGET.get(m)]).filter(([, t]) => t)
+        (groupsOf(ctx)[s.on] ?? [])
+          .map(m => [m, TARGET.get(m)])
+          .filter(([, t]) => t)
       );
     // What the members have between them: their props, each prop's values,
     // their states. A typo or another case on the group is read as on one
@@ -6278,7 +6287,7 @@ function checkOne(
       const pastSpacing = (/** @type {[string, number]} */ [, k]) => {
         if (!s.on) return null;
         // (A group: its first member that reads a control height.)
-        const parts = FAMILIES[s.on] ?? [s.on];
+        const parts = groupsOf(ctx)[s.on] ?? [s.on];
         const token = parts
           .flatMap(p => C.partReads(p, 'size') ?? [])
           .map((/** @type {{token: string}} */ r) => r.token)
@@ -6980,7 +6989,7 @@ function checkOne(
       // or group, `link`) is no typo of another token's word (`pink`): the
       // name near by spelling is then no reading of it.
       const knownWord = (/** @type {string} */ w) =>
-        TARGET.has(w) || Boolean(FAMILIES[w]) || partWords().has(w);
+        TARGET.has(w) || Boolean(groupsOf(ctx)[w]) || partWords().has(w);
       const typedWords = thing.toLowerCase().replace(/^-+/, '').split('-');
       const near = nearest(thing, Object.keys(TOKENS)).filter(n => {
         const nearWords = n.replace(/^-+/, '').split('-');
@@ -7133,13 +7142,13 @@ function checkOne(
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
-        FAMILIES[s.on ?? ''] || (familyOf(s.on ?? '') && parts.length > 1),
+        groupsOf(ctx)[s.on ?? ''] || (familyOf(s.on ?? '') && parts.length > 1),
       );
       // A part with no record is judged by its group: refused when no
       // member that has a record reads the token, as the group form is.
       const fam = s.on ? familyOf(s.on) : null;
       if (!recorded.length && fam && !spread) {
-        const siblings = FAMILIES[fam].filter(t => C.MAP[t]);
+        const siblings = groupsOf(ctx)[fam].filter(t => C.MAP[t]);
         const famResults = siblings.map(
           t =>
             /** @type {[string, import('./_compiler.mjs').CheckFailure | null]} */ ([
