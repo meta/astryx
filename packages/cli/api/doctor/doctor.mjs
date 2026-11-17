@@ -1276,6 +1276,18 @@ function iconUseCommandOf(choice, variant) {
 }
 
 /**
+ * The main set the placeholder fixes name: the one `experimental.iconSet`
+ * names, else the only installed set; null when no main set is decided or
+ * icon features are off. The placeholder check, and the source scan it
+ * reads, run only when there is one.
+ * @param {DoctorContext['iconSets']} iconSets
+ * @returns {string | null}
+ */
+export function placeholderMainSet(iconSets) {
+  return iconSets?.choice.configured ?? iconSets?.choice.set?.name ?? null;
+}
+
+/**
  * The placeholder component for a missing icon, still in the project's own
  * source (AST-084): each file and the meanings it stands for, with the commands that give each a
  * real icon. Only a project where the icon feature gate is on, and whose
@@ -1285,7 +1297,7 @@ function iconUseCommandOf(choice, variant) {
  */
 export function checkIconPlaceholders(ctx) {
   const choice = ctx.iconSets?.choice;
-  const main = choice?.configured ?? choice?.set?.name;
+  const main = placeholderMainSet(ctx.iconSets);
   if (!choice || !main || ctx.iconPlaceholders == null) return null;
   const id = 'icon-placeholders';
   const label = 'Placeholder icons';
@@ -2645,9 +2657,9 @@ export async function runChecks(options = {}) {
       checkDocsProgressiveDisclosure(ctx),
     ),
   ];
-  // Only a project where icon features are on scans its source for
-  // placeholders.
-  if (iconSets) {
+  // Only a project where icon features are on and a main set is decided
+  // scans its source for placeholders: no other project gets the check.
+  if (placeholderMainSet(iconSets)) {
     try {
       ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
     } catch {

@@ -542,7 +542,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
             ],
             [
               '`astryx doctor`',
-              'In an app, the `icon-sets` check: fails when `experimental.iconSet` names a set, main or backup, that is not installed, was withdrawn (an invalid set, or one whose module does not resolve), or that two packages ship by that name, saying why; fails when more than one set is installed and the list leaves one out; fails when `experimental.iconVariant` names a variant the main set does not declare; and warns when another installed set was withdrawn. The `icon-placeholders` check warns while copied code uses the placeholder for a missing icon, naming each file and meaning. In your icon-set package, check with `astryx integration check` instead: plain `doctor` diagnoses an app.',
+              'In an app, the `icon-sets` check: fails when `experimental.iconSet` names a set, main or backup, that is not installed, was withdrawn (an invalid set, or one whose module does not resolve), or that two packages ship by that name, saying why; fails when more than one set is installed and the list leaves one out; fails when `experimental.iconVariant` names a variant the main set does not declare; and warns when another installed set was withdrawn. When a main set is decided (the one `experimental.iconSet` names, or the only installed set), the `icon-placeholders` check warns while copied code uses the placeholder for a missing icon, naming each file and meaning. In your icon-set package, check with `astryx integration check` instead: plain `doctor` diagnoses an app.',
             ],
             [
               'JSON types',
