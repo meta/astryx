@@ -87,7 +87,10 @@ describe('accessibility-audit --components contract', () => {
     const result = runAudit([], dir => {
       const storybook = path.join(dir, 'apps/storybook/dist');
       fs.mkdirSync(storybook, {recursive: true});
-      fs.writeFileSync(path.join(storybook, 'index.json'), JSON.stringify(index));
+      fs.writeFileSync(
+        path.join(storybook, 'index.json'),
+        JSON.stringify(index),
+      );
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(

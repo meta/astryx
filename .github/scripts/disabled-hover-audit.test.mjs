@@ -55,7 +55,9 @@ describe('selectStories', () => {
   });
 
   it('skips docs entries', () => {
-    expect(selectStories(entries, ['button']).some(e => e.id.endsWith('--docs'))).toBe(false);
+    expect(
+      selectStories(entries, ['button']).some(e => e.id.endsWith('--docs')),
+    ).toBe(false);
   });
 });
 
@@ -63,13 +65,17 @@ describe('diffSnapshots', () => {
   const node = (label, styles) => ({label, styles});
 
   it('passes an element that renders identically hovered', () => {
-    const snapshot = [node('', {'background-color': 'red', cursor: 'not-allowed'})];
+    const snapshot = [
+      node('', {'background-color': 'red', cursor: 'not-allowed'}),
+    ];
     expect(diffSnapshots(snapshot, structuredClone(snapshot))).toEqual([]);
   });
 
   it('reports the property that moved', () => {
     const before = [node('', {'background-image': 'none'})];
-    const after = [node('', {'background-image': 'linear-gradient(grey, grey)'})];
+    const after = [
+      node('', {'background-image': 'linear-gradient(grey, grey)'}),
+    ];
     expect(diffSnapshots(before, after)).toEqual([
       {
         label: '',
@@ -81,10 +87,21 @@ describe('diffSnapshots', () => {
   });
 
   it('sees a change on a descendant, not just the disabled element itself', () => {
-    const before = [node('', {color: 'grey'}), node(' > svg:nth-child(1)', {fill: 'grey'})];
-    const after = [node('', {color: 'grey'}), node(' > svg:nth-child(1)', {fill: 'blue'})];
+    const before = [
+      node('', {color: 'grey'}),
+      node(' > svg:nth-child(1)', {fill: 'grey'}),
+    ];
+    const after = [
+      node('', {color: 'grey'}),
+      node(' > svg:nth-child(1)', {fill: 'blue'}),
+    ];
     expect(diffSnapshots(before, after)).toEqual([
-      {label: ' > svg:nth-child(1)', property: 'fill', from: 'grey', to: 'blue'},
+      {
+        label: ' > svg:nth-child(1)',
+        property: 'fill',
+        from: 'grey',
+        to: 'blue',
+      },
     ]);
   });
 
@@ -101,7 +118,9 @@ describe('diffSnapshots', () => {
 
 describe('formatViolations', () => {
   it('says so plainly when there is nothing to report', () => {
-    expect(formatViolations([])).toContain('No disabled element paints a hover state');
+    expect(formatViolations([])).toContain(
+      'No disabled element paints a hover state',
+    );
   });
 
   it('groups by component and names the story and the delta', () => {
@@ -110,12 +129,21 @@ describe('formatViolations', () => {
         component: 'Core/Button',
         story: 'core-button--disabled',
         element: '<button.astryx-button>',
-        deltas: [{label: '', property: 'background-image', from: 'none', to: 'linear-gradient(grey, grey)'}],
+        deltas: [
+          {
+            label: '',
+            property: 'background-image',
+            from: 'none',
+            to: 'linear-gradient(grey, grey)',
+          },
+        ],
       },
     ]);
     expect(output).toContain('Core/Button (1)');
     expect(output).toContain('core-button--disabled');
-    expect(output).toContain('background-image: none -> linear-gradient(grey, grey)');
+    expect(output).toContain(
+      'background-image: none -> linear-gradient(grey, grey)',
+    );
   });
 });
 
@@ -131,7 +159,10 @@ describe('CLI contract', () => {
       });
       return {status: 0, stdout: result};
     } catch (error) {
-      return {status: error.status, stdout: (error.stdout || '') + (error.stderr || '')};
+      return {
+        status: error.status,
+        stdout: (error.stdout || '') + (error.stderr || ''),
+      };
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
@@ -147,7 +178,12 @@ describe('CLI contract', () => {
   });
 
   it('fails loudly when the storybook build is missing', () => {
-    const {status, stdout} = runAudit(['--storybook-dir', 'nope', '--components', 'Button']);
+    const {status, stdout} = runAudit([
+      '--storybook-dir',
+      'nope',
+      '--components',
+      'Button',
+    ]);
     expect(status).toBe(1);
     expect(stdout).toContain('Storybook build not found');
   });

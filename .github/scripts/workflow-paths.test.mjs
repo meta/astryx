@@ -23,11 +23,7 @@ const workflows = fs
   ]);
 // The workflows that report the required contexts (build, test,
 // docsite-test, lint, spec-owner-approval, review-required).
-const REQUIRED_CONTEXT_WORKFLOWS = [
-  'ci.yml',
-  'lint.yml',
-  'review-signal.yml',
-];
+const REQUIRED_CONTEXT_WORKFLOWS = ['ci.yml', 'lint.yml', 'review-signal.yml'];
 // `**`, `**/*`, `**/**`: a glob that matches every path is no allowlist.
 const MATCH_ALL = /^\*\*(\/\*+)*$/;
 

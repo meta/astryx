@@ -358,6 +358,7 @@ function classifyChanges(
     const complete = expectedCount == null || expectedCount === 0;
     return {
       specOnly: false,
+      timesOnly: false,
       toolingOnly: false,
       touchesKnowledgeRecords: !complete,
       touchesDesignAssets: false,
@@ -461,6 +462,7 @@ function classifyChanges(
       sharedInfra.some(filePath => !isVitestGraphInfraPath(filePath)));
   return {
     specOnly,
+    timesOnly,
     toolingOnly,
     touchesKnowledgeRecords,
     touchesDesignAssets,
@@ -563,7 +565,7 @@ if (require.main === module) {
         throw new Error('GITHUB_OUTPUT is required with --github-output.');
       fs.appendFileSync(
         outputPath,
-        `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
+        `spec_only=${result.specOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
       );
     } else {
       process.stdout.write(`${JSON.stringify(result)}\n`);

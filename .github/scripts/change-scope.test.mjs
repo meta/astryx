@@ -98,6 +98,8 @@ describe('spec-only change scope', () => {
       );
       expect(result.surfaces).toEqual(['node-times']);
       expect(result.specOnly).toBe(true);
+      // Named apart, so the test join still requires every owner's outcome.
+      expect(result.timesOnly).toBe(true);
       expect(result.fullSuite).toBe(false);
       expect(result.vitestFullSuite).toBe(false);
       expect(result.touchesKnowledgeRecords).toBe(false);
@@ -117,6 +119,7 @@ describe('spec-only change scope', () => {
         {filename: other, status: 'M'},
       ]);
       expect(result.specOnly).toBe(false);
+      expect(result.timesOnly).toBe(false);
       expect(result.fullSuite).toBe(true);
       expect(result.vitestFullSuite).toBe(true);
     },
