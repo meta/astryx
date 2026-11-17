@@ -42,6 +42,7 @@
  * @property {string} [mode] - `light` or `dark`: only that color mode (colors only; a shadow is one value for both modes).
  * @property {boolean} [only] - With a member of an always-alike group (inputs, checks), style just that part.
  * @property {boolean} [png] - Also take PNG pictures of the preview.
+ * @property {string} [ground] - With `contrast-accepted`: the part the text sits on, as the contrast problem names it.
  */
 
 /**
@@ -81,7 +82,7 @@
  * or white that reads there. `fix` is null when no one command does (a
  * color the palette cannot make read: its note says what to change).
  * @experimental May change or be removed in a patch release.
- * @typedef {{problem: string, fix: string | null}} ThemeEditProblem
+ * @typedef {{problem: string, fix: string | null, accept?: string}} ThemeEditProblem - `accept`: where the failing color is one the theme typed (a copy of an original), the line that keeps the problem as designed, with the reason the original draws it so
  */
 
 /**
@@ -153,6 +154,7 @@
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
+ * @property {Array<{part: string, ground: string, mode: 'light' | 'dark', ratio: number, color: string, reason: string, problem: string | null, undo: string}>} data.acceptedContrast - Contrast problems the theme keeps as designed (a color it copies from an original): the text part and the part under it, the mode, the ratio accepted, the color, the reason, the problem as drawn now and the line that takes the acceptance back. A change that draws one at a lower ratio makes it a problem again. Never hidden: the text output lists them too.
  * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output ends with them.
  * @property {string[]} data.notes - What else to know; with `png`, the text the sample page's pictures draw cut short and the words they break inside the word, as the browser measured them (one note for each part, with its labels).
  * @property {string} data.preview
