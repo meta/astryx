@@ -400,7 +400,9 @@ they are separately named.
   that cap waits until one of that author's runs finishes, and is not turned
   away at its longest wait (DEC-31). A `release-critical`
   pull request's run is outside that cap, as it is outside these limits
-  (DEC-30). A held suite's check fails with
+  (DEC-30). Every pull
+  request from the shared agent login counts toward one three-run cap for that
+  login as a whole. A held suite's check fails with
   "Queued behind your 15 oldest PRs: runs on a push once it is among them, or at
   the pre-merge re-run.", "Queued behind the shared login's 5 oldest PRs: runs
   on a push once it is among them, or at the pre-merge re-run." or "Daily
@@ -758,6 +760,10 @@ Current-state gap: the CI workflows defer the heavy suites only for the shared
 agent login and start them when a pull request is marked ready, and they turn
 a run away at its longest wait; FR20 and FR16's three-run cap (DEC-31) state
 the required behavior.
+Current-state gap in the three-run cap: a fork pull request's runs are not
+counted, because a fork's pull-request run has a read-only token and can
+neither set the cap's commit status nor cancel itself (a fork's run starts only
+after a maintainer's `ci:run` label, FR17).
 
 ## Verification
 
@@ -1514,6 +1520,8 @@ DEC-14). Second, an author has at most three pull-request CI runs active at
 once, engineering owners included, which FR16's owner exemption no longer
 covers; a run over that cap waits for one of that author's own runs to finish
 rather than being turned away after twelve minutes (FR16, amending DEC-16).
+The shared agent login is one author for this cap: all agent lanes together
+share three runs (decided `2026-11-17 08:36 PT`).
 
 Rejected: letting main-red and flaky-test fixes skip the queue as
 `release-critical` pull requests do (DEC-30).
