@@ -101,7 +101,7 @@ const MAX_PROJECT_AGENT_DOC_LINES = 32;
  * clears the project root and the working folder (cli-surface INV31); a copy
  * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
  */
-const REMOVE_LINE =
+export const REMOVE_LINE =
   'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
 
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
