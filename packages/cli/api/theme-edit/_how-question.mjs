@@ -4732,6 +4732,22 @@ export function draftAnswer(ctx, env, question) {
         return '';
       },
     )
+    // ("#f5eff7 12px text"): a color and a size said for one text are two
+    // asks of that text, each read on its own.
+    .replace(
+      /(#[0-9a-f]{3,8}|\b[a-z]+)\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+(text|type|labels?|copy)\b(?!\s+(?:on|for|in|of)\b)/gi,
+      (m, color, len, noun) =>
+        colorsIn(String(color).toLowerCase()).length
+          ? `${color} ${noun}, ${len} ${noun}`
+          : m,
+    )
+    .replace(
+      /\b(\d+(?:\.\d+)?(?:px|rem|em))\s+(#[0-9a-f]{3,8}|[a-z]+)\s+(text|type|labels?|copy)\b(?!\s+(?:on|for|in|of)\b)/gi,
+      (m, len, color, noun) =>
+        colorsIn(String(color).toLowerCase()).length
+          ? `${len} ${noun}, ${color} ${noun}`
+          : m,
+    )
     // ("sky blue", "near-black"): names in two words.
     .replace(/\bsky[- ]blue\b/gi, 'sky')
     .replace(/\b(?:near|almost|nearly|soft)[- ]black\b/gi, '#111111')
@@ -9940,6 +9956,25 @@ export function draftAnswer(ctx, env, question) {
         .replace(/-?\d*\.?\d+(px|rem|em)/g, '')
         .trim() === ''
     ) {
+      // ("avatars: round, 32px"): a shape takes no length, so a length
+      // said after the shape alone is the part's size, never its corners.
+      if (
+        prev.parts.length &&
+        prev.aspects.length === 1 &&
+        prev.aspects[0] === 'corners' &&
+        !prev.lengths.length &&
+        /\b(?:round(?:ed)?|circular|circles?|pills?|square)\b/.test(prev.text)
+      ) {
+        const sized = clausesOf(
+          `${prev.parts.map(p => p.on).join(' and ')} size ${c.lengths.join(' ')}`,
+          lex.parts,
+        )[0];
+        if (sized?.parts.length) {
+          if (!sized.aspects.includes('size')) sized.aspects = ['size'];
+          clauses[i] = sized;
+          continue;
+        }
+      }
       prev.lengths = [...c.lengths, ...prev.lengths];
       prev.dir = null;
       prev.text = `${prev.text} ${c.lengths.join(' ')}`;
@@ -16717,7 +16752,17 @@ export function draftAnswer(ctx, env, question) {
     }
     // "error text red", "labels smaller": text that belongs to parts how
     // cannot pick alone is a lookup, never the whole theme's text.
-    if (!c.parts.length && /\berror (text|messages?)\b/.test(c.text)) {
+    // (With a color given, "error text #e5484d", the error text has a token
+    // of its own, as success and warning text do: that token answers.)
+    if (
+      !c.parts.length &&
+      /\berror (text|messages?)\b/.test(c.text) &&
+      !(
+        /\berror text\b/.test(c.text) &&
+        c.colors.length &&
+        Object.hasOwn(TOKENS, '--color-text-error')
+      )
+    ) {
       const which = /\berror\b/.test(c.text) ? 'error text' : 'labels';
       push({
         text: `${which} belong to the parts that show them (an input's error message, a field's label); name the part, or look it up`,
@@ -16930,7 +16975,12 @@ export function draftAnswer(ctx, env, question) {
     // "combobox rounder": a word a component's doc lists, as the subject of
     // a shape change with no part named, is a part how cannot name; it is
     // never a whole-theme change.
-    const unknown = !c.parts.length && unknownPart(c.text);
+    // (A status said before "text", "warning text darker", names that
+    // status's text color, never a part.)
+    const unknown =
+      !c.parts.length &&
+      !/\b(?:success|warning|info|danger|error)\s+text\b/.test(c.text) &&
+      unknownPart(c.text);
     if (unknown) {
       push({
         text: `no part is called "${unknown.word}"${unknown.parts.length ? `; the closest parts: ${unknown.parts.join(', ')}` : ''}. Name one of them, or list the parts`,
@@ -21862,9 +21912,17 @@ export function draftAnswer(ctx, env, question) {
         // A part whose text is all in parts inside it that set their own
         // size (a dialog's title block): each of those tokens on the part,
         // from its own size.
+        // (Only the type size tokens: a spacing token a piece inside sizes
+        // its icon from is no text size.)
         const heldS =
           on && !f.state
-            ? heldTextTokens(one(on), 'font-size', /\btitles?\b/.test(c.text))
+            ? heldTextTokens(
+                one(on),
+                'font-size',
+                /\btitles?\b/.test(c.text),
+              ).filter(t =>
+                /^--(?:text-[a-z0-9-]+-size|font-size-[a-z0-9-]+)$/.test(t),
+              )
             : [];
         if (heldS.length) {
           const steps = heldS
@@ -22935,12 +22993,15 @@ export function draftAnswer(ctx, env, question) {
         // (Not a color word, "gray text #555", which gives the color; a
         // role named with the value it takes, "the accent text #0033aa",
         // is that role's token.)
+        // (The danger color's text is the error text, as its dial says:
+        // "danger (errors, …)".)
+        const roleName = roleWord === 'danger' ? 'error' : roleWord;
         const roleTok =
-          roleWord &&
-          Object.hasOwn(TOKENS, `--color-text-${roleWord}`) &&
-          !Object.hasOwn(HUES, roleWord) &&
-          !parseColor(roleWord)
-            ? `--color-text-${roleWord}`
+          roleName &&
+          Object.hasOwn(TOKENS, `--color-text-${roleName}`) &&
+          !Object.hasOwn(HUES, roleName) &&
+          !parseColor(roleName)
+            ? `--color-text-${roleName}`
             : null;
         // "the text 4.5:1 against the page", "links 4.5:1 contrast": the
         // color the text reads (a link's accent text token, a part's own
@@ -23217,12 +23278,19 @@ export function draftAnswer(ctx, env, question) {
             );
           if (!more && !less) return null;
           // (A role's text color, such as the accent text, moves as written:
-          // it is a color, not the contrast of the main text.)
+          // it is a color, not the contrast of the main text. Unless the ask
+          // is for contrast or reading, "darker red for contrast": then each
+          // mode moves away from its own page, darker on a light page and
+          // lighter on a dark one.)
           const literal =
             (Boolean(c.mode) ||
               (roleTok != null &&
                 !/^--color-text-(primary|secondary)$/.test(roleTok))) &&
-            /\b(darker|lighter)\b/.test(c.text);
+            /\b(darker|lighter)\b/.test(c.text) &&
+            (Boolean(c.mode) ||
+              !/\b(?:contrast|readab\w*|legib\w*|to read|stand out)\b/.test(
+                c.text,
+              ));
           const steps = perMode(
             tok,
             tok,
