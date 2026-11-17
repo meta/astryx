@@ -67,6 +67,7 @@ import {
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
+ * @property {boolean} deprecated - Its doc marks it deprecated: another part replaces it.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
  * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
@@ -242,6 +243,7 @@ async function readComponents(coreDir) {
               }
             : null,
         overlay: pg?.overlay === true,
+        deprecated: Boolean(doc.deprecated),
         // An overlay with an open state, unless its playground opens it as
         // a real overlay over the page.
         opens:

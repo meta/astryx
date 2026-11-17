@@ -384,6 +384,12 @@ describe(
           for (const [key, value] of Object.entries(result)) {
             if (value == null || value === '') continue;
             const label = `${result.domain} ${result.name}: ${key}`;
+            // Readiness shows as the kind's tag, only on an unready template.
+            if (key === 'isReady') {
+              const kind = value ? result.kind : `${result.kind} (not ready)`;
+              expect(printsField(plain, 'kind', kind), label).toBe(true);
+              continue;
+            }
             expect(printsField(verbose, key, value), label).toBe(true);
             if (key !== 'score' && key !== 'reason') {
               // The plain view keeps the first sentence of a description.

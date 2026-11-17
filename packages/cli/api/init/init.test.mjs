@@ -10,10 +10,12 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {init, getNextSteps} from './init.mjs';
 import {logger} from '../logger.mjs';
+import {inspectAgentDocs} from '../../foundation/agent-docs/agent-docs.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
@@ -247,10 +249,10 @@ describe('init() — logger', () => {
       errSpy.mockRestore();
     }
     const text = lines.join('\n');
-    expect(text).toContain('[ok] AI agent docs installed -> AGENTS.md');
+    expect(text).toContain('[ok] AI agent docs: AGENTS.md created (Astryx ');
     expect(text).toContain('  Next steps:');
     // The exact next-steps block the CLI prints comes from getNextSteps().
-    expect(text).toContain(getNextSteps('npx astryx')[2].slice(0, 20));
+    expect(text).toContain(getNextSteps('npx astryx', tmpDir)[2].slice(0, 20));
   });
 });
 
@@ -316,5 +318,144 @@ describe('init() — write-path safety', () => {
     } finally {
       fs.rmSync(outside, {recursive: true, force: true});
     }
+  });
+});
+
+describe('init() — what changed in each agent-doc file', () => {
+  /**
+   * Run init with the logger captured.
+   * @param {import('./init.type.mjs').InitOptions} options
+   */
+  async function runInit(options) {
+    /** @type {string[]} */
+    const lines = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
+    logger.setSilent(false);
+    try {
+      const receipt = await init(options, {cwd: tmpDir});
+      return {receipt, text: lines.join('\n')};
+    } finally {
+      logger.setSilent(true);
+      logSpy.mockRestore();
+    }
+  }
+  const agentsOnly = {features: 'agents', agentDocsPath: ['AGENTS.md']};
+
+  it('says a new file was added, then that a second run changed nothing', async () => {
+    asProject();
+    const first = await runInit(agentsOnly);
+    const [added] = first.receipt.data.docsChanges;
+    expect(added).toMatchObject({path: 'AGENTS.md', change: 'created', from: null});
+    expect(added.to).toMatch(/^\d+\.\d+\.\d+/);
+    expect(first.text).toContain(`[ok] AI agent docs: AGENTS.md created (Astryx ${added.to})`);
+
+    const second = await runInit(agentsOnly);
+    expect(second.receipt.data.docsChanges).toEqual([
+      {path: 'AGENTS.md', change: 'unchanged', from: added.to, to: added.to},
+    ]);
+    expect(second.text).toContain(
+      `[ok] AI agent docs: AGENTS.md already current (Astryx ${added.to}), nothing changed`,
+    );
+  });
+
+  it('names the old and new version when it refreshes an older block', async () => {
+    asProject();
+    const {receipt} = await runInit(agentsOnly);
+    const current = receipt.data.docsChanges[0].to;
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      read('AGENTS.md').replace(`Astryx v${current}`, 'Astryx v0.0.1'),
+    );
+    const refresh = await runInit(agentsOnly);
+    expect(refresh.receipt.data.docsChanges).toEqual([
+      {path: 'AGENTS.md', change: 'updated', from: '0.0.1', to: current},
+    ]);
+    expect(refresh.text).toContain(`[ok] AI agent docs: AGENTS.md updated (Astryx 0.0.1 -> ${current})`);
+  });
+
+  it('reports an import of AGENTS.md without a version', async () => {
+    asProject();
+    const {receipt} = await runInit({});
+    const gemini = receipt.data.docsChanges.find(c => c.path === 'GEMINI.md');
+    expect(gemini).toEqual({path: 'GEMINI.md', change: 'created', from: null, to: null});
+  });
+
+  it('reads the version from the block, not from a version the project text mentions', async () => {
+    asProject();
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '# AGENTS.md\n\nWe moved from Astryx v0.6.0 last quarter.\n',
+    );
+    const first = await runInit(agentsOnly);
+    const [change] = first.receipt.data.docsChanges;
+    expect(change).toMatchObject({path: 'AGENTS.md', change: 'updated', from: null});
+    expect(change.to).not.toBe('0.6.0');
+    const second = await runInit(agentsOnly);
+    expect(second.receipt.data.docsChanges).toEqual([
+      {path: 'AGENTS.md', change: 'unchanged', from: change.to, to: change.to},
+    ]);
+    expect(second.text).toContain(`AGENTS.md already current (Astryx ${change.to}), nothing changed`);
+    // upgrade's staleness check reads the block the same way.
+    expect(inspectAgentDocs(tmpDir, change.to).status).toBe('current');
+  });
+
+  it('says a block was removed when another Claude Code file now holds it', async () => {
+    asProject();
+    execFileSync('git', ['init', '-q'], {cwd: tmpDir});
+    fs.mkdirSync(path.join(tmpDir, '.claude'));
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'CLAUDE.md'), '');
+    await runInit({});
+    expect(read('.claude/CLAUDE.md')).toContain(MARKER_START);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# CLAUDE.md\n');
+    const {receipt, text} = await runInit({});
+    const removed = receipt.data.docsChanges.find(c => c.path === '.claude/CLAUDE.md');
+    expect(removed).toMatchObject({change: 'removed', to: null});
+    expect(text).toContain('[ok] AI agent docs: .claude/CLAUDE.md: Astryx block removed, another agent file holds it');
+  });
+
+  it('names each file from the project root, even when init runs below it', async () => {
+    asProject();
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    const receipt = await init({}, {cwd: sub});
+    expect(receipt.data.docsWritten).toContain('../../AGENTS.md');
+    const paths = receipt.data.docsChanges.map(c => c.path);
+    expect(paths).toContain('AGENTS.md');
+    expect(paths.every(p => !path.isAbsolute(p) && !p.startsWith('..'))).toBe(true);
+  });
+
+  it('names an --agent-docs-path file from the project root when init runs below it', async () => {
+    asProject();
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    const receipt = await init({features: 'agents', agentDocsPath: ['NOTES.md']}, {cwd: sub});
+    expect(receipt.data.docsWritten).toEqual(['NOTES.md']);
+    expect(receipt.data.docsChanges.map(c => c.path)).toEqual(['src/app/NOTES.md']);
+  });
+
+  it('keeps every field of the earlier receipt, with the same values', async () => {
+    asProject();
+    const {receipt} = await runInit(agentsOnly);
+    expect(receipt.type).toBe('init.run');
+    expect(receipt.data).toMatchObject({
+      mode: 'features',
+      features: ['agents'],
+      docsWritten: ['AGENTS.md'],
+      docsError: null,
+      theme: false,
+      themeTemplate: null,
+      themeTemplatePath: null,
+      template: null,
+      templatePath: null,
+      nextSteps: false,
+    });
+    // docsChanges is the only new field, and it lines up with docsWritten.
+    expect(Object.keys(receipt.data).sort()).toEqual(
+      [
+        'mode', 'features', 'docsWritten', 'docsChanges', 'docsError', 'theme',
+        'themeTemplate', 'themeTemplatePath', 'template', 'templatePath', 'nextSteps',
+      ].sort(),
+    );
+    expect(receipt.data.docsChanges.map(c => c.path)).toEqual(receipt.data.docsWritten);
   });
 });

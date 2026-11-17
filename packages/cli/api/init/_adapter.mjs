@@ -1,14 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Environment adapter for `init --user`: the home folder, the settings
- * file, the per-user state, and the search path (spec AST-081 FR7, FR8;
- * architecture:cli-surface INV21).
+ * @file Environment adapter for init: for `init --user`, the home folder, the
+ * settings file, the per-user state, and the search path (spec AST-081 FR7,
+ * FR8); for the getting-started steps, the project's install command
+ * (architecture:cli-surface INV21).
  *
  * @input  the home folder, the settings file, the search path
  * @output the computer-level agent text written or removed, with the setting
  *   and the links recorded
- * @position packages/cli/api/init — imported by the user leaf only
+ * @position packages/cli/api/init — imported by the user and run leaves
  */
 
 import * as os from 'node:os';
@@ -27,6 +28,7 @@ import {
 } from '../../foundation/env/user-settings.mjs';
 import {recordAgentTextWritten} from '../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
 
@@ -56,4 +58,16 @@ export function applyComputerAgentText({remove}) {
     recordAgentTextWritten(cliVersion());
   }
   return {home, command, files, cliOnSearchPath: astryxOnSearchPath()};
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note when its lockfiles
+ * disagree.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function projectInstallStep(packages, cwd) {
+  return installStepFor(packages, cwd);
 }

@@ -22,12 +22,16 @@ import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
 import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
+import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
+import {projectInstallStep} from '../_adapter.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
   installAgentDocs,
   renderAgentDocsBlock,
   agentDocsTargetDir,
+  readAgentDocTexts,
+  agentDocChange,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
 import {listTemplates} from '../../template/template.mjs';
@@ -38,6 +42,8 @@ import {logger} from '../../logger.mjs';
 const VALID_FEATURES = ['agents', 'theme', 'template'];
 const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 
+const THEME_PACKAGE = '@astryxdesign/theme-neutral';
+
 /**
  * Build the "Next steps" lines printed at the end of `astryx init`.
  *
@@ -46,9 +52,11 @@ const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
+ * @param {string} [cwd] the project folder; its package manager names the theme install command
  * @returns {string[]} ordered list of human-facing lines
  */
-export function getNextSteps(invocation) {
+export function getNextSteps(invocation, cwd = process.cwd()) {
+  const install = projectInstallStep([THEME_PACKAGE], cwd);
   return [
     '',
     '  Next steps:',
@@ -58,7 +66,8 @@ export function getNextSteps(invocation) {
     "       and import '@astryxdesign/core/astryx.css'",
     "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
-    '       npm install @astryxdesign/theme-neutral',
+    `       ${install.line}`,
+    ...(install.note ? [`       (${install.note})`] : []),
     `       ${invocation} theme add neutral`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
@@ -86,6 +95,20 @@ function sameFolder(a, b) {
     }
   };
   return real(a) === real(b);
+}
+
+/**
+ * One receipt line for one agent-doc file.
+ * @param {import('../init.type.mjs').InitDocsChange} change
+ * @returns {string}
+ */
+function changeLine({path: shown, change, from, to}) {
+  const version = to ? ` (Astryx ${to})` : '';
+  if (change === 'removed') return `${shown}: Astryx block removed, another agent file holds it`;
+  if (change === 'created') return `${shown} created${version}`;
+  if (change === 'unchanged') return `${shown} already current${version}, nothing changed`;
+  if (from && to && from !== to) return `${shown} updated (Astryx ${from} -> ${to})`;
+  return `${shown} updated${version}`;
 }
 
 /**
@@ -124,6 +147,7 @@ async function applyAgents(cwd, options, invocation, data) {
     // With explicit paths, installAgentDocs checks each file's own folder.
     if (!paths) assertAgentDocsTarget(targetDir);
     const renderedBlock = await renderAgentDocsBlock(root);
+    const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
     /** @type {string[]} */
     const skipped = [];
     const files = installAgentDocs(targetDir, {
@@ -144,7 +168,16 @@ async function applyAgents(cwd, options, invocation, data) {
             path.relative(cwd, path.join(targetDir, rel)).split(path.sep).join('/'),
           );
     data.docsWritten = written;
-    logger.log(`[ok] AI agent docs installed -> ${written.join(', ')}`);
+    const after = readAgentDocTexts(targetDir, files);
+    // The receipt names each file from the project root; the line names it
+    // from where init ran, as docsWritten does.
+    data.docsChanges = files.map(rel => ({
+      path: path.relative(root, path.join(targetDir, rel)).split(path.sep).join('/'),
+      ...agentDocChange(before.get(rel) ?? null, after.get(rel) ?? null),
+    }));
+    data.docsChanges.forEach((change, i) => {
+      logger.log(`[ok] AI agent docs: ${changeLine({...change, path: written[i]})}`);
+    });
     // A file 0.7.1 did not write (GEMINI.md, or a project-root file when init
     // runs below the root) that resolves outside the project is left as it
     // is, reported in docsError with one note; the exit code stays 0. A file
@@ -325,6 +358,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
       mode: 'features',
       features,
       docsWritten: [],
+      docsChanges: [],
       docsError: null,
       theme: false,
       themeTemplate: null,
@@ -353,6 +387,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     mode: 'default',
     features: ['agents'],
     docsWritten: [],
+    docsChanges: [],
     docsError: null,
     theme: false,
     themeTemplate: null,
@@ -370,6 +405,6 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     logger.log('');
     return {type: 'init.run', data};
   }
-  for (const line of getNextSteps(invocation)) logger.log(line);
+  for (const line of getNextSteps(invocation, cwd)) logger.log(line);
   return {type: 'init.run', data};
 }

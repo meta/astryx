@@ -256,6 +256,7 @@ export function otherCommand(typed, entries, from) {
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
+ * The first `pinned` suggestions always stay ahead of the hint.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -265,6 +266,7 @@ export function otherCommand(typed, entries, from) {
  *   alone?: boolean,
  *   namesOf?: (suggestion: T) => Array<string | undefined>,
  *   keywordsOf?: (suggestion: T) => string[],
+ *   pinned?: number,
  * }} options `namesOf` gives the names the command matched a suggestion by;
  *   by default its name. `keywordsOf` gives the keywords the suggestion's doc
  *   declares and the synonyms its search card lists; by default none
@@ -279,6 +281,7 @@ export function withOtherCommand(
     alone = false,
     namesOf = suggestion => [suggestion.name],
     keywordsOf = () => [],
+    pinned = 0,
   },
 ) {
   if (!found) return suggestions;
@@ -301,9 +304,9 @@ export function withOtherCommand(
     (found.tier === MATCH_TIER.keyword &&
       synonymMatches(typed, {own: {synonyms: keywordsOf(suggestion)}}).size >
         0);
-  let at = 0;
+  let at = Math.min(pinned, suggestions.length);
   suggestions.forEach((suggestion, index) => {
-    if (matchesAsWell(suggestion)) at = index + 1;
+    if (matchesAsWell(suggestion)) at = Math.max(at, index + 1);
   });
   return [
     ...suggestions.slice(0, at),
@@ -549,7 +552,8 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
  * namespaces. Only a CLI tree file whose name `isWanted` accepts, and only an
- * integration doc whose text spells the name, is read.
+ * integration doc whose text spells the name, is read. A doc the run's base
+ * leaves out is no hint.
  * @param {Array<string | undefined>} docsDirs the integrations' docs folders
  * @param {import('./name-index.mjs').NameIndex} index
  * @param {string} wanted the folded name
@@ -557,8 +561,19 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
  * @returns {Promise<string[]>}
  */
 async function rootDocNames(docsDirs, index, wanted, isWanted) {
+  const {coreOnlyDocNames} = await import('../bases/core-docs.mjs');
+  const leftOut = await coreOnlyDocNames();
+  /** @param {string} name */
+  const served = name => isWanted(name) && !leftOut.has(name);
+  // A level exists while a topic sits in it; an integration's topic keeps
+  // its level on any base.
+  const filled = new Set(
+    index.docs.flat().flatMap(({declared}) =>
+      declared?.level ? [declared.level] : [],
+    ),
+  );
   const builtin = [
-    ...index.topics.filter(isWanted),
+    ...index.topics.filter(served),
     ...index.treeStems.filter(isWanted).flatMap(stem => {
       const name = rootNamespaceName(
         fs.readFileSync(
@@ -566,9 +581,11 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
           'utf8',
         ),
       );
-      return name && isWanted(name) ? [name] : [];
+      return name && served(name) ? [name] : [];
     }),
-    ...index.levels.filter(isWanted),
+    ...index.levels.filter(
+      level => served(level) || (isWanted(level) && filled.has(level)),
+    ),
   ];
   if (builtin.length > 0) return builtin;
   // A topic or root namespace: a doc without `placement`.

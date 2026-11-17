@@ -101,6 +101,15 @@ for each bug.
   stored candidates are that CLI's own gather, made and ranked by one CLI
   version, and they stay on the server. The generated registries stay the source
   for the pages and links those results open.
+- **FR2a — Icon search has a stored index too.** `exportIconIndex()` and
+  `rankIconIndex()` in `@astryxdesign/cli/api` are experimental, the icon
+  counterpart of the search index pair. `exportIconIndex()` returns the icon
+  sets `icon()` searches in a folder as plain JSON, `{version, sets,
+withdrawn}`, where `version` is the CLI version that made it.
+  `rankIconIndex()` ranks only indexes made by its own CLI version and refuses
+  any other with an error that names both versions. It ranks the sets of every
+  index as one list with `icon()`'s own ranking, and equal scores keep the
+  order in which the indexes were given.
 - **FR3 — Availability and visibility are separate projections.** Availability
   means that a named Docsite operation has the source, loader, route, or handoff
   required to present an admitted item on the current content line. Visibility means

@@ -234,7 +234,7 @@ describe.skipIf(!POSIX)(
         expect(first.lines).toEqual([handedTo('9.0.1')('9.0.0')]);
         expect(first.notice).toEqual([
           available('9.0.1', '9.0.5'),
-          'To upgrade, run: npm install @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then npx astryx upgrade --from 9.0.1 --apply',
+          'To upgrade, run: npm install -E @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then npx astryx upgrade --from 9.0.1 --apply',
         ]);
         // The notice comes after the command's own output.
         expect(first.stderr.trim().split('\n').at(-1)).toBe(first.notice[1]);
@@ -275,7 +275,7 @@ describe.skipIf(!POSIX)(
       expect(r.status).toBe(0);
       expect(r.notice).toEqual([
         available('9.0.0', '9.0.5'),
-        'To upgrade, run: npm install @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then host astryx upgrade --from 9.0.0 --apply',
+        'To upgrade, run: npm install -E @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then host astryx upgrade --from 9.0.0 --apply',
       ]);
     });
 

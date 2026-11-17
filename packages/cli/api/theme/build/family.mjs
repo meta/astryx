@@ -43,18 +43,22 @@ export function resolveThemeFamily(members) {
         `Theme "${member.theme.name}" has an invalid normalized parent.`,
       );
     }
-    const parentName = parent?.name ?? null;
-    if (parentName && !byName.has(parentName)) {
-      throw new Error(
-        `Theme "${member.theme.name}" is missing selected ancestor "${parentName}".`,
-      );
-    }
+    // A member whose base is not selected is a root: the family's one root
+    // may extend a base of its own (a package theme), which its resolved
+    // values carry, as its standalone build does.
+    const selectedParent = parent?.name ?? null;
+    const parentName =
+      selectedParent && byName.has(selectedParent) ? selectedParent : null;
     if (parentName && parent !== byName.get(parentName).sourceTheme) {
       throw new Error(
         `Theme "${member.theme.name}" does not extend the selected "${parentName}" source.`,
       );
     }
-    return {...member, parentName};
+    return {
+      ...member,
+      parentName,
+      unselectedBase: parentName ? null : selectedParent,
+    };
   });
   const resolved = new Map(
     withParents.map(member => [member.theme.name, member]),
@@ -75,6 +79,13 @@ export function resolveThemeFamily(members) {
   for (const member of withParents) visit(member);
   const roots = withParents.filter(member => member.parentName === null);
   if (roots.length !== 1) {
+    // A member whose base is not selected, beside another root, misses that
+    // ancestor: named so, with the base it extends.
+    const missing = roots.find(member => member.unselectedBase);
+    if (roots.length > 1 && missing)
+      throw new Error(
+        `Theme "${missing.theme.name}" is missing selected ancestor "${missing.unselectedBase}": a family has one root, and only the root may extend a theme the family does not select. Select "${missing.unselectedBase}" too, or build "${missing.theme.name}" on its own.`,
+      );
     throw new Error(
       `A theme family must have exactly one selected root; found ${roots.length}.`,
     );
