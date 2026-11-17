@@ -114,6 +114,7 @@ import {
 } from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -1498,10 +1499,21 @@ export function PowerSearch({
     [handleFieldBlur],
   );
 
+  // The popover presentation's Tokenizer draws its own status icon; the sheet
+  // trigger's field draws this one.
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status: isSheetPresentation ? status : undefined,
+      statusVariant,
+    });
+
   if (isSheetPresentation) {
     const triggerDescribedBy =
       [
-        status?.message ? statusMessageId : null,
+        // The tooltip variant renders no message box; the info-tip's tooltip
+        // describes the trigger instead.
+        status?.message && statusVariant !== 'tooltip' ? statusMessageId : null,
+        statusTooltipDescribedBy,
         showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
       ]
         .filter(Boolean)
@@ -1594,7 +1606,9 @@ export function PowerSearch({
                 ) : null}
               </button>
             </div>
-            {(endContent || isRenderable(resultCountText)) && (
+            {(endContent ||
+              isRenderable(resultCountText) ||
+              isRenderable(statusIcon)) && (
               <div
                 ref={endLaneRef}
                 {...stylex.props(sheetTriggerStyles.endSection)}>
@@ -1604,6 +1618,7 @@ export function PowerSearch({
                   </span>
                 )}
                 {endContent}
+                {statusIcon}
               </div>
             )}
           </div>
