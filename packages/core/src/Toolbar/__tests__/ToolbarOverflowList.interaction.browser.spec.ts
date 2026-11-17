@@ -454,6 +454,50 @@ test.describe('a single row’s minimum width', () => {
       .waitFor();
   });
 
+  test('in a wide flex row, a list with a set or capped width folds within it and keeps its trigger', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--caller-limited-width&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="width-capped"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(200);
+    for (const testId of ['width-set', 'width-capped']) {
+      const read = await page.evaluate(id => {
+        const list = document.querySelector<HTMLElement>(
+          `[data-testid="${id}"] .astryx-overflow-list`,
+        );
+        if (list == null) {
+          throw new Error(`No list in ${id}`);
+        }
+        const box = list.getBoundingClientRect();
+        const buttons = [...list.querySelectorAll('button')].filter(
+          button => button.closest('[aria-hidden="true"]') == null,
+        );
+        return {
+          width: box.width,
+          labels: buttons.map(button => button.innerText.trim()),
+          clipped: buttons.some(
+            button => button.getBoundingClientRect().right > box.right + 0.5,
+          ),
+        };
+      }, testId);
+      test.info().annotations.push({
+        type: testId,
+        description: JSON.stringify(read),
+      });
+      expect(read.width).toBeLessThanOrEqual(200.5);
+      // Every visible item keeps its label, the last one is the trigger, and
+      // nothing runs past the list's edge.
+      expect(read.labels.every(label => label !== '')).toBe(true);
+      expect(read.labels.at(-1)).toMatch(/^\+\d+$/);
+      expect(read.clipped).toBe(false);
+    }
+  });
+
   test('in a parent narrower than its folded width, keeps the indicator whole', async ({
     page,
   }) => {

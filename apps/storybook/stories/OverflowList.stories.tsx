@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
+import type {CSSProperties} from 'react';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
 import type {OverflowItem} from '@astryxdesign/core/OverflowList';
 import {Button} from '@astryxdesign/core/Button';
@@ -497,4 +498,37 @@ export const ContentSizedParent: Story = {
       </div>
     </div>
   ),
+};
+
+/** In a wide flex row, a list whose width the caller sets or caps folds within that width and keeps its trigger. */
+export const CallerLimitedWidth: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    const list = (style: CSSProperties) => (
+      <OverflowList
+        gap={2}
+        style={style}
+        overflowRenderer={overflowItems => (
+          <Button
+            label={`+${overflowItems.length}`}
+            variant="ghost"
+            size="sm"
+          />
+        )}>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div style={{width: 700, padding: 8}}>
+        <div data-testid="width-set" style={{display: 'flex'}}>
+          {list({width: 200})}
+        </div>
+        <div data-testid="width-capped" style={{display: 'flex', marginTop: 8}}>
+          {list({maxWidth: 200})}
+        </div>
+      </div>
+    );
+  },
 };

@@ -440,6 +440,26 @@ function flexRowFreeWidth(list: HTMLElement): number {
 }
 
 /**
+ * How far a list's box can widen as it shows more items: up to its
+ * `max-width`, and not at all when its width is set (a caller `width`).
+ */
+function widenRoom(list: HTMLElement): number {
+  const maxWidth = parseFloat(getComputedStyle(list).maxWidth);
+  const room = Number.isFinite(maxWidth)
+    ? Math.max(0, maxWidth - list.getBoundingClientRect().width)
+    : Infinity;
+  // Typed OM keeps `auto` for a width nothing sets; where it is missing,
+  // only `max-width` limits the room.
+  if (typeof list.computedStyleMap === 'function') {
+    const width = list.computedStyleMap().get('width');
+    if (width != null && width.toString() !== 'auto') {
+      return 0;
+    }
+  }
+  return room;
+}
+
+/**
  * Hook for managing horizontal overflow of a list of items.
  *
  * Renders all items into a hidden measurement container, then calculates
@@ -584,7 +604,11 @@ export function useOverflowInternal(
         // A list in a single flex row may unfold into the row's free width.
         availableWidth =
           container.offsetWidth +
-          (tracksInlineBounds ? Math.floor(flexRowFreeWidth(container)) : 0);
+          (tracksInlineBounds
+            ? Math.floor(
+                Math.min(flexRowFreeWidth(container), widenRoom(container)),
+              )
+            : 0);
         recordBorderBox(measuredSizes, container);
         if (container.parentElement != null && tracksInlineBounds) {
           recordBorderBox(measuredSizes, container.parentElement);
