@@ -542,6 +542,42 @@ describe('checkProviderIdentity', () => {
     );
   });
 
+  it('names both fixes when only some conflicts are declared by both', () => {
+    /** @param {string} name @param {boolean} bothDeclare */
+    const conflict = (name, bothDeclare) =>
+      loaded({
+        name,
+        __spec: name,
+        __providerConflict: {
+          providerId: '@acme/widgets',
+          claimedBy: '@acme/widgets',
+          message: `${name} message.`,
+          ...(bothDeclare ? {bothDeclare: true} : {}),
+        },
+      });
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        conflict('@acme/widgets-legacy', true),
+        conflict('@acme/renamed', false),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      '@acme/widgets-legacy message. @acme/renamed message.',
+    );
+    expect(c.fix).toBe(
+      'Where both manifests declare the ID: Both manifests declare the same ' +
+        '`providerId`. If they are one integration installed under two ' +
+        'names, keep one of the two dependencies; if they are different ' +
+        'integrations, give each its own `providerId` in ' +
+        'astryx.integration.*. For the other conflicts: Give each ' +
+        'integration its own `providerId` in astryx.integration.*. A ' +
+        "renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
   it('offers keeping one dependency when both manifests declare the ID', () => {
     const message =
       '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim ' +

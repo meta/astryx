@@ -1373,6 +1373,35 @@ export function checkPackageManager(ctx) {
   };
 }
 
+const TWIN_PROVIDER_FIX =
+  'Both manifests declare the same `providerId`. If they are one ' +
+  'integration installed under two names, keep one of the two ' +
+  'dependencies; if they are different integrations, give each its ' +
+  'own `providerId` in astryx.integration.*.';
+const NAMED_PROVIDER_FIX =
+  'Give each integration its own `providerId` in astryx.integration.*. ' +
+  "A renamed package may keep its predecessor's ID only when the " +
+  'predecessor is no longer installed.';
+
+/**
+ * The fix for a set of provider conflicts: the two-case advice for conflicts
+ * where both manifests declare the ID, the rename advice for the rest, and
+ * both, each named, when the project has some of each.
+ * @param {ReadonlyArray<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} conflicts
+ * @returns {string}
+ */
+function providerConflictFix(conflicts) {
+  const twins = conflicts.filter(
+    integration => integration.__providerConflict?.bothDeclare,
+  ).length;
+  if (twins === conflicts.length) return TWIN_PROVIDER_FIX;
+  if (twins === 0) return NAMED_PROVIDER_FIX;
+  return (
+    `Where both manifests declare the ID: ${TWIN_PROVIDER_FIX} ` +
+    `For the other conflicts: ${NAMED_PROVIDER_FIX}`
+  );
+}
+
 /**
  * Check 6b — every contributing integration owns its provider identity.
  *
@@ -1413,16 +1442,7 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix: conflicts.every(
-        integration => integration.__providerConflict?.bothDeclare,
-      )
-        ? 'Both manifests declare the same `providerId`. If they are one ' +
-          'integration installed under two names, keep one of the two ' +
-          'dependencies; if they are different integrations, give each its ' +
-          'own `providerId` in astryx.integration.*.'
-        : 'Give each integration its own `providerId` in astryx.integration.*. ' +
-          "A renamed package may keep its predecessor's ID only when the " +
-          'predecessor is no longer installed.',
+      fix: providerConflictFix(conflicts),
     };
   }
 

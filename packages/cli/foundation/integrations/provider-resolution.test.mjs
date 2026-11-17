@@ -312,8 +312,21 @@ describe('the message for a package set aside', () => {
     __declaredKeys: declares ? ['providerId', 'components'] : ['components'],
   });
   /** @param {any} first @param {any} second */
-  const messageOf = (first, second) =>
-    markProviderConflicts([first, second])[1].__providerConflict.message;
+  const conflictOf = (first, second) =>
+    markProviderConflicts([first, second])[1].__providerConflict;
+  /** @param {any} first @param {any} second */
+  const messageOf = (first, second) => conflictOf(first, second).message;
+
+  it('marks a conflict both manifests declare, and only that one', () => {
+    expect(
+      conflictOf(pkg('@acme/widgets', true), pkg('@acme/widgets-legacy', true))
+        .bothDeclare,
+    ).toBe(true);
+    expect(
+      conflictOf(pkg('@acme/widgets', false), pkg('@acme/renamed', true))
+        .bothDeclare,
+    ).toBeUndefined();
+  });
 
   it('offers keeping one dependency when both manifests declare the ID', () => {
     expect(
