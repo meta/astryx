@@ -767,10 +767,13 @@ function holdsActingContent(path, context) {
 
 /**
  * @typedef {object} ComponentUse A component of the app's own code that the
- *   module renders.
+ *   module renders, or refers to in a way the scan cannot follow (then its
+ *   placement is `blocked`).
  * @property {string | null} local the component of this module it names, or
  *   null for one that may come from another module
  * @property {string[]} names the names that component may go by elsewhere
+ * @property {string | null} [module] the name of a module whose every export
+ *   it may render, as a `lazy(() => import('./Hero'))` does
  * @property {Placement} placement
  */
 
@@ -781,7 +784,58 @@ function holdsActingContent(path, context) {
  * @property {ComponentUse[]} uses
  * @property {Map<string, string[]>} exports each component the module
  *   exports, by its name in the module, with the names it goes by elsewhere
+ * @property {string | null} stem the module's name as another module imports it
  */
+
+/**
+ * Whether a reference to a component is the name of an element that renders
+ * it, as in `<Hero />` or `<Sections.Hero />`.
+ * @param {any} ref
+ */
+function isElementName(ref) {
+  let top = ref;
+  while (top.parentPath?.isJSXMemberExpression() && top.key === 'object') top = top.parentPath;
+  return Boolean(top.parentPath?.isJSXOpeningElement() || top.parentPath?.isJSXClosingElement());
+}
+
+/**
+ * Whether a reference to a component only exports it or names its type, so
+ * it renders nothing.
+ * @param {any} ref
+ */
+function rendersNothing(ref) {
+  // An exported declaration is a reference of its own binding.
+  if (ref.isExportDeclaration()) return true;
+  const parent = ref.parentPath;
+  if (parent?.isExportSpecifier() || parent?.isExportDefaultDeclaration()) return true;
+  return Boolean(
+    ref.findParent(
+      (/** @type {any} */ p) =>
+        /^TS/.test(p.node.type) && !/^TS(As|Satisfies|NonNull|Instantiation)Expression$|^TSTypeAssertion$/.test(p.node.type),
+    ),
+  );
+}
+
+/**
+ * Whether a binding is referred to anywhere except as the name of an element
+ * or in an export: in a list, as a value, through `lazy`, and so on. The scan
+ * cannot follow where such a reference renders the component.
+ * @param {any} binding
+ */
+function referredToElsewhere(binding) {
+  return (binding?.referencePaths ?? []).some(
+    (/** @type {any} */ ref) => !isElementName(ref) && !rendersNothing(ref),
+  );
+}
+
+/**
+ * Whether a module path is the app's own code: a relative path or a path alias.
+ * @param {string} specifier
+ * @param {(specifier: string) => boolean} isOwnCode
+ */
+function ownModule(specifier, isOwnCode) {
+  return /^\.{1,2}(\/|$)/.test(specifier) || isOwnCode(specifier);
+}
 
 /**
  * Read one module of the app's own source: its Core buttons that show no
@@ -839,6 +893,45 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
         uses.push({local: null, names: target.names, placement: placementOf(path, context)});
       }
     },
+    ImportDeclaration(/** @type {any} */ path) {
+      const from = path.node.source.value;
+      if (path.node.importKind === 'type' || !ownModule(from, isOwnCode)) return;
+      for (const specifier of path.node.specifiers) {
+        if (specifier.importKind === 'type') continue;
+        if (!referredToElsewhere(path.scope.getBinding(specifier.local.name))) continue;
+        const imported = importOf(path.scope.getBinding(specifier.local.name))?.imported ?? '*';
+        const fromStem = specifierStem(from);
+        uses.push(
+          imported === '*'
+            ? {local: null, names: [], module: fromStem, placement: 'blocked'}
+            : {
+                local: null,
+                names: imported === 'default' ? [specifier.local.name, ...(fromStem ? [fromStem] : [])] : [imported],
+                placement: 'blocked',
+              },
+        );
+      }
+    },
+    CallExpression(/** @type {any} */ path) {
+      const [specifier] = path.node.arguments;
+      if (path.node.callee.type !== 'Import' || specifier?.type !== 'StringLiteral') return;
+      if (!ownModule(specifier.value, isOwnCode)) return;
+      uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
+    },
+    ImportExpression(/** @type {any} */ path) {
+      const specifier = path.node.source;
+      if (specifier?.type !== 'StringLiteral' || !ownModule(specifier.value, isOwnCode)) return;
+      uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
+    },
+    Program: {
+      exit(/** @type {any} */ path) {
+        for (const [name, binding] of Object.entries(path.scope.bindings)) {
+          if (isComponentDeclaration(binding) && referredToElsewhere(binding)) {
+            uses.push({local: name, names: [name], placement: 'blocked'});
+          }
+        }
+      },
+    },
     ExportDefaultDeclaration(/** @type {any} */ path) {
       const declaration = path.node.declaration;
       const aliases = ['default', ...(stem ? [stem] : [])];
@@ -852,7 +945,28 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
     },
     ExportNamedDeclaration(/** @type {any} */ path) {
       const {declaration, specifiers, source: from} = path.node;
-      if (from) return;
+      if (from) {
+        // A re-export under another name, or of a module's default export,
+        // goes by a name the scan cannot match to the component.
+        if (!ownModule(from.value, isOwnCode)) return;
+        const fromStem = specifierStem(from.value);
+        for (const specifier of specifiers ?? []) {
+          if (specifier.type === 'ExportNamespaceSpecifier') {
+            uses.push({local: null, names: [], module: fromStem, placement: 'blocked'});
+            continue;
+          }
+          if (specifier.type !== 'ExportSpecifier') continue;
+          const local = specifier.local.type === 'StringLiteral' ? specifier.local.value : specifier.local.name;
+          const exported =
+            specifier.exported.type === 'StringLiteral' ? specifier.exported.value : specifier.exported.name;
+          if (local === 'default') {
+            uses.push({local: null, names: fromStem ? [fromStem] : [], module: fromStem, placement: 'blocked'});
+          } else if (exported !== local) {
+            uses.push({local: null, names: [local], placement: 'blocked'});
+          }
+        }
+        return;
+      }
       if (declaration?.type === 'FunctionDeclaration' && declaration.id) {
         exportAs(declaration.id.name, declaration.id.name);
       } else if (declaration?.type === 'VariableDeclaration') {
@@ -869,7 +983,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
       }
     },
   });
-  return {buttons, uses, exports};
+  return {buttons, uses, exports, stem};
 }
 
 /**
@@ -930,13 +1044,15 @@ export function buttonsWithoutAction({files, scan, modulesNaming}) {
       if (here && !sameComponent(use.placement, component)) places.push({file, placement: use.placement});
     }
     const shared = names.filter(name => name !== 'default');
-    if (shared.length > 0) {
-      for (const other of modulesNaming(shared)) {
+    const moduleName = names.length > 0 ? (own?.stem ?? null) : null;
+    const lookFor = moduleName && !shared.includes(moduleName) ? [...shared, moduleName] : shared;
+    if (lookFor.length > 0) {
+      for (const other of modulesNaming(lookFor)) {
         if (other === file) continue;
         for (const use of scan(other)?.uses ?? []) {
-          if (use.local == null && use.names.some(name => shared.includes(name))) {
-            places.push({file: other, placement: use.placement});
-          }
+          const byName = use.local == null && use.names.some(name => shared.includes(name));
+          const byModule = moduleName != null && use.module === moduleName;
+          if (byName || byModule) places.push({file: other, placement: use.placement});
         }
       }
     }

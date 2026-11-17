@@ -141,6 +141,26 @@ describe('the button-actions check', () => {
   );
 
   it(
+    'a component loaded through lazy inside a link is not reported',
+    async () => {
+      const check = await buttonCheck({
+        'src/main.tsx': MAIN,
+        'src/App.tsx': [
+          "import {lazy} from 'react';",
+          "const Hero = lazy(() => import('./Hero'));",
+          'export default function App() {',
+          '  return <a href="/start"><Hero /></a>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/Hero.tsx': app('<Button label="Start" />').replace('export default function App', 'export default function Hero'),
+      });
+      expect(check?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
     "follows a path alias to the app's own code",
     async () => {
       const files = {

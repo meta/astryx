@@ -239,6 +239,44 @@ describe('where the component that holds the button is rendered', () => {
     '',
   ].join('\n');
 
+  const heroDefault = [
+    "import {Button} from '@astryxdesign/core/Button';",
+    'export default function Hero() {',
+    '  return <Button label="Start" />;',
+    '}',
+    '',
+  ].join('\n');
+  /** @param {string} imports @param {string} body */
+  const pageWith = (imports, body) => `${imports}\nexport default function Page() {\n  return ${body};\n}\n`;
+
+  it.each([
+    ['a lazy import inside a link', {'Hero.tsx': heroDefault, 'page.tsx': pageWith("import {lazy} from 'react';\nconst Lazy = lazy(() => import('./Hero'));", '<a href="/x"><Lazy /></a>')}],
+    ['an aliased import inside a link', {'Hero.tsx': hero, 'page.tsx': pageWith("import {Hero as Banner} from './Hero';", '<a href="/x"><Banner /></a>')}],
+    ['a list of components', {'Hero.tsx': hero, 'page.tsx': pageWith("import {Hero} from './Hero';\nconst sections = [Hero];", '<a href="/x">{sections.map(Section => <Section key="s" />)}</a>')}],
+    ['a renamed re-export', {'Hero.tsx': hero, 'sections.ts': "export {Hero as Banner} from './Hero';\n", 'page.tsx': pageWith("import {Banner} from './sections';", '<a href="/x"><Banner /></a>')}],
+    ['a re-export of a default export', {'Hero.tsx': heroDefault, 'sections.ts': "export {default as Banner} from './Hero';\n", 'page.tsx': pageWith("import {Banner} from './sections';", '<a href="/x"><Banner /></a>')}],
+    ['a namespace import read as a value', {'Hero.tsx': hero, 'page.tsx': pageWith("import * as Sections from './Hero';", '<a href="/x">{Object.values(Sections).map(S => <S key="s" />)}</a>')}],
+    ['a component passed as a prop', {'Hero.tsx': hero, 'page.tsx': pageWith("import {Hero} from './Hero';\nimport {Route} from 'react-router-dom';", '<Route path="/" Component={Hero} />')}],
+    ['a component its own module lists', {'page.tsx': "import {Button} from '@astryxdesign/core/Button';\nexport function Home() {\n  return <Button label=\"Go\" />;\n}\nexport const routes = [{path: '/', component: Home}];\n"}],
+  ])('%s: not reported', (_, modules) => {
+    expect(deadButtons(modules)).toEqual([]);
+  });
+
+  it('an aliased import in the open is followed to the button', () => {
+    expect(deadButtons({'Hero.tsx': hero, 'page.tsx': pageWith("import {Hero as Banner} from './Hero';", '<main><Banner /></main>')})).toEqual([
+      'Hero.tsx:3 Start',
+    ]);
+  });
+
+  it('a type that names the component renders nothing', () => {
+    expect(
+      deadButtons({
+        'Hero.tsx': hero,
+        'page.tsx': pageWith("import {Hero} from './Hero';\ntype HeroProps = Parameters<typeof Hero>[0];", '<main><Hero /></main>'),
+      }),
+    ).toEqual(['Hero.tsx:3 Start']);
+  });
+
   it('a component the app renders in the open', () => {
     expect(
       deadButtons({

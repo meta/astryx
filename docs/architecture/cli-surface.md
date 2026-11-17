@@ -374,17 +374,21 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   The `button-actions` check warns for each `Button` or `IconButton` from
   `@astryxdesign/core` that has no `onClick`, `clickAction`, `href`, or
   `submit` or `reset` type, or whose handler has an empty body or whose link
-  goes nowhere (`#`, an empty link, or a `javascript:` link), and that nothing
-  around it can act on. Nothing acts on a button when each element
-  around it is a Core layout component, a React wrapper, a provider, or HTML
-  that holds no control and has no handler, link, widget role or spread props, and
-  when each place the app renders the component that holds it is the same, or
-  nothing renders that component and its module exports it (a page or an entry
-  point). The check does not report a button that it cannot judge: one with
-  props spread in, a ref, an id, a tooltip, a disabled or loading state, or a
-  prop it does not know, or one inside an element, or a prop of an element,
-  that it does not trust. The warning names each button's file, line and
-  label, and never fails `doctor`.
+  goes nowhere, and that nothing around it can act on. A link goes nowhere
+  when it is an empty link, a `javascript:` link, or `#`, except in an app
+  that routes by the URL hash, where `#` opens the first page. Nothing acts
+  on a button when each element around it is a Core layout component, a React
+  wrapper, a provider, or HTML that holds no control and has no handler, link,
+  widget role or spread props, and when each place the app renders the
+  component that holds it is the same. A component that nothing in the app
+  renders or refers to, while its module exports it, is a page or an entry
+  point, and nothing is around it. The check does not report a button that it
+  cannot judge: one with props spread in, a ref, an id, a tooltip, a disabled
+  or loading state, or a prop it does not know; one inside an element, or a
+  prop of an element, that it does not trust; or one in a component that the
+  app refers to in a way the scan cannot follow, such as through `lazy`, a
+  list of components, a prop, or a renamed re-export. The warning names each
+  button's file, line and label, and never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

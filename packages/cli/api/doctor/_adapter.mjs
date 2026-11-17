@@ -390,11 +390,11 @@ export function findButtonsWithoutAction(projectDir) {
     const text = textOf(file);
     return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
   });
-  // A module that renders a component names it as an element, a member or
-  // the end of a module path.
+  // A module that renders a component, or refers to it in any other way,
+  // names it or the module that exports it.
   const modulesNaming = (/** @type {string[]} */ names) => {
     const alternatives = names.map(escapeRegExp).join('|');
-    const pattern = new RegExp(`(?:<|\\.)(?:${alternatives})\\b|[/'"](?:${alternatives})['"]`);
+    const pattern = new RegExp(`\\b(?:${alternatives})\\b`);
     return files.filter(file => pattern.test(textOf(file) ?? ''));
   };
   const found = buttonsWithoutAction({files: withButtons, scan, modulesNaming}).map(each => ({
