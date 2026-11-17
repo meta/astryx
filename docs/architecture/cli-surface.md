@@ -294,7 +294,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15).
+  (DEC-15). The one HTML file `astryx experimental render` writes may also go
+  to an absolute path the caller names with `--out`, in any folder; it never
+  replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
   command or its programmatic API) to a root, a change that makes the operation
@@ -1023,6 +1025,25 @@ disk or the home folder to scratch copies.
 
 Rejected: keeping scratch copies inside the project (they land in folders the
 app builds, typechecks and lints).
+
+### DEC-16 — A render writes its one file where an absolute `--out` names it
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+Agents that make a page to share often keep it with other files to upload, in
+a folder outside the page's project, and name that folder's file by an
+absolute path. A path the caller names absolutely is their choice of place, so
+`astryx experimental render` writes its one HTML file there instead of
+refusing it (INV10). The file it writes there is still never one a render did
+not write: an existing file is replaced only when its head shows that a render
+wrote it, as everywhere else. A relative `--out` stays inside the current
+folder, and `--reverse`, which writes files the embedded source names, keeps
+every write inside it.
+
+Rejected: refusing every path outside the current folder (most agents that
+render a page for an artifact name an absolute path, and retry after the
+refusal); accepting a relative path that climbs out (a path such as
+`../page.html` reads as a mistake more often than as a choice).
 
 ## Verification
 

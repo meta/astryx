@@ -1774,6 +1774,35 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'a-folder.html'}))).toBe('ERR_WRITE_FAILED');
   }, 60_000);
 
+  it('writes to an absolute --out in another folder, and never replaces a file there that a render did not write', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'share', 'page.html');
+      const result = /** @type {any} */ (await render('page.tsx', {cwd: dir, out}));
+      expect(result.data.output).toBe(out);
+      expect(fs.readFileSync(out, 'utf8')).toContain('<meta name="generator" content="Astryx');
+      // A render again replaces the file a render wrote.
+      await render('page.tsx', {cwd: dir, out});
+      const other = path.join(elsewhere, 'notes.html');
+      fs.writeFileSync(other, '<p>mine</p>');
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: other}))).toBe('ERR_FILE_EXISTS');
+      expect(fs.readFileSync(other, 'utf8')).toBe('<p>mine</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a relative --out outside the current folder, saying an absolute path works', async () => {
+    let error;
+    try {
+      await render('page.tsx', {cwd: dir, out: '../escaped.html'});
+    } catch (e) {
+      error = /** @type {any} */ (e);
+    }
+    expect(error?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(error?.message).toContain('or name an absolute path');
+  });
+
   it('refuses --out outside the current folder, and a write through a symlink that leaves it', async () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: '../escaped.html'}))).toBe('ERR_PATH_TRAVERSAL');
     expect(await codeOf(() => render('page.html', {cwd: dir, reverse: true, out: '../escaped.tsx'}))).toBe(

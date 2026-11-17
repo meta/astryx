@@ -44,7 +44,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        "The file to write. Rendering: an .html file (default: the page's name with .html). Reversing: a page module (default: inside a new folder beside the HTML file, named after it, such as `report-restored/`).",
+        "The file to write. Rendering: an .html file (default: the page's name with .html); a relative path stays inside the current folder, and an absolute path may name any folder (a render never replaces a file it did not write). Reversing: a page module inside the current folder (default: inside a new folder beside the HTML file, named after it, such as `report-restored/`).",
     },
     {
       name: 'options.reverse',
@@ -110,7 +110,7 @@ export const doc = {
       code: 'ERR_RENDER_NEWER_FORMAT',
       when: 'reversing a file in a newer render format than this CLI reads; the message and the suggestion name the CLI version that wrote it',
     },
-    {code: 'ERR_PATH_TRAVERSAL', when: 'a file would be written outside the current folder (symlinks followed), or through a symbolic link: `out`, or with `reverse` the page or an embedded file; or, with `reverse`, a file other than the page would go into a folder that already exists'},
+    {code: 'ERR_PATH_TRAVERSAL', when: 'a file would be written outside the current folder (symlinks followed), or through a symbolic link: a relative `out`, or with `reverse` the page or an embedded file; or, with `reverse`, a file other than the page would go into a folder that already exists'},
   ],
   examples: [
     {label: 'Render a page', code: "const {data} = await render('src/app/page.tsx', {out: 'page.html'});"},
