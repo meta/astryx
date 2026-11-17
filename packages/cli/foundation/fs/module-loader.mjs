@@ -344,6 +344,8 @@ let exitGuards = 0;
 /** @type {typeof process.exit | null} */
 let realExit = null;
 let guardsInstalled = false;
+/** @type {{error: unknown, load: GuardedLoad} | null} */
+let microtaskException = null;
 /** Callbacks of a module load running now, each holding the stdout gate. */
 const deferredGates = new Set();
 /**
@@ -563,12 +565,33 @@ function installThemeModuleGuards() {
   // One thrown while the module still loads (from a microtask it queued)
   // refuses that load with it, as a throw from its top level does.
   tellThemeModuleCallbacks(error => {
-    const load = guardedLoad.getStore();
+    const thrown =
+      microtaskException && Object.is(microtaskException.error, error)
+        ? microtaskException
+        : null;
+    microtaskException = null;
+    const load = thrown?.load ?? guardedLoad.getStore();
     if (!load) return null;
     if (load.done) return 'after';
     load.fail(error);
     return 'during';
   });
+  // Before Node 24, a microtask's uncaught exception loses its async context.
+  // Keep the originating load until the exception handler reads it.
+  const queue = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = function (callback) {
+    const load = guardedLoad.getStore();
+    if (!load || typeof callback !== 'function')
+      return queue.call(globalThis, callback);
+    return queue.call(globalThis, () => {
+      try {
+        callback();
+      } catch (error) {
+        microtaskException = {error, load};
+        throw error;
+      }
+    });
+  };
   // A global Node defines as replaceable (an accessor, such as `Buffer`)
   // that a theme module assigns while it loads is put back when the load
   // ends: its value as it was is read only when the module assigns it.
@@ -667,9 +690,14 @@ async function withThemeModuleGuards(load) {
   holdExit();
   /** @type {(error: unknown) => void} */
   let fail = () => {};
+  /** @type {{error: {value: unknown} | null}} */
+  const failure = {error: null};
   /** @type {Promise<never>} */
   const failed = new Promise((_resolve, reject) => {
-    fail = reject;
+    fail = error => {
+      failure.error ??= {value: error};
+      reject(error);
+    };
   });
   // Read only through the race below; a failure after it settled is moot.
   failed.catch(() => {});
@@ -698,11 +726,14 @@ async function withThemeModuleGuards(load) {
   // Node empties its loop with the load still waiting: refused, not exit 13.
   process.once('beforeExit', drained);
   try {
-    return await Promise.race([
+    const loaded = await Promise.race([
       guardedLoad.run(store, load),
       unsettled,
       failed,
     ]);
+    // The import can win the race in the checkpoint that also throws.
+    if (failure.error) throw failure.error.value;
+    return loaded;
   } finally {
     process.removeListener('beforeExit', drained);
     process.exitCode = exitCode;

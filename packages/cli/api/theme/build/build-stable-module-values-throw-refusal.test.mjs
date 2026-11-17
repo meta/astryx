@@ -163,5 +163,23 @@ describe('a theme module that throws from a microtask while it loads', () => {
     );
     expect(r.stdout + r.stderr).not.toContain('process.exit(1)');
     expect(r.stderr).not.toMatch(/^\s+at /m);
+    expect(exists('p/p.css')).toBe(false);
+  });
+
+  it('refuses the load when the CLI supplies Core, before writing outputs', () => {
+    fs.unlinkSync(path.join(dir, 'node_modules/@astryxdesign'));
+    write(
+      'p/p.ts',
+      `queueMicrotask(() => { throw new Error('micro-throw'); });\n${THEME}`,
+    );
+    const r = cli(['theme', 'build', 'p/p.ts', '--json']);
+    expect(r.status, r.stderr).toBe(1);
+    const out = JSON.parse(r.stdout);
+    expect(out.code).toBe('ERR_THEME_LOAD');
+    expect(out.error).toContain(
+      'Failed to load theme from p/p.ts: micro-throw',
+    );
+    expect(r.stderr).not.toMatch(/^\s+at /m);
+    expect(fs.readdirSync(path.join(dir, 'p'))).toEqual(['p.ts']);
   });
 });
