@@ -12,10 +12,11 @@
  * @position Rendered by RichTextEditor and RichTextView inside the composer,
  *   so a document reads the same way in both.
  *
- * SYNC: When modified, keep RichTextEditor.tsx and RichTextView.tsx in sync.
+ * SYNC: RichTextEditor.tsx and RichTextView.tsx both mount this plugin and
+ *   set `--_richtext-document-direction` on their own root.
  */
 
-import {useEffect} from 'react';
+import {useLayoutEffect} from 'react';
 import {firstStrongDirection} from './firstStrongDirection';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {mergeRegister} from '@lexical/utils';
@@ -303,8 +304,23 @@ export function registerBlockDirection(editor: LexicalEditor): () => void {
  */
 export function BlockDirectionPlugin(): null {
   const [editor] = useLexicalComposerContext();
-  // Registers the direction transforms and listener on the Lexical editor.
-  // The teardown removes them.
-  useEffect(() => registerBlockDirection(editor), [editor]);
+  // A layout effect, not an ordinary one: it runs after Lexical has written
+  // the document into the DOM and before the browser paints, so the first
+  // frame a reader sees already has every block on its own side. An
+  // ordinary effect runs after that frame, which showed an English
+  // paragraph right-aligned in a right-to-left page for about one frame
+  // before it moved.
+  useLayoutEffect(() => {
+    const teardown = registerBlockDirection(editor);
+    // Registering only arms the transforms; a document already in the
+    // editor has run none of them. Settle it now, in this same frame.
+    editor.update(
+      () => {
+        $allProseContainers().forEach($writeOwnDirection);
+      },
+      {discrete: true, tag: HISTORY_MERGE_TAG},
+    );
+    return teardown;
+  }, [editor]);
   return null;
 }

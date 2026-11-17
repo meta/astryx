@@ -45,7 +45,6 @@ const TEXT_BLOCK_SPACE = `calc(${spacingVars['--spacing-3']})`;
 const WIDE_BLOCK_SPACE = `calc(${spacingVars['--spacing-4']})`;
 const LIST_ITEM_SPACE = `calc(${spacingVars['--spacing-1']})`;
 const TASK_BOX_SIZE = '20px';
-
 const LIST_ROW_GAP = `calc(${spacingVars['--spacing-0-5']})`;
 const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
