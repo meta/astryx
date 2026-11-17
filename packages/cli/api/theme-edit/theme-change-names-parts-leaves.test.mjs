@@ -62,6 +62,18 @@ describe('a whole-theme change', () => {
     expect(notesOf(r)).not.toContain('--radius-full 0px');
   }, 240_000);
 
+  it('corners of an explicit size offer them to the circles too, every one', async () => {
+    await themeEditNew('c4', {cwd});
+    const r = await themeEditSet('c4', 'corners', '4px', {cwd});
+    // (Bootstrap's 4px: a calendar's picked day keeps its circle unless
+    // asked; the result gives the line.)
+    expect(notesOf(r)).toMatch(
+      /drawn as circles stay round \([^)]*calendar-day/,
+    );
+    expect(notesOf(r)).toContain(' set c4 corners 4px --on calendar-day');
+    expect(notesOf(r)).toContain(' set c4 corners 4px --on avatar');
+  }, 240_000);
+
   it('a border width names the surfaces it does not reach and the dividers it thickens', async () => {
     await themeEditNew('b3', {cwd});
     const r = await themeEditSet('b3', '--border-width', '4px', {cwd});
