@@ -52,6 +52,7 @@ import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {
   Aperture,
@@ -2055,7 +2056,8 @@ export default function CanvasEditor() {
             </LayoutHeader>
           }
           content={
-            <LayoutContent padding={0}>
+            <LayoutContent role="main" padding={0}>
+              <VisuallyHidden as="h1">Canvas editor</VisuallyHidden>
               <Layout
                 height="fill"
                 start={
@@ -2155,7 +2157,11 @@ export default function CanvasEditor() {
                               height="max-content"
                               minHeight="100%"
                               xstyle={styles.canvasStage}>
+                              {/* The artboard is a physical coordinate space:
+                                  layers sit at x/y from its top-left corner in
+                                  every reading direction. */}
                               <Card
+                                dir="ltr"
                                 padding={0}
                                 elevation="med"
                                 width={FRAME.width * scale}

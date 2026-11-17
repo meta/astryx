@@ -386,3 +386,48 @@ function ScrollingStack() {
 export const Scrolling: Story = {
   render: () => <ScrollingStack />,
 };
+
+/**
+ * A pushed screen whose content raises a layer with `z-index: 2` over its
+ * top edge, under the bar. The bar's title and Back stay above it.
+ */
+function RaisedContentStack() {
+  const [path, setPath] = useState<string[]>(['General']);
+  return (
+    <div style={{height: '100vh'}}>
+      <NavigationStack
+        label="Settings"
+        root={
+          <NavigationScreen title="Settings">
+            <Rows title="Settings" />
+          </NavigationScreen>
+        }
+        path={path}
+        onPathChange={setPath}
+        getKey={entry => entry}
+        renderScreen={entry => (
+          <NavigationScreen title={entry}>
+            <div
+              data-testid="raised-content"
+              style={{
+                position: 'absolute',
+                insetInline: 0,
+                top: 0,
+                height: 160,
+                zIndex: 2,
+                background: 'rgb(255 214 0 / 0.9)',
+              }}
+            />
+            <Rows title={entry} />
+          </NavigationScreen>
+        )}
+        data-testid="navigation-stack"
+      />
+    </div>
+  );
+}
+
+export const RaisedContent: Story = {
+  name: 'Raised content under the bar',
+  render: () => <RaisedContentStack />,
+};

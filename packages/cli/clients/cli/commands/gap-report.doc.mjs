@@ -27,6 +27,7 @@ export const doc = {
       required: false,
       description:
         'Component or design-system area the gap is about, up to 120 characters. Required unless --list-categories is set.',
+      names: 'component',
     },
   ],
   options: [

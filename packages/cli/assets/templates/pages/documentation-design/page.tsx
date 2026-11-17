@@ -573,10 +573,12 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">{getComponentName(activeNav)}</Text>
+              <Text as="h1" type="display-1">
+                {getComponentName(activeNav)}
+              </Text>
               <Text type="supporting" color="secondary">
                 March 30, 2026 · Updated 5:40 p.m. PST
               </Text>
@@ -687,6 +689,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                     <Section variant="muted" padding={3} dividers={['top']}>
                       <VStack gap={3}>
                         <TabList
+                          aria-label={`${example.title} details`}
                           value={activeTab}
                           onChange={value =>
                             setExampleTabs(prev => ({

@@ -15,6 +15,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
 import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   SparklesIcon,
   ClipboardDocumentIcon,
@@ -44,6 +45,7 @@ const subscribeToNothing = () => () => {};
 
 export default function TechnicalDocumentationPage() {
   const {copy} = useClipboard();
+  const showToast = useToast();
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
   // every width; once script runs, wide screens move the links to the rail.
@@ -72,10 +74,12 @@ export default function TechnicalDocumentationPage() {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">Getting started with Product Name</Text>
+              <Text as="h1" type="display-1">
+                Getting started with Product Name
+              </Text>
               <Text type="supporting" color="secondary">
                 Last updated March 30, 2026
               </Text>
@@ -115,10 +119,42 @@ export default function TechnicalDocumentationPage() {
                       icon: <Icon icon={ChevronDownIcon} />,
                     }}
                     items={[
-                      {label: 'Open in v0', onClick: () => {}},
-                      {label: 'Open in Claude', onClick: () => {}},
-                      {label: 'Open in ChatGPT', onClick: () => {}},
-                      {label: 'Open in Cursor', onClick: () => {}},
+                      {
+                        label: 'Open in v0',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in v0 here',
+                            uniqueID: 'open-v0',
+                          }),
+                      },
+                      {
+                        label: 'Open in Claude',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in Claude here',
+                            uniqueID: 'open-claude',
+                          }),
+                      },
+                      {
+                        label: 'Open in ChatGPT',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in ChatGPT here',
+                            uniqueID: 'open-chatgpt',
+                          }),
+                      },
+                      {
+                        label: 'Open in Cursor',
+                        onClick: () =>
+                          // Demo only: replace this toast with the link that opens the prompt.
+                          showToast({
+                            body: 'Demo: this would open the prompt in Cursor here',
+                            uniqueID: 'open-cursor',
+                          }),
+                      },
                     ]}
                   />
                 </HStack>

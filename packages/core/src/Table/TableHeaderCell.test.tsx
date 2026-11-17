@@ -138,7 +138,13 @@ describe('TableHeaderCell', () => {
     const {container} = render(<Table data={users} columns={columns} />);
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('padding-block: var(--spacing-2)');
-    expect(declarations).toContain('padding-inline: var(--spacing-3)');
+    expect(declarations).toContain('--_table-header-inline: var(--spacing-3)');
+    expect(declarations).toContain(
+      'padding-inline: var(--_table-header-inline)',
+    );
+    expect(declarations).toContain(
+      '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
+    );
   });
 
   it('takes the compact density padding from the table', () => {
@@ -147,7 +153,13 @@ describe('TableHeaderCell', () => {
     );
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('padding-block: var(--spacing-1)');
-    expect(declarations).toContain('padding-inline: var(--spacing-2)');
+    expect(declarations).toContain('--_table-header-inline: var(--spacing-2)');
+    expect(declarations).toContain(
+      'padding-inline: var(--_table-header-inline)',
+    );
+    expect(declarations).toContain(
+      '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
+    );
   });
 
   it('takes the spacious density padding from the table', () => {
@@ -156,7 +168,13 @@ describe('TableHeaderCell', () => {
     );
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('padding-block: var(--spacing-3)');
-    expect(declarations).toContain('padding-inline: var(--spacing-4)');
+    expect(declarations).toContain('--_table-header-inline: var(--spacing-4)');
+    expect(declarations).toContain(
+      'padding-inline: var(--_table-header-inline)',
+    );
+    expect(declarations).toContain(
+      '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
+    );
   });
 
   it('applies the header font weight and color inside a table', () => {
@@ -236,7 +254,13 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain('text-align: end');
     expect(declarations).not.toContain('text-align: start');
     // The rest of the context styling survives the override.
-    expect(declarations).toContain('padding-inline: var(--spacing-3)');
+    expect(declarations).toContain('--_table-header-inline: var(--spacing-3)');
+    expect(declarations).toContain(
+      'padding-inline: var(--_table-header-inline)',
+    );
+    expect(declarations).toContain(
+      '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
+    );
   });
 
   it('accepts an array of xstyle values', () => {

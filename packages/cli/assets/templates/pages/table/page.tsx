@@ -32,6 +32,7 @@ import {
   pixel,
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ArrowDownTrayIcon,
   DocumentDuplicateIcon,
@@ -413,7 +414,7 @@ export default function SimpleTableTemplate() {
     },
     {
       key: 'actions',
-      header: '',
+      header: <VisuallyHidden>Actions</VisuallyHidden>,
       width: pixel(56),
       renderCell: member => (
         <DropdownMenu
@@ -457,7 +458,7 @@ export default function SimpleTableTemplate() {
               onClick: () =>
                 // Demo only: replace this toast with the call that sends the invite.
                 showToast({
-                  body: `Invite resent to ${member.email}`,
+                  body: `Demo: the invite would be resent to ${member.email} here`,
                   uniqueID: `resend-${member.id}`,
                 }),
             },
@@ -546,7 +547,7 @@ export default function SimpleTableTemplate() {
                             onClick: () =>
                               // Demo only: replace this toast with the export call.
                               showToast({
-                                body: `Exported ${pluralize(selectionState.selectedKeys.size, 'member')}`,
+                                body: `Demo: ${pluralize(selectionState.selectedKeys.size, 'member')} would be exported here`,
                                 uniqueID: 'export-members',
                               }),
                           },

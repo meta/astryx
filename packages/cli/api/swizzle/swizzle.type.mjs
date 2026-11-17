@@ -11,7 +11,7 @@
  *
  * @typedef {object} SwizzleListResponse
  * @property {'swizzle.list'} type
- * @property {string} package `@astryxdesign/core`, the package the listed components come from.
+ * @property {string} package The run's base: `@astryxdesign/core`, or the active base when it is not Core.
  * @property {string[]} data
  */
 

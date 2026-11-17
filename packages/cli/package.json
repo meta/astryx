@@ -134,6 +134,7 @@
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
     "css-tree": "3.2.1",
+    "esbuild": "catalog:",
     "globals": "17.14.0",
     "ignore": "^7.0.14",
     "jiti": "^2.7.0",
