@@ -8233,10 +8233,12 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
       const now = theme.tokens[k];
       const [l, d] = Array.isArray(now) ? now : [now, now];
       if (l !== v.light.color || d !== v.dark.color) continue;
-      out.tokens[k] = [
-        refOf(v.family, 'light', v.light),
-        refOf(v.family, 'dark', v.dark),
-      ];
+      // A half kept at the base theme's (family 'literal') is its color.
+      const half = (/** @type {'light' | 'dark'} */ m) =>
+        /** @type {any} */ (v[m]).family === 'literal'
+          ? v[m].color
+          : refOf(v.family, m, v[m]);
+      out.tokens[k] = [half('light'), half('dark')];
     }
   }
   // A lifted part reads the neutral color's stops too.
