@@ -158,7 +158,9 @@ Astryx paints either text part by status.
 ## Accessibility contract
 
 Compact layout preserves the ordered-list role and `aria-current` handling while
-moving optional navigation to the summary controls.
+moving optional navigation to the summary controls. In compact layout, a
+disabled step states that it is unavailable with a hidden status word after its
+label, because no button carries `aria-disabled` there.
 
 ## Design relationships
 

@@ -25,7 +25,6 @@ export const doc = {
     BellIcon: 'notification',
     DocumentTextIcon: 'document',
     EyeIcon: 'eye',
-    InformationCircleIcon: 'info',
     LinkIcon: 'link',
     PencilIcon: 'edit',
     PhotoIcon: 'image',

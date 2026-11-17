@@ -8,11 +8,16 @@
  * file and an overloaded runner look the same. When `VITEST_SHARD_WATCHDOG_SECONDS`
  * passes, this reporter prints every test file still running with how long it
  * has run, and ends the run with "shard stuck in <file>", the file that has run
- * longest. When `VITEST_SHARD_TIMES_FILE` is set, it writes each finished
- * file's seconds there as JSON, for the recorded-times check.
+ * longest. With `VITEST_SHARD_WATCHDOG_NAME_ONLY=1` it prints the same list as
+ * a warning and lets the run go on, so the job limit still cancels the leg: a
+ * run that a limit cancels stays incomplete for a scheduler that re-runs
+ * incomplete runs. When `VITEST_SHARD_TIMES_FILE` is set, it writes each
+ * finished file's seconds there as JSON, for the recorded-times check.
  *
- * @input env VITEST_SHARD_WATCHDOG_SECONDS, VITEST_SHARD_TIMES_FILE
- * @output stdout lines and exit code 1 when the watchdog fires; the times file
+ * @input env VITEST_SHARD_WATCHDOG_SECONDS, VITEST_SHARD_WATCHDOG_NAME_ONLY,
+ *   VITEST_SHARD_TIMES_FILE
+ * @output stdout lines, and exit code 1 when the watchdog fires (not with
+ *   VITEST_SHARD_WATCHDOG_NAME_ONLY=1); the times file
  * @position scripts — a reporter the Node legs pass to `pnpm test:node`
  */
 
@@ -92,16 +97,20 @@ export default class ShardWatchdog {
         seconds: Math.round((now - start) / 1000),
       }))
       .sort((a, b) => b.seconds - a.seconds);
+    const nameOnly = process.env.VITEST_SHARD_WATCHDOG_NAME_ONLY === '1';
     const lines = [
       '',
       `The Node shard ran ${limit} s, near its job's time limit. Test files still running:`,
       ...(rows.length
         ? rows.map(row => `  ${row.file}  running for ${row.seconds} s`)
         : ['  (none: the shard is not inside a test file)']),
-      `::error title=Node shard stuck::shard stuck in ${rows[0]?.file ?? 'setup, before any test file'} (${rows[0] ? `${rows[0].seconds} s` : `${limit} s`}); every running file is listed above`,
+      nameOnly
+        ? `::warning title=Node shard near its limit::still running at ${limit} s: ${rows[0]?.file ?? 'setup, before any test file'} (${rows[0] ? `${rows[0].seconds} s` : `${limit} s`}); every running file is listed above, and the run goes on`
+        : `::error title=Node shard stuck::shard stuck in ${rows[0]?.file ?? 'setup, before any test file'} (${rows[0] ? `${rows[0].seconds} s` : `${limit} s`}); every running file is listed above`,
     ];
     process.stdout.write(`${lines.join('\n')}\n`);
     this.writeTimes();
-    process.exit(1);
+    // The job limit, not this reporter, ends a leg that keeps running.
+    if (!nameOnly) process.exit(1);
   }
 }

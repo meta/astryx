@@ -166,10 +166,15 @@ export function toErrorEnvelope(err, suggestions, code, receipt) {
  * @param {string} [code] - Stable machine-readable error code (error-codes.mjs).
  * @param {Record<string, unknown>} [receipt] - What the command had already
  *   done before it failed (see toErrorEnvelope).
+ * @param {Record<string, unknown>} [members] - Additive members a code
+ *   documents, such as `requirement` on `ERR_BASE_CAPABILITY`.
  */
-export function jsonError(message, suggestions, code, receipt) {
+export function jsonError(message, suggestions, code, receipt, members) {
   process.__xdsJsonHandled = true;
-  const err = toErrorEnvelope(message, suggestions, code, receipt);
+  const err = {
+    ...toErrorEnvelope(message, suggestions, code, receipt),
+    ...(members ?? {}),
+  };
   // No-op when cliError already classified this failure — first outcome wins.
   setOutcome('error', {exitCode: 1, error: new Error(message), code: err.code});
   // Written whole before the exit: a process that exits with output still

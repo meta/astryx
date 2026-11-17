@@ -2449,11 +2449,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 onMouseMove={() =>
                   highlightOnHover(index, () => setGridRow(-1))
                 }
-                {...stylex.props(
-                  styles.item,
-                  itemSizeStyles[size],
-                  index === highlightedIndex && styles.itemHighlighted,
-                  isSelected && styles.itemSelected,
+                {...mergeProps(
+                  themeProps('typeahead-option', {
+                    size,
+                    highlighted:
+                      index === highlightedIndex ? 'highlighted' : null,
+                    selected: isSelected ? 'selected' : null,
+                  }),
+                  stylex.props(
+                    styles.item,
+                    itemSizeStyles[size],
+                    index === highlightedIndex && styles.itemHighlighted,
+                    isSelected && styles.itemSelected,
+                  ),
                 )}>
                 {isGrid ? (
                   <>

@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 12,
+    "matchCount": 13,
     "results": [
       {
         "domain": "doc",
@@ -15,6 +15,21 @@
         "title": "<text>",
         "command": "astryx docs author-a-theme --index",
         "parent": "astryx docs guides",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "author-a-theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs author-a-theme creating-a-custom-theme",
+        "parent": "astryx docs author-a-theme --index",
         "mentions": [
           "description mentions \"experimental\""
         ]
