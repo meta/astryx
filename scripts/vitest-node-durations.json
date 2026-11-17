@@ -1,6 +1,5 @@
 {
   "$comment": "Seconds of test time per Node test file, from the Node legs of a pull request's CI run (files that run did not reach keep their earlier Main-run times). Only how scripts/vitest-shard-sequencer.mjs balances legs depends on these numbers; a missing or stale entry never drops or repeats a file. Regenerate from a run's Node legs: gh run view <run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log. The swizzle-proof slices keep the time they take when a change reaches them, the largest seen; a split books them at their import alone when the run's swizzle-proof scope proves no target. CI's Node legs leave them out: they run in ci.yml's swizzle-proof legs.",
-  "source": "recorded Node leg logs",
   "seconds": {
     ".github/scripts/a11y-contract-shard.test.mjs": 0.5,
     ".github/scripts/a11y-dependent-audits.test.mjs": 1.8,
@@ -1644,7 +1643,5 @@
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 4.7,
     "scripts/vitest-shard-watchdog.test.mjs": 11.2
-  },
-  "packages/cli/api/theme-edit/theme-how-answer-wording.test.mjs": 20000,
-  "packages/cli/api/theme-edit/theme-changed-tokens-built-values.test.mjs": 20000
+  }
 }
