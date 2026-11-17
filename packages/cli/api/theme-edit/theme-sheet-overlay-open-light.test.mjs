@@ -81,7 +81,8 @@ describe('show', () => {
     const r = await themeEditShow('t', {cwd});
     const unreached = /** @type {any} */ (r).data.unreached;
     expect(unreached).toContain('toast');
-    expect(unreached).toContain('banner');
+    // The banner's info grows from the look with the accent.
+    expect(unreached).not.toContain('banner');
     // A part that reads the accent is reached.
     expect(unreached).not.toContain('button');
     await themeEditSet('t', 'background-color', '#222222', {cwd, on: 'toast'});

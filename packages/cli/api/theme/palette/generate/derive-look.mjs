@@ -34,6 +34,8 @@ import {perceptualDelta} from './generator.mjs';
  * @typedef {object} Stop
  * @property {number} stop
  * @property {string} color
+ * @property {string} [family]
+ * @property {string} [alpha]
  */
 
 /**
@@ -76,6 +78,27 @@ import {perceptualDelta} from './generator.mjs';
  * @property {(m: Mode) => string[]} text The theme's text and secondary text colors (opaque hex) in a mode.
  * @property {(m: Mode) => string[]} grounds The surfaces text sits on in a mode: page, surface, card (opaque hex).
  * @property {(token: string) => boolean} [wanted] Whether a token is written (Core has it and the theme does not set it by hand).
+ */
+
+/**
+ * What deriveStatusColors reads.
+ * @typedef {object} DeriveStatusInput
+ * @property {Record<string, Record<Mode, Record<string | number, string>>>} palette Generated families by id; a role's family has the role's dial id.
+ * @property {ReadonlyArray<number>} stops
+ * @property {ReadonlyArray<Mode>} modes
+ * @property {ReadonlyArray<string>} roles The dial ids to derive (info, success, warning, danger).
+ * @property {(m: Mode) => string[]} grounds Page, surface, card (opaque hex).
+ * @property {(m: Mode, role: string) => Array<Stop & {family: string}>} inks The text the theme draws on a role's fill in a mode, preferred first (white or near-black).
+ * @property {(m: Mode) => string | null} accent The accent fill in a mode, kept apart from.
+ * @property {(token: string) => boolean} [wanted]
+ */
+
+/**
+ * The status colors a palette derives, and each role's state. A token's stop may name its own family (the text on a fill is the neutral color's, or white or black).
+ * @typedef {object} DerivedStatus
+ * @property {Record<string, DerivedToken>} tokens
+ * @property {Record<string, 'derived' | 'unreadable' | 'alike'>} roles
+ * @property {string[]} why
  */
 
 /** Core's category hues; gray is the neutral family's. */
@@ -173,6 +196,24 @@ function strength(color) {
   return most > 0 ? Math.min(1, C / most) : 0;
 }
 /**
+ * How strong the look's colors are against Core's: the accent's strength
+ * over the median of Core's hues, in steps of 0.05 (so an accent of about
+ * the same strength leaves them as they are); 1 without a colored accent.
+ * @param {string | null | undefined} accent
+ * @returns {number}
+ */
+function strengthScale(accent) {
+  const core = Object.values(HUE_SEEDS)
+    .map(strength)
+    .sort((a, b) => a - b);
+  const median = core[Math.floor(core.length / 2)];
+  return accent && hexToOklch(accent).C >= GRAY_CHROMA && median > 0
+    ? Math.round(
+        Math.min(1.2, Math.max(0.25, strength(accent) / median)) * 20,
+      ) / 20
+    : 1;
+}
+/**
  * The seeds of the derived hues: Core's hues at the strength of the accent,
  * in steps of 0.05 so an accent of about the same strength leaves them as
  * they are; Core's strength without a colored accent.
@@ -181,20 +222,46 @@ function strength(color) {
  */
 export function lookSeeds(accent) {
   const hues = Object.keys(HUE_SEEDS);
-  const core = hues.map(h => strength(HUE_SEEDS[h])).sort((a, b) => a - b);
-  const median = core[Math.floor(core.length / 2)];
-  const scale =
-    accent && hexToOklch(accent).C >= GRAY_CHROMA && median > 0
-      ? Math.round(
-          Math.min(1.2, Math.max(0.25, strength(accent) / median)) * 20,
-        ) / 20
-      : 1;
+  const scale = strengthScale(accent);
   return Object.fromEntries(
     hues.map(h => {
       const {L, C, H} = hexToOklch(HUE_SEEDS[h]);
       return [h, oklchClampedHex(L, C * scale, H)];
     }),
   );
+}
+/**
+ * A see-through color over an opaque one, as the eye sees it. `alpha` is
+ * two hex digits.
+ * @param {string} color
+ * @param {string} alpha
+ * @param {string} under
+ * @returns {string}
+ */
+function over(color, alpha, under) {
+  const a = parseInt(alpha, 16) / 255;
+  const ch =
+    /**
+     * @param {string} c
+     * @param {number} i
+     */
+    (c, i) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2]
+    .map(i =>
+      Math.round(a * ch(color, i) + (1 - a) * ch(under, i))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+/**
+ * @param {string} a
+ * @param {string} b
+ */
+function contrast(a, b) {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 /**
  * Whether a family is one lookSeeds grows: an id, a name and a seed at
@@ -520,4 +587,282 @@ export function deriveLookColors({
     }
   }
   return out;
+}
+/**
+ * The status roles a palette derives for a look that leaves them unset: each
+ * role's dial id and the word its tokens carry.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const STATUS_ROLES = {
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
+  danger: 'error',
+};
+/**
+ * A status fill under this ΔE (×100, an OKLab distance of 0.1) from the
+ * accent's reads as the accent at a glance, as two button fills do.
+ */
+const APART_FROM_ACCENT = 10;
+/** How far apart, in hue, a status role keeps from the accent. */
+const ROLE_APART = 30;
+/** How far a role's hue may turn to keep apart, so it stays its family. */
+const ROLE_TURN = 40;
+/**
+ * The seeds of the status roles a look derives: each role's own hue and
+ * lightness (the base theme's color for it) at the accent's strength,
+ * turned away from the accent's hue when the two would sit within 30°
+ * (at most 40°, so info stays a blue, danger a red). `base` holds each
+ * role's base color by dial id (info, success, warning, danger).
+ * @param {Record<string, string>} base
+ * @param {string | null | undefined} accent
+ * @returns {Record<string, string>}
+ */
+export function statusSeeds(base, accent) {
+  const scale = strengthScale(accent);
+  const a = accent ? hexToOklch(accent) : null;
+  /**
+   * @type {Record<string, string>}
+   */
+  const out = {};
+  for (const [id, color] of Object.entries(base)) {
+    const {L, C, H} = hexToOklch(color);
+    let hue = H;
+    if (a && a.C >= GRAY_CHROMA) {
+      const gap = ((H - a.H + 540) % 360) - 180;
+      if (Math.abs(gap) < ROLE_APART) {
+        const away = Math.min(ROLE_TURN, ROLE_APART - Math.abs(gap));
+        hue = (H + (gap >= 0 ? away : -away) + 360) % 360;
+      }
+    }
+    out[id] = oklchClampedHex(L, C * scale, hue);
+  }
+  return out;
+}
+/**
+ * Where each status token starts, `[light, dark]`: the fill at its middle,
+ * the text, tint and text on the tint where the official neutral theme maps
+ * them, icons and borders at the fill.
+ */
+export const STATUS_STOPS = /** @type {const} */ ({
+  fill: [50, 70],
+  warningFill: [85, 85],
+  text: [45, 80],
+  muted: [85, 75],
+  /** The dark tint is see-through, as the official neutral theme's is. */
+  mutedDarkAlpha: '3D',
+  onMuted: [25, 80],
+});
+/**
+ * The status colors a palette derives for the roles a theme leaves unset.
+ * @param {DeriveStatusInput} param0
+ * @returns {DerivedStatus}
+ */
+export function deriveStatusColors({
+  palette,
+  stops,
+  modes,
+  roles,
+  grounds,
+  inks,
+  accent,
+  wanted = () => true,
+}) {
+  /**
+   * @type {Record<string, DerivedToken>}
+   */
+  const tokens = {};
+  /**
+   * @type {Record<string, 'derived' | 'unreadable' | 'alike'>}
+   */
+  const state = {};
+  /**
+   * @type {string[]}
+   */
+  const why = [];
+  const sorted = [...stops].filter(s => s > 0 && s < 100).sort((a, b) => a - b);
+  const near =
+    /**
+     * @param {number} n
+     */
+    n =>
+      sorted.reduce(
+        (best, s) => (Math.abs(s - n) < Math.abs(best - n) ? s : best),
+        sorted[0],
+      );
+  const each =
+    /**
+     * @param {(m: Mode) => Stop} fn
+     */
+    fn => {
+      const v = /** @type {Record<Mode, Stop>} */ ({});
+      for (const m of /** @type {Mode[]} */ (['light', 'dark']))
+        v[m] = fn(modes.includes(m) ? m : modes[0]);
+      return v;
+    };
+  for (const id of roles) {
+    const w = STATUS_ROLES[id];
+    const fam = palette[id];
+    if (!w || !fam) continue;
+    const at =
+      /**
+       * @param {Mode} m
+       * @param {number} stop
+       */
+      (m, stop) => ({stop, color: String(fam[m][stop])});
+    /**
+     * @type {string[]}
+     */
+    const fails = [];
+    /**
+     * The stop nearest `start` that reads at `needs` on every color in `bg`.
+     */
+    const pick =
+      /**
+       * @param {string} token
+       * @param {Mode} m
+       * @param {number} start
+       * @param {string[]} bg
+       * @param {number} needs
+       * @returns {Stop}
+       */
+      (token, m, start, bg, needs) => {
+        const s0 = near(start);
+        const order = [...sorted].sort(
+          (a, b) =>
+            Math.abs(a - s0) - Math.abs(b - s0) ||
+            (m === 'light' ? a - b : b - a),
+        );
+        const scored = order.map(stop => ({
+          stop,
+          r: Math.min(...bg.map(c => contrast(at(m, stop).color, c))),
+        }));
+        const best =
+          scored.find(x => x.r >= needs) ??
+          scored.reduce((x, y) => (y.r > x.r ? y : x));
+        if (best.r < needs)
+          fails.push(
+            `${token} reads at only ${Math.round(best.r * 100) / 100}:1 in ${m} (needs ${needs}:1)`,
+          );
+        return at(m, best.stop);
+      };
+    // The fill: nearest its middle that stands out from the page at 3:1 and
+    // carries white or near-black text at 4.5:1 (near-black first on
+    // warning, white first otherwise).
+    const onFill = /** @type {Record<Mode, Stop & {family: string}>} */ ({});
+    // Warning is a bright fill that carries near-black text, as Core's is:
+    // its text, not its edge, makes it read, so it is not held to 3:1 on
+    // the page.
+    const bright = id === 'warning';
+    const fill = each(m => {
+      const s0 = near(
+        (bright ? STATUS_STOPS.warningFill : STATUS_STOPS.fill)[
+          m === 'light' ? 0 : 1
+        ],
+      );
+      const order = [...sorted].sort(
+        (a, b) => Math.abs(a - s0) - Math.abs(b - s0) || b - a,
+      );
+      const choices = inks(m, id);
+      // The role's usual text first: the nearest stop it reads on, before
+      // the other text on a nearer stop.
+      for (const ink of choices)
+        for (const s of order) {
+          const c = at(m, s).color;
+          if (
+            !bright &&
+            Math.min(...grounds(m).map(g => contrast(c, g))) < NON_TEXT
+          )
+            continue;
+          const a = accent(m);
+          if (a && perceptualDelta(c, a) < APART_FROM_ACCENT) continue;
+          if (contrast(ink.color, c) >= TEXT) {
+            onFill[m] = ink;
+            return at(m, s);
+          }
+        }
+      fails.push(
+        `--color-${w} cannot carry readable text and stand out from the page in ${m}`,
+      );
+      onFill[m] = choices[0];
+      return at(m, s0);
+    });
+    const muted = each(m => {
+      const stop = near(STATUS_STOPS.muted[m === 'light' ? 0 : 1]);
+      const solid = at(m, stop);
+      return m === 'dark'
+        ? {
+            stop,
+            color: `${solid.color}${STATUS_STOPS.mutedDarkAlpha.toLowerCase()}`,
+            alpha: STATUS_STOPS.mutedDarkAlpha.toLowerCase(),
+          }
+        : solid;
+    });
+    /** The tint as it shows over each surface. */
+    const tintSeen =
+      /**
+       * @param {Mode} m
+       */
+      m =>
+        muted[m].alpha
+          ? grounds(m).map(g =>
+              over(muted[m].color.slice(0, 7), muted[m].alpha ?? 'ff', g),
+            )
+          : [muted[m].color];
+    const set = {
+      [`--color-${w}`]: fill,
+      [`--color-${w}-muted`]: muted,
+      [`--color-text-${w}`]: each(m =>
+        pick(
+          `--color-text-${w}`,
+          m,
+          STATUS_STOPS.text[m === 'light' ? 0 : 1],
+          [...grounds(m), ...tintSeen(m)],
+          TEXT,
+        ),
+      ),
+      [`--color-on-${w}-muted`]: each(m =>
+        pick(
+          `--color-on-${w}-muted`,
+          m,
+          STATUS_STOPS.onMuted[m === 'light' ? 0 : 1],
+          tintSeen(m),
+          TEXT,
+        ),
+      ),
+      [`--color-icon-${w}`]: each(m =>
+        pick(`--color-icon-${w}`, m, fill[m].stop, grounds(m), NON_TEXT),
+      ),
+      [`--color-border-${w}`]: each(m =>
+        pick(`--color-border-${w}`, m, fill[m].stop, grounds(m), NON_TEXT),
+      ),
+    };
+    // Apart from the accent: a role whose fill is drawn like the accent's
+    // would not tell a status from an action.
+    const alike = modes.some(m => {
+      const a = accent(m);
+      return a ? perceptualDelta(fill[m].color, a) < APART_FROM_ACCENT : false;
+    });
+    if (fails.length) {
+      state[id] = 'unreadable';
+      why.push(...fails);
+      continue;
+    }
+    if (alike) {
+      state[id] = 'alike';
+      why.push(`${id} would be drawn like the accent`);
+      continue;
+    }
+    state[id] = 'derived';
+    for (const [k, v] of Object.entries(set))
+      if (wanted(k)) tokens[k] = {family: id, ...v};
+    const inkToken = `--color-on-${w}`;
+    if (wanted(inkToken))
+      tokens[inkToken] = {
+        family: onFill.light.family,
+        light: onFill.light,
+        dark: onFill.dark,
+      };
+  }
+  return {tokens, roles: state, why};
 }

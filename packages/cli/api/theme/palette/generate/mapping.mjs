@@ -19,7 +19,12 @@ import {
   generateTonalPalette,
   perceptualDelta,
 } from './generator.mjs';
-import {deriveLookColors} from './derive-look.mjs';
+import {
+  deriveLookColors,
+  deriveStatusColors,
+  lookSeeds,
+  statusSeeds,
+} from './derive-look.mjs';
 
 /** @typedef {import('./types.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
 
@@ -85,7 +90,6 @@ import {deriveLookColors} from './derive-look.mjs';
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {PaletteColorReader} reader
  * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
@@ -124,6 +128,7 @@ import {deriveLookColors} from './derive-look.mjs';
  * @property {Record<string, Partial<Record<PaletteMode, string>>>} exact Main tokens set exactly, per mode: the color's fill gives way to them.
  * @property {Record<string, string>} unread Main tokens set exactly to a value that is not one readable color in some mode, as written.
  * @property {Record<string, Partial<Record<PaletteMode, StopRef>>> | null} lift Lifted secondary text per background token of LIFT_PARTS, per mode; null without one.
+ * @property {{ roles: Record<string, 'derived' | 'unreadable' | 'alike'>; why: string[]; }} statuses The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {{ badges: DerivedState; chart: DerivedState; merged: string[]; unreadable: string[]; }} categories Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
  */
 
@@ -912,6 +917,7 @@ export function paletteTools(candidate, context) {
     solid,
     surfaces,
     onFor,
+    onChoices,
     page,
     neutral,
     contrast,
@@ -1118,6 +1124,47 @@ export function planPaletteRequest(dials, options, context) {
   }
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
+  }
+  // The category and chart hues grow with the look, after the theme's own
+  // colors.
+  const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
+  for (const [id, seed] of Object.entries(derived)) {
+    if (!config.families.some(f => f?.id === id)) {
+      config.families.push({
+        id,
+        name: id[0].toUpperCase() + id.slice(1),
+        seed,
+      });
+    }
+  }
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each (statusSeeds).
+  const unset = Object.keys(STATUS_TOKEN).filter(
+    d => !dials.some(f => f.id === d),
+  );
+  /**
+   * @type {Record<string, string>}
+   */
+  const baseColors = {};
+  for (const d of unset) {
+    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+    const rgb = v ? context.reader.rgb(v) : null;
+    if (rgb && context.reader.alpha(String(v)) >= 1) {
+      baseColors[d] = hex(rgb);
+    }
+  }
+  const seeds = statusSeeds(
+    baseColors,
+    dials.find(d => d.id === 'accent')?.seed,
+  );
+  for (const [id, seed] of Object.entries(seeds)) {
+    if (!config.families.some(f => f?.id === id)) {
+      config.families.push({
+        id,
+        name: id[0].toUpperCase() + id.slice(1),
+        seed,
+      });
+    }
   }
   return {config, fills};
 }
@@ -1610,7 +1657,26 @@ export function mapPalette(candidate, dials, fills, context) {
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      each(m => {
+        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+        const from = /** @type {StopRef} */ (fill[m]);
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+        if (
+          own &&
+          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
+        ) {
+          return {...from, color: own};
+        }
+        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+      }),
+    );
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
@@ -1853,12 +1919,46 @@ export function mapPalette(candidate, dials, fills, context) {
       lift = found;
     }
   }
+  const categories = mapCategories();
+  const statuses = mapStatuses();
   /**
-   * @type {PaletteMapping['categories']}
+   * The status roles the theme leaves unset, from the palette's families of
+   * them (deriveStatusColors), written as its shades; a token set by hand
+   * keeps its value, and a role that cannot be drawn readable and apart
+   * from the accent keeps the base theme's.
+   * @returns {PaletteMapping['statuses']}
    */
-  const categories = context.editor
-    ? mapCategories()
-    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
+  function mapStatuses() {
+    const pal =
+      /** @type {Record< string, Record<PaletteMode, Record<string | number, string>> >} */ (
+        /** @type {unknown} */ (candidate.palette)
+      );
+    const roles = Object.keys(STATUS_TOKEN).filter(
+      d => !dials.some(f => f.id === d) && pal[d],
+    );
+    if (!roles.length) {
+      return {roles: {}, why: []};
+    }
+    const derived = deriveStatusColors({
+      palette: pal,
+      stops,
+      modes,
+      roles,
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      inks: (m, id) =>
+        t.onChoices(id, m).map(r => ({
+          stop: r.stop,
+          color: r.color,
+          family: String(r.family ?? 'neutral'),
+        })),
+      accent: m => tokens['--color-accent']?.[m]?.color ?? null,
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {roles: derived.roles, why: derived.why};
+  }
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
@@ -1925,6 +2025,7 @@ export function mapPalette(candidate, dials, fills, context) {
     unread,
     lift,
     categories,
+    statuses,
   };
 }
 /**
