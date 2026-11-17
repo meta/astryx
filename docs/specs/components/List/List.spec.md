@@ -265,7 +265,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   a coarse pointer the handle always shows and takes its place in the row.
   It also takes its place in the row after a list marker at the leading
   edge, and under `outset` and `bleed`, whose rows reach the host's padding
-  edge. Hidden, it keeps its tab stop. The handle's room styles, for the
+  edge. Hidden, it keeps its tab stop. In a disabled row the handle dims with
+  the row's content, once, to the row's disabled opacity. The handle's room styles, for the
   list and for a row that stays put, come with the reorderable object's
   session, so a List without `reorderable` loads none of them
   (`architecture:component-import-boundaries` INV7). The reorder
