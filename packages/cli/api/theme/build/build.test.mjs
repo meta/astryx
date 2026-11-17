@@ -56,7 +56,11 @@ vi.setConfig({testTimeout: 30000});
 
 let tmpDir;
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-'));
+  // The real path: macOS keeps the temp folder behind a link (/var is
+  // /private/var), and the files a theme imports are listed by real path.
+  tmpDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-')),
+  );
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
