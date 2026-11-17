@@ -1538,6 +1538,16 @@ function toolAnswer(t, env, targets) {
     )
   )
     return 'list';
+  if (/\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/.test(q))
+    return [
+      {
+        text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. Status parts also carry an icon and words, so a state never rests on color alone. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
+        commands: [
+          ...(env.exists ? [`${P} show ${env.slug}`] : []),
+          `${HOW} "status colors"`,
+        ],
+      },
+    ];
   if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
     return [
       {

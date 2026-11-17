@@ -44,6 +44,7 @@ import {
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
 import {
   CATEGORY_HUES,
+  cvdClashes,
   deriveCodeColors,
   deriveLookColors,
   deriveStatusColors,
@@ -65,7 +66,11 @@ let ownSourceTokenValues = () => ({});
 export function setOwnTokenReader(read) {
   ownSourceTokenValues = read;
 }
-import {hexToOklch, normalizeColor} from '../theme/palette/generate/color.mjs';
+import {
+  hexToOklch,
+  normalizeColor,
+  oklchClampedHex,
+} from '../theme/palette/generate/color.mjs';
 import {
   alphaOf,
   compositeOver,
@@ -317,6 +322,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string]}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {Array<{token: string, mode: Mode, pair: string, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
@@ -3261,6 +3267,37 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const categories = mapCategories();
   const statuses = mapStatuses();
   const code = mapCode();
+  const cvd = statusClashes();
+  /**
+   * The status fills, as the theme shows them, that someone red-weak or
+   * green-weak may not tell apart, in each mode, where the theme changed at
+   * least one of the two (a base theme's own pair is the base's).
+   * @returns {NonNullable<PaletteMapping['cvd']>}
+   */
+  function statusClashes() {
+    /** @type {NonNullable<PaletteMapping['cvd']>} */
+    const out = [];
+    const words = ['info', 'success', 'warning', 'error'];
+    for (const m of modes) {
+      /** @type {Record<string, string>} */
+      const fills = {};
+      for (const w of words) {
+        const k = `--color-${w}`;
+        const v =
+          exactOf(k, m) ??
+          tokens[k]?.[m]?.color ??
+          t.colorIn(base?.[m]?.[k], m);
+        if (v && parseColor(v) && alphaOf(v) >= 1)
+          fills[w] = hex(/** @type {number[]} */ (parseColor(v)));
+      }
+      const changed = (/** @type {string} */ w) =>
+        `--color-${w}` in tokens || exactOf(`--color-${w}`, m) != null;
+      for (const c of cvdClashes(fills))
+        if (changed(c.a) || changed(c.b))
+          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]]});
+    }
+    return out;
+  }
   /**
    * The code colors and the overlay scrim, from the palette
    * (deriveCodeColors); a token set by hand keeps its value.
@@ -3374,6 +3411,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     categories,
     statuses,
     code,
+    cvd,
     kept: keptAtBase,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
@@ -3601,6 +3639,31 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
     out.push(
       `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
     );
+  // Status fills someone red-weak or green-weak may not tell apart: one
+  // note per pair, with a line that sets one of them apart in lightness.
+  /** @type {Set<string>} */
+  const saidPairs = new Set();
+  for (const c of pal.cvd ?? []) {
+    const id = `${c.a}|${c.b}`;
+    if (saidPairs.has(id)) continue;
+    saidPairs.add(id);
+    const visions = [
+      ...new Set(
+        (pal.cvd ?? [])
+          .filter(x => x.a === c.a && x.b === c.b)
+          .map(x => `${x.vision} (${x.mode})`),
+      ),
+    ];
+    // The one to move: the second of the pair, toward lighter where it is
+    // already the lighter one, else darker.
+    const [x, y] = c.colors.map(v => hexToOklch(v));
+    const L = Math.max(0.15, Math.min(0.95, y.L + (y.L >= x.L ? 0.15 : -0.15)));
+    const apart = oklchClampedHex(L, y.C, y.H);
+    const dial = c.b === 'error' ? 'danger' : c.b;
+    out.push(
+      `for color-blind readers, the ${c.a} and ${c.b} fills may look alike (${visions.join(', ')}: ${c.colors.join(' and ')}); status icons and words still tell them apart, and a ${y.L >= x.L ? 'lighter' : 'darker'} ${dial} keeps the colors apart too: ${P} set ${slug} ${dial} ${quoteCommandArgument(apart)}`,
+    );
+  }
   if (pal.code?.length)
     out.push(
       `${pal.code.join(', ')} ${pal.code.length > 1 ? 'keep' : 'keeps'} the base theme's: no shade of ${pal.code.length > 1 ? 'their' : 'its'} color reads at 4.5:1 on the code background and the page`,

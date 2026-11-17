@@ -14,6 +14,7 @@ import {
   CATEGORY_HUES,
   CATEGORY_STOPS,
   HUE_SEEDS,
+  cvdClashes,
   deriveLookColors,
   deriveStatusColors,
   isLookFamily,
@@ -238,5 +239,20 @@ describe('derived look colors', () => {
     expect(tintStops('#000080')[0]).toBeLessThan(tintStops('#0052cc')[0]);
     expect(tintStops('#a7c7e7')[0]).toBeGreaterThan(tintStops('#0052cc')[0]);
     expect(tintStops(null)).toEqual(tintStops('#808080'));
+  });
+
+  it('finds status fills a red-weak or green-weak reader may not tell apart', () => {
+    // The official neutral theme's status fills stay apart.
+    expect(
+      cvdClashes({
+        info: '#0074e2',
+        success: '#198100',
+        warning: '#ffce2f',
+        error: '#c9303a',
+      }),
+    ).toEqual([]);
+    // A muddy warning beside a mid green does not.
+    const found = cvdClashes({success: '#357d2b', warning: '#8a6d00'});
+    expect(found.map(c => c.vision).sort()).toEqual(['green-weak', 'red-weak']);
   });
 });
