@@ -58,7 +58,8 @@ Present an inline reference to a source as a readable label or compact number wh
 
 - Released default preserved: `yes` — `variant="label"`.
 - Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+  or target changes. Styling output: a label chip is centred on its line, so a
+  chip with an icon no longer rides above it.
 - Controlled/uncontrolled behavior: not applicable; Citation owns no state.
 - Migration decision: none
 
