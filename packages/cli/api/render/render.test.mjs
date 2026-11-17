@@ -114,6 +114,9 @@ export default function Page() {
       <StatCard title="Q3">
         <Text>Revenue grew 12%</Text>
       </StatCard>
+      <ui.Box title="Q4">
+        <Text>Costs fell 3%</Text>
+      </ui.Box>
       {view === 'settings' ? <Settings /> : <Text>Home</Text>}
     </div>
   );
@@ -122,6 +125,12 @@ export default function Page() {
 function StatCard({title}: {title: string; children?: unknown}) {
   return <section>{title}</section>;
 }
+
+function Box({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+const ui = {Box};
 `;
 
 describe('render(): text a component did not draw', () => {
@@ -142,9 +151,10 @@ describe('render(): text a component did not draw', () => {
     );
   });
 
-  it('still warns when a component of the page around the text drops it', () => {
+  it('still warns when a component of the page around the text drops it, by name or as a member', () => {
     expect(dropped.slice(1).map(w => w.message)).toEqual([
       '<Text> on line 26 did not render the text "Revenue grew 12%" it was given; it takes that text through a prop (often label=), so check its props.',
+      '<Text> on line 29 did not render the text "Costs fell 3%" it was given; it takes that text through a prop (often label=), so check its props.',
     ]);
   });
 

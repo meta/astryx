@@ -943,7 +943,8 @@ function pagePlugin(filename, browser = false) {
         for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
           if (!up.isJSXElement()) continue;
           const name = jsxName(up.node);
-          if (!/^[A-Z]/.test(name)) continue;
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
           chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
         }
         texts.push({
