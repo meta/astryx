@@ -8,10 +8,10 @@
  * @output Counts the elements that paint a visible focus ring for one focus
  *   move. A delegated row leaves the ring to a nested Button, which rings
  *   itself. It rings for a control that shows no ring, such as one inside
- *   VisuallyHidden, and a disabled row rings for any focused control. Option
- *   rows and reorderable rows leave the ring to an end Button. Rows with their
- *   own action and option rows keep their own ring, and pointer focus on a
- *   Button paints none
+ *   VisuallyHidden, and a disabled row rings for a Button it dims, but not
+ *   for a reorder handle. Option rows and reorderable rows leave the ring to
+ *   an end Button. Rows with their own action and option rows keep their own
+ *   ring, and pointer focus on a Button paints none
  * @position Testing; validates Item's focus-within ring
  */
 
@@ -322,6 +322,27 @@ describe('Item focus ring', () => {
     focusWithKeyboard(share);
 
     expect(paintsRing(optionRowOf(share))).toBe(true);
+  });
+
+  it('leaves the ring to the reorder handle of a disabled reorderable List row', () => {
+    render(
+      <List reorderable={createReorderable({onReorder: () => {}})}>
+        <ListItem
+          itemKey="report"
+          label="Quarterly report"
+          isDisabled
+          endContent={<Button label="Share" size="sm" onClick={() => {}} />}
+        />
+        <ListItem itemKey="notes" label="Meeting notes" isDisabled />
+      </List>,
+    );
+    for (const name of ['Reorder Quarterly report', 'Reorder Meeting notes']) {
+      const handle = screen.getByRole('button', {name});
+
+      focusWithKeyboard(handle);
+
+      expect(ringedElements(optionRowOf(handle))).toEqual([handle]);
+    }
   });
 
   it('keeps the row ring of a CheckboxList option for its checkbox', () => {
