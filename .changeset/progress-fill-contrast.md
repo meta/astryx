@@ -1,6 +1,5 @@
 ---
 '@astryxdesign/core': patch
-'@astryxdesign/lab': patch
 '@astryxdesign/theme-neutral': patch
 '@astryxdesign/theme-butter': patch
 '@astryxdesign/theme-stone': patch
