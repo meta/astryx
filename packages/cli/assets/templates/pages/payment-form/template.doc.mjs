@@ -12,8 +12,11 @@ export const doc = {
   category: 'Form - Checkout',
   icons: {
     CheckCircleIcon: 'success',
+    CreditCardIcon: 'creditCard',
+    DevicePhoneMobileIcon: 'mobile',
     LockClosedIcon: 'lock',
     ShieldCheckIcon: 'shield',
     TruckIcon: 'shipping',
+    WalletIcon: 'wallet',
   },
 };
