@@ -2678,6 +2678,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
  * @property {string} [compound] - a compound subject a part word begins, which names no part ("radio station")
+ * @property {string} [unbound] - the part said before a look that names none of its own, out of the binder's reach: the look is named, never written
  * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
  * @property {{holder: string, part: string}} [placeStrict] - an element named in a place it cannot be kept to: answered only when the answer holds there (a token on the place)
  * @property {{owner: string, child: string}} [possMiss] - a possessive owner's element it does not have ("the date picker's days")
@@ -4528,7 +4529,9 @@ export function draftAnswer(ctx, env, question) {
           );
           const owner =
             firstColor > 0 ? `${words.slice(0, firstColor).join(' ')} ` : '';
-          return `${owner}${under ?? bare} background and ${words.slice(Math.max(0, firstColor)).join(' ')} text`;
+          // (Joined by "with", so the text is said of the same part, in
+          // the same state: "selected item #f7f8f8 text on #1c1d1f".)
+          return `${owner}${under ?? bare} background with ${words.slice(Math.max(0, firstColor)).join(' ')} text`;
         }
         return `${under ?? bare} ${ground ?? 'page'} background, ${ink} text`;
       },
@@ -8382,20 +8385,6 @@ export function draftAnswer(ctx, env, question) {
   const otherReadings = [];
   /** Clauses whose every step was kept to their container. @type {Set<any>} */
   const keptInPlace = new Set();
-  // "checkboxes green": the color a checked box fills with (the checks
-  // group's, or one of its boxes').
-  for (const c of clauses)
-    if (
-      c.parts.length === 1 &&
-      ['checks', ...(FAMILIES.checks ?? [])].includes(c.parts[0].on) &&
-      c.colors.length &&
-      !c.state &&
-      !c.named &&
-      !/\b(border|outline|background|unchecked)\b/.test(c.text)
-    ) {
-      c.state = 'checked';
-      c.stateImplied = true;
-    }
   // "labels on form fields": the label, not the field it sits on.
   for (const c of clauses)
     if (c.parts.some(p => p.on === 'field-label')) {
@@ -10339,7 +10328,66 @@ export function draftAnswer(ctx, env, question) {
               (C.MAP[p.on]?.contains ?? []).includes(tp.on),
           );
         if (inside && !c.parts.every(p => textOnlyPart(p.on))) c.parts = [tp];
-        c.aspects.push(inside ? 'text' : 'background');
+        // (A part that paints no fill of its own, in the state said, a tab
+        // or a side nav item at rest: a bare color is its text, never a
+        // fill it does not draw. A part with a fill keeps the fill.)
+        const fam0 = (/** @type {string} */ on) =>
+          FAMILIES[on] ? FAMILIES[on][0] : on;
+        // (Only where the ask speaks of that part's text in another of its
+        // clauses, "tabs 14px text, …, other tabs #666666", "sidebar items
+        // #8a8f98 and selected item #f7f8f8 text": the color goes with the
+        // text the list is about; said alone, a color stays the fill.)
+        const textSaid = (/** @type {string} */ on) =>
+          clauses.some(
+            o =>
+              o !== c &&
+              (o.parts.some(q => q.on === on) ||
+                (!o.parts.length &&
+                  joinOf.get(o)?.sep === 'with' &&
+                  clauses[clauses.indexOf(o) - 1]?.parts.some(
+                    q => q.on === on,
+                  ))) &&
+              o.aspects.some(a =>
+                ['text', 'fontsize', 'weight', 'case'].includes(a),
+              ),
+          );
+        const fillless =
+          !inside &&
+          c.colors.length > 0 &&
+          c.parts.every(p => textSaid(p.on)) &&
+          c.parts.every(p => {
+            const rec = C.MAP[fam0(p.on)];
+            if (!rec || FAMILIES[p.on] || textOnlyPart(fam0(p.on)))
+              return false;
+            if (!(C.partReads(fam0(p.on), 'text') ?? []).length) return false;
+            const said = c.state ? `${c.state}=${c.state}` : null;
+            /** @param {string} k */
+            const inSaid = k =>
+              !/:|\[|::/.test(k) &&
+              (said
+                ? k.includes(said)
+                : !/selected=|checked=|current=/.test(k));
+            if (
+              ['background-color', 'background'].some(prop =>
+                Object.values(rec.own?.[prop]?.tokens ?? {}).some(
+                  (/** @type {string[]} */ whens) =>
+                    whens.length === 0 || whens.some(inSaid),
+                ),
+              )
+            )
+              return false;
+            return !Object.entries(rec.at?.['background-color'] ?? {}).some(
+              ([k, v]) =>
+                !/^\s*(?:transparent|none|initial|inherit)\s*$/i.test(
+                  String(v),
+                ) &&
+                !/:|\[|::/.test(k) &&
+                (said
+                  ? k.includes(said)
+                  : !/selected=|checked=|current=/.test(k)),
+            );
+          });
+        c.aspects.push(inside || fillless ? 'text' : 'background');
       }
   };
 
@@ -10452,6 +10500,10 @@ export function draftAnswer(ctx, env, question) {
     c.aspects = [...b.aspects];
   }
   fillAspect();
+  /** Clauses that took their part from another clause. @type {Set<Clause>} */
+  const carried = new Set();
+  /** (A clause with a part of its own, never one it took.) @param {Clause} x */
+  const ownsPart = x => x.parts.length > 0 && !carried.has(x);
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
     const prev = clauses[i - 1];
@@ -10460,6 +10512,65 @@ export function draftAnswer(ctx, env, question) {
       .slice(0, i)
       .reverse()
       .find(x => x.parts.length && !x.except);
+    // The binder: a part reaches a clause that names none of its own only
+    // from its list's owner (a colon's head, or the part a list is led by,
+    // said first with no other part named between), or from the clause
+    // right before, when that clause named it itself. A part carried once
+    // is carried no further: "badges pill shaped, rounder cards, compact
+    // tables, …, gray background" never reaches the tables' rows.
+    const reach = (() => {
+      if (!nearest || c.parts.length) return true;
+      if (listOwner(c)) return true;
+      if (prev === nearest && ownsPart(prev)) return true;
+      // (After an except, its own run reads it: "… taller except the large
+      // ones and bolder".)
+      if (prev?.except) return true;
+      // (What is said "with" an item is that item's, however it got its
+      // part: "the current item #1f2937 with white text".)
+      if (prev === nearest && joinOf.get(c)?.sep === 'with') return true;
+      // (The second half of a mode pair is the first half's: "#ffffff in
+      // light mode and #1a1f36 in dark mode".)
+      if (
+        prev === nearest &&
+        prev.mode &&
+        c.mode &&
+        prev.mode !== c.mode &&
+        joinOf.get(c)?.sep === 'and'
+      )
+        return true;
+      let k = i - 1;
+      while (
+        k > 0 &&
+        !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
+      )
+        k--;
+      const head = clauses[k];
+      if (
+        head &&
+        head !== c &&
+        ownsPart(head) &&
+        // (Only another part said between breaks the list: an item said of
+        // the head's own part, or of a piece of it, keeps it.)
+        !clauses
+          .slice(k + 1, i)
+          .some(
+            x =>
+              ownsPart(x) &&
+              !x.parts.every(p =>
+                head.parts.some(
+                  h =>
+                    h.on === p.on ||
+                    (
+                      C.MAP[FAMILIES[h.on]?.[0] ?? h.on]?.contains ?? []
+                    ).includes(p.on) ||
+                    p.on.startsWith(`${h.on}-`),
+                ),
+              ),
+          )
+      )
+        return true;
+      return false;
+    })();
     // (An item of a part's colon list is its subject's, never the item
     // before's: "tabs: … on the selected tab, …, 14px medium text".)
     const owner = nearest ? listOwner(c) : null;
@@ -10467,7 +10578,7 @@ export function draftAnswer(ctx, env, question) {
       nearest && owner
         ? {...nearest, parts: owner.parts, state: owner.state}
         : nearest;
-    if (
+    const takesBefore = Boolean(
       !c.parts.length &&
       before &&
       !c.except &&
@@ -10478,7 +10589,9 @@ export function draftAnswer(ctx, env, question) {
       !unknownLead(c) &&
       !unknownSlot(c.text) &&
       // (The clause-scope reader decides: a modifier of the part before
-      // takes it; anything else is the whole theme's.)
+      // takes it; anything else is the whole theme's. Out of the binder's
+      // reach, the look is named, never written on a part said further
+      // back nor on the whole theme.)
       scopeOf(c, before) === 'inherit' &&
       // (A second ask said with only its way or its color, "rounder and
       // darker", "rounder and red", is about the same part.)
@@ -10487,8 +10600,52 @@ export function draftAnswer(ctx, env, question) {
         c.lengths.length ||
         (prev === nearest &&
           (c.dir != null || colorsIn(c.text).length > 0) &&
-          c.text.trim().split(/\s+/).length <= 3))
-    ) {
+          c.text.trim().split(/\s+/).length <= 3)),
+    );
+    if (takesBefore && before && !reach)
+      c.unbound = String(before.parts[0]?.on ?? '');
+    // (A look the scope reader gives the whole theme, said in a list out of
+    // reach of the part before it, with no theme word and no dial of its
+    // own, "badges 4px corners, rounder cards, compact tables, … and no
+    // border": named, never the whole theme's. "12px text" is the text
+    // size dial; "the whole app's borders" says the theme.)
+    else if (
+      !takesBefore &&
+      before &&
+      !reach &&
+      !c.parts.length &&
+      !c.except &&
+      ['comma', 'and', 'with'].includes(String(joinOf.get(c)?.sep)) &&
+      c.aspects.length > 0 &&
+      c.aspects.every(
+        a =>
+          ![
+            'corners',
+            'spacing',
+            'family',
+            'fontsize',
+            'leading',
+            'tracking',
+            'colors',
+            'mode',
+            'contrast',
+          ].includes(a),
+      ) &&
+      !ROLE_WORDS.test(c.text) &&
+      !/\b(?:theme|everything|everywhere|whole|entire|all|app|site|page|body|text|mode|accent|brand|neutral)\b/.test(
+        c.text,
+      ) &&
+      // (Only after a part the asker named in so many words: "big touch
+      // targets" names the controls by what they are for.)
+      lex.parts.some(
+        ([re, x]) =>
+          before.parts.some(p => p.on === x.on) &&
+          re.test(` ${asked0.toLowerCase()} `),
+      ) &&
+      scopeOf(c, before) === 'theme'
+    )
+      c.unbound = String(before.parts[0]?.on ?? '');
+    if (takesBefore && before && reach) {
       // (After an except, "… taller except the large ones, and bolder":
       // every part of the ask the except closed, never only the last.)
       /** @type {Clause[]} */
@@ -10503,6 +10660,24 @@ export function draftAnswer(ctx, env, question) {
         )
         .map(p => ({...p}));
       c.state ??= before.state;
+      carried.add(c);
+      // (A mode pair's first half, said of no part, is said of the part its
+      // second half takes: "borders #d5dbe1 in light mode and #30313d in
+      // dark mode" are one part's.)
+      if (
+        prev &&
+        !prev.parts.length &&
+        !prev.except &&
+        prev.mode &&
+        c.mode &&
+        prev.mode !== c.mode &&
+        joinOf.get(c)?.sep === 'and' &&
+        !lex.parts.some(([re]) => re.test(` ${prev.text.toLowerCase()} `))
+      ) {
+        prev.parts = c.parts.map(p => ({...p}));
+        prev.state ??= c.state;
+        carried.add(prev);
+      }
       // (Its own aspect from its own words: "red" and "darker" are a fill.)
       if (!c.aspects.length) fillAspect();
     }
@@ -13583,6 +13758,32 @@ export function draftAnswer(ctx, env, question) {
     clauses.splice(i + 1, 0, turned);
     i++;
   }
+  // ("menus with 4px padding and 32px rows": a list's own rows or items are
+  // the rows its head part holds, never another part's rows.)
+  for (const c of clauses) {
+    const j = joinOf.get(c);
+    if (!['with', 'colon'].includes(String(j?.list)) || c.parts.length !== 1)
+      continue;
+    if (!/\b(?:rows?|items?|entries|options?)\b/.test(c.text)) continue;
+    let k = clauses.indexOf(c) - 1;
+    while (
+      k > 0 &&
+      !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
+    )
+      k--;
+    // (The head's part, or, where the head gave its words to the first
+    // item, that item's.)
+    const holder = clauses
+      .slice(k, clauses.indexOf(c))
+      .find(x => x.parts.length)?.parts[0]?.on;
+    if (!holder || c.parts[0].on === holder) continue;
+    const h = FAMILIES[holder] ? FAMILIES[holder][0] : holder;
+    const own = (C.MAP[h]?.contains ?? []).find(
+      x => x === `${h}-item` || x === `${h}-row`,
+    );
+    if (own && !(C.MAP[h]?.contains ?? []).includes(c.parts[0].on))
+      c.parts = [{on: own}];
+  }
   // ("side nav #08090a, items 13px text": a word naming a piece of the
   // part a list leads with, its items, its track, is that piece.)
   for (let i = 1; i < clauses.length; i++) {
@@ -13727,6 +13928,48 @@ export function draftAnswer(ctx, env, question) {
       !/\b(?:shadow|glow|blur)\b/.test(c.text)
     )
       c.aspects = ['border'];
+  // "checkboxes green", "switches, checkboxes and progress bars in
+  // magenta": the color a part that fills when checked takes is its checked
+  // fill (the part data's own checked look), never its off look too; in a
+  // list of parts, those parts are read apart from the rest.
+  /** @param {string} on */
+  const fillsWhenChecked = on =>
+    Object.keys(
+      C.MAP[FAMILIES[on] ? FAMILIES[on][0] : on]?.at?.['background-color'] ??
+        {},
+    ).some(k => /(?:^|,)checked=checked(?:,|$)/.test(k));
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const c = clauses[i];
+    if (
+      !c.parts.length ||
+      !c.colors.length ||
+      c.state ||
+      c.named ||
+      c.except ||
+      /\b(border|outline|background|unchecked|off|track|thumb|knob)\b/.test(
+        c.text,
+      )
+    )
+      continue;
+    // (Only its fill: "indicator focus rings blue" is the ring.)
+    if (!c.aspects.every(a => a === 'background')) continue;
+    const toggles = c.parts.filter(p => fillsWhenChecked(p.on));
+    if (!toggles.length) continue;
+    const rest = c.parts.filter(p => !toggles.includes(p));
+    c.parts = toggles;
+    c.state = 'checked';
+    c.stateImplied = true;
+    if (rest.length) {
+      const other = {
+        ...c,
+        parts: rest,
+        state: null,
+        stateImplied: undefined,
+      };
+      joinOf.set(other, {sep: 'and', list: joinOf.get(c)?.list ?? null});
+      clauses.splice(i + 1, 0, other);
+    }
+  }
   /** The unknown subject a list is held under, until a clause leaves it. */
   let heldUnder = '';
   /**
@@ -13762,17 +14005,36 @@ export function draftAnswer(ctx, env, question) {
     settleSubject();
     {
       const unknown = unknownSubject(c);
+      // (A compound subject that names no part, "kbd hints #2e3035 with
+      // #8a8f98 text": the slot guard names it; what its list says after
+      // it is held under it too, never the whole theme's.)
+      const compoundHead =
+        !unknown && c.compound && !c.parts.length ? c.compound : '';
       if (
         heldUnder &&
         (unknown ||
           c.parts.length ||
-          /[;\n.]|\bthen\b/.test(c.joint ?? '') ||
+          // (A with-list item is still the list's, whatever joined it
+          // after a rewrite: ";with".)
+          (/[;\n.]|\bthen\b/.test(c.joint ?? '') &&
+            !/\bwith\b/.test(c.joint ?? '')) ||
           /^[a-z][a-z' -]{1,40}:/.test(c.text.trim()))
       )
         heldUnder = '';
       if (unknown) heldUnder = unknown;
-      if (heldUnder && !c.parts.length)
+      if (compoundHead) heldUnder = compoundHead;
+      else if (heldUnder && !c.parts.length)
         guardFor = {c, phrase: unknown ?? '', from: drafts.length};
+    }
+    // (A look said with no part of its own, out of reach of the part said
+    // before it: named, never written on that part nor theme-wide.)
+    if (c.unbound && !c.parts.length) {
+      push({
+        text: `"${c.text.trim()}" names no part, and the last part said, ${c.unbound}, is not said right before it, so nothing is written for it; say its part with it, as in "${c.unbound} ${c.text.trim()}"`,
+        options: [],
+        lookup: `${HOW} ${c.unbound}`,
+      });
+      continue;
     }
     // An element its place has no part of its own for: nothing is written,
     // and the answer says why.
