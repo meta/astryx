@@ -101,6 +101,36 @@ describe('liftTargetAt', () => {
     expect(liftAt(150, 35, spans(layout, ['list']))).toBeNull();
   });
 
+  it('commits the segment a lift lands on when the segments wrap onto two rows', () => {
+    // A caller's style wraps five segments: A B C on the first row, D E on
+    // the second, E under B.
+    const box = (
+      value: string,
+      left: number,
+      right: number,
+      top: number,
+    ): SegmentSpan => {
+      const element = document.createElement('button');
+      element.dataset.value = value;
+      return {element, left, right, top, bottom: top + 36};
+    };
+    const wrapped = [
+      box('a', 12, 108, 22),
+      box('b', 112, 208, 22),
+      box('c', 212, 308, 22),
+      box('d', 12, 108, 62),
+      box('e', 112, 208, 62),
+    ];
+    const area = [{left: 10, top: 20, right: 310, bottom: 100}];
+    const lift = (x: number, y: number) =>
+      liftTargetAt(x, y, area, wrapped)?.dataset.value ?? null;
+    expect(lift(160, 80)).toBe('e');
+    expect(lift(60, 80)).toBe('d');
+    expect(lift(160, 40)).toBe('b');
+    // In a gap between the rows, the horizontal rule decides.
+    expect(lift(160, 60)).toBe('b');
+  });
+
   it("commits on a segment's own touch band, never on the box around every band", () => {
     const segments = spans(layout);
     // Grid's band stops 4 px above the control (a neighbor clamped it);

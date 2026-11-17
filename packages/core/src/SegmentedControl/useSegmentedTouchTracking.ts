@@ -61,6 +61,9 @@ export interface SegmentSpan {
   readonly element: HTMLElement;
   readonly left: number;
   readonly right: number;
+  /** The box's top and bottom, when measured. */
+  readonly top?: number;
+  readonly bottom?: number;
 }
 
 /** Every segment of `track`, disabled ones included, measured once. */
@@ -69,7 +72,13 @@ export function measureSegments(track: HTMLElement): SegmentSpan[] {
     track.querySelectorAll<HTMLElement>(SEGMENT_SELECTOR),
     element => {
       const rect = element.getBoundingClientRect();
-      return {element, left: rect.left, right: rect.right};
+      return {
+        element,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+      };
     },
   );
 }
@@ -113,9 +122,11 @@ export function segmentTargetAt(
 
 /**
  * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
- * control's lift `area`, the one `segmentTargetAt` counts it for; outside
- * them, none. The tracker counts a held pointer on the control's center line,
- * so a press never lands outside.
+ * control's lift `area`, the segment whose own box holds the lift, else the
+ * one `segmentTargetAt` counts it for; outside them, none. The own-box test
+ * keeps a tap on its segment when a caller's style wraps the segments onto
+ * more than one row. The tracker counts a held pointer on the control's
+ * center line, so a press never lands outside.
  */
 export function liftTargetAt(
   x: number,
@@ -126,7 +137,22 @@ export function liftTargetAt(
   const isInside = area.some(
     box => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
   );
-  return isInside ? segmentTargetAt(x, segments) : null;
+  if (!isInside) {
+    return null;
+  }
+  const under = segments.find(
+    ({left, right, top, bottom}) =>
+      top != null &&
+      bottom != null &&
+      x >= left &&
+      x <= right &&
+      y >= top &&
+      y <= bottom,
+  );
+  if (under != null) {
+    return isDisabled(under.element) ? null : under.element;
+  }
+  return segmentTargetAt(x, segments);
 }
 
 const NO_AREA: ReadonlyArray<ControlBounds> = [];
