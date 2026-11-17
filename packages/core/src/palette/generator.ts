@@ -96,7 +96,10 @@ export const COMPACT_11_STOPS = Object.freeze([
 ]);
 
 const DARK_CHROMA_FACTOR = 0.85;
-const RESERVED_FAMILY_IDS = new Set(['black', 'white']);
+const RESERVED_FAMILY_IDS: ReadonlyArray<string> = Object.freeze([
+  'black',
+  'white',
+]);
 const NEUTRAL_PROFILES = ['neutral-v1', 'warm-v1', 'cool-v1', 'custom'];
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -121,15 +124,13 @@ function interpolateHue(a: number, b: number, amount: number) {
   return normalizeHue(a + delta * amount);
 }
 
-export function validateStops(stops: readonly number[]): number[] {
+export function validateStops(stops: ReadonlyArray<number>): number[] {
   if (!Array.isArray(stops) || stops.length === 0) {
     throw new Error('A palette requires at least one stop.');
   }
   for (const stop of stops) {
     if (!Number.isFinite(stop) || stop < 0 || stop > 100) {
-      throw new Error(
-        `Stop ${String(stop)} must be a finite number from 0 to 100.`,
-      );
+      throw new Error(`Stop ${stop} must be a finite number from 0 to 100.`);
     }
   }
   for (let index = 1; index < stops.length; index++) {
@@ -188,33 +189,55 @@ export const ANCHOR_INPUT_KEYS = Object.freeze([
  * The modes a mode strategy generates.
  */
 export function modesForStrategy(strategy: string): PaletteMode[] {
-  if (strategy === 'light-only') return ['light'];
-  if (strategy === 'dark-only') return ['dark'];
-  if (strategy === 'light-and-dark') return ['light', 'dark'];
-  throw new Error(`Unknown mode strategy: ${String(strategy)}`);
+  if (strategy === 'light-only') {
+    return ['light'];
+  }
+  if (strategy === 'dark-only') {
+    return ['dark'];
+  }
+  if (strategy === 'light-and-dark') {
+    return ['light', 'dark'];
+  }
+  throw new Error(`Unknown mode strategy: ${strategy}`);
 }
 
 function hueBalanceFactor(hue: number) {
   const normalized = normalizeHue(hue);
-  if (normalized >= 70 && normalized < 115) return 0.94;
-  if (normalized >= 115 && normalized < 175) return 0.78;
-  if (normalized >= 175 && normalized < 230) return 0.82;
-  if (normalized >= 285 && normalized < 340) return 0.9;
+  if (normalized >= 70 && normalized < 115) {
+    return 0.94;
+  }
+  if (normalized >= 115 && normalized < 175) {
+    return 0.78;
+  }
+  if (normalized >= 175 && normalized < 230) {
+    return 0.82;
+  }
+  if (normalized >= 285 && normalized < 340) {
+    return 0.9;
+  }
   return 1;
 }
 
 function highToneChromaFactor(hue: number, tone: number) {
-  if (tone <= 60) return 1;
+  if (tone <= 60) {
+    return 1;
+  }
   const taper = smoothstep((tone - 60) / 35);
   const normalized = normalizeHue(hue);
-  if (normalized >= 115 && normalized < 175) return 1 - 0.28 * taper;
-  if (normalized >= 175 && normalized < 200) return 1 - 0.4 * taper;
+  if (normalized >= 115 && normalized < 175) {
+    return 1 - 0.28 * taper;
+  }
+  if (normalized >= 175 && normalized < 200) {
+    return 1 - 0.4 * taper;
+  }
   return 1;
 }
 
 function toneAdjustedHue(hue: number, tone: number) {
   const normalized = normalizeHue(hue);
-  if (normalized < 40 || normalized >= 70 || tone >= 50) return normalized;
+  if (normalized < 40 || normalized >= 70 || tone >= 50) {
+    return normalized;
+  }
   const darkening = clamp((50 - tone) / 40, 0, 1);
   return normalizeHue(normalized - 8 * Math.sqrt(darkening));
 }
@@ -228,8 +251,12 @@ function vibrancyMultiplier(vibrancy: number) {
   if (!Number.isFinite(vibrancy) || vibrancy < 0 || vibrancy > 100) {
     throw new Error('Vibrancy must be a number from 0 to 100.');
   }
-  if (vibrancy <= 25) return (vibrancy / 25) * 0.72;
-  if (vibrancy <= 50) return 0.72 + ((vibrancy - 25) / 25) * 0.28;
+  if (vibrancy <= 25) {
+    return (vibrancy / 25) * 0.72;
+  }
+  if (vibrancy <= 50) {
+    return 0.72 + ((vibrancy - 25) / 25) * 0.28;
+  }
   return 1 + (vibrancy - 50) * 0.0096;
 }
 
@@ -285,10 +312,12 @@ function colorToPolar(color: string): PolarColor {
 }
 
 function neutralPolar(profile: string, seed: string): PolarColor {
-  if (profile === 'custom') return colorToPolar(seed);
+  if (profile === 'custom') {
+    return colorToPolar(seed);
+  }
   const hue = profile === 'warm-v1' ? 75 : profile === 'cool-v1' ? 250 : 0;
   if (!['neutral-v1', 'warm-v1', 'cool-v1'].includes(profile)) {
-    throw new Error(`Unknown neutral profile: ${String(profile)}`);
+    throw new Error(`Unknown neutral profile: ${profile}`);
   }
   return {
     lightness: 0.5,
@@ -302,7 +331,9 @@ function anchorPolarAtStop(
   anchors: TonalPaletteAnchor[],
   stop: number,
 ): PolarColor {
-  if (anchors.length === 0) return seed;
+  if (anchors.length === 0) {
+    return seed;
+  }
   const sorted = [...anchors].sort((a, b) => a.stop - b.stop);
   const lower = [...sorted].reverse().find(anchor => anchor.stop <= stop);
   const upper = sorted.find(anchor => anchor.stop >= stop);
@@ -351,8 +382,9 @@ function generateCandidate(
   // v2: a gray family's color fades toward white the way a gray scale's
   // does, so its pale stops (a page, a card on it) carry only a faint tint
   // of its hue; its darker stops keep their color.
-  if (recipe === PALETTE_RECIPE_V2 && !coordinateWithOtherFamilies)
+  if (recipe === PALETTE_RECIPE_V2 && !coordinateWithOtherFamilies) {
     chroma *= grayFade(lightness);
+  }
   // v2, on the pale side of a ramp (above its middle): the narrower a
   // stop's gamut is for the most vivid seed at the default vibrancy (a pale
   // tint), the more every request shares that gamut in proportion (the most
@@ -442,15 +474,18 @@ function applyAnchor(
       for (let index = 0; index < 18; index++) {
         const amount = (low + high) / 2;
         const mixed = interpolateColor(target, candidate, amount);
-        if (perceptualDelta(mixed, target) <= tolerance) low = amount;
-        else high = amount;
+        if (perceptualDelta(mixed, target) <= tolerance) {
+          low = amount;
+        } else {
+          high = amount;
+        }
       }
       generatedColor = interpolateColor(target, candidate, low);
     }
   } else if (anchor.policy === 'flexible') {
     generatedColor = interpolateColor(candidate, target, 0.35);
   } else {
-    throw new Error(`Unknown anchor policy: ${String(anchor.policy)}`);
+    throw new Error(`Unknown anchor policy: ${anchor.policy as string}`);
   }
   return {
     ...anchor,
@@ -482,11 +517,15 @@ function correctionAtStop(
   stop: number,
 ): ColorTriple {
   const zero: ColorTriple = [0, 0, 0];
-  if (corrections.length === 0) return zero;
+  if (corrections.length === 0) {
+    return zero;
+  }
   const first = corrections[0];
   if (stop <= first.stop) {
     const boundary = Math.max(0, first.stop - 25);
-    if (stop <= boundary && boundary !== first.stop) return zero;
+    if (stop <= boundary && boundary !== first.stop) {
+      return zero;
+    }
     const amount =
       boundary === first.stop
         ? 1
@@ -496,7 +535,9 @@ function correctionAtStop(
   const last = corrections[corrections.length - 1];
   if (stop >= last.stop) {
     const boundary = Math.min(100, last.stop + 25);
-    if (stop >= boundary && boundary !== last.stop) return zero;
+    if (stop >= boundary && boundary !== last.stop) {
+      return zero;
+    }
     const amount =
       boundary === last.stop
         ? 1
@@ -518,7 +559,9 @@ function applyAnchorCorrections(
   stops: number[],
   anchors: TonalPaletteAnchor[],
 ) {
-  if (anchors.length === 0) return {colors, anchors: []};
+  if (anchors.length === 0) {
+    return {colors, anchors: []};
+  }
   const corrections = anchors
     .map(anchor => {
       const candidate = colors[anchor.stop];
@@ -561,7 +604,7 @@ function assertAnchorSet(anchors: TonalPaletteAnchor[], stops: number[]) {
   for (const anchor of anchors) {
     const color = normalizeColor(anchor.color);
     if (!['light', 'dark'].includes(anchor.mode)) {
-      throw new Error(`Unknown anchor mode: ${String(anchor.mode)}`);
+      throw new Error(`Unknown anchor mode: ${anchor.mode}`);
     }
     if (!stops.includes(anchor.stop)) {
       throw new Error(
@@ -615,9 +658,13 @@ function buildDiagnostics(
         hueIdentityRisk = 'yellow-to-brown';
       }
     }
-    if (index === 0) continue;
+    if (index === 0) {
+      continue;
+    }
     const previous = colors[stops[index - 1]];
-    if (luminance(color) + 0.000001 < luminance(previous)) monotonic = false;
+    if (luminance(color) + 0.000001 < luminance(previous)) {
+      monotonic = false;
+    }
     const adjacentDelta = perceptualDelta(previous, color);
     minimumAdjacentDeltaE = Math.min(minimumAdjacentDeltaE, adjacentDelta);
     maximumAdjacentDeltaE = Math.max(maximumAdjacentDeltaE, adjacentDelta);
@@ -648,14 +695,20 @@ function darkChromaMultiplier(
   mode: PaletteMode,
   stop: number,
 ) {
-  if (!taper || mode !== 'dark' || family.kind === 'neutral') return 1;
-  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) return 1;
+  if (!taper || mode !== 'dark' || family.kind === 'neutral') {
+    return 1;
+  }
+  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) {
+    return 1;
+  }
   // Read own keys only. A family id such as `constructor` must not get a
   // multiplier from the object prototype.
   const edge = Object.hasOwn(taper.familyMultipliers, family.id)
     ? taper.familyMultipliers[family.id]
     : taper.edgeMultiplier;
-  if (stop <= taper.throughStop) return edge;
+  if (stop <= taper.throughStop) {
+    return edge;
+  }
   const recovery = smoothstep(
     (stop - taper.throughStop) / (taper.recoverAtStop - taper.throughStop),
   );
@@ -697,7 +750,9 @@ function generateRamp(
       request.recipe,
     );
     colors[stop] = generated.hex;
-    if (generated.gamutMapped) gamutMappedStops.push(stop);
+    if (generated.gamutMapped) {
+      gamutMappedStops.push(stop);
+    }
   }
   const corrected = applyAnchorCorrections(colors, request.stops, anchors);
   const diagnostics = buildDiagnostics(
@@ -736,7 +791,9 @@ function buildCoordinationDiagnostics(
       .filter(family => chromaticIds.has(family.id) && family[mode])
       .map(family => {
         const ramp = family[mode];
-        if (!ramp) throw new Error(`Missing ${mode} ramp for ${family.id}.`);
+        if (!ramp) {
+          throw new Error(`Missing ${mode} ramp for ${family.id}.`);
+        }
         const color = ramp.colors[stop];
         return {
           id: family.id,
@@ -802,7 +859,9 @@ function normalizeDarkChromaTaper(
   stops: number[],
   families: NormalizedFamily[],
 ): NormalizedRequest['darkChromaTaper'] {
-  if (taper == null) return undefined;
+  if (taper == null) {
+    return undefined;
+  }
   if (typeof taper !== 'object' || Array.isArray(taper)) {
     throw new Error('darkChromaTaper must be an object.');
   }
@@ -879,10 +938,10 @@ export function normalizeGenerationRequest(
   }
   // A request that names no recipe runs the first one, so a config written
   // before v2 regenerates the same colors.
-  const recipe = input.recipe ?? (PALETTE_RECIPE as PaletteRecipe);
+  const recipe = input.recipe ?? PALETTE_RECIPE;
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
-      `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
+      `Unknown palette recipe: ${input.recipe} (known: ${PALETTE_RECIPES.join(', ')}).`,
     );
   }
   const modeStrategy = input.modeStrategy ?? 'light-and-dark';
@@ -893,22 +952,24 @@ export function normalizeGenerationRequest(
     if (!family || typeof family !== 'object' || Array.isArray(family)) {
       throw new Error(`Family ${index} must be an object.`);
     }
-    const id = String(family.id ?? '').trim();
+    const id = `${family.id ?? ''}`.trim();
     if (!/^[a-z][a-z0-9-]*$/.test(id)) {
       throw new Error(
         `Family ${index} id must use lower-kebab-case characters.`,
       );
     }
-    if (RESERVED_FAMILY_IDS.has(id)) {
+    if (RESERVED_FAMILY_IDS.includes(id)) {
       throw new Error(
         `Family id ${id} is reserved for the standalone ${id} palette value.`,
       );
     }
-    if (ids.has(id)) throw new Error(`Duplicate family id: ${id}.`);
+    if (ids.has(id)) {
+      throw new Error(`Duplicate family id: ${id}.`);
+    }
     ids.add(id);
     const kind = family.kind ?? 'chromatic';
     if (!['chromatic', 'neutral'].includes(kind)) {
-      throw new Error(`Unknown family kind: ${String(kind)}`);
+      throw new Error(`Unknown family kind: ${kind}`);
     }
     if (family.anchors != null && !Array.isArray(family.anchors)) {
       throw new Error(`Family ${id} anchors must be an array.`);
@@ -920,7 +981,7 @@ export function normalizeGenerationRequest(
         );
       }
       if (!['light', 'dark'].includes(anchor.mode)) {
-        throw new Error(`Unknown anchor mode: ${String(anchor.mode)}`);
+        throw new Error(`Unknown anchor mode: ${anchor.mode}`);
       }
       if (!modes.includes(anchor.mode)) {
         throw new Error(
@@ -929,11 +990,11 @@ export function normalizeGenerationRequest(
       }
       if (!Number.isFinite(anchor.stop) || !stops.includes(anchor.stop)) {
         throw new Error(
-          `Anchor stop ${String(anchor.stop)} is not present in the requested stop layout.`,
+          `Anchor stop ${anchor.stop} is not present in the requested stop layout.`,
         );
       }
       if (!['exact', 'bounded', 'flexible'].includes(anchor.policy)) {
-        throw new Error(`Unknown anchor policy: ${String(anchor.policy)}`);
+        throw new Error(`Unknown anchor policy: ${anchor.policy}`);
       }
       const maxDeltaE = anchor.maxDeltaE;
       if (
@@ -970,7 +1031,7 @@ export function normalizeGenerationRequest(
     });
     return {
       id,
-      name: String(family.name ?? id),
+      name: `${family.name ?? id}`,
       seed: normalizeColor(family.seed),
       kind,
       anchors,
@@ -980,7 +1041,7 @@ export function normalizeGenerationRequest(
   // The receipt records this request, so an unknown profile fails even when no
   // neutral family reads it.
   if (!NEUTRAL_PROFILES.includes(neutralProfile)) {
-    throw new Error(`Unknown neutral profile: ${String(neutralProfile)}`);
+    throw new Error(`Unknown neutral profile: ${neutralProfile}`);
   }
   const darkChromaTaper = normalizeDarkChromaTaper(
     input.darkChromaTaper,

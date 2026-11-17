@@ -29,6 +29,7 @@ export type {
   TonalPaletteGenerationInput,
   TonalPaletteNormalizedRequest,
   TonalPaletteRampDiagnostics,
+  PaletteLift,
   ThemePalette,
   ThemePaletteInput,
 } from './types';

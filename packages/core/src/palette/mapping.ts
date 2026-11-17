@@ -86,9 +86,9 @@ export interface PaletteMappingContext {
   has: (token: string) => boolean;
   reader: PaletteColorReader;
   /** The value a token is set to exactly in a mode, as written. */
-  settingOf?: (token: string, mode: PaletteMode) => unknown;
+  settingOf?: (token: string, mode: PaletteMode) => string | undefined;
   /** The fixed color a written value gives in a mode, or null. */
-  colorIn?: (value: unknown, mode: PaletteMode) => string | null;
+  colorIn?: (value: string, mode: PaletteMode) => string | null;
   /** Whether a token is set exactly in any mode. */
   setExactly?: (token: string) => boolean;
   /** The line that sets a value, for a note that offers one; without it, the note offers none. */
@@ -105,7 +105,7 @@ export interface PaletteDial {
 export interface ConfigFamily {
   id?: unknown;
   seed?: unknown;
-  anchors?: Array<{mode: string; stop: number; [key: string]: unknown}>;
+  anchors?: {mode: string; stop: number; [key: string]: unknown}[];
   [key: string]: unknown;
 }
 
@@ -170,9 +170,12 @@ export const PALETTE_DIALS = Object.freeze([
 /** The generator's vibrancy when the theme sets none. */
 export const VIBRANCY_DEFAULT = 50;
 
+/** A value a mapping table holds. */
+type TableEntry = object | string | number | boolean | null | undefined;
+
 /** A record without inherited keys, so a key such as `constructor` reads nothing. */
-function ownTable<T>(table: T): T {
-  const own = (value: unknown): unknown => {
+function ownTable<T extends object>(table: T): T {
+  const own = (value: TableEntry): TableEntry => {
     if (Array.isArray(value)) {
       return value.map(own);
     }
@@ -183,8 +186,10 @@ function ownTable<T>(table: T): T {
     ) {
       return value;
     }
-    const out: Record<string, unknown> = Object.create(null);
-    for (const [key, entry] of Object.entries(value)) {
+    const out: Record<string, TableEntry> = Object.create(null);
+    for (const [key, entry] of Object.entries(
+      value as Record<string, TableEntry>,
+    )) {
       out[key] = own(entry);
     }
     return out;
@@ -310,7 +315,9 @@ export const NEUTRAL_STOPS: Record<string, [number, number]> = ownTable({
   ].reverse() as [number, number],
 });
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
-const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
+const NEUTRAL_INSIDE: ReadonlyArray<string> = Object.freeze([
+  '--color-background-inverted',
+]);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
 export const NEUTRAL_TINTS: Record<
   string,
@@ -573,9 +580,12 @@ export function paletteTools(
   };
   const neutral = Boolean(candidate.palette.neutral);
   /** The value a token is set to exactly in a mode, as written, or undefined. */
-  const settingOf = (token: string, m: PaletteMode): unknown =>
+  const settingOf = (token: string, m: PaletteMode): string | undefined =>
     context.settingOf?.(token, m);
-  const colorIn = (value: unknown, m: PaletteMode): string | null => {
+  const colorIn = (
+    value: string | undefined,
+    m: PaletteMode,
+  ): string | null => {
     if (value == null) {
       return null;
     }
@@ -583,7 +593,7 @@ export function paletteTools(
       return context.colorIn(value, m);
     }
     // (Without a reader of its own, a value is a color when it is one.)
-    const v = String(value).trim();
+    const v = value.trim();
     return parseColor(v) ? v : null;
   };
   /** The exact opaque color a token is set to in a mode, or null. */
@@ -616,8 +626,8 @@ export function paletteTools(
    * colors, else the neutral color's surfaces, else the base theme's; the
    * family's own surface stop when nothing else is known.
    */
-  const surfaces = (m: PaletteMode, id: string): Array<[string, string]> => {
-    const out: Array<[string, string]> = [];
+  const surfaces = (m: PaletteMode, id: string): [string, string][] => {
+    const out: [string, string][] = [];
     for (const n of [
       '--color-background-surface',
       '--color-background-body',
@@ -700,8 +710,8 @@ export function paletteTools(
   const over = (
     name: string,
     r: StopRef,
-    under: Array<[string, string]>,
-  ): Array<[string, string]> => {
+    under: [string, string][],
+  ): [string, string][] => {
     if (!r.alpha) {
       return [[name, r.color]];
     }
@@ -769,12 +779,12 @@ export type PaletteRequestFamily = {
   name: string;
   seed: string;
   kind?: 'neutral';
-  anchors?: Array<{
+  anchors?: {
     mode: PaletteMode;
     stop: number;
     color: string;
     policy: 'exact';
-  }>;
+  }[];
 };
 
 /**
@@ -851,7 +861,7 @@ export function anchorDarkFills(
         color: f.seed,
         policy: 'exact',
       };
-      const own: Array<{mode: string; stop: number}> = f.anchors ?? [];
+      const own: {mode: string; stop: number}[] = f.anchors ?? [];
       const others = own.filter(
         a => !(a.mode === 'dark' && a.stop === anchor.stop),
       );
@@ -993,7 +1003,7 @@ export function mapPalette(
     id: string,
     m: PaletteMode,
     start: number,
-    on: Array<[string, string]>,
+    on: [string, string][],
     needs: number,
   ): StopRef => {
     const usual = TOWARD_CONTRAST[m];
@@ -1034,7 +1044,7 @@ export function mapPalette(
       ) {
         continue;
       }
-      const shadeAt = NEUTRAL_INSIDE.has(token) ? atInside : at;
+      const shadeAt = NEUTRAL_INSIDE.includes(token) ? atInside : at;
       put(
         token,
         'neutral',
@@ -1075,7 +1085,7 @@ export function mapPalette(
     if (Object.values(set).some(Boolean)) {
       exact[surface] = Object.fromEntries(
         Object.entries(set).filter(([, v]) => v),
-      ) as Partial<Record<PaletteMode, string>>;
+      );
     }
   }
 
@@ -1122,8 +1132,8 @@ export function mapPalette(
         Object.entries(exactFill).map(([m, v]) => {
           // A var() is named with the color it reads, so the note says
           // which color the text was picked for.
-          const written = String(
-            settingOf(names.fill, m as PaletteMode) ?? '',
+          const written = (
+            settingOf(names.fill, m as PaletteMode) ?? ''
           ).trim();
           const rgb = parseColor(v);
           const color = rgb && alphaOf(v) >= 1 ? hex(rgb) : v;
@@ -1282,7 +1292,7 @@ export function mapPalette(
     });
     put(names.muted, f.id, muted);
     /** The tint the theme really shows: an exact setting wins. */
-    const mutedSeen = (m: PaletteMode): Array<[string, string]> => {
+    const mutedSeen = (m: PaletteMode): [string, string][] => {
       const own = rawOf(names.muted, m);
       return own
         ? surfaces(m, f.id).map(([n, bg]) => [
@@ -1437,8 +1447,8 @@ export function mapPalette(
     const drawn = (
       name: string,
       color: string,
-      under: Array<[string, string]>,
-    ): Array<[string, string]> => {
+      under: [string, string][],
+    ): [string, string][] => {
       const top = parseColor(color) as ColorTriple;
       const a = alphaOf(color);
       return under.map(([n, c]) => [
@@ -1489,7 +1499,7 @@ export function mapPalette(
         }
         const seen = drawn(what, fillColor, surfaces(m, 'neutral'));
         const hover = valueOf(m, '--color-overlay-hover');
-        const on: Array<[string, string]> = [
+        const on: [string, string][] = [
           ...seen,
           ...(hover && alphaOf(hover) > 0
             ? drawn('a hover', hover, seen).map(([n, c]): [string, string] => [

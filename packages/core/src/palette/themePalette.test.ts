@@ -131,7 +131,7 @@ describe('themePalette', () => {
       if (next() < 0.5) {
         input.recipe = PALETTE_RECIPE_V2;
       }
-      expectTokensApplied(input as ThemePaletteInput, `palette-random-${i}`);
+      expectTokensApplied(input, `palette-random-${i}`);
     }
   });
 
@@ -183,31 +183,43 @@ describe('themePalette', () => {
 describe('defineTheme({palette})', () => {
   const palette = themePalette({accent: '#5b3cc4', neutral: '#6b6b70'});
 
-  it('compiles the lifted secondary text as a light-dark() value a browser reads', () => {
-    const theme = defineTheme({name: 'palette-compiled', palette});
-    const css = generateThemeCSS(theme).component;
-    const [light, dark] = palette.tokens['--color-text-secondary'];
-    // The lifted shades are the palette's grays on the accent tint.
-    const lifted = String(
-      palette.components.item?.selected?.['--color-text-secondary'],
-    );
-    expect(lifted).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
-    expect(css).toContain(`--color-text-secondary: ${lifted}`);
-    expect(css).not.toMatch(/--color-text-secondary:\s*\[/);
-    expect(css).not.toMatch(/--color-text-secondary:\s*#[0-9a-f]{6},/);
-    expect(light).toMatch(/^#/);
-    expect(dark).toMatch(/^#/);
+  it('compiles the lifted secondary text into each mode a browser reads', () => {
+    const css = generateThemeCSS(
+      defineTheme({name: 'palette-compiled', palette}),
+    ).component;
+    const lift = palette.components.item?.selected;
+    const light = lift?.['@light']['--color-text-secondary'];
+    const dark = lift?.['@dark']['--color-text-secondary'];
+    expect(light).toMatch(/^#[0-9a-f]{6}$/);
+    expect(dark).toMatch(/^#[0-9a-f]{6}$/);
+    expect(css).toContain(`--color-text-secondary: ${light}`);
+    expect(css).toContain(`--color-text-secondary: ${dark}`);
+    expect(css).not.toMatch(/--color-text-secondary:\s*(\[|#[0-9a-f]{6},)/);
   });
 
   it('lifts secondary text on each coloured card, as the official theme does', () => {
     for (const color of ['blue', 'green', 'red', 'yellow']) {
-      expect(
-        palette.components.card?.[`variant:${color}`]?.[
-          '--color-text-secondary'
-        ],
-        color,
-      ).toMatch(/^light-dark\(/);
+      const lift = palette.components.card?.[`variant:${color}`];
+      expect(lift?.['@light']['--color-text-secondary'], color).toMatch(/^#/);
+      expect(lift?.['@dark']['--color-text-secondary'], color).toMatch(/^#/);
     }
+  });
+
+  it('lets a part style the theme sets win in both modes', () => {
+    const theme = defineTheme({
+      name: 'palette-own-style',
+      palette,
+      components: {
+        item: {selected: {'--color-text-secondary': '#123456'}},
+      },
+    });
+    // No mode block of the palette's is left to beat it in one mode.
+    expect(theme.components?.item?.selected).toEqual({
+      '--color-text-secondary': '#123456',
+    });
+    expect(generateThemeCSS(theme).component).toContain(
+      '--color-text-secondary: #123456',
+    );
   });
 
   it('lets an explicit token win, token by token', () => {

@@ -118,7 +118,7 @@ export function normalizeColor(input) {
   if (/^#?[0-9a-f]{6}$/i.test(value)) {
     return `#${value.replace('#', '').toLowerCase()}`;
   }
-  throw new Error(`Invalid color: ${input}`);
+  throw new Error(`Invalid color: ${String(input)}`);
 }
 /**
  * @param {string} hex
@@ -132,7 +132,9 @@ export function hexToOklch(hex) {
     srgbToLinear(blue),
   );
   let hue = (Math.atan2(b, a) * 180) / Math.PI;
-  if (hue < 0) hue += 360;
+  if (hue < 0) {
+    hue += 360;
+  }
   return {L: lightness, C: Math.sqrt(a * a + b * b), H: hue};
 }
 /**
@@ -164,8 +166,12 @@ function oklchInGamut(lightness, chroma, hue) {
  * @returns {string}
  */
 function oklchToHex(lightness, chroma, hue) {
-  if (lightness <= 0) return '#000000';
-  if (lightness >= 1) return '#ffffff';
+  if (lightness <= 0) {
+    return '#000000';
+  }
+  if (lightness >= 1) {
+    return '#ffffff';
+  }
   const radians = (hue * Math.PI) / 180;
   const [red, green, blue] = oklabToLinearRgb(
     lightness,
@@ -188,8 +194,11 @@ export function maxOklchChroma(hue, lightness) {
   let high = 0.4;
   for (let index = 0; index < 20; index++) {
     const middle = (low + high) / 2;
-    if (oklchInGamut(lightness, middle, hue)) low = middle;
-    else high = middle;
+    if (oklchInGamut(lightness, middle, hue)) {
+      low = middle;
+    } else {
+      high = middle;
+    }
   }
   return low;
 }
@@ -210,8 +219,12 @@ export function oklchClampedHex(lightness, chroma, hue) {
  * @returns {number}
  */
 export function toneToOklabLightness(tone) {
-  if (tone <= 0) return 0;
-  if (tone >= 100) return 1;
+  if (tone <= 0) {
+    return 0;
+  }
+  if (tone >= 100) {
+    return 1;
+  }
   const relative = tone > 8 ? Math.pow((tone + 16) / 116, 3) : tone / 903.3;
   return Math.cbrt(relative);
 }

@@ -134,7 +134,11 @@ export function toJsdocJavaScript(source, fileName) {
     /** @type {string[]} */
     const tags = [];
     for (const param of fn.typeParameters ?? []) {
-      tags.push(`@template ${param.getText(sourceFile)}`);
+      tags.push(
+        param.constraint
+          ? `@template {${typeText(param.constraint)}} ${param.name.text}`
+          : `@template ${param.name.text}`,
+      );
     }
     for (const param of fn.parameters) {
       const name = param.name.getText(sourceFile);

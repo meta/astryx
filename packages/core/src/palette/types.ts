@@ -113,7 +113,7 @@ export interface TonalPaletteRampDiagnostics {
   /** Stops whose ideal color fell outside sRGB and was mapped back into it. */
   gamutMappedStops: number[];
   /** Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target. */
-  anchors: Array<TonalPaletteAnchor & {generatedColor: string; deltaE: number}>;
+  anchors: (TonalPaletteAnchor & {generatedColor: string; deltaE: number})[];
 }
 
 /**
@@ -147,14 +147,19 @@ export interface TonalPaletteNormalizedRequest {
   /** The requested taper, with `familyMultipliers` filled in; present only when the request has a taper. */
   darkChromaTaper?: Required<TonalPaletteDarkChromaTaper>;
   stops: number[];
-  families: Array<{
+  families: {
     id: string;
     name: string;
     seed: string;
     kind: 'chromatic' | 'neutral';
     anchors: TonalPaletteAnchor[];
-  }>;
+  }[];
 }
+
+/** A part style's lifted secondary text, as color-mode blocks: one value for each mode. */
+export type PaletteLift = Readonly<
+  Record<'@light' | '@dark', Readonly<Record<'--color-text-secondary', string>>>
+>;
 
 /** The seeds `themePalette()` grows a theme's colors from. */
 export interface ThemePaletteInput {
@@ -182,8 +187,8 @@ export interface ThemePalette {
   readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   /** Each color token's `[light, dark]` value. */
   readonly tokens: Readonly<Record<string, readonly [string, string]>>;
-  /** Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do: each value is a `light-dark()` CSS value. */
+  /** Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do, by part and style key. */
   readonly components: Readonly<
-    Record<string, Record<string, Record<string, string>>>
+    Record<string, Readonly<Record<string, PaletteLift>>>
   >;
 }

@@ -10,8 +10,8 @@
  *   request, runs the engine, and maps the stops against Core's defaults
  */
 
-import {defineTheme, tokenDefaults} from '../theme/defineTheme';
-import {resolveThemeTokens} from '../theme/tokens';
+import {tokenDefaults} from '../theme/tokenDefaults';
+import {resolveDefaultTokens} from '../theme/tokenValues';
 import {parseColor} from '../utils/color';
 import {
   PALETTE_RECIPE,
@@ -29,9 +29,13 @@ import {
   type PaletteDial,
   type PaletteMappingContext,
 } from './mapping';
-import type {ThemePalette, ThemePaletteInput} from './types';
+import type {PaletteLift, ThemePalette, ThemePaletteInput} from './types';
 
-const INPUT_KEYS = new Set<string>([...PALETTE_DIALS, 'vibrancy', 'recipe']);
+const INPUT_KEYS: ReadonlyArray<string> = Object.freeze([
+  ...PALETTE_DIALS,
+  'vibrancy',
+  'recipe',
+]);
 
 /** Core's color reader: hex, rgb() and rgba(), and named colors. */
 const coreReader: PaletteColorReader = {
@@ -50,18 +54,17 @@ const coreReader: PaletteColorReader = {
   },
 };
 
-let coreBase: PaletteBase | undefined;
-/** Core's default colors in each mode: what a palette is measured against. */
+/**
+ * Core's default colors in each mode: what a palette is measured against.
+ * Read per call, from the defaults alone, so the entry holds no state and
+ * runs on a server as it runs at build time.
+ */
 function defaultBase(): PaletteBase {
-  if (!coreBase) {
-    const theme = defineTheme({name: 'astryx-defaults'});
-    coreBase = {
-      light: resolveThemeTokens(theme, {mode: 'light'}),
-      dark: resolveThemeTokens(theme, {mode: 'dark'}),
-      components: theme.components ?? {},
-    };
-  }
-  return coreBase;
+  return {
+    light: resolveDefaultTokens('light'),
+    dark: resolveDefaultTokens('dark'),
+    components: {},
+  };
 }
 
 /**
@@ -87,10 +90,10 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
       'themePalette() takes an object of seed colors, such as {accent: "#5b3cc4"}.',
     );
   }
-  const unknown = Object.keys(input).filter(key => !INPUT_KEYS.has(key));
+  const unknown = Object.keys(input).filter(key => !INPUT_KEYS.includes(key));
   if (unknown.length) {
     throw new TypeError(
-      `themePalette(): ${unknown.map(key => `"${key}"`).join(', ')} is not a palette key. It takes ${[...INPUT_KEYS].join(', ')}.`,
+      `themePalette(): ${unknown.map(key => `"${key}"`).join(', ')} is not a palette key. It takes ${INPUT_KEYS.join(', ')}.`,
     );
   }
   const recipe = input.recipe ?? PALETTE_RECIPE;
@@ -145,17 +148,16 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   for (const [token, {light, dark}] of Object.entries(mapping.tokens)) {
     tokens[token] = Object.freeze([light.color, dark.color] as const);
   }
-  const components: Record<string, Record<string, Record<string, string>>> = {};
+  const components: Record<string, Record<string, PaletteLift>> = {};
   for (const [part, block, ground] of LIFT_PARTS) {
     const lifted = mapping.lift?.[ground];
     if (!lifted?.light || !lifted.dark) {
       continue;
     }
-    // (A part style's value is one CSS value: the two modes as
-    // light-dark(), as the official themes write it.)
-    (components[part] ??= {})[block] = {
-      '--color-text-secondary': `light-dark(${lifted.light.color}, ${lifted.dark.color})`,
-    };
+    (components[part] ??= {})[block] = Object.freeze({
+      '@light': Object.freeze({'--color-text-secondary': lifted.light.color}),
+      '@dark': Object.freeze({'--color-text-secondary': lifted.dark.color}),
+    });
   }
   return Object.freeze({
     kind: 'theme-palette',

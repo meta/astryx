@@ -84,8 +84,8 @@ import {
  * @property {PaletteBase} [base]
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {PaletteColorReader} reader
- * @property {(token: string, mode: PaletteMode) => unknown} [settingOf] The value a token is set to exactly in a mode, as written.
- * @property {(value: unknown, mode: PaletteMode) => string | null} [colorIn] The fixed color a written value gives in a mode, or null.
+ * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
+ * @property {(value: string, mode: PaletteMode) => string | null} [colorIn] The fixed color a written value gives in a mode, or null.
  * @property {(token: string) => boolean} [setExactly] Whether a token is set exactly in any mode.
  * @property {(thing: string, value: string, mode?: PaletteMode) => string} [setLine] The line that sets a value, for a note that offers one; without it, the note offers none.
  */
@@ -102,7 +102,7 @@ import {
  * @typedef {object} ConfigFamily
  * @property {unknown} [id]
  * @property {unknown} [seed]
- * @property {Array<{mode: string; stop: number; [key: string]: unknown}>} [anchors]
+ * @property {{mode: string; stop: number; [key: string]: unknown}[]} [anchors]
  */
 
 /**
@@ -121,10 +121,13 @@ import {
  * @property {Record<string, Partial<Record<PaletteMode, StopRef>>> | null} lift Lifted secondary text per background token of LIFT_PARTS, per mode; null without one.
  */
 
+/** A value a mapping table holds. */
+/** @typedef {object | string | number | boolean | null | undefined} TableEntry */
+
 /** @typedef {ReturnType<typeof paletteTools>} PaletteTools */
 
 /** One family of a request, with its exact seed anchors. */
-/** @typedef {{ id: string; name: string; seed: string; kind?: 'neutral'; anchors?: Array<{ mode: PaletteMode; stop: number; color: string; policy: 'exact'; }>; }} PaletteRequestFamily */
+/** @typedef {{ id: string; name: string; seed: string; kind?: 'neutral'; anchors?: { mode: PaletteMode; stop: number; color: string; policy: 'exact'; }[]; }} PaletteRequestFamily */
 
 /**
  * What `planPaletteRequest` settles for a set of color settings.
@@ -185,15 +188,15 @@ export const PALETTE_DIALS = Object.freeze([
 export const VIBRANCY_DEFAULT = 50;
 /**
  * A record without inherited keys, so a key such as `constructor` reads nothing.
- * @template T
+ * @template {object} T
  * @param {T} table
  * @returns {T}
  */
 function ownTable(table) {
   const own =
     /**
-     * @param {unknown} value
-     * @returns {unknown}
+     * @param {TableEntry} value
+     * @returns {TableEntry}
      */
     value => {
       if (Array.isArray(value)) {
@@ -207,10 +210,12 @@ function ownTable(table) {
         return value;
       }
       /**
-       * @type {Record<string, unknown>}
+       * @type {Record<string, TableEntry>}
        */
       const out = Object.create(null);
-      for (const [key, entry] of Object.entries(value)) {
+      for (const [key, entry] of Object.entries(
+        /** @type {Record<string, TableEntry>} */ (value),
+      )) {
         out[key] = own(entry);
       }
       return out;
@@ -347,8 +352,11 @@ export const NEUTRAL_STOPS = ownTable({
     [...officialStops('--color-background-card')].reverse()
   ),
 });
-/** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
-const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
+/**
+ * Neutral tokens whose shade stays inside the ramp, off its white and black ends.
+ * @type {ReadonlyArray<string>}
+ */
+const NEUTRAL_INSIDE = Object.freeze(['--color-background-inverted']);
 /**
  * Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`.
  * @type {Record< string, [[number, string], [number, string]] >}
@@ -680,12 +688,12 @@ export function paletteTools(candidate, context) {
     /**
      * @param {string} token
      * @param {PaletteMode} m
-     * @returns {unknown}
+     * @returns {string | undefined}
      */
     (token, m) => context.settingOf?.(token, m);
   const colorIn =
     /**
-     * @param {unknown} value
+     * @param {string | undefined} value
      * @param {PaletteMode} m
      * @returns {string | null}
      */
@@ -697,7 +705,7 @@ export function paletteTools(candidate, context) {
         return context.colorIn(value, m);
       }
       // (Without a reader of its own, a value is a color when it is one.)
-      const v = String(value).trim();
+      const v = value.trim();
       return parseColor(v) ? v : null;
     };
   /** The exact opaque color a token is set to in a mode, or null. */
@@ -750,11 +758,11 @@ export function paletteTools(candidate, context) {
     /**
      * @param {PaletteMode} m
      * @param {string} id
-     * @returns {Array<[string, string]>}
+     * @returns {[string, string][]}
      */
     (m, id) => {
       /**
-       * @type {Array<[string, string]>}
+       * @type {[string, string][]}
        */
       const out = [];
       for (const n of [
@@ -872,8 +880,8 @@ export function paletteTools(candidate, context) {
     /**
      * @param {string} name
      * @param {StopRef} r
-     * @param {Array<[string, string]>} under
-     * @returns {Array<[string, string]>}
+     * @param {[string, string][]} under
+     * @returns {[string, string][]}
      */
     (name, r, under) => {
       if (!r.alpha) {
@@ -1022,7 +1030,7 @@ export function anchorDarkFills(
           policy: 'exact',
         };
         /**
-         * @type {Array<{mode: string; stop: number}>}
+         * @type {{mode: string; stop: number}[]}
          */
         const own = f.anchors ?? [];
         const others = own.filter(
@@ -1193,7 +1201,7 @@ export function mapPalette(candidate, dials, fills, context) {
      * @param {string} id
      * @param {PaletteMode} m
      * @param {number} start
-     * @param {Array<[string, string]>} on
+     * @param {[string, string][]} on
      * @param {number} needs
      * @returns {StopRef}
      */
@@ -1240,7 +1248,7 @@ export function mapPalette(candidate, dials, fills, context) {
       ) {
         continue;
       }
-      const shadeAt = NEUTRAL_INSIDE.has(token) ? atInside : at;
+      const shadeAt = NEUTRAL_INSIDE.includes(token) ? atInside : at;
       put(
         token,
         'neutral',
@@ -1279,8 +1287,8 @@ export function mapPalette(candidate, dials, fills, context) {
     const surface = paletteToken('neutral');
     const set = each(m => exactOf(surface, m));
     if (Object.values(set).some(Boolean)) {
-      exact[surface] = /** @type {Partial<Record<PaletteMode, string>>} */ (
-        Object.fromEntries(Object.entries(set).filter(([, v]) => v))
+      exact[surface] = Object.fromEntries(
+        Object.entries(set).filter(([, v]) => v),
       );
     }
   }
@@ -1330,8 +1338,8 @@ export function mapPalette(candidate, dials, fills, context) {
         Object.entries(exactFill).map(([m, v]) => {
           // A var() is named with the color it reads, so the note says
           // which color the text was picked for.
-          const written = String(
-            settingOf(names.fill, /** @type {PaletteMode} */ (m)) ?? '',
+          const written = (
+            settingOf(names.fill, /** @type {PaletteMode} */ (m)) ?? ''
           ).trim();
           const rgb = parseColor(v);
           const color = rgb && alphaOf(v) >= 1 ? hex(rgb) : v;
@@ -1498,7 +1506,7 @@ export function mapPalette(candidate, dials, fills, context) {
     const mutedSeen =
       /**
        * @param {PaletteMode} m
-       * @returns {Array<[string, string]>}
+       * @returns {[string, string][]}
        */
       m => {
         const own = rawOf(names.muted, m);
@@ -1673,8 +1681,8 @@ export function mapPalette(candidate, dials, fills, context) {
       /**
        * @param {string} name
        * @param {string} color
-       * @param {Array<[string, string]>} under
-       * @returns {Array<[string, string]>}
+       * @param {[string, string][]} under
+       * @returns {[string, string][]}
        */
       (name, color, under) => {
         const top = /** @type {ColorTriple} */ (parseColor(color));
@@ -1749,7 +1757,7 @@ export function mapPalette(candidate, dials, fills, context) {
         const seen = drawn(what, fillColor, surfaces(m, 'neutral'));
         const hover = valueOf(m, '--color-overlay-hover');
         /**
-         * @type {Array<[string, string]>}
+         * @type {[string, string][]}
          */
         const on = [
           ...seen,

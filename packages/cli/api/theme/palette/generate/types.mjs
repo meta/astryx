@@ -68,7 +68,7 @@
  * @property {number} maximumHueDrift Largest hue distance, in degrees, between a stop and the family's reference hue.
  * @property {'blue-to-purple' | 'yellow-to-brown' | null} hueIdentityRisk Named drift the ramp is at risk of, or `null`.
  * @property {number[]} gamutMappedStops Stops whose ideal color fell outside sRGB and was mapped back into it.
- * @property {Array<TonalPaletteAnchor & {generatedColor: string; deltaE: number}>} anchors Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target.
+ * @property {(TonalPaletteAnchor & {generatedColor: string; deltaE: number})[]} anchors Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target.
  */
 
 /**
@@ -92,8 +92,11 @@
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
  * @property {Required<TonalPaletteDarkChromaTaper>} [darkChromaTaper] The requested taper, with `familyMultipliers` filled in; present only when the request has a taper.
  * @property {number[]} stops
- * @property {Array<{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }>} families
+ * @property {{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }[]} families
  */
+
+/** A part style's lifted secondary text, as color-mode blocks: one value for each mode. */
+/** @typedef {Readonly< Record<'@light' | '@dark', Readonly<Record<'--color-text-secondary', string>>> >} PaletteLift */
 
 /**
  * The seeds `themePalette()` grows a theme's colors from.
@@ -114,7 +117,7 @@
  * @property {'theme-palette'} kind
  * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {Readonly<Record<string, readonly [string, string]>>} tokens Each color token's `[light, dark]` value.
- * @property {Readonly< Record<string, Record<string, Record<string, string>>> >} components Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do: each value is a `light-dark()` CSS value.
+ * @property {Readonly< Record<string, Readonly<Record<string, PaletteLift>>> >} components Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do, by part and style key.
  */
 
 export {};

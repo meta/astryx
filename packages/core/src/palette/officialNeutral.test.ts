@@ -49,14 +49,16 @@ function stopOf(node: Node | undefined): Stop | null {
 
 it('equals the stops and lifted parts the official Neutral theme writes', () => {
   const stops: Record<string, Stop[]> = {};
-  const lifted: Array<[string, string]> = [];
+  const lifted: [string, string][] = [];
   const visit = (node: unknown, keys: string[]): void => {
     if (!node || typeof node !== 'object') {
       return;
     }
     const n = node as Node;
     if (n.type === 'ObjectProperty') {
-      const key = String((n.key as Node).name ?? (n.key as Node).value ?? '');
+      const raw = (n.key as Node).name ?? (n.key as Node).value;
+      const key =
+        typeof raw === 'string' || typeof raw === 'number' ? String(raw) : '';
       const value = n.value as Node;
       if (keys.at(-1) === 'tokens' && value.type === 'ArrayExpression') {
         const pair = (value.elements as Node[]).map(stopOf);

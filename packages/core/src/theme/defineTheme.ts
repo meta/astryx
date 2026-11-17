@@ -105,7 +105,7 @@ import {
   type OnMediaOverrides,
   type ResolvedOnMedia,
 } from './onMediaTokens';
-import {
+import type {
   colorDefaults,
   spacingDefaults,
   sizeDefaults,
@@ -137,6 +137,8 @@ import {
 
 import type {DomainTokenName} from './domainTokens';
 import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
+import {deepMergeComponents} from './mergeComponents';
+import {tokenDefaults} from './tokenDefaults';
 import type {SyntaxThemeDefinition} from './syntax';
 import {registerTheme} from './themeRegistry';
 import {resolveLocalTokenContract} from './localTokens';
@@ -714,23 +716,7 @@ export type ResolvedDefinedTheme<IconVariant extends string = string> =
 // All defaults merged into a single flat map
 // =============================================================================
 
-/** All Astryx token defaults as a flat map. Useful for resolving full token sets. */
-export const tokenDefaults: Record<string, string> = {
-  ...colorDefaults,
-  ...spacingDefaults,
-  ...sizeDefaults,
-  ...borderDefaults,
-  ...focusDefaults,
-  ...radiusDefaults,
-  ...shadowDefaults,
-  ...durationDefaults,
-  ...easeDefaults,
-  ...typographyDefaults,
-  ...textSizeDefaults,
-  ...fontWeightDefaults,
-  ...typeScaleDefaults,
-  ...domainTokenDefaults,
-};
+export {tokenDefaults} from './tokenDefaults';
 
 // =============================================================================
 // defineTheme
@@ -862,39 +848,34 @@ function readPalette(input: {
 
 /**
  * The palette's part styles under the theme's own: a part style the theme
- * sets wins, property by property.
+ * sets wins, property by property. The palette writes each mode in its own
+ * color-mode block, so a property the theme sets for both modes leaves those
+ * blocks first.
  */
 function withPaletteComponents(
   palette: ThemePalette,
   own: ComponentStyleMap | undefined,
 ): ComponentStyleMap | undefined {
-  const parts = Object.entries(palette.components);
-  if (!parts.length) {
-    return own;
-  }
-  const merged: Record<string, Record<string, unknown>> = {};
-  for (const [part, blocks] of parts) {
-    merged[part] = {...blocks};
-  }
-  for (const [part, blocks] of Object.entries(own ?? {})) {
-    const fromPalette = merged[part];
-    if (!fromPalette || !blocks || typeof blocks !== 'object') {
-      merged[part] = blocks as Record<string, unknown>;
-      continue;
-    }
-    for (const [block, style] of Object.entries(blocks)) {
-      const under = fromPalette[block];
-      fromPalette[block] =
-        under &&
-        typeof under === 'object' &&
-        style &&
-        typeof style === 'object' &&
-        !Array.isArray(style)
-          ? {...under, ...style}
-          : style;
+  const lifted: ComponentStyleMap = {};
+  for (const [part, blocks] of Object.entries(palette.components)) {
+    lifted[part] = {};
+    for (const [block, lift] of Object.entries(blocks)) {
+      const ownStyle = own?.[part]?.[block];
+      const set = (property: string): boolean =>
+        ownStyle != null && ownStyle[property] !== undefined;
+      const style: Record<string, Record<string, string>> = {};
+      for (const mode of ['@light', '@dark'] as const) {
+        const values = Object.entries(lift[mode]).filter(
+          ([property]) => !set(property),
+        );
+        if (values.length) {
+          style[mode] = Object.fromEntries(values);
+        }
+      }
+      lifted[part][block] = style;
     }
   }
-  return merged as ComponentStyleMap;
+  return deepMergeComponents(lifted, own);
 }
 
 /**
