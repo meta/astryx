@@ -7367,7 +7367,21 @@ function checkOne(
             (d.vars ?? []).some(x => inCalc.has(x.toLowerCase())),
         ),
       );
-      if (hit && !oneLength(v)) {
+      // (A radius of two to four corners, each one length, is written as
+      // each corner on the box, and its first corner as the one length the
+      // variable takes: the build's corner radii, so it is taken.)
+      const corners =
+        prop === 'border-radius' &&
+        splitTop(v.trim(), '/').every(half => {
+          const w = splitTop(half.trim(), ' ').filter(Boolean);
+          return (
+            w.length >= 1 &&
+            w.length <= 4 &&
+            w.every(x => oneLength(x) || /^0+(?:\.0+)?$/.test(x))
+          );
+        }) &&
+        (splitTop(v.trim(), ' ').filter(Boolean).length > 1 || v.includes('/'));
+      if (hit && !oneLength(v) && !corners) {
         const first = splitTop(v.trim(), ' ')[0] ?? '';
         const n = cssNumber(first);
         const fix = oneLength(first)

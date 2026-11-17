@@ -19152,6 +19152,20 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'corners': {
+        // "Menu corners 0 0 6px 6px": two to four corner lengths in a row,
+        // as CSS gives them (top-left first, clockwise), are that radius on
+        // the part as written, each corner its own.
+        {
+          const run =
+            /(?:^|\s)((?:0|\d*\.?\d+(?:px|rem|em|%))(?:\s+(?:0|\d*\.?\d+(?:px|rem|em|%))){1,3})(?=\s*(?:[,;.!?]|$|\s(?!\d)))/.exec(
+              c.text,
+            )?.[1];
+          if (on && run && !c.dir)
+            return {
+              text: `corners${where}: border-radius ${run}, each corner as written (top-left first, clockwise)`,
+              options: [[set('border-radius', run, {...f, ...modeOf(c)})]],
+            };
+        }
         // ("4px top corners", "square bottom corners", "round the left
         // corners 8px": the corners on those sides only, each its own
         // longhand, start and end in the writing direction.)
