@@ -156,12 +156,14 @@ export default async function setup(project) {
       trashFolder(userHome);
       trashFolder(themeCache);
       trashFolder(baseThemes);
-      endRun();
       const written = writtenSince(checkoutBefore, checkoutState(root));
-      if (written.length)
+      if (written.length) {
+        endRun();
         throw new Error(
           `tests wrote into the checkout (every fixture belongs in a temp folder): ${written.slice(0, 10).join('; ')}`,
         );
+      }
+      endRun();
     };
   } catch (error) {
     endRun();

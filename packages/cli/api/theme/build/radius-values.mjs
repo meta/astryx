@@ -54,10 +54,8 @@ export function radiusInputProblems(radius) {
         why: `the radius scale is given no ${field}, and Core builds each corner from the base and the multiplier together, so every scaled corner is NaNpx, which the browser drops (the corners go square): add ${FIELDS[field]}`,
         value: radius,
       });
-    else if (
-      value !== undefined &&
-      (!Number.isFinite(Number(value)) || typeof value === 'boolean')
-    )
+    // (Core multiplies what it is given: a boolean counts as 1 or 0.)
+    else if (value !== undefined && !Number.isFinite(Number(value)))
       out.push({
         path: ['radius', field],
         why: `the radius scale's ${field} is a number, and Core builds every scaled corner from ${JSON.stringify(value) ?? String(value)} as NaNpx, which the browser drops: give ${FIELDS[field]}`,

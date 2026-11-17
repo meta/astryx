@@ -327,9 +327,17 @@ describe('stable build typography values', () => {
       );
       expect(r.lines.join('\n'), String(radius)).toMatch(why);
     }
-    const whole = await buildSource(
-      "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', radius: {base: 8, multiplier: 1}});\n",
-    );
-    expect(whole.lines.join('\n')).not.toMatch(/radius/);
+    // A whole scale, and one whose base Core multiplies as a number (a
+    // boolean counts as 1 or 0), warn nothing.
+    for (const radius of [
+      '{base: 8, multiplier: 1}',
+      '{base: true, multiplier: 1}',
+      '{base: 4, multiplier: false}',
+    ]) {
+      const whole = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', radius: ${radius}});\n`,
+      );
+      expect(whole.lines.join('\n'), radius).not.toMatch(/radius/);
+    }
   });
 });

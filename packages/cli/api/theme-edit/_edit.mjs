@@ -184,10 +184,10 @@ import {
 } from '../../foundation/config/theme-private-vars.mjs';
 import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
 import {
-  boxed,
   CUSTOM_PROPERTY,
   customPropertyCycle,
   cycleProblem,
+  writtenPrimitive,
 } from '../theme/build/written-values.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
@@ -3003,17 +3003,14 @@ export async function editorStoredRefusal(root, slug) {
 }
 
 /**
- * A value as the build writes it: a boxed primitive (`new String('red')`)
- * as its primitive, each half of a pair too; any other value as it is.
+ * A value as the build writes it (written-values' `writtenPrimitive`): a
+ * BigInt as its digits, a boxed primitive (`new String('red')`) as its
+ * primitive, each half of a pair too; any other value as it is.
  * @param {unknown} value
  * @returns {unknown}
  */
 const asPrimitive = value =>
-  boxed(value)
-    ? /** @type {any} */ (value).valueOf()
-    : Array.isArray(value)
-      ? value.map(h => (boxed(h) ? h.valueOf() : h))
-      : value;
+  Array.isArray(value) ? value.map(writtenPrimitive) : writtenPrimitive(value);
 
 /** @type {WeakMap<object, Record<string, Record<string, unknown>>>} */
 const coreSurfaces = new WeakMap();

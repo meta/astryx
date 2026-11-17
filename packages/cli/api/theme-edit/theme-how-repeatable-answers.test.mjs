@@ -65,11 +65,17 @@ beforeAll(async () => {
   await themeEditNew('n', {cwd, like: 'neutral'});
   /** @type {Record<string, Record<string, unknown>>} */
   const by = Object.fromEntries(ASKS.map(q => [q, {}]));
-  clearCache();
-  for (const q of ASKS) by[q].fresh = await commands(q);
+  // Each ask fresh (its own cleared cache), then warm (every ask's cache
+  // made), then fresh again in the other order.
+  for (const q of ASKS) {
+    clearCache();
+    by[q].fresh = await commands(q);
+  }
   for (const q of ASKS) by[q].warm = await commands(q);
-  clearCache();
-  for (const q of [...ASKS].reverse()) by[q].freshAgain = await commands(q);
+  for (const q of [...ASKS].reverse()) {
+    clearCache();
+    by[q].freshAgain = await commands(q);
+  }
   for (const q of ASKS)
     answers.set(
       q,
