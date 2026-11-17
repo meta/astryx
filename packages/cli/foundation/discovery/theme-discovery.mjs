@@ -23,6 +23,7 @@ import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
 import {CLI_ROOT, realDir} from '../fs/paths.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
@@ -679,8 +680,8 @@ function readThemeDoc(docPath, owner) {
 
 /**
  * Descriptor reads in this process, by path and label, reused while the file
- * keeps its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, any>} | {error: unknown}}>}
+ * keeps its stamp (`fileStamp`).
+ * @type {Map<string, {stamp: string, read: {value: Record<string, any>} | {error: unknown}}>}
  */
 const descriptorReads = new Map();
 
@@ -714,10 +715,15 @@ export function readStaticDescriptorValue(
   typeName,
   {data = false} = {},
 ) {
-  const {size, mtimeMs} = fs.statSync(docPath);
+  // A kept read still counts as a read of the file, so a kept catalog sees an
+  // edit to it.
+  recordContentRead(docPath);
+  const stamp = fileStamp(docPath);
+  // An absent path throws the error a stat gives.
+  if (stamp === '-') fs.statSync(docPath);
   const key = `${docPath}\0${label}\0${typeName}\0${data}`;
   let cached = descriptorReads.get(key);
-  if (!cached || cached.size !== size || cached.mtimeMs !== mtimeMs) {
+  if (cached?.stamp !== stamp) {
     /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
@@ -743,7 +749,7 @@ export function readStaticDescriptorValue(
     } catch (error) {
       read = {error};
     }
-    cached = {size, mtimeMs, read};
+    cached = {stamp, read};
     descriptorReads.set(key, cached);
   }
   if ('error' in cached.read) throw cached.read.error;

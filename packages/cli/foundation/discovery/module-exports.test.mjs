@@ -20,6 +20,7 @@ import {
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
+import {recordReads} from '../fs/read-record.mjs';
 
 /** @type {string} */
 let dir;
@@ -178,6 +179,15 @@ describe('moduleExportSource', () => {
     fs.utimesSync(next, npmTime, npmTime);
     fs.renameSync(next, file);
     expect(moduleExportSource(file, 'AcmePanel')).toBeNull();
+  });
+
+  it('counts a kept read as a read of the file', () => {
+    const file = write('Kept.tsx', 'export function AcmeKept() {}\n');
+    expect(moduleExportSource(file, 'AcmeKept')).toBe(file);
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    recordReads(seen, () => moduleExportSource(file, 'AcmeKept'));
+    expect(seen.has(file)).toBe(true);
   });
 });
 
