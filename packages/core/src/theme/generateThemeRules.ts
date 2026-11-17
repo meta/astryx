@@ -1129,10 +1129,12 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          // A pseudo-class block takes the same derived variables as its
-          // rule at rest: a hovered table row's fill reaches its pinned cells
-          // through --table-row-overlay as the resting fill does.
-          const pseudoEntries = pseudo.startsWith(':')
+          // A pseudo-class block expands like its resting rule. A hovered
+          // row's fill then reaches pinned cells through --table-row-overlay.
+          // A pseudo-element block (`::before`) is another box, which reads
+          // none of the component's variables: it is written as authored.
+          const pseudoClass = pseudo.startsWith(':') && !pseudo.includes('::');
+          const pseudoEntries = pseudoClass
             ? expandComponentDeclarations(
                 component,
                 Object.entries(pseudoStyles).map(([k, v]) => [
@@ -1143,7 +1145,7 @@ function generateComponentRules(
                 ]),
                 resetInheritedPaddingSpecificity,
               )
-            : [];
+            : Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,

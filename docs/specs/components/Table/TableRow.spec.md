@@ -33,15 +33,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                            |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `isHeaderRow`, `xstyle` (a list of StyleX styles), root `BaseProps`, and a `ref`.                                                                                                       |
-| Behavior                | A native `tr` carrying the `table-row` target that takes the enclosing Table's striping and hover treatment and holds its cells' divider during a glide.                                            |
-| End-user impact         | People can follow a row across the table by its stripe or hover highlight, and assistive technology reads it as a row.                                                                              |
-| Builder impact          | A theme styles a selected row through the `table-row` target's `selected` state (FR5), and either stripe of a data-driven table through `parity` and `striped` (FR6).                               |
-| Compatibility/readiness | Additive: a selected row gains `data-selected="selected"` (FR5); body rows gain `data-parity` and, in a striped table, `data-striped="striped"` (FR6); no prop, default, or styling output changes. |
-| Review checks           | Reject striping that counts an expansion panel, hover or striping on a header row, a lost target, or caller props that miss the row.                                                                |
-| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`.                                                                                                            |
+| Area                    | Contract                                                                                                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children`, `isHeaderRow`, `xstyle` (a list of StyleX styles), root `BaseProps`, and a `ref`.                                                                                                                                                            |
+| Behavior                | A native `tr` carrying the `table-row` target that takes the enclosing Table's striping and hover treatment and holds its cells' divider during a glide.                                                                                                 |
+| End-user impact         | People can follow a row across the table by its stripe or hover highlight, and assistive technology reads it as a row.                                                                                                                                   |
+| Builder impact          | A theme styles a selected row through the `table-row` target's `selected` state (FR5), and either stripe of a data-driven table through `parity` and `striped` (FR6).                                                                                    |
+| Compatibility/readiness | Additive: a selected row gains `data-selected="selected"` (FR5); body rows gain `data-parity` and, in a striped table, `data-striped="striped"` (FR6); no prop or default changes; a theme's `table-row` background now also reaches pinned cells (FR6). |
+| Review checks           | Reject striping that counts an expansion panel, hover or striping on a header row, a lost target, or caller props that miss the row.                                                                                                                     |
+| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`.                                                                                                                                                                 |
 
 This table is a review projection; the body below is authoritative.
 
@@ -58,8 +58,9 @@ Consumer syntax and examples belong in `TableRow.doc.mjs`.
 - Released default preserved: `yes` — a body row.
 - Compatibility class: additive; a selected row gains `data-selected="selected"`
   and the `table-row` target gains the `selected` theme state (FR5); body rows
-  gain the `parity` visual prop and the `striped` state (FR6); no prop,
-  default, or styling output changes.
+  gain the `parity` visual prop and the `striped` state (FR6); no prop or
+  default changes; a theme's `table-row` background now also reaches pinned
+  cells (FR6).
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
