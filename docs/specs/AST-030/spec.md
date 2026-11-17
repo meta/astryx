@@ -401,7 +401,7 @@ they are separately named.
   that login as a whole. A run over that cap waits, before it waits for room,
   until one of that author's runs finishes; that wait has no longest wait and
   never stops the run, and the run then waits for room as any run does, its
-  stop without room at its longest wait included (DEC-31). A `release-critical`
+  stop without room at its longest wait included (DEC-32). A `release-critical`
   pull request's run is outside that cap, as it is outside these limits
   (DEC-30). A held suite's check fails with
   "Queued behind your 15 oldest PRs: runs on a push once it is among them, or at
@@ -518,7 +518,7 @@ they are separately named.
   later attempt of a run (the pre-merge re-run of all jobs) also runs every
   suite at that head. Marking the pull request ready, opening it and reopening
   it start no heavy suite. A release merge-back, a release-branch pull request
-  and the heavy-suite caps (FR16) are unaffected (DEC-14, DEC-31).
+  and the heavy-suite caps (FR16) are unaffected (DEC-14, DEC-32).
 
 - **FR21 — Main's full unit run is about hourly and always finishes.** The
   Main workflow runs its unit suites (every Vitest project of every package,
@@ -1089,7 +1089,7 @@ job's check run of the same name is ambiguous to branch protection); deferring
 spec-only changes (their heavy jobs already do nothing, and every push would
 then need a re-run to merge).
 
-Amended by DEC-31: the deferral covers every author, and the heavy suites run
+Amended by DEC-32: the deferral covers every author, and the heavy suites run
 at each head whose review and spec gates pass, and at the pre-merge re-run,
 instead of when the pull request is marked ready.
 
@@ -1220,7 +1220,7 @@ pass ninety); a check in every job (it spent the shared API budget); admitting
 the small workflows too (one or two slim jobs a run do not repay two API calls
 each).
 
-Amended by DEC-31: before it waits for room, a pull-request run over its
+Amended by DEC-32: before it waits for room, a pull-request run over its
 author's three-run cap (FR16) waits for one of that author's runs to finish,
 with no longest wait; its wait for room, and its stop without room at the
 longest wait, stay as above.
@@ -1442,7 +1442,7 @@ four times a day).
 
 The owner asked for "some system that will activate ci:run on contribution PRs that are stable", "Or we have some contrib lane that runs off a budget", and "plus ci:run to override?" (FR29). She approved the budget with "Ok 600": The owner set the budget at 600 runner-minutes per UTC day; unused minutes don't carry over.
 
-Amended by DEC-31: a run the job starts follows FR20 like any pull request's
+Amended by DEC-32: a run the job starts follows FR20 like any pull request's
 run: typecheck until the head's review and spec gates pass, then the heavy
 suites at that head.
 
@@ -1515,9 +1515,9 @@ Rejected: queueing release-critical pull requests ahead of others inside
 DEC-16's wait (a full CI still delays them), and running a reduced suite for
 them (a release change needs its full checks).
 
-### DEC-31 — Heavy CI runs once review passes, and an author runs at most three at once
+### DEC-32 — Heavy CI runs once review passes, and an author runs at most three at once
 
-**Reference:** `spec:AST-030/DEC-31`
+**Reference:** `spec:AST-030/DEC-32`
 **Decider:** `cixzhang`, `2026-11-17 07:57 PT`
 
 Most heavy runs are on heads that never merge, and a few authors' runs can
