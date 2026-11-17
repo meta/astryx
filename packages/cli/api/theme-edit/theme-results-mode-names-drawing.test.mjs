@@ -185,9 +185,9 @@ describe('pills and corners', () => {
   it(
     'stay off the misses under rounded corners, and are listed under square ones',
     async () => {
-      // (On the mode case's theme: corners are their own setting.)
+      await themeEditNew('p', {cwd, like: 'neutral'});
       const small = /** @type {any} */ (
-        await themeEditSet('m', 'corners', 'small', {cwd})
+        await themeEditSet('p', 'corners', 'small', {cwd})
       ).data;
       const show = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
