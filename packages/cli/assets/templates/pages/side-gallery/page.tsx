@@ -100,7 +100,7 @@ export default function SideGalleryTemplate() {
       contentWidth={1400}
       content={
         <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 360, repeat: 'fit'}} gap={8} align="center">
+          <Grid columns={{minWidth: 360, max: 2, repeat: 'fit'}} gap={8} align="center">
             {/* Left side: Text + CTA */}
             <VStack gap={6} vAlign="center">
               <VStack gap={3}>
