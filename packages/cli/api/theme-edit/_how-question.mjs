@@ -28531,13 +28531,24 @@ export function draftAnswer(ctx, env, question) {
   // on it, as set measures it after; a look whose text would not read
   // (under 4.5:1) in a mode takes a text color that does there, white or
   // black, beside the fill. A text that reads keeps the fill line alone.
+  // (A fill is a color as typed, or a theme color the fill takes by
+  // reference, "selected tab accent": var(--color-accent), measured as that
+  // token is in each mode.)
+  /** @param {unknown} v @param {'light' | 'dark'} m */
+  const fillIn = (v, m) => {
+    const said = String(v ?? '').trim();
+    const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(said)?.[1];
+    const raw = ref ? String(current(ref, m) ?? '') : said;
+    const rgb = parseColor(raw);
+    return rgb && alphaOf(raw) >= 1 ? rgb : null;
+  };
   for (const [di, d] of [...result.entries()].reverse()) {
     // (The one fill asked, in one line or in a line for each variant it
     // goes to: each line's look is measured, never only a lone line's.)
     const isFill = (/** @type {Step} */ x) =>
       Boolean(x.on) &&
       /^background(?:-color)?$/.test(x.thing) &&
-      parseColor(String(x.value ?? '')) != null;
+      (fillIn(x.value, 'light') != null || fillIn(x.value, 'dark') != null);
     const first = d.options[0]?.[0];
     const fillSteps =
       first && isFill(first)
@@ -28559,11 +28570,8 @@ export function draftAnswer(ctx, env, question) {
     )
       continue;
     const st = fillSteps[0];
-    const fill = parseColor(String(st.value ?? ''));
     if (
       !st.on ||
-      !fill ||
-      alphaOf(String(st.value)) < 1 ||
       !C.MAP[one(st.on)] ||
       textOnlyPart(one(st.on)) ||
       FAMILIES[st.on]
@@ -28592,18 +28600,55 @@ export function draftAnswer(ctx, env, question) {
       for (const m of modes) {
         const ink = parseColor(String(current(tok, m) ?? ''));
         if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
-        if (ratio(ink, fill) >= 4.5) continue;
+        const fill = fillIn(st.value, m);
+        if (!fill || ratio(ink, fill) >= 4.5) continue;
         const white = ratio([255, 255, 255], fill);
         const black = ratio([0, 0, 0], fill);
+        // (A theme color's own text color, --color-on-accent for the
+        // accent, where it reads on that color in the mode: it follows
+        // the color when the theme changes it.)
+        const ref = /^var\(\s*--color-([a-z0-9-]+)\s*\)$/i.exec(
+          String(st.value ?? '').trim(),
+        )?.[1];
+        const onTok = ref ? `--color-on-${ref}` : null;
+        const onInk =
+          onTok && Object.hasOwn(TOKENS, onTok)
+            ? fillIn(`var(${onTok})`, m)
+            : null;
         fixes.push(
-          set('color', white >= black ? '#ffffff' : '#000000', {
-            on: st.on,
-            ...(look ? {when: look} : {}),
-            ...(st.state ? {state: st.state} : {}),
-            ...(modes.length > 1 || st.mode ? {mode: m} : {}),
-          }),
+          set(
+            'color',
+            onInk && ratio(onInk, fill) >= 4.5
+              ? `var(${onTok})`
+              : white >= black
+                ? '#ffffff'
+                : '#000000',
+            {
+              on: st.on,
+              ...(look ? {when: look} : {}),
+              ...(st.state ? {state: st.state} : {}),
+              ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+            },
+          ),
         );
       }
+    }
+    // (One token line for every mode it reaches, never a line a mode.)
+    for (let k = fixes.length - 1; k >= 0; k--) {
+      const f = fixes[k];
+      if (!/^var\(/.test(String(f.value)) || !f.mode) continue;
+      const twin = fixes.findIndex(
+        (g, gi) =>
+          gi !== k &&
+          g.value === f.value &&
+          g.when === f.when &&
+          g.state === f.state &&
+          g.mode &&
+          g.mode !== f.mode,
+      );
+      if (twin < 0) continue;
+      delete fixes[twin].mode;
+      fixes.splice(k, 1);
     }
     if (!fixes.length || !env.check([...fillSteps, ...fixes]).ok) continue;
     // (Its own line beside the fill's, so the fill reads as asked and the
@@ -28622,6 +28667,37 @@ export function draftAnswer(ctx, env, question) {
       options: [fixes],
       ...(fixes.length > 1 ? {sequence: true} : {}),
     });
+    // (A theme color's fill, "selected tab accent", in a whole ask: the
+    // answer that runs it in order carries that text line right after the
+    // fill, so running it never leaves the text unreadable.)
+    if (/^var\(/.test(String(st.value ?? '').trim()))
+      for (const seq of result) {
+        if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
+        const steps = seq.options[0];
+        const at = steps.findIndex(x =>
+          fillSteps.some(
+            f =>
+              f.thing === x.thing &&
+              f.on === x.on &&
+              String(f.value) === String(x.value) &&
+              (f.when ?? '') === (x.when ?? '') &&
+              (f.state ?? '') === (x.state ?? '') &&
+              (f.mode ?? '') === (x.mode ?? ''),
+          ),
+        );
+        if (at < 0) continue;
+        const missing = fixes.filter(
+          f =>
+            !steps.some(
+              x =>
+                x.thing === f.thing &&
+                x.on === f.on &&
+                (x.state ?? '') === (f.state ?? '') &&
+                (x.when ?? '') === (f.when ?? ''),
+            ),
+        );
+        steps.splice(at + 1, 0, ...missing);
+      }
   }
   // "make the info banner navy": one status's fill on one part, or that
   // status's color for the whole theme (its banners, badges and toasts
