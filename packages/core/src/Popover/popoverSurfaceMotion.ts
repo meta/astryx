@@ -10,8 +10,9 @@
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and
  *   dismiss.
- * @position Internal to Popover. Under a finger the popover grows out of its
- *   source and shrinks back into it, as a UIKit popover does.
+ * @position Internal to Popover and DropdownMenu. Under a finger the
+ *   popover grows out of its source and shrinks back into it, as a UIKit
+ *   popover does.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/popoverSurfaceFrame.ts
@@ -31,6 +32,7 @@ import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {mapProgress, mapRange} from '../motion/progress';
 import {readThemeTimingOrInstant} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
+import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   frameOf,
   popoverCollapsedState,
@@ -316,7 +318,11 @@ export function createPopoverSurfaceMotion(
     );
     presentHandle = handle;
     endHold();
-    releaseHold = holdInput(element, {until: handle, scope: 'viewport'});
+    // Under a fine primary pointer, as on a touchscreen laptop, the page
+    // stays live while it grows.
+    releaseHold = isCoarsePointer(view)
+      ? holdInput(element, {until: handle, scope: 'viewport'})
+      : null;
     void handle.finished.then(() => {
       if (presentHandle === handle) {
         presentHandle = null;
