@@ -123,6 +123,7 @@ import {
 } from './DropdownMenuContext';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {DropdownMenuItem} from './DropdownMenuItem';
+import {stableClassName} from '../naming';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -190,6 +191,10 @@ const triggerSizeStyles = stylex.create({
   },
   lg: {},
 });
+
+// A flyout paints its own box, so it carries the popup target the root menu's
+// popover surface carries: one theme entry reaches every pointer menu's box.
+const POPUP_CLASS_NAME = stableClassName('dropdown-menu-popup');
 
 const flyoutStyles = stylex.create({
   menu: {
@@ -1201,8 +1206,9 @@ export function DropdownMenuSubMenu(
           }
         : undefined)}
       {...(surface === 'flyout'
-        ? // The flyout's frame paints its surface, so the menu target rides
-          // on it; a drilled-in view sits inside the root's surface.
+        ? // The flyout's frame paints its surface, so the menu and popup
+          // targets ride on it; a drilled-in view sits inside the root's
+          // surface.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(
@@ -1212,6 +1218,7 @@ export function DropdownMenuSubMenu(
               // each frame its own style animates.
               layerAnimations.end,
             ),
+            POPUP_CLASS_NAME,
           )
         : stylex.props(
             regionStyles.frame,
@@ -1439,6 +1446,7 @@ export function DropdownMenuSubMenu(
                       hasOverflow && flyoutStyles.scrollable,
                       layerAnimations.end,
                     ),
+                    POPUP_CLASS_NAME,
                   )}>
                   {nestedContent}
                 </div>

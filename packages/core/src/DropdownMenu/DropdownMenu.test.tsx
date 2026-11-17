@@ -26,6 +26,8 @@ import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu, type DropdownMenuTriggerProps} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {Popover} from '../Popover/Popover';
+import {defineTheme} from '../theme/defineTheme';
+import {generateThemeCSS} from '../theme/generateThemeRules';
 import {DropdownMenuDivider} from './DropdownMenuDivider';
 import {DropdownMenuGroup} from './DropdownMenuGroup';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
@@ -2222,6 +2224,49 @@ describe('DropdownMenu theming slots', () => {
     expect(screen.getByText('File Actions')).toHaveClass(
       'astryx-dropdown-menu-section-heading',
     );
+  });
+
+  it('puts the popup target on the popover surface that paints the menu box', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const menu = screen.getByRole('menu', {name: 'Actions', hidden: true});
+    const popup = menu.closest('.astryx-dropdown-menu-popup');
+    // The box is the shared popover surface; the menu target stays on the
+    // list inside it, and the generic popover target stays on the box.
+    expect(popup).not.toBeNull();
+    expect(popup).not.toBe(menu);
+    expect(popup).toHaveClass('astryx-popover');
+    expect(menu).toHaveClass('astryx-dropdown-menu');
+    expect(menu).not.toHaveClass('astryx-dropdown-menu-popup');
+    expect(
+      popup
+        ?.closest('[popover]')
+        ?.querySelectorAll('.astryx-dropdown-menu-popup'),
+    ).toHaveLength(1);
+  });
+
+  it('emits theme rules for the popup target', () => {
+    const theme = defineTheme({
+      name: 'dropdown-menu-popup-test',
+      components: {
+        'dropdown-menu-popup': {
+          base: {
+            borderRadius: '2px',
+            boxShadow: 'none',
+            border: '1px solid rgb(1, 2, 3)',
+          },
+        },
+      },
+    });
+    const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-dropdown-menu-popup');
+    expect(css).toContain('border-radius: 2px');
   });
 
   it('exposes a themeable slot on the menu divider', () => {
