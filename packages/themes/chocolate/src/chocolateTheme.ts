@@ -246,6 +246,9 @@ export const chocolateTheme = defineTheme({
     '--color-border-red': ['#FD0000', '#ff5c5c'],
     '--color-icon-red': ['#FD0000', '#ff5c5c'],
     '--color-text-red': ['#b60000', '#ff7a7a'],
+    // The error toast: the theme's own deep red, under which the text its
+    // dark side draws reads at 4.5:1 in both modes.
+    '--color-background-error-inverted': '#b60000',
 
     // Categorical — Teal
     '--color-background-teal': ['#2e6b5a33', '#5ab89833'],

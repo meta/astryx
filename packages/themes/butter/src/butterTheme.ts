@@ -372,6 +372,9 @@ export const butterTheme = defineTheme({
     '--color-background-card': [neutral.light[100], neutral.dark[20]],
     '--color-background-popover': [neutral.light[100], neutral.dark[20]],
     '--color-background-inverted': [neutral.light[15], neutral.dark[95]],
+    // The error toast: a red from the theme's own ramp under which the text
+    // its dark side draws reads at 4.5:1 in both modes.
+    '--color-background-error-inverted': [red.light[40], red.dark[45]],
 
     // Status semantics share the Red, Yellow, and Green families.
     '--color-error': [red.light[30], red.dark[85]],

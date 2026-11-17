@@ -39,8 +39,8 @@ export const matchaPaletteRefs = {
     dark: {70: '#6dbf2a', 75: '#80d43a'},
   },
   red: {
-    light: {30: '#b10000', 35: '#cc0000', 50: '#fd0000'},
-    dark: {70: '#ff5c5c', 75: '#ff7a7a'},
+    light: {25: '#920000', 30: '#b10000', 35: '#cc0000', 50: '#fd0000'},
+    dark: {35: '#a90000', 70: '#ff5c5c', 75: '#ff7a7a'},
   },
   cyan: {
     light: {35: '#2e6060', 50: '#3a7c7c'},

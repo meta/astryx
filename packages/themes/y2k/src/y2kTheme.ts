@@ -387,6 +387,9 @@ export const y2kTheme = defineTheme({
     '--color-icon-green': [green.light[30], green.dark[20]],
     '--color-text-green': [green.light[30], green.dark[20]],
 
+    // The error toast: a red from the theme's own ramp under which the text
+    // its dark side draws reads at 4.5:1 in both modes.
+    '--color-background-error-inverted': [red.light[40], red.dark[45]],
     '--color-background-red': [red.light[85], red.dark[85]],
     '--color-border-red': [red.light[75], red.dark[75]],
     '--color-icon-red': [red.light[30], red.dark[20]],

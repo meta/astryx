@@ -19,6 +19,7 @@
  *   card;
  * - selected-item and numbered-citation text on the accent tint, with the
  *   theme's own rules for those parts;
+ * - the error toast's text on its surface, in the side the toast draws;
  * - status text on its pale status fill (a field status, a banner);
  * - category text (Token, Badge) on its own category fill;
  * - code text and the code block's language label on the code background
@@ -29,6 +30,7 @@
  * @position Repo-level guard, sibling of the other scripts/check-*.
  */
 
+import fs from 'node:fs';
 import {parseStyleKey} from '../packages/core/src/utils/parseStyleKey';
 import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
@@ -49,6 +51,15 @@ const TEXT_ROLES = [
   '--color-text-secondary',
   '--color-text-accent',
 ];
+
+/** Core's error toast surface, for a theme that does not set its own. */
+const CORE_ERROR_INVERTED =
+  /'--color-background-error-inverted':\s*'([^']+)'/.exec(
+    fs.readFileSync(
+      new URL('../packages/core/src/theme/tokens.stylex.ts', import.meta.url),
+      'utf8',
+    ),
+  )?.[1];
 
 /** Card variants and the fill token Core's Card paints for each. */
 const CARD_FILLS = {
@@ -359,6 +370,30 @@ function rows() {
         const layers = [at(tokens, '--color-accent-muted'), body];
         for (const role of ['--color-text-primary', '--color-text-secondary'])
           push({...base, where, role, text: at(tokens, role), layers});
+      }
+      // The error toast's text: its surface draws the side whose content
+      // colour contrasts more with it, and that side's primary text.
+      {
+        const ground = resolveColor(
+          page['--color-background-error-inverted'] ?? CORE_ERROR_INVERTED,
+          page,
+          modeIndex,
+        );
+        const contentOn = name =>
+          layeredContrast(
+            resolveColor(page[name], page, modeIndex),
+            [ground],
+            modeIndex,
+          );
+        const side =
+          contentOn('--color-on-dark') >= contentOn('--color-on-light') ? 1 : 0;
+        push({
+          ...base,
+          where: 'the error toast',
+          role: '--color-text-primary',
+          text: resolveColor(page['--color-text-primary'], page, side),
+          layers: [ground],
+        });
       }
       // Status text on its pale status fill (a field status, a banner).
       for (const status of ['success', 'warning', 'error', 'info'])

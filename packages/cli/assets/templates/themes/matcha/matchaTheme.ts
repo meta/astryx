@@ -130,6 +130,9 @@ export const matchaTheme = defineTheme({
     '--color-background-card': [neutral.light[100], neutral.dark[15]],
     '--color-background-popover': [neutral.light[100], neutral.dark[20]],
     '--color-background-inverted': [neutral.light[20], neutral.dark[75]],
+    // The error toast: a red from the theme's own ramp under which the text
+    // its dark side draws reads at 4.5:1 in both modes.
+    '--color-background-error-inverted': [red.light[25], red.dark[35]],
 
     // Status / Sentiment
     '--color-success': [green.light[50], green.dark[70]],
