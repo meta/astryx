@@ -40,7 +40,14 @@
  * ```
  */
 
-import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
+import React, {
+  use,
+  useEffect,
+  useId,
+  useInsertionEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
@@ -414,7 +421,8 @@ export function Theme({
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
   const parent = use(ThemeContext);
-  const parentMode = use(ThemeModeContext);
+  const parentModeValue = use(ThemeModeContext);
+  const parentMode = parentModeValue?.mode;
   const parentForces = parentMode === 'light' || parentMode === 'dark';
   const aroundScheme = use(SystemSchemeContext);
   const systemScheme = parentForces ? 'preference' : aroundScheme;
@@ -424,10 +432,13 @@ export function Theme({
   // and still takes this Theme's mode. The server and the browser make the
   // same choice, so the markup matches.
   const ownTheme = isDefinedTheme(theme) ? theme : null;
-  if (ownTheme == null) {
-    warnNotATheme(theme);
-  }
   const applied = ownTheme ?? parent?.theme ?? null;
+  // Reports a value that is not a defined theme.
+  useEffect(() => {
+    if (ownTheme == null) {
+      warnNotATheme(theme);
+    }
+  }, [ownTheme, theme]);
 
   if (ownTheme != null) {
     registerTheme(ownTheme);
@@ -468,6 +479,10 @@ export function Theme({
     () => (applied == null ? null : {theme: applied, mode}),
     [applied, mode],
   );
+  // No theme applies up to the page's root Theme: `<html>` names none.
+  const themeless =
+    applied == null && (parentModeValue?.themeless ?? !isNested);
+  const modeValue = useMemo(() => ({mode, themeless}), [mode, themeless]);
 
   const wrapper = (
     <ThemeNestingContext value={true}>
@@ -489,7 +504,7 @@ export function Theme({
   // mode from ThemeModeContext.
   return (
     <SystemSchemeContext value={systemScheme}>
-      <ThemeModeContext value={mode}>
+      <ThemeModeContext value={modeValue}>
         <ThemeContext value={ctxValue}>{wrapper}</ThemeContext>
       </ThemeModeContext>
     </SystemSchemeContext>
