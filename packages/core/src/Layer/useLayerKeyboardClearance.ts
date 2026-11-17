@@ -340,24 +340,26 @@ export function useLayerKeyboardClearance(
       // A layer too tall for the room on both sides of its trigger sits over
       // the trigger, where the viewport fit shifted it. Shorter, it fits below
       // the trigger, and the fallback order moves it down. Lift it back, so it
-      // keeps the block-start edge it had when the cap landed. A layer that
-      // holds its block-end edge (placed above its trigger) moves only its
-      // top, and is not lifted.
+      // keeps the block-start edge it had when the cap landed. Compare with
+      // the box projected into the new visual viewport: a self-placed layer's
+      // intentional pan is not a fallback shift. A layer that holds its
+      // block-end edge (placed above its trigger) moves only its top, and is
+      // not lifted.
       const placed = settledBox(layer);
       if (
-        placed.top > box.top + 1 &&
-        Math.abs(placed.bottom - box.bottom) > 1
+        placed.top > boxAtNextOffset.top + 1 &&
+        Math.abs(placed.bottom - boxAtNextOffset.bottom) > 1
       ) {
         commitCap(
           height,
           keyboardInsetRef.current,
-          placed.top - box.top,
+          placed.top - boxAtNextOffset.top,
           nextVisualViewportOffsetTop,
         );
         // An engine that does not move the layer by the lift leaves it below
         // the trigger: cap it from where it starts there.
         const lifted = settledBox(layer);
-        if (Math.abs(lifted.top - box.top) > 1) {
+        if (Math.abs(lifted.top - boxAtNextOffset.top) > 1) {
           commitCap(
             height,
             keyboardInsetRef.current,
