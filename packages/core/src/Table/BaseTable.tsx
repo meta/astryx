@@ -126,6 +126,18 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     minWidth: 0,
+    // The row may use the header cell's inline-end padding, but not cross the
+    // cell's edge.
+    maxWidth: 'calc(100% + var(--_table-header-end-room, 0px))',
+  },
+  // The label gives up width first, so the "after" controls stay inside the
+  // cell and can be reached when the column is narrow. The row already took
+  // the cell's end room, so the label's content gets none.
+  headerLabel: {
+    '--_table-header-end-room': '0px',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
 });
 
@@ -910,7 +922,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          {resolvedContent}
+          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
           {after}
         </div>
       ) : (
