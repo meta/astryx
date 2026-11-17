@@ -22,6 +22,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -245,6 +246,14 @@ async function picture({html, png, mode}, i) {
   ).catch(() => null);
   if (Array.isArray(measured?.result?.value) && !measured.exceptionDetails)
     say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}`);
+  // The text the picture draws too faint to read, measured the same way.
+  const faint = await send(
+    'Runtime.evaluate',
+    {expression: `(${lowContrastText})()`, returnByValue: true},
+    sessionId,
+  ).catch(() => null);
+  if (Array.isArray(faint?.result?.value) && !faint.exceptionDetails)
+    say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint.result.value)}`);
   await send('Target.closeTarget', {targetId}).catch(() => {});
   say(i, PICTURE_TAKEN);
 }

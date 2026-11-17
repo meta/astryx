@@ -486,7 +486,8 @@ export function ratio(
 }
 
 /** A ratio to two decimals. */
-export const round = (r: number): number => Math.round(r * 100) / 100;
+/** A ratio cut down to two decimals, never rounded up past a need. */
+export const round = (r: number): number => Math.floor(r * 100 + 1e-9) / 100;
 
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade = (s: number): string => String(round(s));
