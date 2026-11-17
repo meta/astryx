@@ -191,6 +191,16 @@ export function touchedFamilies(project, data) {
 }
 
 /**
+ * The component items of the theme-building page for a Core install and a
+ * group, made once: they come from the installed Core's component docs
+ * alone, which the same install (its folder and its version and stylesheet
+ * key) never changes, and every sample page and sheet a command renders
+ * starts from them.
+ * @type {Map<string, import('./_catalog.mjs').CatalogItem[]>}
+ */
+const componentItemsMade = new Map();
+
+/**
  * Items of the theme-building page: each component once per variant
  * (overlays open), the sample page, and template pages
  * whose packages the project has.
@@ -199,6 +209,27 @@ export function touchedFamilies(project, data) {
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
+  const madeKey = `${project.coreDir}\0${project.coreKey}\0${group ?? ''}`;
+  const made = componentItemsMade.get(madeKey);
+  /** @type {import('./_catalog.mjs').CatalogItem[]} */
+  const items = made
+    ? made.map(it => ({...it}))
+    : componentItems(project, group);
+  if (!made)
+    componentItemsMade.set(
+      madeKey,
+      items.map(it => ({...it})),
+    );
+  return withPages(project, group, items);
+}
+
+/**
+ * The component items of the theme-building page ({@link showcaseItems}).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group only this group
+ * @returns {import('./_catalog.mjs').CatalogItem[]}
+ */
+function componentItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
@@ -305,6 +336,19 @@ export function showcaseItems(project, group) {
           states: true,
         });
   }
+  return items;
+}
+
+/**
+ * {@link showcaseItems}' items with the sample app and the template pages
+ * whose packages the project has (read from the project each time: what it
+ * installs can change).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group only this group
+ * @param {import('./_catalog.mjs').CatalogItem[]} items
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
+ */
+function withPages(project, group, items) {
   items.push({
     group: 'pages',
     name: 'Sample app',
