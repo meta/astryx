@@ -331,6 +331,19 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     focusMenu();
   }, [ownsFocus, show, focusMenu]);
 
+  const openFromKeyboard = useCallback(() => {
+    closedAtRef.current = 0;
+    hoverModeRef.current = false;
+    hoverOpenedAtRef.current = 0;
+    if (isOpen) {
+      if (ownsFocus) {
+        focusMenu();
+      }
+    } else {
+      openAndFocus();
+    }
+  }, [focusMenu, isOpen, openAndFocus, ownsFocus]);
+
   const handleTriggerKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.defaultPrevented || event.key !== 'ArrowDown') {
@@ -338,18 +351,9 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       }
       event.preventDefault();
       clearTimeouts();
-      closedAtRef.current = 0;
-      hoverModeRef.current = false;
-      hoverOpenedAtRef.current = 0;
-      if (isOpen) {
-        if (ownsFocus) {
-          focusMenu();
-        }
-      } else {
-        openAndFocus();
-      }
+      openFromKeyboard();
     },
-    [clearTimeouts, focusMenu, isOpen, openAndFocus, ownsFocus],
+    [clearTimeouts, openFromKeyboard],
   );
 
   const confirmHoverOpen = useCallback((): boolean => {
@@ -380,16 +384,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       // visible menu.
       const isKeyboardActivation = event != null && event.detail === 0;
       if (isKeyboardActivation) {
-        closedAtRef.current = 0;
-        hoverModeRef.current = false;
-        hoverOpenedAtRef.current = 0;
-        if (isOpen) {
-          if (ownsFocus) {
-            focusMenu();
-          }
-        } else {
-          openAndFocus();
-        }
+        openFromKeyboard();
         return;
       }
 
@@ -414,9 +409,8 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       popoverId,
       clearTimeouts,
       isOpen,
-      ownsFocus,
       confirmHoverOpen,
-      openAndFocus,
+      openFromKeyboard,
       focusMenu,
       hideAndRestoreFocus,
     ],
