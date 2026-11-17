@@ -493,8 +493,7 @@ function DefaultMegaMenu({
     // from light dismiss.
     popoverId: popover.id,
   });
-  // Items read the shared modality at a pick to tell a keyboard pick from a
-  // mouse one; this one call keeps that tracking on while the panel lives.
+  // Items read the shared modality at a pick. This call turns that tracking on.
   const modality = useInteractionModalityTracking();
   const panelRef = useMergedRefs(menuRef, modality.ref);
 

@@ -41,13 +41,16 @@ TopNavMegaMenuCloseContext.displayName = 'TopNavMegaMenuCloseContext';
  * Whether the pick that just activated `node` closes its TopNav menu: a
  * keyboard pick and a finger or pen press do; a mouse or trackpad pick, or a
  * pointer pick whose type the shared input stream did not hear, does not.
- * It reads the shared modality and input-stream state at the click.
+ * It reads the shared modality and input-stream state at the click; with no
+ * node, it reads the page's.
  */
 export function pickCloses(node: Element | null): boolean {
   if (getInteractionModality(node) === 'keyboard') {
     return true;
   }
-  const view = node?.ownerDocument.defaultView;
+  const view =
+    node?.ownerDocument.defaultView ??
+    (typeof window === 'undefined' ? null : window);
   const type = view == null ? null : getLastPointerType(view);
   return type === 'touch' || type === 'pen';
 }

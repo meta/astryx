@@ -263,14 +263,15 @@ export function TopNavMegaMenuItem({
   // Default mode — desktop popover item with large icon + description
   // =========================================================================
   const Element = href ? LinkComponent : onClick ? 'button' : 'div';
-  const handleDesktopClick = (event: React.MouseEvent<HTMLElement>) => {
+  // A custom link component may call `onClick()` without the event.
+  const handleDesktopClick = (event?: React.MouseEvent<HTMLElement>) => {
     onClick?.();
     // A keyboard, finger or pen pick ends the panel, as in TopNavMenu; a
     // mouse pick leaves it open.
     if (
       hasCloseOnSelect &&
       (href != null || onClick != null) &&
-      pickCloses(event.currentTarget)
+      pickCloses(event?.currentTarget ?? null)
     ) {
       closePanel?.();
     }

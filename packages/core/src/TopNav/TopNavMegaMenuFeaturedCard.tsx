@@ -184,8 +184,9 @@ export function TopNavMegaMenuFeaturedCard({
             href={linkHref}
             // Following the card's link with the keyboard, a finger or a pen
             // ends the panel, as an item pick does.
-            onClick={(event: React.MouseEvent<HTMLElement>) => {
-              if (pickCloses(event.currentTarget)) {
+            // A custom link component may call `onClick()` without the event.
+            onClick={(event?: React.MouseEvent<HTMLElement>) => {
+              if (pickCloses(event?.currentTarget ?? null)) {
                 closePanel?.();
               }
             }}
