@@ -23,7 +23,7 @@ import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
-import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
+import {projectInstallCommand} from '../_adapter.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
@@ -56,7 +56,7 @@ const THEME_PACKAGE = '@astryxdesign/theme-neutral';
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {
-  const {installCommand, noCommandReason} = installCommandFor(
+  const {installCommand, noCommandReason} = projectInstallCommand(
     [THEME_PACKAGE],
     cwd,
   );
