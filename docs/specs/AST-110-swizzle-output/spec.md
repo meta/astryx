@@ -168,11 +168,14 @@ release.
   and writes no test, story, spec, or doc file. The CLI owner implements and
   owns these changes.
 - The FR7 proof runs in `main`'s heavy lanes (`spec:AST-030` FR21) and in
-  full at release time.
+  full in a release re-check.
 - FR7 gap: a pull request's required test lane (`spec:AST-030` FR11) runs the
   swizzle proof, which FR7 leaves out of pull requests. `main`'s unit run proves
   only the copies its named commit's own change affects, so a covered change
-  that no unit run names is first proven by a release re-check.
+  that no unit run names is first proven by a release re-check. A release
+  publishes on a release-check and a unit run of its cut commit, which prove
+  only that commit's own change, so a release cut without a re-check can ship
+  an unproven copy.
 - `architecture:layer-runtime`: the layer stack, the modal outlet, and the
   layer contexts (`LayerProvider` and its consumers, such as `useToast`) keep
   their state and context objects under versioned keys (FR3, DEC-2).
