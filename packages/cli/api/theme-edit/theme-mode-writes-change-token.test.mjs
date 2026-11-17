@@ -147,16 +147,17 @@ describe('a one-mode theme', () => {
 });
 
 describe('a link color', () => {
-  it('points to the token its color prop reads, on the link', async ctx => {
+  it('goes into the token its color prop reads, on the link, in the mode typed', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('f7', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('f7', 'color', 'red', {cwd, on: 'link', mode: 'dark'}),
+    await themeEditSet('f7', 'color', 'red', {cwd, on: 'link', mode: 'dark'});
+    const rules = [...cssOf('f7').matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter(
+      m => /--color-text-accent: red/.test(m[2]),
     );
-    expect(r.run).toEqual([
-      expect.stringMatching(
-        /set f7 --color-text-accent red --on link --mode dark$/,
-      ),
-    ]);
+    expect(rules.length).toBeGreaterThan(0);
+    for (const m of rules) {
+      expect(m[1]).toMatch(/astryx-link/);
+      expect(m[1]).not.toMatch(/:scope\[data-theme="light"\]/);
+    }
   }, 240_000);
 });
