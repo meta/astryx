@@ -243,6 +243,16 @@ describe("a render, which carries the page's script", () => {
         `<span title='press autofocus now' data-x=autofocus autofocus>x</span>`,
       ),
     ).toBe(`<span title='press autofocus now' data-x=autofocus>x</span>`);
+    // It reads tags as the render's HTML reader does: spaces around `=` and a
+    // `>` inside a quoted value are part of the attribute.
+    expect(
+      withoutAutofocus(
+        `<span title = "press autofocus now" autofocus>x</span>`,
+      ),
+    ).toBe(`<span title = "press autofocus now">x</span>`);
+    expect(withoutAutofocus(`<input title="a>b" autofocus>`)).toBe(
+      `<input title="a>b">`,
+    );
     const painted = new JSDOM(markup).window.document.querySelector('input');
     expect(painted?.hasAttribute('autofocus')).toBe(false);
     const dom = new JSDOM(file, {

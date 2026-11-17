@@ -721,11 +721,22 @@ export function linksOpenNewTabs(markup) {
  * @returns {string}
  */
 export function withoutAutofocus(markup) {
-  return markup.replace(/<[a-zA-Z][^>]*\sautofocus\b[^>]*>/gi, tag =>
-    tag.replace(/(\s+)([^\s=/>]+)(=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?/g, (attr, _, /** @type {string} */ name) =>
-      name.toLowerCase() === 'autofocus' ? '' : attr,
-    ),
-  );
+  let out = '';
+  let at = 0;
+  for (const token of scanHtml(markup)) {
+    if (token.kind !== 'start') continue;
+    for (const [name, , start, end] of token.attrs) {
+      if (name !== 'autofocus') continue;
+      // The attribute goes with the spaces before it; the reader names
+      // where its text starts and ends, so every other attribute stays as
+      // written.
+      let from = start;
+      while (from > token.start && /[\t\n\f\r ]/.test(markup[from - 1])) from--;
+      out += markup.slice(at, from);
+      at = end;
+    }
+  }
+  return at === 0 ? markup : out + markup.slice(at);
 }
 
 /**
