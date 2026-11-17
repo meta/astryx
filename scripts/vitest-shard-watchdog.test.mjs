@@ -38,7 +38,13 @@ function runFixtures(files, env, {timeout = 60_000} = {}) {
       cwd: root,
       encoding: 'utf8',
       timeout,
-      env: {...process.env, CI: 'true', ...env},
+      // Each fixture selects its mode, not the CI leg that runs this test.
+      env: {
+        ...process.env,
+        CI: 'true',
+        VITEST_SHARD_WATCHDOG_NAME_ONLY: '0',
+        ...env,
+      },
     },
   );
 }
