@@ -1044,7 +1044,10 @@ function planPalette(cwd, slug, data, base) {
   // again below while the theme has a color; any other hue the config
   // holds is the author's, and stays as written.
   const derived = fams.length
-    ? lookSeeds(fams.find(f => f.id === 'accent')?.seed)
+    ? lookSeeds(
+        fams.find(f => f.id === 'accent')?.seed,
+        fams.find(f => f.id === 'neutral')?.seed,
+      )
     : null;
   const grown = isLookFamily;
   for (let i = families.length - 1; i >= 0; i--)
