@@ -2,7 +2,7 @@
 
 /**
  * @file CheckboxInput.tooltipCost.test.tsx
- * @input CheckboxInput, with useTooltip wrapped in a spy
+ * @input CheckboxInput, with useTooltip and useTooltipInternal wrapped in spies
  * @output Proof that a checkbox whose disabled message cannot show runs no
  *   tooltip hook, and that one whose message can show still has it
  * @position Testing for /packages/core/src/CheckboxInput/CheckboxInput.tsx
@@ -15,14 +15,26 @@ import {CheckboxInput} from './CheckboxInput';
 
 vi.mock('../Tooltip/useTooltip', async importOriginal => {
   const actual = await importOriginal<typeof tooltipModule>();
-  return {...actual, useTooltip: vi.fn(actual.useTooltip)};
+  return {
+    ...actual,
+    useTooltip: vi.fn(actual.useTooltip),
+    useTooltipInternal: vi.fn(actual.useTooltipInternal),
+  };
 });
 
-const useTooltipSpy = vi.mocked(tooltipModule.useTooltip);
+const spies = [
+  vi.mocked(tooltipModule.useTooltip),
+  vi.mocked(tooltipModule.useTooltipInternal),
+];
+/** Tooltip hook calls from CheckboxInput, through either entry. */
+const tooltipCalls = () =>
+  spies.reduce((count, spy) => count + spy.mock.calls.length, 0);
 
 describe('CheckboxInput tooltip cost', () => {
   beforeEach(() => {
-    useTooltipSpy.mockClear();
+    for (const spy of spies) {
+      spy.mockClear();
+    }
   });
 
   // A page of many checkboxes pays the tooltip's work only where a disabled
@@ -46,7 +58,7 @@ describe('CheckboxInput tooltip cost', () => {
         />
       </>,
     );
-    expect(useTooltipSpy).not.toHaveBeenCalled();
+    expect(tooltipCalls()).toBe(0);
   });
 
   it('keeps the disabled message as the checkbox description', () => {
@@ -59,7 +71,7 @@ describe('CheckboxInput tooltip cost', () => {
         disabledMessage="Managed by your administrator"
       />,
     );
-    expect(useTooltipSpy).toHaveBeenCalled();
+    expect(tooltipCalls()).toBeGreaterThan(0);
     expect(
       screen.getByRole('checkbox', {name: 'Locked'}),
     ).toHaveAccessibleDescription('Managed by your administrator');

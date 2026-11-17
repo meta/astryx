@@ -180,10 +180,13 @@ export interface TooltipOptions {
    * Wrap in useCallback for stable identity.
    */
   onHide?: () => void;
+}
 
+/** Core's own tooltip options. Not exported from the package. */
+export interface TooltipInternalOptions {
   /**
-   * @internal Called with the tooltip's surface when it mounts, and with null
-   * when it unmounts. Wrap in useCallback for stable identity.
+   * Called with the tooltip's surface when it mounts, and with null when it
+   * unmounts. Wrap in useCallback for stable identity.
    */
   onSurfaceMount?: (surface: HTMLElement | null) => void;
 }
@@ -283,6 +286,17 @@ export interface TooltipReturn {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  return useTooltipInternal(options);
+}
+
+/**
+ * useTooltip with Core's own options. Core components import it from this
+ * module; the package exports only useTooltip.
+ */
+export function useTooltipInternal(
+  options: TooltipOptions = {},
+  {onSurfaceMount}: TooltipInternalOptions = {},
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',
@@ -295,7 +309,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isDefaultOpen = false,
     onShow,
     onHide,
-    onSurfaceMount,
   } = options;
 
   // A tooltip stays open while its trigger is hovered, so it must never settle

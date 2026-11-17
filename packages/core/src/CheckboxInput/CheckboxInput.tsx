@@ -4,7 +4,7 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltipInternal
  *   (only while a disabled message can show),
  *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
@@ -50,7 +50,7 @@ import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -700,13 +700,15 @@ function DisabledMessageTooltip({
     },
     [onDescribing],
   );
-  const tooltip = useTooltip({
-    placement: 'above',
-    // The container row is not naturally focusable; focusin bubbles up from the
-    // native checkbox, so always attach focus listeners.
-    focusTrigger: 'always',
-    onSurfaceMount,
-  });
+  const tooltip = useTooltipInternal(
+    {
+      placement: 'above',
+      // The container row is not naturally focusable; focusin bubbles up from
+      // the native checkbox, so always attach focus listeners.
+      focusTrigger: 'always',
+    },
+    {onSurfaceMount},
+  );
   const {interactionRef, positionRef} = tooltip;
   // Attaches the tooltip to the row and the checkbox, which the parent
   // renders.
