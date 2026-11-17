@@ -74,6 +74,7 @@ export const docs = {
       },
       {
         className: 'astryx-complex-selector-indicator-icon',
+        sitsOn: 'icon',
         states: ['state'],
       },
       {className: 'astryx-complex-selector-popup'},

@@ -257,7 +257,7 @@ export const docs = {
     ],
   },
   theming: {
-    targets: [{className: 'astryx-checkbox-list'}],
+    targets: [{className: 'astryx-checkbox-list', sitsOn: 'field'}],
     vars: [
       {
         name: '--_checkbox-row-press-paint',

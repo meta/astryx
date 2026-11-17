@@ -186,7 +186,7 @@ export const docs = {
   ],
   components: [{name: 'useImperativeAlertDialog'}],
   theming: {
-    targets: [{className: 'astryx-alert-dialog'}],
+    targets: [{className: 'astryx-alert-dialog', sitsOn: 'dialog'}],
   },
 };
 

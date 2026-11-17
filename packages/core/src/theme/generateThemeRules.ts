@@ -50,6 +50,7 @@ import {
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
+import {isSharedElementPart} from './sharedElementParts';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 
@@ -197,7 +198,29 @@ export interface ThemeRulesSplit {
   component: string[];
   /** Prose element defaults (h1-h6, p, small, code, hr) — belongs in reset layer */
   prose: string[];
+  /**
+   * With `layered`, the rules of the shared-element parts (`SHARED_ELEMENT_PARTS`),
+   * left out of `component`: they belong in the later `parts` sub-layer of
+   * astryx-theme. Absent without `layered`, where `component` holds them.
+   */
+  parts?: string[];
 }
+
+/** Options for the layered theme outputs. */
+export interface ThemeLayerOptions {
+  /**
+   * Leave the shared-element parts' rules out of the component output and return
+   * them apart, for the later `parts` sub-layer of astryx-theme.
+   */
+  layered?: boolean;
+}
+
+/**
+ * The astryx-theme sub-layers in order. A shared-element part's rules sit in
+ * `parts`, after the rest, so they win over the component it sits on by
+ * layer order.
+ */
+export const THEME_SUB_LAYER_ORDER = '@layer components, parts;';
 
 /**
  * Output from generateThemeCSS — two CSS blocks for different layers.
@@ -1190,6 +1213,7 @@ function adaptationStatusRoleDefaults(
 export function generateThemeRules(
   theme: ThemeRuleSource,
   warnings?: string[],
+  group?: ComponentGroup,
 ): string[] {
   const parts: string[] = [];
   const sink = diagnosticSink(warnings);
@@ -1233,7 +1257,7 @@ export function generateThemeRules(
   // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
   if (components) {
-    generateComponentRules(components, parts, {sink});
+    generateComponentRules(components, parts, {sink, group});
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
@@ -1359,6 +1383,26 @@ interface ComponentRuleOptions {
   sink?: DiagnosticSink;
   /** Location prefix for diagnostics, e.g. `onDark.` or `adaptations[0].`. */
   location?: string;
+  /**
+   * Lower only one group of entries: the shared-element parts (`parts`) or every
+   * other entry (`regular`). Omitted, every entry is lowered.
+   */
+  group?: ComponentGroup;
+}
+
+/**
+ * The two groups of a theme's component entries in the layered outputs: the
+ * shared-element parts (`SHARED_ELEMENT_PARTS`), whose rules sit in the later `parts`
+ * sub-layer, and every other entry, in `components`.
+ */
+type ComponentGroup = 'regular' | 'parts';
+
+/** Whether a component entry belongs to the group being lowered. */
+function inGroup(component: string, group: ComponentGroup | undefined) {
+  return (
+    group === undefined ||
+    isSharedElementPart(component) === (group === 'parts')
+  );
 }
 
 /**
@@ -1374,9 +1418,13 @@ function generateComponentRules(
     surface,
     sink = warnToConsole,
     location: locationPrefix = '',
+    group,
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
+    if (!inGroup(component, group)) {
+      continue;
+    }
     for (const [key, styles] of Object.entries(rules)) {
       /**
        * Emit a style block on a selector: its declarations, then its
@@ -1817,8 +1865,14 @@ function generateSizeOverrides(
 export function generateThemeRulesSplit(
   theme: DefinedTheme,
   warnings?: string[],
+  options?: ThemeLayerOptions,
 ): ThemeRulesSplit {
-  const allRules = generateThemeRules(theme, warnings);
+  const layered = options?.layered === true;
+  const allRules = generateThemeRules(
+    theme,
+    warnings,
+    layered ? 'regular' : undefined,
+  );
 
   const prose: string[] = [];
   const component: string[] = [];
@@ -1831,7 +1885,18 @@ export function generateThemeRulesSplit(
     }
   }
 
-  return {component, prose};
+  if (!layered) {
+    return {component, prose};
+  }
+  const parts: string[] = [];
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {
+      sink: diagnosticSink(warnings),
+      group: 'parts',
+    });
+  }
+  return {component, prose, parts};
 }
 
 function resolvedAdaptationRules(
@@ -1873,6 +1938,34 @@ function resolvedAdaptationRules(
 export function generateOnMediaCSS(
   theme: DefinedTheme,
   warnings?: string[],
+): string;
+export function generateOnMediaCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  options: ThemeLayerOptions & {layered: true},
+): {component: string; parts: string};
+export function generateOnMediaCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+  options?: ThemeLayerOptions,
+): string | {component: string; parts: string} {
+  if (options?.layered) {
+    return {
+      component: onMediaCSS(theme, warnings, 'regular'),
+      parts: generateOnMediaPartsCSS(theme, warnings),
+    };
+  }
+  return onMediaCSS(theme, warnings);
+}
+
+/**
+ * The media-surface CSS of `generateOnMediaCSS`, its component entries
+ * limited to one group when `group` is given.
+ */
+function onMediaCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  group?: ComponentGroup,
 ): string {
   const parts: string[] = [];
   const scopeSelector = themeScopeStart(theme.name);
@@ -1924,6 +2017,7 @@ export function generateOnMediaCSS(
         surface,
         sink,
         location,
+        group,
       });
       generateColorOverrides(onMedia.components, parts, surface);
       generateSizeOverrides(onMedia.components, parts, surface);
@@ -1988,12 +2082,75 @@ export function generateOnMediaCSS(
   return blocks.join('\n\n');
 }
 
+/**
+ * The shared-element parts' on-media rules alone, lowered as `generateOnMediaCSS`
+ * lowers every component entry, for the later `parts` sub-layer.
+ */
+function generateOnMediaPartsCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+): string {
+  const sink = diagnosticSink(warnings);
+  const parts: string[] = [];
+  for (const surface of ['dark', 'light'] as const) {
+    const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
+    if (!onMedia?.components) {
+      continue;
+    }
+    generateComponentRules(onMedia.components, parts, {
+      resetInheritedPaddingSpecificity: true,
+      surface,
+      sink,
+      location: surface === 'dark' ? 'onDark.' : 'onLight.',
+      group: 'parts',
+    });
+  }
+  if (parts.length === 0) {
+    return '';
+  }
+  return `@scope (${themeScopeStart(theme.name)}) to (${THEME_SCOPE_TO}) {\n${parts.join('\n\n')}\n}`;
+}
+
+/**
+ * The shared-element parts' adaptation rules alone, one media block for each rule
+ * in authored order, for the later `parts` sub-layer.
+ */
+function generateAdaptationPartsCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+): string {
+  const sink = diagnosticSink(warnings);
+  const {rules} = statusRoleGenerationContext(theme);
+  const scopeSelector = themeScopeStart(theme.name);
+  const blocks: string[] = [];
+  for (const [index, rule] of rules.entries()) {
+    const components = rule.components;
+    if (!components) {
+      continue;
+    }
+    const parts: string[] = [];
+    generateComponentRules(components, parts, {
+      resetInheritedPaddingSpecificity: true,
+      sink,
+      location: `adaptations[${index}].`,
+      group: 'parts',
+    });
+    if (parts.length > 0) {
+      blocks.push(
+        generateAdaptationMediaBlock(rule.query, parts, scopeSelector),
+      );
+    }
+  }
+  return blocks.join('\n\n');
+}
+
 /** Generate only the declarations one adaptation rule writes. */
 function generateAdaptationRuleRules(
   rule: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
+  group?: ComponentGroup,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(rule, location, sink, [
@@ -2009,6 +2166,7 @@ function generateAdaptationRuleRules(
       resetInheritedPaddingSpecificity: true,
       sink,
       location,
+      group,
     });
     generateColorOverrides(rule.components, parts);
     generateSizeOverrides(rule.components, parts);
@@ -2049,6 +2207,25 @@ function generateAdaptationMediaBlock(
 export function generateAdaptationCSS(
   theme: DefinedTheme,
   warnings?: string[],
+  options?: ThemeLayerOptions,
+): ThemeCSSOutput & {parts?: string} {
+  if (options?.layered) {
+    return {
+      ...adaptationCSS(theme, warnings, 'regular'),
+      parts: generateAdaptationPartsCSS(theme, warnings),
+    };
+  }
+  return adaptationCSS(theme, warnings);
+}
+
+/**
+ * The adaptation CSS of `generateAdaptationCSS`, its component entries
+ * limited to one group when `group` is given.
+ */
+function adaptationCSS(
+  theme: DefinedTheme,
+  warnings: string[] | undefined,
+  group?: ComponentGroup,
 ): ThemeCSSOutput {
   const sink = diagnosticSink(warnings);
   // Built themes can reach this compiler without passing through defineTheme.
@@ -2079,6 +2256,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].`,
       sink,
       statusRoleDefaults[index],
+      group,
     );
     if (parts.length === 0) {
       continue;
@@ -2153,6 +2331,28 @@ function indentRule(rule: string): string {
 }
 
 /**
+ * The astryx-theme content of a theme. With shared-element part rules, the
+ * theme's rules sit in two sub-layers: the parts' rules in `parts`, every
+ * other rule in `components`. Without them, the component CSS as it was.
+ */
+export function layeredThemeCSS(
+  componentCss: string,
+  partsCss: string,
+): string {
+  // With no shared-element part entries the theme keeps the single layer it
+  // always wrote, byte for byte.
+  if (!partsCss) {
+    return componentCss;
+  }
+  const blocks = [THEME_SUB_LAYER_ORDER];
+  if (componentCss) {
+    blocks.push(`@layer components {\n${componentCss}\n}`);
+  }
+  blocks.push(`@layer parts {\n${partsCss}\n}`);
+  return blocks.join('\n\n');
+}
+
+/**
  * Generate layered CSS for a theme — runtime path.
  *
  * Returns two CSS blocks for injection into different layers:
@@ -2186,7 +2386,11 @@ function generateThemeCSSWithContext(
   theme: DefinedTheme,
   warnings?: string[],
 ): ThemeCSSOutput {
-  const {component, prose} = generateThemeRulesSplit(theme, warnings);
+  const {
+    component,
+    prose,
+    parts = [],
+  } = generateThemeRulesSplit(theme, warnings, {layered: true});
   const scopeSelector = themeScopeStart(theme.name);
   const scopeTo = THEME_SCOPE_TO;
 
@@ -2206,19 +2410,35 @@ function generateThemeCSSWithContext(
 
   // Adaptations follow the root theme in authored order. Media-surface rules
   // follow adaptations so onDark/onLight keep their specified precedence.
-  const adaptationCss = generateAdaptationCSS(theme, warnings);
+  const adaptationCss = generateAdaptationCSS(theme, warnings, {
+    layered: true,
+  });
   if (adaptationCss.component) {
     componentCss = componentCss
       ? `${componentCss}\n\n${adaptationCss.component}`
       : adaptationCss.component;
   }
 
-  const onMediaCss = generateOnMediaCSS(theme, warnings);
-  if (onMediaCss) {
+  const onMediaCss = generateOnMediaCSS(theme, warnings, {layered: true});
+  if (onMediaCss.component) {
     componentCss = componentCss
-      ? `${componentCss}\n\n${onMediaCss}`
-      : onMediaCss;
+      ? `${componentCss}\n\n${onMediaCss.component}`
+      : onMediaCss.component;
   }
 
-  return {prose: proseCss, component: componentCss};
+  // The shared-element parts' rules, in the same order, in the later sub-layer.
+  const partsCss = [
+    parts.length > 0
+      ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${parts.join('\n\n')}\n}`
+      : '',
+    adaptationCss.parts ?? '',
+    onMediaCss.parts,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return {
+    prose: proseCss,
+    component: layeredThemeCSS(componentCss, partsCss),
+  };
 }

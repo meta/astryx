@@ -5656,13 +5656,26 @@ async function themeBuildInternal(
 
     let themeRules;
     try {
-      themeRules = _generateThemeRulesSplit(resolvedTheme, droppedDeclarations);
+      // A core that knows the shared-element parts returns their rules apart
+      // (`parts`), for the later sub-layer; an older one ignores the option.
+      themeRules = _generateThemeRulesSplit(resolvedTheme, droppedDeclarations, {
+        layered: true,
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Theme normalization failed.';
       throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
     }
     const {component, prose} = themeRules;
+    // A core that knows the shared-element parts returns their rules apart;
+    // an older one ignores the option and returns none.
+    const coreSplitsParts = Array.isArray(themeRules.parts);
+    /** @type {string} The sub-layer order statement, as the core writes it. */
+    const subLayerOrder = coreSplitsParts
+      ? _coreThemeModule.THEME_SUB_LAYER_ORDER
+      : '';
+    /** @type {string[]} */
+    const partRules = coreSplitsParts ? themeRules.parts : [];
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
     // (generateThemeCSS) always emits them, so the build must too, or the
@@ -5681,7 +5694,11 @@ async function themeBuildInternal(
     let adaptationCss;
     try {
       adaptationCss = _generateAdaptationCSS
-        ? _generateAdaptationCSS(resolvedTheme, droppedDeclarations)
+        ? _generateAdaptationCSS(
+            resolvedTheme,
+            droppedDeclarations,
+            coreSplitsParts ? {layered: true} : undefined,
+          )
         : {component: '', prose: ''};
     } catch (error) {
       const message =
@@ -5719,25 +5736,61 @@ async function themeBuildInternal(
       adaptationCss.component.includes('light-dark(')
         ? '  :root { color-scheme: light dark; }\n  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
         : '';
+    // Media-surface rules come last so onDark/onLight win over matching
+    // adaptations on the same resolved leaf.
+    let onMediaCss = '';
+    let onMediaPartsCss = '';
+    if (_generateOnMediaCSS) {
+      if (coreSplitsParts) {
+        const onMedia = _generateOnMediaCSS(resolvedTheme, droppedDeclarations, {
+          layered: true,
+        });
+        onMediaCss = onMedia.component;
+        onMediaPartsCss = onMedia.parts;
+      } else {
+        onMediaCss = _generateOnMediaCSS(resolvedTheme, droppedDeclarations);
+      }
+    }
+    // The shared-element parts' rules, in the same root, adaptation,
+    // media-surface order.
+    const partsCss = [
+      partRules.length > 0
+        ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${partRules.join('\n\n')}\n}`
+        : '',
+      adaptationCss.parts ?? '',
+      onMediaPartsCss,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    // A theme with a shared-element part entry writes its rules in two
+    // astryx-theme sub-layers, `components` then `parts`, so the part wins
+    // over the component it sits on. The color-scheme rules stay outside
+    // both. Any other theme keeps the single layer it always wrote.
+    const layered = partsCss !== '';
+    const inComponents = (/** @type {string} */ css) =>
+      layered && css
+        ? `${subLayerOrder}\n@layer components {\n${css}\n}`
+        : css;
     if (colorSchemeDecl || componentScope) {
       cssParts.push(
-        `@layer astryx-theme {\n${colorSchemeDecl}${componentScope}\n}`,
+        `@layer astryx-theme {\n${colorSchemeDecl}${inComponents(componentScope)}\n}`,
       );
     }
     if (adaptationCss.prose) {
       cssParts.push(`@layer reset {\n${adaptationCss.prose}\n}`);
     }
     if (adaptationCss.component) {
-      cssParts.push(`@layer astryx-theme {\n${adaptationCss.component}\n}`);
+      cssParts.push(
+        `@layer astryx-theme {\n${inComponents(adaptationCss.component)}\n}`,
+      );
     }
-    // Media-surface rules come last so onDark/onLight win over matching
-    // adaptations on the same resolved leaf.
-    let onMediaCss = '';
-    if (_generateOnMediaCSS) {
-      onMediaCss = _generateOnMediaCSS(resolvedTheme, droppedDeclarations);
-      if (onMediaCss) {
-        cssParts.push(`@layer astryx-theme {\n${onMediaCss}\n}`);
-      }
+    if (onMediaCss) {
+      cssParts.push(`@layer astryx-theme {\n${inComponents(onMediaCss)}\n}`);
+    }
+    if (layered) {
+      cssParts.push(
+        `@layer astryx-theme {\n${subLayerOrder}\n@layer parts {\n${partsCss}\n}\n}`,
+      );
     }
     for (const message of droppedDeclarations) {
       const w = `Declaration ${message}. The generated CSS omits it; fix the value in the theme source.`;
@@ -5777,6 +5830,9 @@ async function themeBuildInternal(
       adaptationProse: adaptationCss.prose,
       onMedia: onMediaCss,
       colorScheme: colorSchemeDecl.trimEnd(),
+      layered,
+      layerOrder: layered ? subLayerOrder : '',
+      parts: partsCss,
     };
     css = cssParts.join('\n\n') + '\n';
   }

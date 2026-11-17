@@ -148,7 +148,7 @@ export const docs = {
         visualProps: ['variant', 'size', 'status'],
         states: ['disabled', 'readonly'],
       },
-      {className: 'astryx-selector-option'},
+      {className: 'astryx-selector-option', sitsOn: 'item'},
       {
         className: 'astryx-selector-option-row',
         visualProps: ['size'],
@@ -157,7 +157,7 @@ export const docs = {
       {className: 'astryx-selector-search'},
       {className: 'astryx-selector-section-heading'},
       {className: 'astryx-selector-empty-state'},
-      {className: 'astryx-selector-indicator-icon', states: ['state']},
+      {className: 'astryx-selector-indicator-icon', sitsOn: 'icon', states: ['state']},
       {className: 'astryx-selector-check'},
       {className: 'astryx-selector-popup'},
     ],

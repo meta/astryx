@@ -222,6 +222,7 @@ export const docs = {
       },
       {
         className: 'astryx-markdown-blockquote',
+        sitsOn: 'blockquote',
         visualProps: ['density'],
       },
       {
@@ -768,6 +769,7 @@ export const docsZh = {
       },
       {
         className: 'astryx-markdown-blockquote',
+        sitsOn: 'blockquote',
         visualProps: ['density'],
         description:
           '每个渲染的引用块（与 astryx-blockquote 目标共用同一元素）。覆盖 marginBlockStart/marginBlockEnd 可调整引用块周围的间距；反映 data-density。仅适用于默认渲染——自定义的 components.blockquote 拥有自己的样式。',

@@ -152,7 +152,7 @@ export const docs = {
         visualProps: ['size'],
         states: ['checked', 'disabled'],
       },
-      {className: 'astryx-checkbox-label'},
+      {className: 'astryx-checkbox-label', sitsOn: 'field-label'},
     ],
     vars: [
       {
@@ -408,7 +408,7 @@ export const docsZh = {
         visualProps: ['size'],
         states: ['checked', 'disabled'],
       },
-      {className: 'astryx-checkbox-label'},
+      {className: 'astryx-checkbox-label', sitsOn: 'field-label'},
     ],
     vars: [
       {

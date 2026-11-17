@@ -37,7 +37,7 @@ export const docs = {
   ],
   theming: {
     container: true,
-    targets: [{className: 'astryx-selectable-card', visualProps: ['selected', 'variant']}],
+    targets: [{className: 'astryx-selectable-card', sitsOn: 'card', visualProps: ['selected', 'variant']}],
     vars: [
       {name: '--selectable-card-ring-color', description: 'Colour of the selection ring drawn for a variant a theme added. The built-in variants each ring in their own border token and ignore this; a theme that adds a variant sets it in the same rule as that variant\'s `backgroundColor`, because no token the component could pick is guaranteed to contrast with a fill it cannot know.', default: 'var(--color-accent)'},
       {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},

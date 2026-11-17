@@ -169,7 +169,7 @@ function SaveSettings() {
     targets: [
       {className: 'astryx-banner-frame', visualProps: ['container', 'elevation']},
       {className: 'astryx-banner', visualProps: ['container', 'status']},
-      {className: 'astryx-banner-icon', visualProps: ['status']},
+      {className: 'astryx-banner-icon', sitsOn: 'icon', visualProps: ['status']},
       {className: 'astryx-banner-description'},
       {className: 'astryx-banner-content', visualProps: ['container', 'status']},
     ],

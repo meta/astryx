@@ -1124,6 +1124,7 @@ export {
   generateOnMediaCSS,
   generateAdaptationCSS,
   generateThemeCSS,
+  THEME_SUB_LAYER_ORDER,
   type ThemeRulesSplit,
   type ThemeCSSOutput,
 } from './generateThemeRules';

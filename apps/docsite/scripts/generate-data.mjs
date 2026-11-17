@@ -1175,6 +1175,7 @@ export interface ThemingTarget {
   className: string;
   visualProps?: string[];
   states?: string[];
+  sitsOn?: string;
 }
 
 export interface ComponentVar {

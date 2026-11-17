@@ -21,6 +21,7 @@ export const docs = {
       {className: 'astryx-radio-list', visualProps: ['orientation', 'size']},
       {
         className: 'astryx-radio-list-item',
+        sitsOn: 'item',
         visualProps: ['size'],
         states: ['selected', 'disabled'],
       },

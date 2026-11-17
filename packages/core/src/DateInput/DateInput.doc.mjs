@@ -243,7 +243,7 @@ export const docs = {
         visualProps: ['size', 'status'],
         states: ['disabled'],
       },
-      {className: 'astryx-date-input-toggle-icon', states: ['state']},
+      {className: 'astryx-date-input-toggle-icon', sitsOn: 'icon', states: ['state']},
     ],
   },
   usage: {
@@ -629,7 +629,7 @@ export const docsZh = {
         visualProps: ['size', 'status'],
         states: ['disabled'],
       },
-      {className: 'astryx-date-input-toggle-icon', states: ['state']},
+      {className: 'astryx-date-input-toggle-icon', sitsOn: 'icon', states: ['state']},
     ],
   },
 };

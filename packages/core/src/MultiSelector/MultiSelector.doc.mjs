@@ -152,6 +152,7 @@ export const docs = {
       {className: 'astryx-multi-selector-section-heading'},
       {
         className: 'astryx-multi-selector-indicator-icon',
+        sitsOn: 'icon',
         states: ['state'],
       },
       {

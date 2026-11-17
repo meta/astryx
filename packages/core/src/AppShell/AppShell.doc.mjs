@@ -223,7 +223,7 @@ export const docs = {
     targets: [
       {className: 'astryx-app-shell', visualProps: ['variant']},
       {className: 'astryx-app-shell-header', visualProps: ['variant']},
-      {className: 'astryx-app-shell-sidenav', visualProps: ['variant']},
+      {className: 'astryx-app-shell-sidenav', sitsOn: 'layout-panel', visualProps: ['variant']},
     ],
   },
 };
@@ -320,7 +320,7 @@ export const docsZh = {
         visualProps: ['variant'],
       },
       {className: 'astryx-app-shell-header', visualProps: ['variant']},
-      {className: 'astryx-app-shell-sidenav', visualProps: ['variant']},
+      {className: 'astryx-app-shell-sidenav', sitsOn: 'layout-panel', visualProps: ['variant']},
     ],
   },
 };

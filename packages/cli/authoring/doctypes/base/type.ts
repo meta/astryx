@@ -525,6 +525,12 @@ export interface ComponentThemingTarget {
    *  selectors such as `[data-checked="checked"]`. Omit if the element has no
    *  state-driven selectors. */
   states?: string[];
+  /** The target of the component whose element this part sits on, when it
+   *  carries that component's target too (a toggle button's `button`). A
+   *  theme's entry for this part wins over its entries for that component:
+   *  the theme compiler emits the part's rules in a later astryx-theme
+   *  sub-layer. Omit for a target on an element of its own. */
+  sitsOn?: string;
 }
 
 /**
