@@ -754,8 +754,8 @@ export function NumberInput({
   const statusMessageID = useId();
   const unitsID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  useMobileKeyboard(inputRef, {tapAreaRef: containerRef});
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;

@@ -469,8 +469,8 @@ export function TextArea({
   const statusMessageID = useId();
   const counterID = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useMobileKeyboard(textareaRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  useMobileKeyboard(textareaRef, {tapAreaRef: containerRef});
   // Tracks the counter "zone" last announced (under / near / over) so we only
   // announce on a zone change, not on every keystroke.
   const counterZoneRef = useRef<'under' | 'near' | 'over' | null>(null);

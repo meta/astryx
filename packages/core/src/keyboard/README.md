@@ -157,7 +157,10 @@ that times motion with it. Everything here is internal to
   its own element and keeps its focused field `offset` above the keyboard. A
   target lifts only while a field inside it has focus, and rides back down once
   focus leaves; one ride moves a target at a time. Where the path places the
-  field, focus moves and first taps arrive without the browser's reveal; a
+  field, focus moves and first taps arrive without the browser's reveal. A
+  field's `tapArea`, its own input container, counts as the field for a first
+  tap outside the container's other controls, so a tap on its padding or
+  border focuses it the same way. A
   claimed tap raises the tap's click on the field afterwards, a synthetic touch
   `PointerEvent` (a `MouseEvent` where none exists), so a caller's `onClick`
   still runs once. A pan the browser makes on its own after a report, as after a

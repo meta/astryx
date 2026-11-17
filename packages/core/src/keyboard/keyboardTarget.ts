@@ -18,6 +18,7 @@ import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {getTouches, subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {isElement} from '../utils/nodeType';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {isIosWebKit} from '../utils/touchQueries';
@@ -1042,6 +1043,36 @@ function rideWithKeyboard(
 export interface KeepFieldAboveKeyboardOptions {
   /** The gap kept between the field and the keyboard, CSS px. */
   offset?: number;
+  /**
+   * The field's own input container. A first tap on it, outside its other
+   * controls, focuses the field as a tap on the field does.
+   */
+  tapArea?: HTMLElement | null;
+}
+
+const OTHER_CONTROL_SELECTOR =
+  'a[href], button, input, select, textarea, [contenteditable], [role="button"], [tabindex]';
+
+/**
+ * Whether a tap on `touched` is a tap on `field`: on the field itself, or on
+ * `tapArea` outside its other controls.
+ */
+function tapsField(
+  touched: EventTarget | null,
+  field: HTMLElement,
+  tapArea: HTMLElement | null,
+): boolean {
+  if (!isElement(touched)) {
+    return false;
+  }
+  if (field.contains(touched)) {
+    return true;
+  }
+  if (tapArea == null || !tapArea.contains(touched)) {
+    return false;
+  }
+  const control = touched.closest(OTHER_CONTROL_SELECTOR);
+  return control == null || !tapArea.contains(control);
 }
 
 // Whether `scroller`, in a fixed container the app positions, can bring
@@ -1133,7 +1164,7 @@ function revealWithin(
  */
 export function keepFieldAboveKeyboard(
   field: HTMLElement,
-  {offset = FIELD_OFFSET}: KeepFieldAboveKeyboardOptions = {},
+  {offset = FIELD_OFFSET, tapArea = null}: KeepFieldAboveKeyboardOptions = {},
 ): () => void {
   const doc = field.ownerDocument;
   const win = doc.defaultView;
@@ -1147,10 +1178,13 @@ export function keepFieldAboveKeyboard(
         ? field
         : null,
   });
-  // A first tap moves focus from nothing, so no blur claims it.
-  const stopTaps = claimTapFocus(field, {
-    claim: () =>
-      doc.activeElement !== field && placementOf(field, offset, win) != null
+  // A first tap moves focus from nothing, so no blur claims it. A tap on the
+  // field's padding or border is a tap on its container, not on the field.
+  const stopTaps = claimTapFocus(tapArea ?? field, {
+    claim: touched =>
+      tapsField(touched, field, tapArea) &&
+      doc.activeElement !== field &&
+      placementOf(field, offset, win) != null
         ? field
         : null,
     deliver: deliverTap,

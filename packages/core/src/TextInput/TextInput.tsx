@@ -387,8 +387,8 @@ export function TextInput({
   const descriptionID = useId();
   const statusMessageID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  useMobileKeyboard(inputRef, {tapAreaRef: containerRef});
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);

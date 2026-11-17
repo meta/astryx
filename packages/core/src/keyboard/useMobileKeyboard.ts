@@ -86,6 +86,11 @@ export interface MobileKeyboardOptions {
   isOpen?: boolean;
   /** Whether the page's own scroll is locked under the target. */
   isPageScrollLocked?: boolean;
+  /**
+   * A field target's own input container. A first tap on it, outside its
+   * other controls, focuses the field as a tap on the field does.
+   */
+  tapAreaRef?: RefObject<HTMLElement | null>;
 }
 
 /** What useMobileKeyboard returns. */
@@ -173,6 +178,7 @@ export function useMobileKeyboard(
     isExpanded = true,
     isOpen = true,
     isPageScrollLocked = false,
+    tapAreaRef,
   }: MobileKeyboardOptions = {},
 ): MobileKeyboard {
   // The inset the keyboard takes at the end of the body's content, CSS px.
@@ -234,7 +240,10 @@ export function useMobileKeyboard(
         return () => {};
       }
       return move == null
-        ? keepFieldAboveKeyboard(target, {offset})
+        ? keepFieldAboveKeyboard(target, {
+            offset,
+            tapArea: tapAreaRef?.current,
+          })
         : followKeyboard(target, {move, offset});
     },
     `${isEnabled}|${move}|${reservesInset}|${offset}|${isTouch}`,

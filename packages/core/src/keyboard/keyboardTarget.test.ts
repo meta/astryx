@@ -2019,6 +2019,49 @@ describe('keepFieldAboveKeyboard', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("takes a first tap on the field's container, so a tap on its padding cannot pan the page", () => {
+    const container = element('div', {top: 650, height: 60});
+    const input = element('input', {top: 660, height: 40});
+    const clear = element('button', {top: 660, height: 40});
+    container.append(input, clear);
+    document.body.append(container);
+    track(keepFieldAboveKeyboard(input, {tapArea: container}));
+    const focus = vi.spyOn(input, 'focus');
+    const tapOn = (target: Element) => {
+      const touch = (type: string) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        const points =
+          type === 'touchend'
+            ? []
+            : [{identifier: 0, clientX: 12, clientY: 655}];
+        Object.assign(event, {
+          touches: points,
+          changedTouches: [{identifier: 0, clientX: 12, clientY: 655}],
+        });
+        return event;
+      };
+      act(() => {
+        target.dispatchEvent(touch('touchstart'));
+      });
+      const end = touch('touchend');
+      act(() => {
+        target.dispatchEvent(end);
+      });
+      return end;
+    };
+    // A tap on the container's own padding.
+    const padding = tapOn(container);
+    expect(padding.defaultPrevented).toBe(true);
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    expect(document.activeElement).toBe(input);
+    // A tap on another control in the container stays that control's.
+    act(() => input.blur());
+    focus.mockClear();
+    const button = tapOn(clear);
+    expect(button.defaultPrevented).toBe(false);
+    expect(focus).not.toHaveBeenCalled();
+  });
+
   it('attaches nothing under a mouse or a trackpad', () => {
     isCoarse = false;
     const scrollBy = vi.fn();
