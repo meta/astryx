@@ -153,6 +153,7 @@ import {
   groupsOf,
 } from './_settings.mjs';
 import {
+  borderFor,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -6006,6 +6007,8 @@ async function changeOnce(
         data.settings.map(x => keyOf(x)).lastIndexOf(k);
   /** @type {string | null} */
   let vibrancyGone = null;
+  /** The border a border color brought to a part that drew none. @type {import('./_settings.mjs').Setting | null} */
+  let borderAdded = null;
   let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
@@ -6419,6 +6422,12 @@ async function changeOnce(
   } else {
     // A changed setting goes last, so it wins over what came before it.
     if (prev) data.settings.splice(prevIdx, 1);
+    // A border color on a part that draws no border brings the border it
+    // needs, written before it in the same change.
+    if (sub === 'set') {
+      borderAdded = borderFor(ctx, slug, data, s);
+      if (borderAdded) data.settings.push(borderAdded);
+    }
     data.settings.push(s);
   }
   // A setting listed twice by hand keeps only the entry this command left;
@@ -6796,6 +6805,11 @@ async function changeOnce(
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
+    ...(borderAdded
+      ? [
+          `${borderAdded.on} drew no border${borderAdded.when ? ` when ${borderAdded.when}` : ''}, so this adds one for the color to show on: ${describe(borderAdded)}, transparent at rest so ${borderAdded.on} keeps one size in every state; undo ${slug} takes back both`,
+        ]
+      : []),
     ...(alsoReplaced.length && prev
       ? [
           `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is ${sub === 'set' ? 'replaced' : 'removed'}`,
