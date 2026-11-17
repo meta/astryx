@@ -99,8 +99,9 @@ touch. The recipe styles paint from that attribute.
 - **INV5 — Every pointer through the engine.** A mouse or pen press paints at
   once on `pointerdown` through the engine, with the same release fade as a
   finger's, in place of CSS `:active` (`spec:AST-094` DEC-21; `component:Button` FR15).
-  A key press that activates a control paints its press until release,
-  through the same recipe.
+  A key press that activates a control on release (Space) paints its press
+  until release, through the same recipe; a key that activates on key down
+  (Enter) paints no press.
 - **INV6 — The first press.** The engine's core stays on first load: it finds
   the pressable element, writes the attribute, starts the delay timer, and
   ends the press on a scroll. Optional profiles (the group slide, the menu
