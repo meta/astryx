@@ -200,6 +200,25 @@ export function startsATermWordOf(t, text) {
 }
 
 /**
+ * Whether a term is one of a text's words, or the start of one, however
+ * short against the whole text: `avata` in AvatarGroupInteractive.
+ * @param {TermWords} t
+ * @param {string} text - The name or keyword as authored.
+ * @returns {boolean}
+ */
+export function isOrStartsAWordOf(t, text) {
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    for (let j = 0; j < t.starts.length; j++) {
+      if (w.startsWith(t.starts[j])) return true;
+    }
+    if (sameTermWord(t, w)) return true;
+  }
+  return false;
+}
+
+/**
  * Whether a term is long enough to match inside `text`: four letters, and at
  * least half of the text.
  * @param {string} term

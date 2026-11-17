@@ -129,9 +129,7 @@ async function gatherDomains(options) {
     return result;
   }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
-    wants('component')
-      ? gatherComponents(coreDir, cwd)
-      : [],
+    wants('component') ? gatherComponents(coreDir, cwd) : [],
     wants('hook') ? gatherHooks(coreDir) : [],
     wants('doc') ? gatherDocs(cwd) : [],
     wants('template') ? gatherTemplates(cwd) : [],
@@ -381,7 +379,7 @@ export function gatherCandidatesReused(options) {
  *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
  *   null when build's loader finds the file absent, unreadable, or the wrong
  *   shape.
- * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
+ * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData, ownEvidence?: boolean}} SearchCatalog
  */
 
 /** @type {SearchData | null} */

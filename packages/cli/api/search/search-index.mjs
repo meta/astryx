@@ -194,10 +194,11 @@ export async function rankSearchIndex(query, indexes, options = {}) {
   const {type} = options;
   // Keywords read as search() reads them (_named-keywords.mjs). The names
   // come from every stored entry, before the `type` cut.
-  const view = searchView({
+  const viewed = searchView({
     all,
     components: all.filter(candidate => candidate.domain === 'component'),
-  }).all;
+  });
+  const view = viewed.all;
   const wanted =
     type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
@@ -214,6 +215,8 @@ export async function rankSearchIndex(query, indexes, options = {}) {
         outside: false,
         coreSkipped,
         coreSkippedCode: null,
+        // Search's reading of other entries' names, as the view marks it.
+        ownEvidence: viewed.ownEvidence,
         data: loadSearchData(),
       },
     )

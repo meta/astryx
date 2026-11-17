@@ -53,7 +53,7 @@
  */
 
 import {spellIdentifiers, joined} from './_words.mjs';
-import {tokenizeQuery, phraseWords} from './_query.mjs';
+import {tokenizeQuery, phraseWords, pluralOf} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
@@ -75,6 +75,8 @@ import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
  *   author lists in `keywords`, without the code terms and table cells its
  *   other keywords add.
  * @property {string[]} [weakKeywords]
+ * @property {string[]} [_uses] - The components a block's doc lists as used
+ *   (`componentsUsed`), also among its keywords as gathered.
  * @property {string[]} [weakKeywordBound] - Every name `weakKeywords` can
  *   hold, for a page whose weak keywords cost a parse to read.
  * @property {string} [description]
@@ -188,7 +190,7 @@ function identifierReading(query, all) {
  *
  * @param {string} query
  * @param {{limit?: number}} options
- * @param {{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside?: boolean, coreSkipped?: string | null}} catalog
+ * @param {{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside?: boolean, coreSkipped?: string | null, ownEvidence?: boolean}} catalog
  * @returns {import('./search.type.mjs').SearchResponse}
  */
 export function rankLexical(query, options, catalog) {
@@ -269,6 +271,46 @@ export function rankLexical(query, options, catalog) {
     return best;
   };
 
+  // In search's reading (`ownEvidence`, set by searchView), the query words
+  // that name a component or hook outright (its whole name, as `namedSpan`
+  // and `wordNamed` read it) and no doc. Such a word asks for that entry, and
+  // the title tier reads it (scoreQuery). A word that is also a doc's name
+  // (`theme`, `tokens`) may be asking for the doc. Worked out only when the
+  // title tier asks, as few queries hold a title.
+  /** @type {Set<string> | undefined} */
+  let namedWords;
+  const namedWordsOf = () => {
+    if (namedWords) return namedWords;
+    namedWords = new Set();
+    if (!catalog.ownEvidence) return namedWords;
+    /** @type {string[]} */
+    const docNames = [];
+    for (const candidate of all) {
+      if (candidate.domain === 'doc') {
+        for (const name of [candidate.name, candidate._topic]) {
+          const route = String(name ?? '');
+          docNames.push(joined(route.slice(route.lastIndexOf('/') + 1)));
+        }
+      } else if (
+        candidate.domain === 'component' ||
+        candidate.domain === 'hook'
+      ) {
+        const span = namedSpan(candidate) ?? wordNamed(candidate);
+        if (span) {
+          for (const w of queryWords.slice(span[0], span[1])) {
+            namedWords.add(w);
+          }
+        }
+      }
+    }
+    for (const w of namedWords) {
+      if (docNames.some(n => n === w || pluralOf(w, n) || pluralOf(n, w))) {
+        namedWords.delete(w);
+      }
+    }
+    return namedWords;
+  };
+
   // Score every candidate on its own merits. The consumer groups results by
   // role (page / block / component) and takes the top of each, so there's no
   // cross-role competition to engineer — a target page only needs to be the
@@ -279,7 +321,11 @@ export function rankLexical(query, options, catalog) {
     // What scoreQuery scored each token as, for domainPriority below.
     /** @type {Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>} */
     const tokenHits = new Map();
-    const asWords = scoreQuery(term, tokens, candidate, words, {tokenHits});
+    const asWords = scoreQuery(term, tokens, candidate, words, {
+      tokenHits,
+      named: namedWordsOf,
+      ownEvidence: catalog.ownEvidence === true,
+    });
     const asWhole =
       wholeTokens && mentioned.has(candidate)
         ? scoreQuery(
@@ -287,6 +333,7 @@ export function rankLexical(query, options, catalog) {
             wholeTokens,
             candidate,
             /** @type {string[]} */ (wholeWords),
+            {ownEvidence: catalog.ownEvidence === true},
           )
         : null;
     const hit =
@@ -355,7 +402,10 @@ export function rankLexical(query, options, catalog) {
     if (r.alias === 'partial' && r.aliasWords > longestNamed) continue;
     // It keeps what it earns without those matches.
     const own =
-      scoreQuery(term, tokens, r.candidate, words, {plain: true})?.score ?? 0;
+      scoreQuery(term, tokens, r.candidate, words, {
+        plain: true,
+        ownEvidence: catalog.ownEvidence === true,
+      })?.score ?? 0;
     r.key = Math.max(own, Math.min(r.key, namedFloor - 0.5));
   }
 
