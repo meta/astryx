@@ -20,7 +20,7 @@
  */
 
 import {renderCommandTokens} from './doc-syntax.mjs';
-import {docPackageManager} from '../env/package-manager.mjs';
+import {docPackageManager, prefixCliCommands} from '../env/package-manager.mjs';
 
 /** The kinds a link can name: every authored doc kind. */
 export const LINK_KINDS = new Set([
@@ -157,6 +157,20 @@ export function renderTokens(text, lang = null) {
     {stem: 'astryx', pm: docPackageManager(process.cwd())},
     lang,
   );
+}
+
+/**
+ * Doc text the way a text-mode reader sees it: its tokens rendered
+ * ({@link renderTokens}), then each CLI command it names started with `stem`,
+ * the reader's runner ({@link prefixCliCommands}). A command that prints a
+ * component's or a template's own doc text shows it through this, as `docs`
+ * shows a doc's blocks. JSON readers get the doc text as written.
+ * @param {string} text
+ * @param {string} stem the invocation from `getCliInvocation`
+ * @returns {string}
+ */
+export function showDocText(text, stem) {
+  return prefixCliCommands(renderTokens(text), stem);
 }
 
 /**

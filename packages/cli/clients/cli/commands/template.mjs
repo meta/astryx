@@ -20,6 +20,7 @@ import {template as templateApi} from '../../../api/template/template.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {showDocText} from '../../../foundation/doc-compiler/links.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -246,7 +247,10 @@ export function registerTemplate(program) {
             const toRow = t => ({
               id: t.id,
               name: markNotReady(t.name, t.isReady),
-              description: firstSentence(t.description ?? ''),
+              description: showDocText(
+                firstSentence(t.description ?? ''),
+                getCliInvocation(),
+              ),
               package:
                 t.package && t.package !== '@astryxdesign/core'
                   ? t.package
@@ -284,7 +288,7 @@ export function registerTemplate(program) {
             emit(
               record({package: result.package}),
               text(
-                `# ${markNotReady(tName, isReady)}${description ? ' — ' + description : ''}\n` +
+                `# ${markNotReady(tName, isReady)}${description ? ' — ' + showDocText(description, getCliInvocation()) : ''}\n` +
                   `# Components: ${components.join(', ')}`,
               ),
               code(skeleton),

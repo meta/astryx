@@ -18,6 +18,7 @@ import {
 } from '../lib/component-format.mjs';
 import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {showDocText} from '../../../foundation/doc-compiler/links.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
   emit,
@@ -132,6 +133,11 @@ function componentDetailBlocks(
   const propsCommand = requestedName
     ? `component ${requestedName}${scope} --props`
     : null;
+  // The doc's own text names commands as bare `astryx …`: show them the way
+  // this run's reader runs the CLI.
+  const run = getCliInvocation();
+  /** @param {string} value */
+  const shown = value => showDocText(value, run);
   switch (result.type) {
     case 'component.detail': {
       /** @type {import('../formatters/index.mjs').Block[]} */
@@ -142,22 +148,28 @@ function componentDetailBlocks(
       out.push(
         detail === 'brief'
           ? code(
-              formatBrief(result.data, resolvedName, result.data.import, {
-                themeData,
-              }),
+              shown(
+                formatBrief(result.data, resolvedName, result.data.import, {
+                  themeData,
+                }),
+              ),
             )
           : detail === 'compact'
             ? code(
-                formatCompact(result.data, resolvedName, result.data.import, {
-                  propsCommand,
-                }),
+                shown(
+                  formatCompact(result.data, resolvedName, result.data.import, {
+                    propsCommand,
+                  }),
+                ),
               )
             : code(
-                formatFull(result.data, {
-                  themeData,
-                  importHint: result.data.import,
-                  propsCommand,
-                }),
+                shown(
+                  formatFull(result.data, {
+                    themeData,
+                    importHint: result.data.import,
+                    propsCommand,
+                  }),
+                ),
               ),
       );
       return out;
@@ -165,7 +177,7 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName)),
+        code(shown(formatProps({props: result.data}, resolvedName))),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':

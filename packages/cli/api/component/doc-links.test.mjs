@@ -27,6 +27,8 @@ const {docs} = require('../docs/docs.mjs');
 const {search} = require('../search/search.mjs');
 /** @type {typeof import('../../test-utils/run-cli.mjs')} */
 const {runCli} = require('../../test-utils/run-cli.mjs');
+/** @type {typeof import('../../foundation/env/cli-command.mjs')} */
+const {runWithCliDoor} = require('../../foundation/env/cli-command.mjs');
 
 const SLOW = 60_000;
 
@@ -179,7 +181,7 @@ describe("a link in a component doc's text", () => {
   );
 
   it(
-    'reads the same in the props projection, in JSON, and in text',
+    'reads as the command that opens its doc in the props projection, in JSON, and in text',
     async () => {
       scaffold();
       const props = /** @type {any} */ (
@@ -195,9 +197,12 @@ describe("a link in a component doc's text", () => {
         '`astryx docs acme-setup`',
       );
 
-      const text = await runCli(['component', 'AcmeButton'], tmpDir);
+      // Text starts the command with the name the run's reader types.
+      const text = await runWithCliDoor('host astryx', () =>
+        runCli(['component', 'AcmeButton'], tmpDir),
+      );
       expect(text.status).toBe(0);
-      expect(text.stdout).toContain('`astryx docs acme-setup`');
+      expect(text.stdout).toContain('`host astryx docs acme-setup`');
       expect(text.stdout).not.toContain('{@link generic:acme-setup} says');
     },
     SLOW,

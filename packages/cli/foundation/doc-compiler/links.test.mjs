@@ -11,6 +11,7 @@ import {
   linkFields,
   linkSections,
   parseLinkTarget,
+  showDocText,
   textFields,
   unlinkText,
 } from './links.mjs';
@@ -33,6 +34,27 @@ const resolve = async (/** @type {string} */ target) => {
       }
     : {problem: `"${target}" names no doc`};
 };
+
+describe('showDocText', () => {
+  it("starts each command a doc's text names with the reader's runner, a token's too", () => {
+    expect(
+      showDocText(
+        'See `astryx docs icons`, or {@command component Icon}. `astryx-theme` is a word.',
+        'pnpm exec astryx',
+      ),
+    ).toBe(
+      'See `pnpm exec astryx docs icons`, or `pnpm exec astryx component Icon`. `astryx-theme` is a word.',
+    );
+  });
+
+  it('leaves a code example alone and shows the text as written for the global command', () => {
+    const text = '```tsx\nconst cmd = `astryx docs`;\n```';
+    expect(showDocText(text, 'npx astryx')).toBe(text);
+    expect(showDocText('See `astryx docs icons`.', 'astryx')).toBe(
+      'See `astryx docs icons`.',
+    );
+  });
+});
 
 describe('parseLinkTarget', () => {
   it('reads a doc of the same provider, or of a named one', () => {

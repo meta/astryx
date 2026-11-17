@@ -14,6 +14,7 @@ import {
   findClosestComponents,
 } from './component.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {runWithCliDoor} from '../../../foundation/env/cli-command.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 
@@ -596,6 +597,16 @@ describe('searchComponents', () => {
 });
 
 describe('component <Name> text output', () => {
+  it("starts the commands its doc text names with the runner that reaches this version", async () => {
+    // CheckboxInput's labelIcon prop says: See `astryx docs icons`.
+    const run = await runWithCliDoor('host astryx', () =>
+      runCli(['component', 'CheckboxInput', '--props'], REPO_ROOT),
+    );
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('See `host astryx docs icons`');
+    expect(run.stdout).not.toContain('`astryx docs icons`');
+  }, 30_000);
+
   // The text is a projection of the JSON envelope: it may show less, never
   // data the envelope does not carry.
   it('shows no related-block records that the JSON lacks', async () => {
