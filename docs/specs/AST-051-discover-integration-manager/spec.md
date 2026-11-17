@@ -107,7 +107,9 @@ search` uses: an item matches by the words of its name, title, summary,
   its package. One item opens by its package path (FR3). When nothing
   matches, the not-found error MUST suggest the first Core component or hook
   that `astryx search` gives for the query, through the lookups'
-  other-command hint, and suggests nothing more when search gives none.
+  other-command hint, when search answers the whole query with it by a name
+  or keyword: one word at search's keyword strength, or every word of a
+  longer query. It suggests nothing more when search gives no such entry.
 - **FR5 — Filters follow the CLI's existing options.** `--type <kind>` keeps one
   kind (`component`, `template`, `doc`, `theme`, `codemod`, `agent-doc`): in the
   list, packages that add it; in a search, items of that kind. `--installed`
@@ -220,8 +222,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   saved copy of a discover source's full catalog exists (FR8), search MUST
   print that line only when an item of a package the project could add, from
   those copies or from the official packages no source covers (FR11),
-  carries a word of the query, in any form the word scorer counts as the
-  same word. When no saved copy exists, search prints the line. Search MUST
+  answers every word of the query by its own text (name, title, summary, or
+  keywords), each word or a synonym search reads for it, in any form the
+  word scorer counts as the same word. When no saved copy exists, search prints the line. Search MUST
   NOT call a discover source to decide; it reads only the saved copies and
   the official list. Its JSON output carries no such line.
 

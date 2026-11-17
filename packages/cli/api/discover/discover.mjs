@@ -53,7 +53,7 @@ import {list} from './list/list.mjs';
 import {detail} from './detail/detail.mjs';
 import {doc, docFromResult} from './detail/doc/doc.mjs';
 import {item} from './detail/item/item.mjs';
-import {anyAvailableWord, search} from './search/search.mjs';
+import {anyAvailableNamed, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -169,7 +169,7 @@ export function answersQueries(project) {
 
 /**
  * Whether a package the project could add has an item that carries a word of
- * `query` (see anyAvailableWord), by the saved copies of the discover
+ * `query` (see anyAvailableNamed), by the saved copies of the discover
  * sources' catalogs alone: no source is called. Null when no source has a
  * saved copy, so nothing is known. The search command reads it to point at
  * `discover` only when discover has something to show.
@@ -193,7 +193,7 @@ export function addableMatch(project, query, {type} = {}) {
   )
     ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
     : undefined;
-  return anyAvailableWord(items, query, {type: kind});
+  return anyAvailableNamed(items, query, {type: kind});
 }
 
 /**

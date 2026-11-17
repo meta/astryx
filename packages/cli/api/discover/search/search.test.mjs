@@ -9,7 +9,7 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {anyAvailableWord, search} from './search.mjs';
+import {anyAvailableNamed, search} from './search.mjs';
 import {AstryxError} from '../../error.mjs';
 
 let docsDir;
@@ -415,17 +415,33 @@ describe('discover.search leaf, word by word', () => {
     expect(res.data.matches[0].component).toBe('BarChart');
   });
 
-  it('says whether an item a project could add carries a word of the query', () => {
-    expect(anyAvailableWord(items, 'bar chart')).toBe(true);
-    expect(anyAvailableWord(items, 'bar chart', {type: 'template'})).toBe(
+  it('says whether an item a project could add answers every word of the query', () => {
+    expect(anyAvailableNamed(items, 'bar chart')).toBe(true);
+    expect(anyAvailableNamed(items, 'bar chart', {type: 'template'})).toBe(
       false,
     );
-    expect(anyAvailableWord(items, 'charts')).toBe(true);
-    expect(anyAvailableWord(items, 'zzqqxx')).toBe(false);
-    // The package's description alone is no match, as in search().
-    expect(anyAvailableWord(items, 'directory')).toBe(false);
+    expect(anyAvailableNamed(items, 'charts')).toBe(true);
+    expect(anyAvailableNamed(items, 'zzqqxx')).toBe(false);
+    // One shared word is not enough.
+    expect(anyAvailableNamed(items, 'bar zzqqxx')).toBe(false);
+    // A synonym search reads answers its word: "grid" is a table word.
     expect(
-      anyAvailableWord(
+      anyAvailableNamed(
+        [
+          {
+            package: '@acme/x',
+            kind: 'component',
+            name: 'DataGrid',
+            installed: false,
+          },
+        ],
+        'table',
+      ),
+    ).toBe(true);
+    // The package's description alone is no match, as in search().
+    expect(anyAvailableNamed(items, 'directory')).toBe(false);
+    expect(
+      anyAvailableNamed(
         items.map(item => ({...item, installed: true})),
         'bar chart',
       ),

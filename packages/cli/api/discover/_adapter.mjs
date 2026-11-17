@@ -1286,8 +1286,12 @@ export async function loadValidatedDoc(result, {lang, zh}) {
 /**
  * The not-found error with Core's match for the query in its suggestions:
  * the first Core component or hook `astryx search` gives in `cwd`, as the
- * lookups' shared hint (foundation/suggest/other-command.mjs) names it. The
- * error is unchanged when search gives none, or fails.
+ * lookups' shared hint (foundation/suggest/other-command.mjs) names it, when
+ * search answers the whole query with it by a name or keyword: one word at
+ * search's keyword strength, or every word of a longer query
+ * (api/search/_score.mjs). A Core entry search found only through prose, or
+ * through some of the words, is too weak a match to name. The error is
+ * unchanged when search gives no such entry, or fails.
  * @param {AstryxError} err
  * @param {string} query
  * @param {string} cwd
@@ -1295,18 +1299,26 @@ export async function loadValidatedDoc(result, {lang, zh}) {
  */
 export async function withCoreMatch(err, query, cwd) {
   try {
-    const [{search}, {hintFor, withOtherCommand, MATCH_TIER}] =
-      await Promise.all([
-        import('../search/search.mjs'),
-        import('../../foundation/suggest/other-command.mjs'),
-      ]);
+    const [
+      {search, tokenizeQuery, spellIdentifiers},
+      {FULL_COVERAGE_SCORE, STRONG_TOKEN_SCORE},
+      {hintFor, withOtherCommand, MATCH_TIER},
+    ] = await Promise.all([
+      import('../search/search.mjs'),
+      import('../search/_score.mjs'),
+      import('../../foundation/suggest/other-command.mjs'),
+    ]);
     const {results} = (await search(query, {cwd})).data;
     const core = results.find(
       r =>
         (r.domain === 'component' || r.domain === 'hook') &&
         r.package === CORE_PACKAGE_NAME,
     );
-    if (!core) return err;
+    const strong =
+      tokenizeQuery(spellIdentifiers(query)).length > 1
+        ? FULL_COVERAGE_SCORE
+        : STRONG_TOKEN_SCORE;
+    if (!core || core.score < strong) return err;
     const command = /** @type {'component' | 'hook'} */ (core.domain);
     return new AstryxError(
       err.message,

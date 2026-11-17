@@ -28,6 +28,7 @@ import {
   SEARCH_DOMAINS,
   tokenizeQuery,
 } from '../../search/_query.mjs';
+import {SYNONYM_INDEX} from '../../search/_synonyms.mjs';
 import {
   sameTermWord,
   spellIdentifiers,
@@ -127,35 +128,38 @@ function queryOf(query) {
 }
 
 /**
- * Whether an item a project could add carries a word of `query`: a word of
- * its name, title, keywords, summary, or a package's own description, in any
- * form search counts as the same word (plural, stem). It reads each word
- * once, so it costs far less than ranking every item, at the price of the
- * matches search() finds only by a word's start, a typo, or a synonym.
+ * Whether an item a project could add answers every word of `query`, as an
+ * item in discover's every-word tier does: each word, or a synonym search
+ * reads for it, is a word of the item's name, title, summary, or keywords,
+ * or a package's own description, in any form search counts as the same
+ * word (plural, stem). One shared word is too weak a sign that discover has
+ * what the reader asked for. It reads each word once, so it costs far less
+ * than ranking every item.
  * @param {SearchItem[]} items
  * @param {string} query
  * @param {{type?: import('../../../authoring/discover/type').DiscoverKind}} [opts]
  * @returns {boolean}
  */
-export function anyAvailableWord(items, query, {type} = {}) {
-  const terms = queryOf(query)
+export function anyAvailableNamed(items, query, {type} = {}) {
+  // Each word of the query, with the synonyms search reads for it: any one
+  // of them answers the word.
+  const wanted = queryOf(query)
     .tokens.flatMap(token => wordsOf(token))
-    .map(word => termWords(word));
-  if (terms.length === 0) return false;
-  /** @param {string | undefined} text */
-  const carries = text =>
-    text != null &&
-    wordsOf(text).some(w => terms.some(t => sameTermWord(t, w)));
-  return items.some(
-    item =>
-      !item.installed &&
-      (type == null || item.kind === type) &&
-      (carries(item.name) ||
-        carries(item.title) ||
-        carries(item.summary) ||
-        carries(item.description) ||
-        (item.keywords ?? []).some(carries)),
-  );
+    .map(word => [word, ...(SYNONYM_INDEX.get(word) ?? [])].map(termWords));
+  if (wanted.length === 0) return false;
+  return items.some(item => {
+    if (item.installed || (type != null && item.kind !== type)) return false;
+    const words = [
+      item.name,
+      item.title,
+      item.summary,
+      item.description,
+      ...(item.keywords ?? []),
+    ].flatMap(text => (text == null ? [] : wordsOf(text)));
+    return wanted.every(forms =>
+      forms.some(t => words.some(w => sameTermWord(t, w))),
+    );
+  });
 }
 
 /**
