@@ -25,6 +25,8 @@ import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
+import {butterTheme} from '../../../themes/butter/src/butterTheme';
+
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
     await importOriginal(),
@@ -253,8 +255,13 @@ describe('keeps', () => {
       await how(t, 'make the input border red except the error ones'),
     );
     expect(lines[0]).toBe(`set ${t} border-color '#dc2626' --on inputs`);
+    // Butter's own frame on a text input, as its theme writes it.
+    const own = String(
+      /** @type {any} */ (butterTheme).components['text-input'].base
+        .borderColor,
+    );
     expect(lines).toContain(
-      `set ${t} border-color 'var(--color-border)' --on text-input --when status:error --only`,
+      `set ${t} border-color '${own}' --on text-input --when status:error --only`,
     );
     await follow(lines);
   }, 240_000);

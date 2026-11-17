@@ -51,17 +51,22 @@ describe("text the base colors through a card's variant", () => {
       });
       const found = onBlue(set);
       expect(found.length).toBeGreaterThan(0);
-      for (const p of found)
-        expect(p.fix).toMatch(
-          / set b --color-text-secondary '#[0-9a-f]{6}' --on card --when variant:blue --mode dark$/,
-        );
-      const color = /'(#[0-9a-f]{6})'/.exec(String(found[0].fix))?.[1];
-      await themeEditSet('b', '--color-text-secondary', String(color), {
-        cwd,
-        on: 'card',
-        when: 'variant:blue',
-        mode: 'dark',
-      });
+      // Each line sets a text role on the card's variant, in dark; following
+      // every one clears them.
+      const lines = new Set(found.map(p => String(p.fix)));
+      for (const line of lines) {
+        const m =
+          / set b (--color-text-(?:primary|secondary|accent)) '(#[0-9a-f]{6})' --on card --when variant:blue --mode dark$/.exec(
+            line,
+          );
+        expect(m, line).toBeTruthy();
+        await themeEditSet('b', String(m?.[1]), String(m?.[2]), {
+          cwd,
+          on: 'card',
+          when: 'variant:blue',
+          mode: 'dark',
+        });
+      }
       expect(onBlue(await themeEditShow('b', {cwd}))).toEqual([]);
     },
     T,
