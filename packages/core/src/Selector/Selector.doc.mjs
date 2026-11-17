@@ -295,7 +295,8 @@ export const docs = {
     {
       name: 'isRequired',
       type: 'boolean',
-      description: 'Marks the field as required.',
+      description:
+        'Marks the field as required. When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
       default: 'false',
     },
     {

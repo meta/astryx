@@ -107,7 +107,7 @@ export const docs = {
     {
       name: 'isRequired',
       type: 'boolean',
-      description: 'Whether the field is required (mutually exclusive with isOptional).',
+      description: 'Whether the field is required (mutually exclusive with isOptional). When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
       default: 'false',
     },
     {

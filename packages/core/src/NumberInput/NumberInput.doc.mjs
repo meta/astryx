@@ -73,7 +73,7 @@ export const docs = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        'Whether the field is required (mutually exclusive with isOptional).',
+        'Whether the field is required (mutually exclusive with isOptional). When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
     },
     {
       name: 'isDisabled',
@@ -411,7 +411,8 @@ export const docsZh = {
     {
       name: 'isRequired',
       type: 'boolean',
-      description: '字段是否必填（与 isOptional 互斥）。',
+      description:
+        '字段是否必填（与 isOptional 互斥）。如果表单中大多数字段都是必填，请改为在 FormLayout 上设置 defaultOptionality="required"，这样只有标记 isOptional 的字段显示指示器。',
     },
     {
       name: 'isDisabled',

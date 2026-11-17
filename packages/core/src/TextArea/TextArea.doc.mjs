@@ -141,7 +141,7 @@ export const docs = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        'Displays a "Required" indicator next to the label and sets aria-required. Mutually exclusive with isOptional.',
+        'Displays a "Required" indicator next to the label and sets aria-required. Mutually exclusive with isOptional. When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
       default: 'false',
     },
     {
@@ -463,7 +463,7 @@ export const docsZh = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        '在标签旁显示"必填"指示器并设置 aria-required。与 isOptional 互斥。',
+        '在标签旁显示"必填"指示器并设置 aria-required。与 isOptional 互斥。如果表单中大多数字段都是必填，请改为在 FormLayout 上设置 defaultOptionality="required"，这样只有标记 isOptional 的字段显示指示器。',
       default: 'false',
     },
     {

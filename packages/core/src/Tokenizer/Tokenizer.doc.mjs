@@ -134,7 +134,8 @@ export const docs = {
     {
       name: 'isRequired',
       type: 'boolean',
-      description: 'Marks the field as required.',
+      description:
+        'Marks the field as required. When most fields in a form are required, set defaultOptionality="required" on FormLayout instead, so only the fields marked isOptional show an indicator.',
       default: 'false',
     },
     {
@@ -532,7 +533,8 @@ export const docsZh = {
     {
       name: 'isRequired',
       type: 'boolean',
-      description: '\u5c06\u5b57\u6bb5\u6807\u8bb0\u4e3a\u5fc5\u586b\u3002',
+      description:
+        '\u5c06\u5b57\u6bb5\u6807\u8bb0\u4e3a\u5fc5\u586b\u3002\u5982\u679c\u8868\u5355\u4e2d\u5927\u591a\u6570\u5b57\u6bb5\u90fd\u662f\u5fc5\u586b\uff0c\u8bf7\u6539\u4e3a\u5728 FormLayout \u4e0a\u8bbe\u7f6e defaultOptionality="required"\uff0c\u8fd9\u6837\u53ea\u6709\u6807\u8bb0 isOptional \u7684\u5b57\u6bb5\u663e\u793a\u6307\u793a\u5668\u3002',
       default: 'false',
     },
     {
