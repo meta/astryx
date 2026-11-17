@@ -138,6 +138,7 @@ import {
   dialValueFits,
   holdAfterBuild,
   cornersPlain,
+  pillShapes,
   setArgs,
   editedThemes,
   entryFieldNames,
@@ -158,8 +159,6 @@ import {
   coveredPaints,
   dividerParts,
   normalizeEntry,
-  pillDrawnRadios,
-  pillParts,
   propertyValueProblem,
   storedProblems,
   unknownVarRef,
@@ -2373,31 +2372,22 @@ function leftOutParts(ctx, slug, data, sub, s) {
         run: own.map(x => `${P} undo ${slug} ${undoArgs(x)}`),
       });
   }
+  // Square corners square the pills that are a styling choice (the build
+  // does); the parts drawn as circles keep their shape, said, with the line
+  // that squares one.
   if (
     s.source === 'dial' &&
     s.thing === 'corners' &&
     ['square', '0px'].includes(cornersPlain(String(s.value)) ?? '') &&
     !data.settings.some(x => x.thing === '--radius-full' && !x.on)
   ) {
-    const pills = pillParts(C).filter(has);
-    // On a Core that draws a radio's circle with the pill token, the radio
-    // marks keep it at Core's value (pillDrawnRadios).
-    const radios = pillDrawnRadios(C).filter(has);
-    const round = String(
-      ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
-    );
-    /** @param {string} m */
-    const only = m =>
-      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
-    if (pills.length)
+    const circles = pillShapes(C).circles.filter(has);
+    if (circles.length)
       out.push({
-        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
-        run: [
-          `${P} set ${slug} --radius-full 0px`,
-          ...radios.map(
-            m => `${P} set ${slug} --radius-full ${round} --on ${m}${only(m)}`,
-          ),
-        ],
+        note: `the parts drawn as circles stay round (${circles.join(', ')}): a circle is their shape, not a corner choice; to square one:`,
+        run: circles
+          .slice(0, 3)
+          .map(m => `${P} set ${slug} corners square --on ${m}`),
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
