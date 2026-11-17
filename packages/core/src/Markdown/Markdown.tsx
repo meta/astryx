@@ -640,8 +640,10 @@ const styles = stylex.create({
   // Static Markdown lists never host swipe actions. Let outside counter ink
   // paint through both ordered and unordered ancestors; general List and
   // swipe-capable rows retain their own inline clip (component:List FR9).
+  // List's `overflowInline` compiles to overflow-x, which this replaces;
+  // StyleX's xstyle types name only the physical property.
   blockIndent: {
-    overflowInline: 'visible',
+    overflowX: 'visible',
   },
   // A task list's rows keep CheckboxList's row inset, so its container steps
   // out by that inset to put each checkbox on the text line.
