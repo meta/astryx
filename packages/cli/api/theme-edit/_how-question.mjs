@@ -41,6 +41,7 @@ import {
   FEELS,
   LIKE,
   wordTable,
+  pageColorNote,
 } from './_tables.mjs';
 import {baseInstalled, installLine, packageInstalled} from './_project.mjs';
 import {
@@ -3658,7 +3659,10 @@ function clausesOf(q, partWords, words = null) {
             for (const y of rest.matchAll(o)) {
               const s = /** @type {number} */ (y.index);
               if (s > at) break;
-              if (s + y[0].length >= end && y[0].trim().length > x[0].trim().length)
+              if (
+                s + y[0].length >= end &&
+                y[0].trim().length > x[0].trim().length
+              )
                 return true;
             }
             return false;
@@ -18796,9 +18800,10 @@ export function draftAnswer(ctx, env, question) {
    * @returns {Draft | null}
    */
   function variantLookAnswer(c) {
-    const said = /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
-      c.text.trim(),
-    );
+    const said =
+      /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
+        c.text.trim(),
+      );
     if (!said) return null;
     const on = [...new Set(c.parts.map(x => x.on))];
     if (on.length !== 1 || FAMILIES[on[0]]) return null;
@@ -18827,7 +18832,10 @@ export function draftAnswer(ctx, env, question) {
     const to =
       toSaid.length === 1
         ? toSaid[0]
-        : !toSaid.length && /\bdefault\b/.test(said[2]) && def && values.has(def)
+        : !toSaid.length &&
+            /\bdefault\b/.test(said[2]) &&
+            def &&
+            values.has(def)
           ? def
           : null;
     if (from.length !== 1 || !to || from[0] === to) return null;
@@ -30378,7 +30386,7 @@ export function draftAnswer(ctx, env, question) {
       !result.some(d => /shows only where a part draws it/.test(d.text))
     )
       result.push({
-        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's white until its own CSS adds one line: body { background: var(--color-background-body) }`,
+        text: `${pageColorNote(env.data?.mode)} (The parts that paint it: ${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}.)`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
       });
