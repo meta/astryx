@@ -142,18 +142,28 @@ describe('a color said against the one it replaces', () => {
 
 describe('a near color off a pure one', () => {
   it(
-    "is tinted with the theme's neutral",
+    "is already the theme's tinted neutral, or offered off the pure one",
     async () => {
+      // A tinted gray draws primary text in its own tint already, never
+      // pure white: nothing is left to move.
       await runCli([...ED, 'set', 't', 'neutral', '#7c6a9a'], cwd);
-      const a = await how('never use pure white for text, it glares at night');
+      const tinted = await how(
+        'never use pure white for text, it glares at night',
+      );
       await runCli([...ED, 'undo', 't', 'neutral'], cwd);
-      const line = a.commands.find(c => /--color-text-primary/.test(c)) ?? '';
+      expect(
+        tinted.commands.some(c => /--color-text-primary '#ffffff'/.test(c)),
+      ).toBe(false);
+      // On the base's pure white text, a near white is offered.
+      const plain = await how(
+        'never use pure white for text, it glares at night',
+      );
+      const line =
+        plain.commands.find(c => /--color-text-primary/.test(c)) ?? '';
       const hex = /'#([0-9a-f]{6})'/.exec(line)?.[1] ?? '';
       expect(hex).not.toBe('');
-      const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
-      // Off white, and leaning to the purple: blue over green.
+      const [r, g, b] = [0, 2, 4].map(k => parseInt(hex.slice(k, k + 2), 16));
       expect(Math.min(r, g, b)).toBeLessThan(250);
-      expect(b).toBeGreaterThan(g);
     },
     T,
   );
