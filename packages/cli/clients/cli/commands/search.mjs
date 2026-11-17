@@ -59,10 +59,8 @@ export function registerSearch(program) {
       // mode". Taking only the first word dropped the rest without a word.
       const query = Array.isArray(words) ? words.join(' ') : words;
 
-      /** @type {Project | undefined} */
-      let project;
       try {
-        project = await Project.load(process.cwd());
+        const project = await Project.load(process.cwd());
         await warnOnIntegrationIssues(project, {json});
       } catch {
         // Never let the nudge break the command.
@@ -112,7 +110,7 @@ export function registerSearch(program) {
 
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
-      const addable = () => addableMatch(project, query, options.type);
+      const addable = () => discoverAnswers(query, options.type);
       const {query: q, matchCount, results} = result.data;
       // When Core could not be had, an open search covers the rest alone. Say
       // so, on standard error and in the output, so the list does not read as
@@ -220,19 +218,18 @@ function withNotReadyKind(result) {
 }
 
 /**
- * Whether the saved copy of a discover catalog has a package the project
- * could add with an item that answers the whole `query`, as discover's
- * every-word tier counts words, or null when that is not known. No discover source is called. Never throws.
- * @param {Project | undefined} project
+ * Whether `astryx discover <query>` would list a match, read from the saved
+ * copies of the discover catalogs, or null when that is not known. No
+ * discover source is called. Never throws.
  * @param {string} query
  * @param {string | undefined} type
  * @returns {Promise<boolean | null>}
  */
-async function addableMatch(project, query, type) {
+async function discoverAnswers(query, type) {
   if (type === 'hook') return null;
   try {
     const discover = await import('../../../api/discover/discover.mjs');
-    return discover.addableMatch(project, query, {type});
+    return await discover.wouldAnswer(query, {type});
   } catch {
     return null;
   }
@@ -241,13 +238,12 @@ async function addableMatch(project, query, type) {
 /**
  * Search reads only what is installed. Point at `discover` for the packages
  * that could add more, except for hooks, which no integration adds. When the
- * saved copy of a discover catalog says no package the project could add
- * answers the whole query, discover has nothing to add, so the line is left
- * out.
+ * saved copies of the discover catalogs say discover would list no match,
+ * the line is left out.
  * @param {string} run - The caller's CLI invocation prefix.
  * @param {string} query
  * @param {string | undefined} type
- * @param {boolean | null} addable - {@link addableMatch}
+ * @param {boolean | null} addable - {@link discoverAnswers}
  */
 function discoverHint(run, query, type, addable) {
   if (type === 'hook' || addable === false) return [];

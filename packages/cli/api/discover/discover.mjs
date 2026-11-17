@@ -53,7 +53,7 @@ import {list} from './list/list.mjs';
 import {detail} from './detail/detail.mjs';
 import {doc, docFromResult} from './detail/doc/doc.mjs';
 import {item} from './detail/item/item.mjs';
-import {anyAvailableNamed, search} from './search/search.mjs';
+import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -168,32 +168,53 @@ export function answersQueries(project) {
 }
 
 /**
- * Whether a package the project could add has an item that answers the whole
- * `query` (see anyAvailableNamed), by the saved copies of the discover
- * sources' catalogs alone: no source is called. Null when no source has a
- * saved copy, so nothing is known. The search command reads it to point at
- * `discover` only when discover has something to show.
- * @param {import('../../foundation/config/project.mjs').Project | undefined} project
- * @param {string} query
+ * Whether `astryx discover <query>` would list a match, read from the saved
+ * copies of the discover sources' full catalogs instead of calling the
+ * sources: the same installed packages and catalog items, ranked and cut by
+ * discover's own search (see answersAny), with no rule of its own. Null when
+ * no source has a saved copy, or when discover answers every query in the
+ * project with the list (FR1), so nothing is known. The search command reads
+ * it to point at `discover` only when discover has an answer.
+ *
+ * The docs each installed package adds take a read of the project's whole
+ * docs catalog, so it ranks first without them. A match settles the answer:
+ * more items never empty discover's list. Only a query with no match then
+ * reads them and ranks again.
+ * @param {string} query free text, as search takes it
  * @param {{type?: string}} [options] an item kind, when the search keeps one
- * @returns {boolean | null}
+ * @returns {Promise<boolean | null>}
  */
-export function addableMatch(project, query, {type} = {}) {
+export async function wouldAnswer(query, {type} = {}) {
+  const {packages: scanned, project} = await discoverPackages();
   const official = officialList({project});
-  const packages = savedCatalog(project, {official});
-  if (packages == null) return null;
-  const items = searchItems(
-    [],
-    {sources: [], packages},
-    declaredDependencies(project),
-    officialDeclarations(project, official.packages).any,
-  );
+  const saved = savedCatalog(project, {official});
+  if (saved == null) return null;
+  const catalog = {sources: [], packages: saved};
+  const declarations = officialDeclarations(project, official.packages);
+  const declared = declaredDependencies(project);
   const kind = /** @type {readonly string[]} */ (DISCOVER_KINDS).includes(
     type ?? '',
   )
     ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
     : undefined;
-  return anyAvailableNamed(items, query, {type: kind});
+  /** @param {boolean} docs */
+  const answers = async docs => {
+    const integrations = await describeInstalled(project, scanned, {docs});
+    if (integrations.length === 0 && !hasSources(project)) return null;
+    const packages = withDeclaredOfficial(
+      project,
+      integrations,
+      catalog,
+      declarations,
+      official.packages,
+    );
+    return answersAny(packages, query, {
+      items: searchItems(packages, catalog, declared, declarations.any),
+      type: kind,
+    });
+  };
+  const quick = await answers(false);
+  return quick === false ? answers(true) : quick;
 }
 
 /**

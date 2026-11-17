@@ -262,12 +262,18 @@ export function packageDescription(packageDir) {
  *
  * @param {Project | undefined} project
  * @param {ScannedPackage[]} scanned the packages {@link discoverPackages} found
+ * @param {{docs?: boolean}} [options] `docs: false` leaves out the docs each
+ *   package adds, which take a read of the project's whole docs catalog
  * @returns {Promise<InstalledPackage[]>}
  */
-export async function describeInstalled(project, scanned) {
+export async function describeInstalled(
+  project,
+  scanned,
+  {docs: withDocs = true} = {},
+) {
   if (project == null) return scanned;
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
-  const docs = await projectDocs(project);
+  const docs = withDocs ? await projectDocs(project) : null;
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {

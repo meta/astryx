@@ -9,7 +9,7 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {anyAvailableNamed, search} from './search.mjs';
+import {answersAny, search} from './search.mjs';
 import {AstryxError} from '../../error.mjs';
 
 let docsDir;
@@ -415,42 +415,69 @@ describe('discover.search leaf, word by word', () => {
     expect(res.data.matches[0].component).toBe('BarChart');
   });
 
-  it('says whether an item a project could add answers every word of the query', () => {
-    expect(anyAvailableNamed(items, 'bar chart')).toBe(true);
-    expect(anyAvailableNamed(items, 'bar chart', {type: 'template'})).toBe(
-      false,
-    );
-    expect(anyAvailableNamed(items, 'charts')).toBe(true);
-    expect(anyAvailableNamed(items, 'zzqqxx')).toBe(false);
-    // One shared word is not enough.
-    expect(anyAvailableNamed(items, 'bar zzqqxx')).toBe(false);
-    // A name typed with its words joined answers the query, as in discover.
-    expect(anyAvailableNamed(items, 'barchart')).toBe(true);
-    // The package's description adds the words the item's own text lacks.
-    expect(anyAvailableNamed(items, 'employee typeahead')).toBe(true);
-    // It never answers on its own.
-    expect(anyAvailableNamed(items, 'employee directory')).toBe(false);
-    // A synonym search reads answers its word: "grid" is a table word.
+  it('answers exactly when search() lists any item', async () => {
+    for (const query of [
+      'bar chart',
+      'barchart',
+      'employee typeahead',
+      'zzqqxx',
+      'bar zzqq yyxx wwvv',
+      'directory',
+    ]) {
+      const listed = await search([], query, {items}).then(
+        res => res.data.matches.length > 0,
+        () => false,
+      );
+      expect(answersAny([], query, {items})).toBe(listed);
+    }
+    expect(answersAny([], 'bar chart', {items, type: 'template'})).toBe(false);
+    // Installed components count, as in search().
     expect(
-      anyAvailableNamed(
-        [
-          {
-            package: '@acme/x',
-            kind: 'component',
-            name: 'DataGrid',
-            installed: false,
-          },
-        ],
-        'table',
+      answersAny(
+        [{name: '@acme/own', components: ['Frobnicator']}],
+        'frobnicator',
+        {items},
       ),
     ).toBe(true);
-    // The package's description alone is no match, as in search().
-    expect(anyAvailableNamed(items, 'directory')).toBe(false);
-    expect(
-      anyAvailableNamed(
-        items.map(item => ({...item, installed: true})),
-        'bar chart',
-      ),
-    ).toBe(false);
+  });
+
+  it('still finds what only a word form, a synonym, or a typo matches', async () => {
+    /** @type {any[]} */
+    const more = [
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'Spacer',
+        installed: false,
+        summary: 'Adds space between items.',
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'DataGrid',
+        installed: false,
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'Paginator',
+        installed: false,
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'EntryList',
+        installed: false,
+      },
+    ];
+    /** @param {string} query */
+    const found = async query =>
+      (await search([], query, {items: more})).data.matches.map(
+        m => m.component,
+      );
+    expect(await found('spacing helpers')).toContain('Spacer');
+    expect(await found('table rows')).toContain('DataGrid');
+    expect(await found('Paginatr')).toContain('Paginator');
+    expect(await found('entries list')).toContain('EntryList');
   });
 });

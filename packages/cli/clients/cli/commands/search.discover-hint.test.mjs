@@ -161,4 +161,59 @@ describe('search points at discover by the saved catalog copy', () => {
     },
     TIMEOUT,
   );
+
+  it(
+    'agrees with discover when only an integration the project loads answers',
+    async () => {
+      // The project loads @acme/frob through astryx.config without
+      // declaring it, and a source lists the same package: discover counts
+      // it as installed, so its catalog items are not something to add.
+      const pkgDir = path.join(project, 'node_modules', '@acme', 'frob');
+      fs.mkdirSync(path.join(pkgDir, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkgDir, 'package.json'),
+        JSON.stringify({name: '@acme/frob', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(pkgDir, 'astryx.integration.mjs'),
+        `export default {components: './components'};\n`,
+      );
+      const frob = {
+        package: '@acme/frob',
+        integration: 'acme-frob',
+        aliases: [],
+        latest: '1.0.0',
+        versions: [
+          {
+            version: '1.0.0',
+            publishedAt: '2026-09-20T00:00:00.000Z',
+            prerelease: false,
+            status: 'ok',
+          },
+        ],
+        contributions: [{kind: 'component', name: 'Frobnicator'}],
+      };
+      fs.writeFileSync(
+        path.join(project, 'astryx.config.mjs'),
+        config(marker)
+          .replace('packages: [', `packages: [${JSON.stringify(frob)},`)
+          .replace(
+            'export default {',
+            "export default {\n  integrations: ['@acme/frob'],",
+          ),
+      );
+      expect(
+        (await runCli(['discover', '--json'], {cwd: project})).status,
+      ).toBe(0);
+      for (const query of ['frobnicator', 'bar chart', 'zzqqxx']) {
+        const found = await runCli(['discover', query, '--json'], {
+          cwd: project,
+        });
+        const shown = (await search([query])).includes(HINT);
+        expect(shown, query).toBe(found.status === 0);
+      }
+      expect((await search(['frobnicator'])).includes(HINT)).toBe(false);
+    },
+    TIMEOUT,
+  );
 });

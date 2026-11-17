@@ -30,10 +30,9 @@ import {
 } from '../../search/_query.mjs';
 import {SYNONYM_INDEX} from '../../search/_synonyms.mjs';
 import {
-  joined,
-  sameTermWord,
   spellIdentifiers,
-  termWords,
+  stem,
+  wordForms,
   wordsOf,
 } from '../../search/_words.mjs';
 import {AstryxError} from '../../error.mjs';
@@ -129,60 +128,139 @@ function queryOf(query) {
 }
 
 /**
- * Whether an item a project could add answers the whole query by its words,
- * the way discover's every-word tier counts them: its name or title is the
- * query with its words joined (`barchart` is BarChart), or each word of the
- * query, or a synonym search reads for it, is a word of the item's name,
- * title, summary, or keywords, with its package's description adding words
- * its own text lacks, in any form search counts as the same word (plural,
- * stem). As in rank(), the item's own text must answer at least one word.
- * It reads words and does not run search's scorer, so it counts no match
- * that search finds only by a word's start, a typo, or a joined keyword.
- * @param {SearchItem[]} items
- * @param {string} query
- * @param {{type?: import('../../../authoring/discover/type').DiscoverKind}} [opts]
- * @returns {boolean}
- */
-export function anyAvailableNamed(items, query, {type} = {}) {
-  const whole = joined(query);
-  // Each word of the query, with the synonyms search reads for it: any one
-  // of them answers the word.
-  const wanted = queryOf(query)
-    .tokens.flatMap(token => wordsOf(token))
-    .map(word => [word, ...(SYNONYM_INDEX.get(word) ?? [])].map(termWords));
-  if (wanted.length === 0 || whole === '') return false;
-  /** @param {string[]} words @param {typeof wanted[number]} forms */
-  const answers = (words, forms) =>
-    forms.some(t => words.some(w => sameTermWord(t, w)));
-  return items.some(item => {
-    if (item.installed || (type != null && item.kind !== type)) return false;
-    if (
-      joined(item.name) === whole ||
-      (item.title && joined(item.title) === whole)
-    ) {
-      return true;
-    }
-    const own = [
-      item.name,
-      item.title,
-      item.summary,
-      item.description,
-      ...(item.keywords ?? []),
-    ].flatMap(text => (text == null ? [] : wordsOf(text)));
-    if (!wanted.some(forms => answers(own, forms))) return false;
-    const all = item.packageDescription
-      ? [...own, ...wordsOf(item.packageDescription)]
-      : own;
-    return wanted.every(forms => answers(all, forms));
-  });
-}
-
-/**
  * Better match first: more query words matched, then the higher score.
  * @param {{matched: number, score: number}} a
  * @param {{matched: number, score: number}} b
  */
 const byMatch = (a, b) => b.matched - a.matched || b.score - a.score;
+
+/**
+ * A quick test that leaves out only items search's scorer cannot match, so
+ * ranking scores far fewer of them. A word of the query, or a synonym search
+ * reads for it, matches only text that holds one of its forms, less its last
+ * letter (every form search counts as the same word starts so: `spacing`
+ * holds `spac` of `space`, `entries` holds `entr` of `entry`). A typo, which
+ * search reads only in a query of one word or one identifier, needs a name
+ * or keyword within three letters of the query or one of its words in
+ * length. A query of stopwords alone tests nothing.
+ * @param {ReturnType<typeof queryOf>} words
+ * @returns {(item: SearchItem) => boolean}
+ */
+function mayMatch({term, tokens}) {
+  if (tokens.length === 0) return () => true;
+  const prefixes = new Set();
+  for (const token of tokens) {
+    for (const word of [token, ...(SYNONYM_INDEX.get(token) ?? [])]) {
+      for (const form of [word, stem(word), ...wordForms(word)]) {
+        prefixes.add(form.slice(0, Math.max(3, form.length - 1)));
+      }
+    }
+  }
+  const fuzzy = tokens.length <= 1 || !/\s/.test(term);
+  const lengths = [term, ...tokens]
+    .map(word => word.length)
+    .filter(length => length >= 5);
+  /** @param {string | undefined} text */
+  const nearLength = text =>
+    text != null &&
+    lengths.some(
+      length =>
+        Math.abs(text.length - length) <= 3 &&
+        Math.min(text.length, length) >= 5,
+    );
+  return item => {
+    const text = [
+      item.name,
+      item.title,
+      item.summary,
+      item.description,
+      item.packageDescription,
+      ...(item.keywords ?? []),
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .toLowerCase();
+    for (const prefix of prefixes) if (text.includes(prefix)) return true;
+    return (
+      fuzzy &&
+      (nearLength(item.name) ||
+        nearLength(item.title) ||
+        (item.keywords ?? []).some(nearLength))
+    );
+  };
+}
+
+/**
+ * The items that match `words`, best first, each with its score: the ranking
+ * search() lists. When an item matches every word of the query, only such
+ * items stay (the cut search's suggestions make, orderByAffinity `closest`).
+ * @param {SearchItem[]} items
+ * @param {ReturnType<typeof queryOf>} words
+ * @param {{type?: string, only?: 'installed' | 'available'}} opts
+ * @returns {Array<{item: SearchItem, score: {matched: number, total: number, score: number}}>}
+ */
+function rankItems(items, words, {type, only}) {
+  const may = mayMatch(words);
+  const scored = items
+    .filter(item => (type == null ? true : item.kind === type))
+    .filter(may)
+    .filter(item =>
+      only === 'installed'
+        ? item.installed
+        : only === 'available'
+          ? !item.installed
+          : true,
+    )
+    .map(item => ({item, score: rank(item, words)}))
+    .filter(
+      /** @returns {m is {item: SearchItem, score: {matched: number, total: number, score: number}}} */
+      m => m.score != null,
+    )
+    .sort(
+      (a, b) =>
+        byMatch(a.score, b.score) ||
+        Number(b.item.installed) - Number(a.item.installed) ||
+        KIND_ORDER.indexOf(a.item.kind) - KIND_ORDER.indexOf(b.item.kind) ||
+        compareText(a.item.package, b.item.package) ||
+        compareText(a.item.name, b.item.name),
+    );
+  const everyWord = scored.filter(m => m.score.matched >= m.score.total);
+  return everyWord.length > 0 ? everyWord : scored;
+}
+
+/**
+ * Whether search() would list any match for `query`: the same installed
+ * components and items, ranked and cut the same way, with no rule of its
+ * own. Search's discover line reads it.
+ * @param {ScannedPackage[]} packages installed packages
+ * @param {string} query
+ * @param {{items?: SearchItem[], type?: string}} opts
+ * @returns {boolean}
+ */
+export function answersAny(packages, query, {items = [], type}) {
+  if (!String(query ?? '').trim()) return false;
+  return (
+    rankItems([...installedComponentsOf(packages), ...items], queryOf(query), {
+      type,
+    }).length > 0
+  );
+}
+
+/**
+ * Every installed component, as an item search ranks.
+ * @param {ScannedPackage[]} packages
+ * @returns {SearchItem[]}
+ */
+function installedComponentsOf(packages) {
+  return packages.flatMap(pkg =>
+    pkg.components.map(name => ({
+      package: pkg.name,
+      kind: /** @type {const} */ ('component'),
+      name,
+      installed: true,
+    })),
+  );
+}
 
 /**
  * Search all packages for `query` (a free-text term that never starts with
@@ -216,42 +294,12 @@ export async function search(packages, query, opts) {
   const lower = query.toLowerCase();
   const words = queryOf(query);
 
-  /** @type {SearchItem[]} */
-  const installedComponents = packages.flatMap(pkg =>
-    pkg.components.map(name => ({
-      package: pkg.name,
-      kind: /** @type {const} */ ('component'),
-      name,
-      installed: true,
-    })),
-  );
+  const installedComponents = installedComponentsOf(packages);
 
-  const scored = [...installedComponents, ...items]
-    .filter(item => (type == null ? true : item.kind === type))
-    .filter(item =>
-      only === 'installed'
-        ? item.installed
-        : only === 'available'
-          ? !item.installed
-          : true,
-    )
-    .map(item => ({item, score: rank(item, words)}))
-    .filter(
-      /** @returns {m is {item: SearchItem, score: {matched: number, total: number, score: number}}} */
-      m => m.score != null,
-    )
-    .sort(
-      (a, b) =>
-        byMatch(a.score, b.score) ||
-        Number(b.item.installed) - Number(a.item.installed) ||
-        KIND_ORDER.indexOf(a.item.kind) - KIND_ORDER.indexOf(b.item.kind) ||
-        compareText(a.item.package, b.item.package) ||
-        compareText(a.item.name, b.item.name),
-    );
-  // The cut search's suggestions make (orderByAffinity `closest`): when an
-  // item matches every word of the query, only such items stay.
-  const everyWord = scored.filter(m => m.score.matched >= m.score.total);
-  const ranked = everyWord.length > 0 ? everyWord : scored;
+  const ranked = rankItems([...installedComponents, ...items], words, {
+    type,
+    only,
+  });
 
   if (ranked.length > 0) {
     const matches = ranked.map(({item}) => ({

@@ -97,7 +97,7 @@ discover sources follow it except where this record says otherwise.
   the list of matches, even when one name matches exactly or only one item
   matches, so the response type depends on the form of the query and never on
   what the project has. Every word typed after `discover` is part of the
-  query; after a package path, the next word is its item (FR3). The query
+  query; after a scoped package name, the next word is its item (FR3). The query
   MUST match word by word, with the word scorer `astryx search` uses: an item matches by the words of its name, title, summary,
   and keywords, and its package's description adds only words the item's own
   text lacks. When an item matches every word, only such items are listed.
@@ -217,21 +217,18 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   check, with or without `--strict` or `--next`; they are separate from the
   component example notes, which are `next` notes.
 
-- **FR13 — Search points at discover only when discover has something.**
+- **FR13 — Search points at discover only when discover would answer.**
   `astryx search` text output ends with "More in packages you could add" and
   the `discover` command for the query, except for `--type hook`. When a
   saved copy of a discover source's full catalog exists (FR8), search MUST
-  print that line only when an item of a package the project could add, from
-  those copies or from the official packages no source covers (FR11),
-  answers the whole query, as discover's every-word tier counts words: its
-  name or title is the query with its words joined, or each word of the
-  query, or a synonym search reads for it, is a word of the item's name,
-  title, summary, or keywords, with its package's description adding words
-  its own text lacks, in any form the word scorer counts as the same word.
-  The item's own text answers at least one word. When no saved copy exists,
-  search prints the line. Search MUST NOT call a discover source to decide;
-  it reads only the saved copies and the official list. Its JSON output
-  carries no such line.
+  print that line exactly when `discover <query>` would list a match:
+  discover's own search (FR4), with the packages the project has, the
+  integrations it loads included, and the items of every package those
+  copies list and of the official packages no source covers (FR11), gives
+  at least one match. Search applies no rule of its own. When no saved copy
+  exists, search prints the line. Search MUST NOT call a discover source to
+  decide; it reads only the saved copies and the official list. Its JSON
+  output carries no such line.
 
 ### Platform support
 

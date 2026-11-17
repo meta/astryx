@@ -324,8 +324,8 @@ export function registerDiscover(program) {
        */
       async (words, options) => {
         // The query is variadic, as search's is: `astryx discover bar chart`
-        // is one query, "bar chart". A package path takes the next word as
-        // its item: `astryx discover @acme/charts BarChart` opens
+        // is one query, "bar chart". After a scoped package name the next
+        // word is its item: `astryx discover @acme/charts BarChart` opens
         // `@acme/charts/BarChart`.
         const query = Array.isArray(words)
           ? words.length > 0
