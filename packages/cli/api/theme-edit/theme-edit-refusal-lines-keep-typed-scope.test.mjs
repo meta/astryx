@@ -4,7 +4,7 @@
  * @file Every line a refusal of `set` offers keeps the scope typed: a
  * `--state` or `--when` on the same part, and a `--mode`, go into the line
  * whenever set takes it with them, so following the line never writes wider
- * than what was asked. A hovered link's color is offered as the hovered
+ * than what was asked. A hovered link's color is written as the hovered
  * link's token, never every link's. A line set refuses with a flag (a
  * `--mode` on what is not a color) is offered as the one that works.
  */
@@ -67,8 +67,18 @@ const follow = async line =>
   cli([...ED, .../** @type {string[]} */ (splitCommand(line))]);
 
 describe("a hovered link's color", () => {
+  /** The compiled rules that set --color-text-accent. */
+  const accentRules = () =>
+    [
+      ...fs
+        .readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8')
+        .matchAll(/([^{}]*)\{([^{}]*)\}/g),
+    ]
+      .filter(m => /--color-text-accent:\s*#00438a/.test(m[2]))
+      .map(m => m[1].trim());
+
   it(
-    "is offered as the hovered link's token, and following it writes the hover only",
+    "is taken as the hovered link's token, written for the hover only",
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await cli([
@@ -82,16 +92,16 @@ describe("a hovered link's color", () => {
         '--state',
         'hover',
       ]);
-      expect(r.error).toMatch(/link takes its color from the color prop/);
-      expect(lines(r)).toEqual([
-        "set t --color-text-accent '#00438a' --on link --state hover",
-      ]);
-      expect((await follow(lines(r)[0])).error).toBeUndefined();
-      const written = saved().filter(
-        (/** @type {any} */ x) => x.thing === '--color-text-accent',
+      expect(r.error).toBeUndefined();
+      expect(JSON.stringify(r)).toMatch(
+        /the color goes into --color-text-accent on link/,
       );
-      expect(written).toHaveLength(1);
-      expect(written[0]).toMatchObject({on: 'link', state: 'hover'});
+      const rules = accentRules();
+      expect(rules.length).toBeGreaterThan(0);
+      for (const rule of rules) {
+        expect(rule).toMatch(/astryx-link/);
+        expect(rule).toMatch(/:hover/);
+      }
     },
     T,
   );
@@ -113,9 +123,13 @@ describe("a hovered link's color", () => {
         '--mode',
         'dark',
       ]);
-      expect(lines(r)).toEqual([
-        "set t --color-text-accent '#00438a' --on link --state hover --mode dark",
-      ]);
+      expect(r.error).toBeUndefined();
+      const rules = accentRules();
+      expect(rules.length).toBeGreaterThan(0);
+      for (const rule of rules) {
+        expect(rule).toMatch(/:hover/);
+        expect(rule).not.toMatch(/:scope\[data-theme="light"\]/);
+      }
     },
     T,
   );

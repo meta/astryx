@@ -3492,11 +3492,10 @@ describe('parts36', () => {
           .code,
         `${prop} ${on}`,
       ).toBe('ERR_THEME_BAD_VALUE');
-    const group = await refusal(() =>
-      themeEditSet('p', 'padding', '0', {cwd, on: 'menus'}),
-    );
-    expect(group.code).toBe('ERR_THEME_BAD_VALUE');
-    expect(group.run[0]).toMatch(/padding 0px --on menus$/);
+    // A bare 0 is the length 0px there.
+    const group = await themeEditSet('p', 'padding', '0', {cwd, on: 'menus'});
+    expect(JSON.stringify(group)).toMatch(/0 is saved as 0px/);
+    await themeEditUndo('p', {cwd});
     for (const value of [
       'var(--spacing-2)',
       'calc(var(--spacing-2) + 2px)',
