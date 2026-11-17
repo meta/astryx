@@ -26,6 +26,7 @@ import {
   recordResolved,
   recordResolvedIntegrations,
   resolvedPackages,
+  servingRootPackages,
 } from './package-root.mjs';
 
 afterEach(cleanupFixtures);
@@ -428,5 +429,36 @@ describe('where each package a hosted run resolved came from', () => {
     expect(resolvedPackages()).toEqual([
       {name: '@astryxdesign/cli', version: '0.7.2', source: 'package-set'},
     ]);
+  });
+});
+
+describe('servingRootPackages', () => {
+  afterEach(() => _resetHostedRun());
+
+  it("names what the starting root's package.json declares, and nothing without a hosted run", () => {
+    const set = tempDir('set');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          '@astryxdesign/cli': '0.7.16',
+          '@heroicons/react': '2.2.0',
+        },
+        optionalDependencies: {'acme-extra': '1.0.0'},
+        devDependencies: {'never-served': '1.0.0'},
+      }),
+    );
+    expect(servingRootPackages()).toEqual([]);
+    activateHostedRun({startingRoot: set});
+    expect(servingRootPackages()).toEqual([
+      '@astryxdesign/cli',
+      '@heroicons/react',
+      'acme-extra',
+    ]);
+  });
+
+  it('names nothing when the starting root has no readable package.json', () => {
+    activateHostedRun({startingRoot: tempDir('bare')});
+    expect(servingRootPackages()).toEqual([]);
   });
 });
