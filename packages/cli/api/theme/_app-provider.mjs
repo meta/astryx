@@ -32,6 +32,21 @@ export async function appProviders(cwd) {
 }
 
 /**
+ * The provider's opening tag with the generated module's theme passed, and
+ * its mode when the provider takes one and the theme has one color mode.
+ * @param {AppProvider} provider a provider that takes the theme (`themeProp`)
+ * @param {boolean} oneMode the theme has one color mode
+ * @returns {string}
+ */
+export function providerLine(provider, oneMode) {
+  const mode =
+    oneMode && provider.modeProp
+      ? ` ${provider.modeProp}={themeModes[defaultThemeSlug]}`
+      : '';
+  return `<${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}${mode}>`;
+}
+
+/**
  * `appProviders` for themes already listed.
  * @param {Awaited<ReturnType<typeof listAvailableThemeState>>['themes']} themes
  * @returns {{found: Array<{provider: AppProvider, owner: string}>, taking: {provider: AppProvider, owner: string} | null}}
@@ -99,9 +114,7 @@ export async function withAppProvider(result, cwd) {
         ? Boolean(change.themeModes)
         : result.data.themes.some(t => t.mode);
   const modeProp = oneMode ? taking?.provider.modeProp : undefined;
-  const line = taking
-    ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}${modeProp ? ` ${modeProp}={themeModes[defaultThemeSlug]}` : ''}>`
-    : null;
+  const line = taking ? providerLine(taking.provider, oneMode) : null;
   const name = taking?.provider.export;
   let wire;
   if (kind === 'first') {

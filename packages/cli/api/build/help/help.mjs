@@ -29,24 +29,22 @@ import {appThemeWiring} from '../_adapter.mjs';
  * @returns {string}
  */
 export function themeRule(wiring) {
-  const modes = wiring.state !== 'none' && wiring.hasModes;
   const module =
     wiring.state === 'wired'
       ? `the generated ${wiring.modulePath}`
       : 'the astryx-themes module the theme step writes';
   const notAName =
     'The theme prop takes that theme object, never a name such as "light".';
-  /** The module's names the line uses: `themeModes` only when it passes a mode. */
-  const names = (/** @type {string} */ mode) =>
-    mode ? 'themes, defaultThemeSlug, themeModes' : 'themes, defaultThemeSlug';
+  /** The module's names some markup uses: `themeModes` only when it passes a mode. */
+  const names = (/** @type {string} */ markup) =>
+    markup.includes('themeModes[')
+      ? 'themes, defaultThemeSlug, themeModes'
+      : 'themes, defaultThemeSlug';
   const {provider} = wiring;
   if (provider) {
-    const mode =
-      modes && provider.modeProp
-        ? ` ${provider.modeProp}={themeModes[defaultThemeSlug]}`
-        : '';
-    return `Pass the theme to the app's ${provider.export}, which wires it: <${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}${mode}> (import {${provider.export}} from '${provider.from}', and {${names(mode)}} from ${module}), and import core reset.css + astryx.css. ${notAName}`;
+    return `Pass the theme to the app's ${provider.export}, which wires it: ${provider.line} (import {${provider.export}} from '${provider.from}', and {${names(provider.line)}} from ${module}), and import core reset.css + astryx.css. ${notAName}`;
   }
+  const modes = wiring.state !== 'none' && wiring.hasModes;
   const mode = modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : '';
   return `Wrap the app in <Theme theme={themes[defaultThemeSlug]}${mode}> (import {Theme} from '@astryxdesign/core/theme', and {${names(mode)}} from ${module}) and import core reset.css + astryx.css. ${notAName}`;
 }

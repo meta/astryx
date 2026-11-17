@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {buildHelp, themeRule, themeStep} from './help.mjs';
 import {themeAdd} from '../../theme/add/add.mjs';
+import {providerLine} from '../../theme/_app-provider.mjs';
 import {STARTER_THEME} from '../../../foundation/discovery/theme-discovery.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
@@ -60,23 +61,37 @@ describe('build playbook theme rule', () => {
     expect(rule).toContain('{themes, defaultThemeSlug, themeModes}');
   });
 
-  it('passes the theme to the provider an installed package names, as theme add does', () => {
+  it('prints the provider line the theme add receipt builds, and imports themeModes only when it passes a mode', () => {
+    const brand = {
+      export: 'BrandProvider',
+      from: '@acme/brand',
+      themeProp: 'theme',
+      modeProp: 'colorMode',
+    };
+    const line = providerLine(brand, true);
+    expect(line).toBe(
+      '<BrandProvider theme={themes[defaultThemeSlug]} colorMode={themeModes[defaultThemeSlug]}>',
+    );
     const rule = themeRule({
       state: 'wired',
       modulePath: 'src/astryx-themes.ts',
       hasModes: true,
-      provider: {
-        export: 'BrandProvider',
-        from: '@acme/brand',
-        themeProp: 'theme',
-        modeProp: 'colorMode',
-      },
+      provider: {export: brand.export, from: brand.from, line},
     });
-    expect(rule).toContain(
-      '<BrandProvider theme={themes[defaultThemeSlug]} colorMode={themeModes[defaultThemeSlug]}>',
-    );
+    expect(rule).toContain(line);
     expect(rule).toContain("import {BrandProvider} from '@acme/brand'");
+    expect(rule).toContain('{themes, defaultThemeSlug, themeModes}');
     expect(rule).not.toContain('<Theme ');
+
+    const noMode = providerLine({...brand, modeProp: undefined}, true);
+    const plain = themeRule({
+      state: 'wired',
+      modulePath: 'src/astryx-themes.ts',
+      hasModes: true,
+      provider: {export: brand.export, from: brand.from, line: noMode},
+    });
+    expect(plain).toContain('<BrandProvider theme={themes[defaultThemeSlug]}>');
+    expect(plain).toContain('{themes, defaultThemeSlug} from');
   });
 
   it('adds an installed theme with a command step before wiring it', () => {
