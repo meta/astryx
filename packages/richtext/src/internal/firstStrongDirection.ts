@@ -27,8 +27,10 @@
  * Multilingual Plane, which have no script escapes that every engine knows.
  *
  * JavaScript has no `\p{Bidi_Class=...}` escape, so these sets approximate
- * that property from script and category, and name the characters where the
- * two disagree. Three `AL` characters have script `Common` and are written
+ * that property from script and category, and name the characters this
+ * surface has needed where the two disagree; others still do, as they did
+ * before: some Arabic and NKo `ON` signs, `ON` modifier letters, and `L`
+ * punctuation. Three `AL` characters have script `Common` and are written
  * out here: the semicolon, the question mark, and tatweel. Tatweel is also a
  * modifier letter, so without it the scan reads an Arabic word that starts
  * with one as left-to-right. The Arabic letter mark is beside them for the

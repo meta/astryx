@@ -46,14 +46,6 @@ const WIDE_BLOCK_SPACE = `calc(${spacingVars['--spacing-4']})`;
 const LIST_ITEM_SPACE = `calc(${spacingVars['--spacing-1']})`;
 const TASK_BOX_SIZE = '20px';
 
-/**
- * The document's own direction, set on the editor root by
- * `BlockDirectionPlugin` and read by a block that has none of its own. A
- * custom property is what carries it: it arrives unchanged through a list or
- * a table whose direction differs, where `inherit` would hand the block its
- * container's direction instead.
- */
-export const DOCUMENT_DIRECTION_VAR = '--astryx-richtext-document-direction';
 const LIST_ROW_GAP = `calc(${spacingVars['--spacing-0-5']})`;
 const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
