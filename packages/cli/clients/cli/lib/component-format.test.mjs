@@ -608,3 +608,92 @@ describe('short answer (compact)', () => {
     expect(shortUsage({name: 'useThing', props: []}, 'useThing')).toBeNull();
   });
 });
+
+describe('declared types and piece imports', () => {
+  const doc = {
+    name: 'Picker',
+    description: 'Picks one item.',
+    props: [
+      {
+        name: 'source',
+        type: 'Source<T>',
+        description: 'Where items come from.',
+        required: true,
+      },
+    ],
+    components: [
+      {name: 'PickerItem'},
+      {name: 'PickerGroup', import: '@acme/ui/PickerGroup'},
+    ],
+    types: [
+      {
+        name: 'Source',
+        typeParameters: '<T>',
+        import: "import type { Source } from '@acme/ui/Picker';",
+        extends: ['BaseSource'],
+        members: [
+          {
+            name: 'search',
+            type: '(query: string) => T[]',
+            optional: false,
+            description: 'Finds items.',
+          },
+          {name: 'cancel', type: '() => void', optional: true},
+        ],
+        more: 2,
+      },
+      {name: 'Size', text: "'sm' | 'md'"},
+    ],
+  };
+  const section = [
+    '## Types\n',
+    '### Source<T>\n',
+    [
+      "`import type { Source } from '@acme/ui/Picker';`",
+      'Extends `BaseSource`.',
+      '- `search`: `(query: string) => T[]` **(required)** - Finds items.',
+      '- `cancel`: `() => void`',
+      '- ... 2 more members',
+    ].join('\n') + '\n',
+    '### Size\n',
+    "`type Size = 'sm' | 'md'`\n",
+  ].join('\n');
+
+  it('prints a Types section after the props and pieces in the short answer', () => {
+    const out = formatCompact(doc, 'Picker', '@acme/ui/Picker');
+    expect(out).toContain(section);
+    expect(out.indexOf('## Types')).toBeGreaterThan(
+      out.indexOf('## Components'),
+    );
+    expect(out).toContain(
+      "Imported from another entry:\n- `import { PickerGroup } from '@acme/ui/PickerGroup';`\n",
+    );
+    expect(out).not.toContain('import { PickerItem }');
+  });
+
+  it('prints the same section in --props and --detail full', () => {
+    expect(
+      formatProps({props: doc.props, types: doc.types}, 'Picker'),
+    ).toContain(section);
+    expect(formatFull(doc, {importHint: '@acme/ui/Picker'})).toContain(section);
+  });
+
+  it('prints no section and no import line when the read has neither', () => {
+    const plain = {
+      ...doc,
+      types: undefined,
+      components: [{name: 'PickerItem'}],
+    };
+    for (const out of [
+      formatCompact(plain, 'Picker', '@acme/ui/Picker'),
+      formatProps({props: doc.props}, 'Picker'),
+      formatFull(plain, {}),
+    ]) {
+      expect(out).not.toContain('## Types');
+      expect(out).not.toContain('Imported from another entry');
+    }
+    expect(formatProps({props: doc.props}, 'Picker')).toBe(
+      formatProps({props: doc.props, types: []}, 'Picker'),
+    );
+  });
+});

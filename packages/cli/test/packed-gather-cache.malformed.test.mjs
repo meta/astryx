@@ -216,8 +216,9 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
       expect(keptInodes(primed)).toEqual(warm);
       // The catalog, its table and block catalog, the integration's checks,
       // the issue list, the template records, the integration's theme
-      // records, doctor's docs checks, the CLI's own docs tree and the parses
-      // of the stored docs the runs read.
+      // records, doctor's docs checks, the CLI's own docs tree, the parses
+      // of the stored docs the runs read and the types a component read
+      // names from Core's declaration files.
       expect(
         new Set(
           [...keptInodes(primed).keys()].map(file =>
@@ -236,6 +237,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
           'doctor-check',
           'docs-tree-inputs',
           'doc-parse',
+          'summary',
         ]),
       );
     });

@@ -176,7 +176,10 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName), MARKDOWN),
+        code(
+          formatProps({props: result.data, types: result.types}, resolvedName),
+          MARKDOWN,
+        ),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':

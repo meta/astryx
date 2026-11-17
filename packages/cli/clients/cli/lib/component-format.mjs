@@ -106,6 +106,57 @@ function formatPropsList(props, {whole = false} = {}) {
 }
 
 /**
+ * Render the types a component's props name that its package declares
+ * (`types` on the read): per type its import line, then one member per line
+ * in the props-list style, or its alias text. Empty when there are none.
+ * @param {import('../../../api/component/component.type.mjs').ComponentDeclaredType[] | undefined} types
+ * @returns {string[]}
+ */
+export function formatTypes(types) {
+  if (!Array.isArray(types) || types.length === 0) return [];
+  const out = ['## Types\n'];
+  for (const t of types) {
+    const lines = [];
+    if (t.import) lines.push(`\`${t.import}\``);
+    if (t.extends?.length) {
+      lines.push(`Extends ${t.extends.map(e => `\`${e}\``).join(', ')}.`);
+    }
+    if (typeof t.text === 'string') {
+      lines.push(`\`type ${t.name}${t.typeParameters ?? ''} = ${t.text}\``);
+    }
+    for (const m of t.members ?? []) {
+      const req = m.optional ? '' : ' **(required)**';
+      lines.push(
+        `- \`${m.name}\`: \`${m.type}\`${req}${m.description ? ` - ${m.description}` : ''}`,
+      );
+    }
+    if (t.more) {
+      lines.push(`- ... ${t.more} more member${t.more === 1 ? '' : 's'}`);
+    }
+    out.push(
+      `### ${t.name}${t.typeParameters ?? ''}\n`,
+      lines.join('\n') + '\n',
+    );
+  }
+  return out;
+}
+
+/**
+ * The import line of each piece imported from another entry than its
+ * family's, one per line, under a label. Empty when every piece shares it.
+ * @param {any[]} components
+ * @returns {string[]}
+ */
+function pieceImports(components) {
+  const lines = components
+    .filter(c => typeof c?.import === 'string')
+    .map(c => `- \`import { ${c.name} } from '${c.import}';\``);
+  return lines.length
+    ? [`Imported from another entry:\n${lines.join('\n')}\n`]
+    : [];
+}
+
+/**
  * How a read prints prop descriptions: each one's first sentence, under one
  * line that names the command printing them whole, or every one whole. A read
  * prints them whole when it has no such command, or when the cut would save
@@ -189,6 +240,9 @@ export function formatAccessibility(accessibility, heading = '##') {
  */
 function formatSubComponent(comp, whole = true) {
   const out = [`### ${comp.name}\n`];
+  if (typeof comp.import === 'string') {
+    out.push(`**Import:** \`import {${comp.name}} from '${comp.import}';\`\n`);
+  }
   if (comp.description) {
     out.push(comp.description + '\n');
   }
@@ -233,7 +287,11 @@ function formatSubComponents(components, exampleHashes, whole = true) {
   const out = [];
   /** @type {string[]} */
   let names = [];
+  /** @type {any[]} */
+  let bare = [];
   const flush = () => {
+    const imports = pieceImports(bare);
+    bare = [];
     if (names.length === 1) {
       out.push(
         `See \`${getCliInvocation()} component ${names[0]}\` for its props and usage.\n`,
@@ -243,11 +301,13 @@ function formatSubComponents(components, exampleHashes, whole = true) {
         `Read each with \`${getCliInvocation()} component <Name>\`: ${names.join(', ')}.\n`,
       );
     }
+    out.push(...imports);
     names = [];
   };
   for (const comp of components) {
     if (isBareReference(comp)) {
       names.push(comp.name);
+      bare.push(comp);
       continue;
     }
     flush();
@@ -448,6 +508,8 @@ export function formatFull(docs, options = {}) {
 
   // A read that resolves to a hook prints what it returns, as `hook <name>` does.
   sections.push(...formatHookReturns(docs));
+
+  sections.push(...formatTypes(docs.types));
 
   if (docs.examples?.length) {
     sections.push('## Examples\n');
@@ -674,7 +736,7 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
   if ('components' in docs && docs.components?.length) {
     /** @type {string[]} */
     const pieces = [];
-    /** @type {string[]} */
+    /** @type {any[]} */
     const bare = [];
     for (const comp of docs.components) {
       // A family doc can list its own entry again; its props are above.
@@ -682,22 +744,31 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
       if (comp.props?.length) {
         pieces.push(
           `### ${comp.name}\n`,
+          ...(typeof comp.import === 'string'
+            ? [
+                `**Import:** \`import { ${comp.name} } from '${comp.import}';\`\n`,
+              ]
+            : []),
           formatPropsList(comp.props, {whole: plan.whole}) + '\n',
         );
       } else {
-        bare.push(comp.name);
+        bare.push(comp);
       }
     }
     if (pieces.length || bare.length) sections.push('## Components\n');
     sections.push(...pieces);
     if (bare.length) {
+      const names = bare.map(comp => comp.name);
       sections.push(
-        `${bare.join(', ')}: read ${bare.length === 1 ? 'it' : 'them in one call'} with \`${run} component ${bare.join(' ')}\`.\n`,
+        `${names.join(', ')}: read ${names.length === 1 ? 'it' : 'them in one call'} with \`${run} component ${names.join(' ')}\`.\n`,
+        ...pieceImports(bare),
       );
     }
   }
 
   sections.push(...formatHookReturns(docs));
+
+  sections.push(...formatTypes(docs.types));
 
   if (docs.theming?.componentIcons?.length) {
     sections.push('## Component Icon Slots\n');
@@ -895,14 +966,18 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
 }
 
 /**
- * Format only the props tables (replaces extractProps).
+ * Format only the props, then the types they name (`docs.types`).
  * @param {any} docs
  * @param {string} componentName
  * @returns {string}
  */
 export function formatProps(docs, componentName) {
   if ('props' in docs) {
-    return `## Props\n\n${formatPropsList(docs.props, {whole: true})}\n`;
+    const types = formatTypes(docs.types);
+    return [
+      `## Props\n\n${formatPropsList(docs.props, {whole: true})}\n`,
+      ...types,
+    ].join('\n');
   }
 
   if ('components' in docs) {

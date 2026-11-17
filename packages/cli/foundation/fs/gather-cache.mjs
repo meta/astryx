@@ -30,7 +30,9 @@
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them
- *   (foundation/suggest/name-index.mjs), by css-tree.mjs for what
+ *   (foundation/suggest/name-index.mjs), by declared-types.mjs for the types
+ *   a component read names from its package's declaration files
+ *   (foundation/discovery/declared-types.mjs), by css-tree.mjs for what
  *   `theme build` finds when it checks a theme's pseudo-class keys and token
  *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), and by
  *   `theme build` for the JavaScript it compiles from a theme's local

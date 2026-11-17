@@ -120,7 +120,7 @@
  * @typedef {object} ComponentDetailResponse
  * @property {'component.detail'} type
  * @property {string} package The npm package that owns the component.
- * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope} data
+ * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope & ComponentPieceImports} data
  */
 
 /**
@@ -138,6 +138,37 @@
  * @property {string} package - Owner package, e.g. '@astryxdesign/core' or an integration package name.
  * @property {string} import - Import specifier for the component (e.g. '@astryxdesign/core/Button').
  * @property {boolean} sourceAvailable - Whether a component source file exists for `--source` / swizzle.
+ * @property {ComponentDeclaredType[]} [types] - The types the component's props, and its pieces' props, name that its own package declares, read from the declaration files the package publishes; absent when they name none.
+ */
+
+/**
+ * A piece of a family doc imported from another entry than the family carries
+ * its own specifier.
+ * @typedef {object} ComponentPieceImports
+ * @property {Array<{import?: string}>} [components] - Each piece; `import` is present only when the piece is imported from another specifier than the family's `import`.
+ */
+
+/**
+ * One type a component's props name that its own package declares, one
+ * level deep: an interface or object type lists its members; any other alias
+ * or an enum gives its text. Types it names in turn are not expanded.
+ * @typedef {object} ComponentDeclaredType
+ * @property {string} name - The type's exported name, e.g. 'TableColumn'.
+ * @property {string} [typeParameters] - Its type parameters as declared, e.g. '<T extends SearchableItem = SearchableItem>'.
+ * @property {string} [import] - The public import line, from the package `exports` entry that exports it, e.g. "import type { TableColumn } from '@astryxdesign/core/Table';"; absent when no entry exports it.
+ * @property {string[]} [extends] - The types an interface extends, as written.
+ * @property {ComponentDeclaredTypeMember[]} [members] - An interface's or object type's members, in declaration order, at most 24.
+ * @property {number} [more] - How many members follow the listed ones.
+ * @property {string} [text] - An alias's or enum's type text, on one line; a text cut for length ends with ' ...'.
+ */
+
+/**
+ * One member of a declared interface or object type.
+ * @typedef {object} ComponentDeclaredTypeMember
+ * @property {string} name - The member's name; an index signature is written in brackets, a call signature is '(call)'.
+ * @property {string} type - Its type on one line; a method reads as a function type; a text cut for length ends with ' ...'.
+ * @property {boolean} optional - Whether the member is optional.
+ * @property {string} [description] - The first sentence of its JSDoc, when it has one.
  */
 
 /**
@@ -146,6 +177,7 @@
  * @property {'component.detail.props'} type
  * @property {string} package The npm package that owns the component.
  * @property {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} data
+ * @property {ComponentDeclaredType[]} [types] - The types these props name that the owner package declares, as on `component.detail`; absent when they name none.
  */
 
 /**

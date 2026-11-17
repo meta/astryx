@@ -40,6 +40,7 @@ import {
   resolveComponentReplacement,
   unscopedComponentOwners,
   linkComponentResponse,
+  componentTypes,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -483,9 +484,11 @@ async function componentRead(name, options = {}) {
           : null;
       if (sub) {
         if (props) {
+          const subDocs = {props: sub.matchingComponent.props};
           return componentDetailProps(
-            {props: sub.matchingComponent.props},
+            subDocs,
             owner.package,
+            componentTypes(subDocs, owner, dirName, coreDir),
           );
         }
         return componentDetail(sub.scoped, owner, dirName, coreDir);
@@ -494,7 +497,13 @@ async function componentRead(name, options = {}) {
         scoped.kind === 'integration'
           ? scopeIntegrationMember(loaded, owner, dirName)
           : loaded;
-      if (props) return componentDetailProps(docs, owner.package);
+      if (props) {
+        return componentDetailProps(
+          docs,
+          owner.package,
+          componentTypes(docs, owner, dirName, coreDir),
+        );
+      }
       return componentDetail(docs, owner, dirName, coreDir);
     }
 
@@ -604,7 +613,13 @@ async function componentRead(name, options = {}) {
     }
     const loaded = await loadComponentDoc(owner.docPath, docOpts);
     const docs = scopeIntegrationMember(loaded, owner, dirName);
-    if (props) return componentDetailProps(docs, owner.package);
+    if (props) {
+      return componentDetailProps(
+        docs,
+        owner.package,
+        componentTypes(docs, owner, dirName, coreDir),
+      );
+    }
     return componentDetail(docs, owner, dirName, coreDir);
   }
 
@@ -654,13 +669,20 @@ async function componentRead(name, options = {}) {
   // ── Sub-component scoping ────────────────────────────────────
   // If the user asked for "Code" but the doc is for "CodeBlock" (parent),
   // scope the response to just the matching sub-component.
+  const owner = {
+    package: resolved.resolvedOwnerPackage,
+    sourcePath: resolved.resolvedSourcePath,
+  };
   const sub = scopeSubComponent(docs, dirName, coreDir);
   if (sub) {
-    if (props)
+    if (props) {
+      const subDocs = {props: sub.matchingComponent.props};
       return componentDetailProps(
-        {props: sub.matchingComponent.props},
-        resolved.resolvedOwnerPackage,
+        subDocs,
+        owner.package,
+        componentTypes(subDocs, owner, dirName, coreDir),
       );
+    }
     return componentDetail(
       sub.scoped,
       {
@@ -672,7 +694,13 @@ async function componentRead(name, options = {}) {
     );
   }
 
-  if (props) return componentDetailProps(docs, resolved.resolvedOwnerPackage);
+  if (props) {
+    return componentDetailProps(
+      docs,
+      owner.package,
+      componentTypes(docs, owner, resolved.resolvedName, coreDir),
+    );
+  }
   return componentDetail(
     docs,
     {

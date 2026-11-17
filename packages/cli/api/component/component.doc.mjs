@@ -127,11 +127,12 @@ export const doc = {
     {
       type: 'component.detail',
       description:
-        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent.",
+        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent. A piece imported from another specifier than the component carries its own import. types lists each type the props name that the owner package declares, read from the declaration files the package publishes: its name, its public import type line, and its declaration one level deep (members with type, optional and the first sentence of their JSDoc, or an alias's text); it is absent when the props name none.",
     },
     {
       type: 'component.detail.props',
-      description: "Just the component's props table (ComponentPropDoc[]).",
+      description:
+        "Just the component's props table (ComponentPropDoc[]), with types beside data: the types these props name that the owner package declares, as on component.detail; absent when they name none.",
     },
     {
       type: 'component.detail.source',

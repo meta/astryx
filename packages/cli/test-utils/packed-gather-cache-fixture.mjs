@@ -288,6 +288,23 @@ export function derivedEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds the declared types a component read names
+ * (foundation/discovery/declared-types.mjs), not a gather.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function declaredTypesEntry(file) {
+  try {
+    const entry = readKept(file);
+    return (
+      entry.summary === true && JSON.parse(entry.key)[6] === 'declared-types'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether a kept file holds template discovery's records, not a catalog.
  * @param {string} file
  * @returns {boolean}
@@ -405,6 +422,7 @@ export function entries(tmp) {
     if (
       derivedEntry(file) ||
       issuesEntry(file) ||
+      declaredTypesEntry(file) ||
       templatesEntry(file) ||
       docsTreeEntry(file) ||
       themeFactsEntry(file)

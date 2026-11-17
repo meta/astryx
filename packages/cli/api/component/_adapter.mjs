@@ -44,6 +44,7 @@ import {Project} from '../../foundation/config/project.mjs';
 import {loadComponentDoc as loadValidatedComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {integrationComponentViews} from '../../foundation/discovery/integration-component-views.mjs';
+import {declaredTypes} from '../../foundation/discovery/declared-types.mjs';
 import {
   EXACT_KEYWORD_SCORE,
   EXACT_NAME_SCORE,
@@ -664,10 +665,94 @@ function withExampleKinds(examples) {
 }
 
 /**
+ * The specifier a component is imported from, for its owner.
+ * @param {LoadedComponentDoc & {import?: string}} docs
+ * @param {OwnershipSubject} owner
+ * @param {string} componentName
+ * @param {string | null} coreDir
+ * @returns {string}
+ */
+function ownerImport(docs, owner, componentName, coreDir) {
+  return owner.package === CORE_PACKAGE
+    ? (docs.import ?? resolveImportPath(coreDir, componentName))
+    : resolveIntegrationImportPath(owner, componentName, docs.import);
+}
+
+/**
+ * The types a component's documented props, and its pieces' props, name that
+ * its own package declares, read from the declaration files that package
+ * publishes. Empty for a package this read has no folder for, one that ships
+ * no declarations, or props that name none of its types.
+ * @param {LoadedComponentDoc & {import?: string}} docs
+ * @param {OwnershipSubject} owner
+ * @param {string} componentName
+ * @param {string | null} coreDir
+ * @returns {import('./component.type.mjs').ComponentDeclaredType[]}
+ */
+export function componentTypes(docs, owner, componentName, coreDir) {
+  const packageDir =
+    owner.package === CORE_PACKAGE
+      ? coreDir
+      : (owner.integration?.__packageDir ?? null);
+  if (!packageDir) return [];
+  /** @type {any} */
+  const doc = docs;
+  const typeTexts = [
+    ...(doc.props ?? []),
+    ...(Array.isArray(doc.components) ? doc.components : []).flatMap(
+      (/** @type {any} */ entry) => entry?.props ?? [],
+    ),
+  ]
+    .map(prop => prop?.type)
+    .filter(type => typeof type === 'string');
+  try {
+    return declaredTypes({
+      packageDir,
+      packageName: owner.package,
+      importSpecifier: ownerImport(docs, owner, componentName, coreDir),
+      typeTexts,
+    });
+  } catch {
+    // A declaration this read cannot follow leaves the answer as it was.
+    return [];
+  }
+}
+
+/**
+ * The specifier a piece of a family doc is imported from, when it is not the
+ * family's own: undefined when it is the same, or when only the package root
+ * is known for it.
+ * @param {string} name
+ * @param {OwnershipSubject} owner
+ * @param {string} familyImport
+ * @param {string | null} coreDir
+ * @returns {string | undefined}
+ */
+function pieceImport(name, owner, familyImport, coreDir) {
+  if (typeof name !== 'string' || !name) return undefined;
+  let spec;
+  try {
+    spec =
+      owner.package === CORE_PACKAGE
+        ? resolveImportPath(coreDir, name)
+        : resolveIntegrationImportPath(owner, name, null);
+  } catch {
+    return undefined;
+  }
+  return typeof spec === 'string' &&
+    spec !== familyImport &&
+    spec !== owner.package
+    ? spec
+    : undefined;
+}
+
+/**
  * Augment a loaded `component.detail` doc with ownership metadata. Adds
  * `package`, the resolved `import` specifier, and `sourceAvailable` (whether a
- * swizzleable source file exists for the owner). Existing doc fields (name,
- * usage, props, …) are preserved; each example carries its `kind`.
+ * swizzleable source file exists for the owner); a piece imported from
+ * another entry than the family carries its own `import`, and the types its
+ * props name that the package declares are in `types`. Existing doc fields
+ * (name, usage, props, …) are preserved; each example carries its `kind`.
  * @param {LoadedComponentDoc} docs
  * @param {OwnershipSubject} owner
  * @param {string} componentName
@@ -675,27 +760,37 @@ function withExampleKinds(examples) {
  * @returns {import('./component.type.mjs').ComponentDetailResponse['data']}
  */
 export function withOwnership(docs, owner, componentName, coreDir) {
-  const importSpec =
-    owner.package === CORE_PACKAGE
-      ? (docs.import ?? resolveImportPath(coreDir, componentName))
-      : resolveIntegrationImportPath(owner, componentName, docs.import);
+  const importSpec = ownerImport(docs, owner, componentName, coreDir);
   /** @type {any} */
   const doc = docs;
+  const types = componentTypes(docs, owner, componentName, coreDir);
   return /** @type {any} */ ({
     ...docs,
     ...(doc.examples ? {examples: withExampleKinds(doc.examples)} : {}),
     ...(Array.isArray(doc.components)
       ? {
-          components: doc.components.map((/** @type {any} */ entry) =>
-            entry?.examples
-              ? {...entry, examples: withExampleKinds(entry.examples)}
-              : entry,
-          ),
+          components: doc.components.map((/** @type {any} */ entry) => {
+            if (!entry || typeof entry !== 'object') return entry;
+            const own =
+              entry.import === undefined && entry.name !== docs.name
+                ? pieceImport(entry.name, owner, importSpec, coreDir)
+                : undefined;
+            return entry.examples || own
+              ? {
+                  ...entry,
+                  ...(entry.examples
+                    ? {examples: withExampleKinds(entry.examples)}
+                    : {}),
+                  ...(own ? {import: own} : {}),
+                }
+              : entry;
+          }),
         }
       : {}),
     package: owner.package,
     import: importSpec,
     sourceAvailable: owner.sourcePath != null,
+    ...(types.length ? {types} : {}),
   });
 }
 
