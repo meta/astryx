@@ -123,7 +123,8 @@ const ROWS = [
     'a part’s underline is its indicator',
     {
       q: 'selected tab text #0F6CBD with a 2px underline',
-      has: ['height 2px --on tab-indicator'],
+      // (The selected tab's underline: the indicator in that state.)
+      has: ['height 2px --on tab-indicator --state selected'],
       never: /text-decoration/,
     },
   ],
@@ -312,7 +313,9 @@ const ROWS = [
     'a strip said as a noun takes nothing away',
     {
       q: 'pagination pages in one bordered strip',
-      says: /not used: "pagination pages in one bordered strip"/,
+      // (The pagination's own pages: its border, as "pagination in a
+      // bordered strip" is.)
+      has: ["border '1px solid var(--color-border)' --on pagination"],
       never: /border-width 0/,
     },
   ],

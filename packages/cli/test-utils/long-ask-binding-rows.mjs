@@ -112,7 +112,7 @@ export const LOCK = [
   [
     'selected tab text #635bff with a 2px #635bff underline, other tabs #6c7688',
     [],
-    ['tab'],
+    ['tab', 'tab-indicator'],
   ],
   [
     'page white in light mode and #191919 in dark mode, sidebar #f7f7f5 in light mode and #202020 in dark mode, text #37352f in light mode',
@@ -307,7 +307,7 @@ export const LOCK = [
   ],
   [
     'badges 4px corners, rounder cards, compact tables, 12px text and no border',
-    ['text-size'],
+    ['--border-width', 'text-size'],
     ['badge', 'card', 'table-row'],
   ],
   [
@@ -322,7 +322,7 @@ export const LOCK = [
   ],
   [
     'badges pill corners, rounder cards, compact tables, 12px text and no border',
-    ['text-size'],
+    ['--border-width', 'text-size'],
     ['badge', 'card', 'table-row'],
   ],
   [
@@ -373,7 +373,7 @@ export const LOCK = [
   [
     'selected tab text #635bff with a 2px #635bff underline, rounder cards, compact tables, other tabs #6c7688',
     [],
-    ['card', 'tab', 'table-row'],
+    ['card', 'tab', 'tab-indicator', 'table-row'],
   ],
   [
     'page white in light mode and #191919 in dark mode, rounder cards, compact tables, sidebar #f7f7f5 in light mode and #202020 in dark mode, text #37352f in light mode',
@@ -439,7 +439,7 @@ export const LOCK = [
   ],
   [
     'toggle lists with gray arrows, rounder cards, compact tables, 14px text and no borders',
-    ['text-size'],
+    ['--border-width', 'text-size'],
     ['card', 'switch', 'table-row'],
   ],
   [
@@ -509,7 +509,7 @@ export const LOCK = [
   ],
   [
     'table header text uppercase, rounder cards, compact tables, gray, 12px, bold',
-    [],
+    ['--text-body-weight', 'text-size'],
     ['card', 'table-header-cell', 'table-row'],
   ],
   [
@@ -549,7 +549,7 @@ export const LOCK = [
   ],
   [
     'big touch targets, rounder cards, compact tables, large bold text, thick borders',
-    ['--text-body-weight'],
+    ['--border-width', '--text-body-weight'],
     ['button', 'card', 'inputs', 'table-row'],
   ],
   [

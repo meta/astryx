@@ -930,6 +930,13 @@ const NOT_COLORS = new Set([
 /** The nouns a whole look is said with ("a calm theme", "a warm vibe"). */
 const LOOK_NOUNS = String.raw`(?:theme|look|vibe|aesthetic|palette)`;
 
+/**
+ * Comparatives a telling compares what is there with ("the cards look
+ * darker than the page"), and verbs a part is said to mark something with
+ * ("the date picker should circle today"): word tables the readers share.
+ */
+const TELLING_COMPARATIVES = String.raw`(?:darker|lighter|brighter|duller|bigger|smaller|heavier|thinner)`;
+const MARK_VERBS = String.raw`(?:circle|highlight|mark|ring|outline|underline|show)`;
 const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?|tools?|products?|platforms?|portals?)`;
 
 /** Lengths written in a clause, in order. @param {string} c */
@@ -3348,11 +3355,18 @@ function clausesOf(q, partWords, words = null) {
       // ("radio station app: rounder corners": a part word inside the
       // label of a product, before its colon, names the product.)
       const afterPart = rest.slice((m.index ?? 0) + m[0].length);
+      // ("pagination pages": the part's own items said after its name, one
+      // word stem with it, are the part's, never a screen.)
+      const nextWord = /^\s+([a-z]+)/.exec(afterPart)?.[1] ?? '';
+      const ownItems =
+        nextWord.length > 3 &&
+        nextWord.slice(0, 3) === m[0].trim().toLowerCase().slice(0, 3);
       // ("live sports scores page: …": the product word itself, as the
       // label's last word before its colon, is the product, never the
       // page part.)
       if (
-        new RegExp(String.raw`^\s+${PRODUCT_WORDS}\b`).test(afterPart) ||
+        (!ownItems &&
+          new RegExp(String.raw`^\s+${PRODUCT_WORDS}\b`).test(afterPart)) ||
         new RegExp(String.raw`^[a-z' -]*\b${PRODUCT_WORDS}\s*:`).test(
           afterPart,
         ) ||
@@ -7293,7 +7307,13 @@ export function draftAnswer(ctx, env, question) {
     const endsWithPart = lex.parts.some(([re, x]) => {
       if (!subject.some(p => p.on === x.on)) return false;
       const m = re.exec(lead);
-      return m != null && !lead.slice(m.index + m[0].length).trim();
+      if (m == null) return false;
+      const tail = lead.slice(m.index + m[0].length).trim();
+      // (Or a likeness said of the part: "menus and popovers look like
+      // Slack's: white, rounded, …".)
+      return (
+        !tail || /^(?:(?:look|looks|feel|feels)\s+)?like\b[^:]*$/.test(tail)
+      );
     });
     if (!endsWithPart) return;
     const leadState = stateWord(lead);
@@ -7307,7 +7327,18 @@ export function draftAnswer(ctx, env, question) {
       c.aspects = c.aspects.filter(a => !leadOnly.includes(a));
       ownAspects.set(c, [...c.aspects]);
     }
-    const named = c.parts.filter(p => !subject.includes(p));
+    // ("menus: plain white boxes": a word for any box, said in a part's
+    // own list, is that part's box, never every container.)
+    const named = c.parts.filter(
+      p =>
+        !subject.includes(p) &&
+        !(
+          p.on === 'containers' &&
+          !FAMILIES[subject[0].on]?.includes('containers')
+        ),
+    );
+    if (c.parts.some(p => p.on === 'containers' && !subject.includes(p)))
+      c.parts = [...subject, ...named];
     if (!named.length) return;
     const holder = subject[0].on;
     const segs = holder.split('-');
@@ -7398,7 +7429,7 @@ export function draftAnswer(ctx, env, question) {
         list = 'colon';
         // (A list's colon follows the part's name: never a ratio's, "3:1",
         // nor a declaration's inside braces, "{ font-weight: 800 }".)
-        const colon = /^[^:{]*[a-z)'’]\s*(?=:(?:\s|$))/i.exec(c.text)?.[0]
+        const colon = /^[^:{]*[a-z0-9)'’]\s*(?=:(?:\s|$))/i.exec(c.text)?.[0]
           .length;
         if (colon) ownList(c, colon);
       }
@@ -7432,7 +7463,24 @@ export function draftAnswer(ctx, env, question) {
     const j = joinOf.get(c);
     if (j?.list !== 'colon' || j.sep === 'with') return null;
     const head = listHead(c);
-    return head ? (listSubjectOf.get(head) ?? null) : null;
+    const own = head ? listSubjectOf.get(head) : null;
+    if (!head || !own) return null;
+    // ("menus and popovers look like Slack's: white, rounded, …": the head
+    // said of several parts, each read with the colon, owns every item for
+    // all of them.)
+    const more = [];
+    for (let k = clauses.indexOf(head) + 1; k < clauses.indexOf(c); k++) {
+      const next = listSubjectOf.get(clauses[k]);
+      if (!next) break;
+      more.push(...next.parts);
+    }
+    if (!more.length) return own;
+    return {
+      ...own,
+      parts: [...own.parts, ...more].filter(
+        (p, k, all) => all.findIndex(o => o.on === p.on) === k,
+      ),
+    };
   };
   /** What a later clause's own words make the whole theme's. */
   const THEME_ASPECTS = ['family', 'fontsize', 'leading', 'tracking', 'motion'];
@@ -7466,8 +7514,27 @@ export function draftAnswer(ctx, env, question) {
       FAMILIES[on] ? FAMILIES[on][0] : on;
     if (c.parts.length) return 'own';
     if (!before) return 'theme';
+    // ("make headings semibold and make the text a bit larger": the text
+    // said with its article as the thing to change, or "all text", is the
+    // whole app's, never the part's before it.)
+    if (
+      /\b(?:make|set|turn)\s+(?:the|all)\s+text\b|\ball\s+(?:the\s+)?text\b|^(?:and\s+)?the\s+text\s+(?:a\s+bit\s+|slightly\s+|much\s+)?(?:larger|bigger|smaller|darker|lighter)\b/.test(
+        c.text,
+      )
+    )
+      return 'theme';
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
+    // ("cards square on top, 6px rounded at the bottom": a corner or edge
+    // look said of a side is the side of the part before, never the whole
+    // theme's.)
+    if (
+      own.some(a => a === 'corners' || a === 'border') &&
+      /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b/.test(
+        c.text,
+      )
+    )
+      return 'inherit';
     // ("big buttons, a sky blue, high contrast": a list piece that is only a
     // color, with no look or part word of its own, is the theme's, never
     // a fill on the part a piece before it named; "buttons rounder and
@@ -8047,11 +8114,21 @@ export function draftAnswer(ctx, env, question) {
       !c.parts.length &&
       /\bunderline/.test(c.text) &&
       prev?.parts.some(p => p.on === 'tab') &&
-      !prev.aspects.length
+      // (Or a tab said with its label's color: "selected tab text #635bff
+      // with a 2px #635bff underline".)
+      (!prev.aspects.length ||
+        (prev.aspects.every(a => a === 'text') &&
+          (c.lengths.length > 0 || c.colors.length > 0)))
     ) {
       c.parts = [{on: 'tab-indicator'}];
-      prev.parts = prev.parts.filter(p => p.on !== 'tab');
-      if (!prev.parts.length) prev.text = '';
+      c.state ??= prev.state;
+      // (A tab said with a color of its own, "selected tab #171717 with a
+      // 2px underline", keeps it: its label's color; only a bare subject
+      // gives its words to the underline.)
+      if (!prev.colors.length && !prev.lengths.length) {
+        prev.parts = prev.parts.filter(p => p.on !== 'tab');
+        if (!prev.parts.length) prev.text = '';
+      }
     }
     for (const p of c.parts)
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
@@ -8999,6 +9076,14 @@ export function draftAnswer(ctx, env, question) {
       !new RegExp(String.raw`\b${PRODUCT_WORDS}\s*$`, 'i').test(label[1])
     )
       places.push({holderText: label[1], elementText: label[2], by: 'in'});
+    // ("the date picker should circle today in #0969da": what a part should
+    // mark is in it, as after a label.)
+    const marks = new RegExp(
+      String.raw`^\s*(?:the\s+|my\s+)?([a-z][a-z -]{1,40}?)\s+(?:should|must|needs? to)\s+${MARK_VERBS}\s+(\S.*)$`,
+      'i',
+    ).exec(text);
+    if (marks)
+      places.push({holderText: marks[1], elementText: marks[2], by: 'in'});
     for (const m of text.matchAll(preps)) {
       const after = text.slice(/** @type {number} */ (m.index) + m[0].length);
       // (The place runs to the next place said.)
@@ -10160,16 +10245,26 @@ export function draftAnswer(ctx, env, question) {
     const c = clauses[i];
     const next = clauses[i + 1];
     const describes =
-      /\b(is|are|feels?|looks|seems?|fails?)\b/.test(c.text) &&
-      new RegExp(
-        `\\b(?:too|so|very|really|kind of|feels?|seems?|fails?|flat|heavy|cluttered|busy|boring|bland|dull|harsh|loud|weak|hard|ugly|off|${densityWords('crowded')})\\b`,
+      // ("in dark mode the cards look darker than the page, like holes":
+      // a comparison said of what is there now tells, as a judgment does.)
+      (new RegExp(
+        String.raw`\b(?:is|are|looks?|seems?|feels?)\s+(?:a bit\s+|much\s+|way\s+|so\s+)?${TELLING_COMPARATIVES}\s+than\b`,
       ).test(c.text) &&
-      !/\d/.test(c.text) &&
-      !/^(make|set|use|give|add|remove|change|put)\b/.test(c.text) &&
-      !/#[0-9a-f]{3,8}\b|\(/.test(c.text) &&
-      !c.lengths.length;
+        !/^(make|set|use|give|change)\b/.test(c.text) &&
+        !/#[0-9a-f]{3,8}\b/.test(c.text)) ||
+      (/\b(is|are|feels?|looks|seems?|fails?)\b/.test(c.text) &&
+        new RegExp(
+          `\\b(?:too|so|very|really|kind of|feels?|seems?|fails?|flat|heavy|cluttered|busy|boring|bland|dull|harsh|loud|weak|hard|ugly|off|${densityWords('crowded')})\\b`,
+        ).test(c.text) &&
+        !/\d/.test(c.text) &&
+        !/^(make|set|use|give|add|remove|change|put)\b/.test(c.text) &&
+        !/#[0-9a-f]{3,8}\b|\(/.test(c.text) &&
+        !c.lengths.length);
     if (!describes || !(next.aspects.length || next.dir) || next.colors.length)
       continue;
+    // (The mode the telling is said in is the fix's: "in dark mode the
+    // cards look darker …; make cards slightly lighter".)
+    if (c.mode && !next.mode) next.mode = c.mode;
     if (!next.aspects.length)
       next.aspects = c.aspects.filter(
         a => a !== 'shadow' || !/\bflat\b/.test(c.text),
@@ -10358,9 +10453,21 @@ export function draftAnswer(ctx, env, question) {
         // #8a8f98 and selected item #f7f8f8 text": the color goes with the
         // text the list is about; said alone, a color stays the fill.)
         const textSaid = (/** @type {string} */ on) =>
+          // (Or the part's own indicator is said, "with a 2px underline":
+          // the marker shows which one is chosen, so the colors are
+          // the labels'.)
+          clauses.some(
+            o => o !== c && o.parts.some(q => q.on === `${on}-indicator`),
+          ) ||
           clauses.some(
             o =>
               o !== c &&
+              // (Never the text said with this very fill, "navy #0f172a
+              // with white text": that is the fill's own text.)
+              !(
+                joinOf.get(o)?.sep === 'with' &&
+                clauses[clauses.indexOf(o) - 1] === c
+              ) &&
               (o.parts.some(q => q.on === on) ||
                 (!o.parts.length &&
                   joinOf.get(o)?.sep === 'with' &&
@@ -10517,13 +10624,55 @@ export function draftAnswer(ctx, env, question) {
       !c.parts.every(p => b.parts.some(x => x.on === p.on))
     )
       continue;
-    c.aspects = [...b.aspects];
+    // (Only a look a color can be: "tabs 14px text, selected tab #171717"
+    // is no size.)
+    const colorLooks = b.aspects.filter(a =>
+      ['text', 'background', 'border', 'underline', 'colors'].includes(a),
+    );
+    if (!colorLooks.length) continue;
+    c.aspects = colorLooks;
   }
   fillAspect();
+  // ("soft glows and shadows": a bare noun of the same look joined by
+  // "and" is said with the words before it, one ask, never a second one
+  // that clashes with it.)
+  for (let i = clauses.length - 1; i > 0; i--) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (
+      joinOf.get(c)?.sep === 'and' &&
+      !c.parts.length &&
+      !prev.parts.length &&
+      !c.colors.length &&
+      !c.lengths.length &&
+      c.dir == null &&
+      !c.mode &&
+      !c.state &&
+      /^[a-z]+$/.test(c.text.trim()) &&
+      c.aspects.length > 0 &&
+      c.aspects.every(a => prev.aspects.includes(a))
+    )
+      clauses.splice(i, 1);
+  }
   /** Clauses that took their part from another clause. @type {Set<Clause>} */
   const carried = new Set();
   /** (A clause with a part of its own, never one it took.) @param {Clause} x */
   const ownsPart = x => x.parts.length > 0 && !carried.has(x);
+  // ("selected tab #171717 with a 2px underline": a piece of the part said
+  // with it, in the part's state.)
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (
+      joinOf.get(c)?.sep === 'with' &&
+      !c.state &&
+      prev.state &&
+      c.parts.length &&
+      prev.parts.length &&
+      c.parts.every(p => prev.parts.some(h => p.on.startsWith(`${h.on}-`)))
+    )
+      c.state = prev.state;
+  }
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
     const prev = clauses[i - 1];
@@ -10558,6 +10707,66 @@ export function draftAnswer(ctx, env, question) {
         joinOf.get(c)?.sep === 'and'
       )
         return true;
+      // (A with-list's items are its head's, every one of them: "primary
+      // buttons #303030 with white text and 8px corners".)
+      if (joinOf.get(c)?.list === 'with') {
+        let w = i;
+        while (
+          w > 0 &&
+          ['with', 'and'].includes(String(joinOf.get(clauses[w])?.sep)) &&
+          joinOf.get(clauses[w])?.list === 'with' &&
+          !ownsPart(clauses[w - 1])
+        )
+          w--;
+        // (Its head, or an item that took the head's part, nearest; a comma
+        // ends the with-list, "compact tables with zebra rows, green for
+        // paid and red for overdue".)
+        if (
+          w > 0 &&
+          ['with', 'and'].includes(String(joinOf.get(clauses[w])?.sep)) &&
+          ownsPart(clauses[w - 1]) &&
+          clauses
+            .slice(w - 1, i)
+            .every(
+              x =>
+                !x.parts.length ||
+                x.parts.every(p =>
+                  clauses[w - 1].parts.some(h => h.on === p.on),
+                ),
+            )
+        )
+          return true;
+      }
+      // (A word of the nearest part's own, its size or variant, said across
+      // clauses that name no part: "beveled gray buttons, Charcoal-style
+      // bold system font, small rounded corners" is the small buttons'.)
+      {
+        const at = clauses.indexOf(nearest);
+        const vals = Object.values(
+          C.variantValues(
+            FAMILIES[nearest.parts[0]?.on ?? '']?.[0] ??
+              nearest.parts[0]?.on ??
+              '',
+          ) ?? {},
+        )
+          .flat()
+          .map(String);
+        const sizeWords = /** @type {Record<string, string>} */ ({
+          small: 'sm',
+          medium: 'md',
+          large: 'lg',
+        });
+        const own = c.text
+          .toLowerCase()
+          .split(/[^a-z]+/)
+          .some(w => vals.includes(w) || vals.includes(sizeWords[w] ?? ''));
+        if (
+          ownsPart(nearest) &&
+          own &&
+          clauses.slice(at + 1, i).every(x => !x.parts.length)
+        )
+          return true;
+      }
       let k = i - 1;
       while (
         k > 0 &&
@@ -10622,48 +10831,36 @@ export function draftAnswer(ctx, env, question) {
           (c.dir != null || colorsIn(c.text).length > 0) &&
           c.text.trim().split(/\s+/).length <= 3)),
     );
-    if (takesBefore && before && !reach)
-      c.unbound = String(before.parts[0]?.on ?? '');
-    // (A look the scope reader gives the whole theme, said in a list out of
-    // reach of the part before it, with no theme word and no dial of its
-    // own, "badges 4px corners, rounder cards, compact tables, … and no
-    // border": named, never the whole theme's. "12px text" is the text
-    // size dial; "the whole app's borders" says the theme.)
-    else if (
-      !takesBefore &&
-      before &&
-      !reach &&
-      !c.parts.length &&
-      !c.except &&
-      ['comma', 'and', 'with'].includes(String(joinOf.get(c)?.sep)) &&
-      c.aspects.length > 0 &&
-      c.aspects.every(
-        a =>
-          ![
-            'corners',
-            'spacing',
-            'family',
-            'fontsize',
-            'leading',
-            'tracking',
-            'colors',
-            'mode',
-            'contrast',
-          ].includes(a),
-      ) &&
-      !ROLE_WORDS.test(c.text) &&
-      !/\b(?:theme|everything|everywhere|whole|entire|all|app|site|page|body|text|mode|accent|brand|neutral)\b/.test(
-        c.text,
-      ) &&
-      // (Only after a part the asker named in so many words: "big touch
-      // targets" names the controls by what they are for.)
-      lex.parts.some(
-        ([re, x]) =>
-          before.parts.some(p => p.on === x.on) &&
-          re.test(` ${asked0.toLowerCase()} `),
-      ) &&
-      scopeOf(c, before) === 'theme'
-    )
+    // (Out of reach, a look with a whole-theme meaning, a dial's or a theme
+    // token's, "no shadows", "flat surfaces", "bold system type", "gray
+    // borders", "rounded corners", is the theme's by its meaning; any other
+    // look, a part's fill or text color, is named, never written on a part
+    // said further back nor theme-wide.)
+    // (With a color said, only a theme color's looks: the border color,
+    // the palette, contrast, the mode; "gray #e3e3e3 background" is a
+    // part's fill.)
+    const THEME_LOOKS = c.colors.length
+      ? ['border', 'colors', 'contrast', 'mode']
+      : [
+          'shadow',
+          'surfaces',
+          'spacing',
+          'corners',
+          'family',
+          'fontsize',
+          'leading',
+          'tracking',
+          'weight',
+          'border',
+          'contrast',
+          'mode',
+          'colors',
+          'case',
+          'italic',
+        ];
+    const themeByMeaning =
+      c.aspects.length > 0 && c.aspects.every(a => THEME_LOOKS.includes(a));
+    if (takesBefore && before && !reach && !themeByMeaning)
       c.unbound = String(before.parts[0]?.on ?? '');
     if (takesBefore && before && reach) {
       // (After an except, "… taller except the large ones, and bolder":
@@ -13459,6 +13656,22 @@ export function draftAnswer(ctx, env, question) {
     const thing =
       unknown.some(w => /[a-z]{2}[^su']s$/.test(w)) ||
       near(unknown.join(' ')) !== '' ||
+      // (A label before a part's own look, "fab: #eaddff background": the
+      // look is something's on the page, never the theme's.)
+      (label != null &&
+        // (The label the ask starts with, never a word a clause split
+        // left before a colon, "page loud and fast: …".)
+        new RegExp(String.raw`(?:^|[.;!?\n]\s*)${label}\s*:`).test(asked0) &&
+        // (A look's name, "neon synthwave: deep purple night background, hot
+        // pink accent …": a list with a theme role in it is the theme's
+        // look, never something on the page.)
+        !ROLE_WORDS.test(asked0.slice(asked0.indexOf(`${label}:`))) &&
+        c.aspects.length > 0 &&
+        c.aspects.every(
+          a =>
+            !THEME_ASPECTS.includes(a) &&
+            !['colors', 'mode', 'contrast', 'spacing', 'corners'].includes(a),
+        )) ||
       (words.length === 1 &&
         new RegExp(`\\b${words[0].toUpperCase()}\\b`).test(raw0));
     return thing ? phrase : null;
@@ -13657,6 +13870,9 @@ export function draftAnswer(ctx, env, question) {
         ),
       ).length &&
       !c.aspects.includes('background') &&
+      // (A part the fill reader gave its text, one that paints no fill
+      // there: "selected tab #171717 with a 2px underline".)
+      !c.aspects.includes('text') &&
       !c.parts.every(p => textOnlyPart(p.on))
     )
       c.aspects = ['background'];
@@ -20399,6 +20615,28 @@ export function draftAnswer(ctx, env, question) {
         // "the shadow 20% more opaque": each layer's own alpha (the
         // opacity answer's relative change).
         if (RELATIVE_ALPHA.test(c.text)) return answerFor(c, p, 'opacity');
+        // ("a text shadow": the shadow under the part's letters, never its
+        // box's; the whole theme's text has no shared text shadow, so it
+        // is said of a part.)
+        if (/\btext[- ]shadows?\b/.test(c.text)) {
+          if (!on)
+            return {
+              text: 'a text shadow: no shared setting draws one under all text; say the part, as in "headings with a text shadow"',
+              options: [],
+            };
+          if (c.neg)
+            return {
+              text: `no text shadow${where}`,
+              options: [[set('text-shadow', 'none', f)]],
+            };
+          const typed = c.decl['text-shadow'];
+          return {
+            text: `a text shadow${where}: text-shadow, a soft 1px drop under its letters`,
+            options: [
+              [set('text-shadow', typed ?? '0 1px 1px rgb(0 0 0 / 25%)', f)],
+            ],
+          };
+        }
         const typedShadow = c.decl['box-shadow'] ?? shadowIn(c.text);
         if (typedShadow && on && !c.neg)
           return {
@@ -23837,11 +24075,29 @@ export function draftAnswer(ctx, env, question) {
           // blue on the dark page under 2.5:1, is set for the other mode
           // only, as the text color is; said.)
           const rgb = parseColor(color);
+          // (Links on a bar this ask fills, "dark navigation bar with white
+          // links": measured on that fill, the same in both modes, never
+          // on the page.)
+          const holder = c.container ?? c.within;
+          const barFill = holder
+            ? drafts
+                .flatMap(d => d.options[0] ?? [])
+                .find(
+                  st =>
+                    st.on === holder &&
+                    !st.state &&
+                    !st.mode &&
+                    /^background(?:-color)?$/.test(st.thing) &&
+                    parseColor(String(st.value ?? '')) != null,
+                )
+            : undefined;
           const readable = /** @type {Array<'light' | 'dark'>} */ ([
             'light',
             'dark',
           ]).filter(m => {
-            const page = parseColor(current('--color-background-body', m));
+            const page = barFill
+              ? parseColor(String(barFill.value))
+              : parseColor(current('--color-background-body', m));
             return !rgb || !page || ratio(rgb, page) >= 2.5;
           });
           const oneMode =
@@ -24029,6 +24285,8 @@ export function draftAnswer(ctx, env, question) {
                   on,
                   // "red h1": that level only.
                   ...(f.when ? {when: f.when} : {}),
+                  // ("the active item … with white text": in its state only.)
+                  ...(f.state ? {state: f.state} : {}),
                   ...modeOf(c),
                 }),
               ],
@@ -28175,6 +28433,8 @@ export function draftAnswer(ctx, env, question) {
   // ("selected nav items tinted forest green", "a green tint on hover"):
   // a tint is the color at a low strength over what is beneath, never the
   // solid color, as the accent's tint is.
+  /** The tinted steps, so the answer that runs the whole ask carries them too. @type {Array<[Step, Step]>} */
+  const tinted = [];
   for (const d of result) {
     const c = draftClause.get(d);
     if (!c || !/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/.test(c.text)) continue;
@@ -28189,10 +28449,28 @@ export function draftAnswer(ctx, env, question) {
             ...st,
             value: `color-mix(in srgb, ${st.value} 15%, transparent)`,
           };
+          tinted.push([st, o[k]]);
           if (!/a tint: /.test(d.text))
             d.text += ` (a tint: ${st.value} at 15% over what is beneath)`;
         }
   }
+  // ("soft blue-tinted glass" in a whole ask: the line that runs it in
+  // order takes the tint, never the solid color.)
+  for (const d of result)
+    if (d.sequence)
+      for (const o of d.options)
+        for (const [k, st] of o.entries()) {
+          const t = tinted.find(
+            ([was]) =>
+              was.thing === st.thing &&
+              was.on === st.on &&
+              String(was.value) === String(st.value) &&
+              (was.state ?? '') === (st.state ?? '') &&
+              (was.when ?? '') === (st.when ?? '') &&
+              (was.mode ?? '') === (st.mode ?? ''),
+          );
+          if (t) o[k] = t[1];
+        }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides
