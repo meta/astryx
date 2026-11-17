@@ -291,11 +291,22 @@
  */
 
 /**
+ * One result of a plain-words question (`data.results`, `kind: 'question'`).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditHowResult
+ * @property {string} text - What the result does, or why it does nothing.
+ * @property {string[]} commands - The commands, each checked as `set` checks it.
+ * @property {boolean} [sequence] - Run every command in order.
+ * @property {Array<{command: string, why: string, run?: string[]}>} [refused] - Commands left out, with the reason.
+ * @property {boolean} [offer] - More than the ask (a colored variant changed too): never first, never the answer itself.
+ */
+
+/**
  * `astryx --json experimental theme editor how <subject>`. `kind` says which answer it is.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditHowResponse
  * @property {'themeEdit.how'} type
- * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, [key: string]: any}} data
+ * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, results?: ThemeEditHowResult[], [key: string]: any}} data
  */
 
 export {};

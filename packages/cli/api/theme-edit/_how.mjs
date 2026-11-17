@@ -917,7 +917,7 @@ export function questionOnly(q) {
  * @param {import('./_how-question.mjs').Draft[]} drafts
  */
 function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>, offer?: boolean}>} */
   const out = [];
   // The measured check runs first on the drafts that carry what their
   // clause asks; a draft that joins them ("all of it, in order") then keeps
@@ -1053,6 +1053,24 @@ function finish(env, drafts) {
       out.push({text: d.text, commands: lookups});
       continue;
     }
+    // (What the ask writes is in place already: said so, first, with no
+    // command, so an offer beside it is never taken for the answer.)
+    if (
+      !commands.length &&
+      d.options.length &&
+      !d.offer &&
+      refused.length &&
+      refused.every(r => /^it changes nothing/.test(r.why))
+    ) {
+      const steps = d.options[0];
+      const values = [...new Set(steps.map(st => String(st.value)))];
+      const parts = [...new Set(steps.map(st => st.on).filter(Boolean))];
+      out.push({
+        text: `already ${values.join(', ')}${parts.length ? ` on the ${parts.join(', ')}` : ''} in ${env.slug}, nothing to change (${d.text})`,
+        commands: lookups,
+      });
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
@@ -1069,6 +1087,7 @@ function finish(env, drafts) {
       commands: [...commands, ...lookups],
       ...(d.sequence && commands.length ? {sequence: true} : {}),
       ...(refused.length ? {refused} : {}),
+      ...(d.offer ? {offer: true} : {}),
     });
   }
   if (!env.exists && out.some(r => r.commands.some(c => / set /.test(c))))
@@ -1080,8 +1099,16 @@ function finish(env, drafts) {
   // Changes first; a lookup ("how card") after the commands that change.
   const changes = (/** @type {{commands: string[]}} */ r) =>
     r.commands.some(c => / editor (set|undo|new) /.test(c)) ? 0 : 1;
+  // An offer, more than the ask, is never first or the answer: it follows
+  // every other result; left alone, a first line says the ask itself
+  // writes nothing here.
+  const offered = (/** @type {{offer?: boolean}} */ r) => (r.offer ? 1 : 0);
+  // (Its words first, with no command: "the mode the app shows first is
+  // set where it renders the theme"; the line it offers follows.)
+  if (out.length && out.every(r => r.offer))
+    out.unshift({text: out[0].text, commands: []});
   return out
-    .sort((a, b) => changes(a) - changes(b))
+    .sort((a, b) => offered(a) - offered(b) || changes(a) - changes(b))
     .filter(r => {
       const k = `${r.text}\n${r.commands.join('\n')}`;
       if (seen.has(k)) return false;

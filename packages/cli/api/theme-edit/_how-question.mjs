@@ -92,7 +92,7 @@ import {render as renderStep} from './_how-commands.mjs';
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean}} Draft
  */
 
 /**
@@ -7179,7 +7179,7 @@ export function draftAnswer(ctx, env, question) {
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
     const subject =
-      /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
+      /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary|success|warning|danger|error|info|destructive)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
         c.text,
       );
     const bare =
@@ -7443,11 +7443,6 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       return 'theme';
-    // A text color: the part's, when it holds text.
-    if (own.every(a => a === 'text'))
-      return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
-        ? 'inherit'
-        : 'theme';
     // ("dark cards #1c1c1e, popovers #2c2c2e, and subtle borders": after a
     // list of several parts, a look with no subject of its own is the
     // theme's, never the last part's.)
@@ -7464,6 +7459,11 @@ export function draftAnswer(ctx, env, question) {
       }
       if (named.size > 1) return 'theme';
     }
+    // A text color: the part's, when it holds text.
+    if (own.every(a => a === 'text'))
+      return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
+        ? 'inherit'
+        : 'theme';
     if (j.list === 'with' || j.sep === 'and') return 'inherit';
     return 'theme';
   };
@@ -10610,7 +10610,12 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:(?:in\s+)?(?:both|all)\s+modes|every\s+mode|everywhere|light\s+and\s+dark|dark\s+and\s+light)\b/i.test(
         `${c.text} ${question}`,
       ) ||
-      question.toLowerCase().includes(String(color).toLowerCase())
+      question.toLowerCase().includes(String(color).toLowerCase()) ||
+      // (A theme the ask keeps to one mode, "…, dark mode only": the color
+      // as said, in that mode; there is no other page to keep readable.)
+      /\b(?:dark|light)(?:[- ]mode)?[- ]only\b|\bonly (?:a )?(?:dark|light)(?: mode)?\b/i.test(
+        question,
+      )
     )
       return null;
     if (!parseColor(color)) return null;
@@ -12131,6 +12136,7 @@ export function draftAnswer(ctx, env, question) {
           : {}
       ),
       ...(input.unmet ? {unmet: input.unmet} : {}),
+      ...(d.offer || input.offer ? {offer: true} : {}),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -13000,6 +13006,21 @@ export function draftAnswer(ctx, env, question) {
     c.text = m[1];
     c.colors = colorsIn(m[1].toLowerCase());
     c.lengths = lengthsIn(m[1]);
+    // (A side the look is drawn on, "a 1px bottom border", is the side it
+    // turns on too: what it turns into joins the state's look after it on
+    // that side, one border there, never every side.)
+    const side = sideOf(m[1]);
+    if (
+      side &&
+      !sideOf(next.text) &&
+      !lex.parts.some(([re]) => re.test(` ${next.text.toLowerCase()} `)) &&
+      next.aspects.every(x => x === 'border' || x === 'size')
+    ) {
+      next.text = `${next.text} ${m[2]} ${side} border`;
+      next.colors = [...turned.colors, ...next.colors];
+      next.aspects = ['border'];
+      continue;
+    }
     joinOf.set(turned, {sep: 'and', list: joinOf.get(c)?.list ?? null});
     clauses.splice(i + 1, 0, turned);
     i++;
@@ -13054,6 +13075,37 @@ export function draftAnswer(ctx, env, question) {
       c.aspects = ['background'];
       c.text = c.text.replace(/\bopacity\s+(\d*\.?\d+)/, 'background alpha $1');
     }
+  // ("nav bar translucent white", "a translucent nav bar": translucent with
+  // no amount said of a part with a fill is that fill, the color asked or
+  // its own, partly see-through, never dropped.)
+  for (const c of clauses)
+    if (
+      c.parts.length &&
+      /\b(?:translucent|frosted)\b/.test(c.text) &&
+      !/\b(?:opacity|alpha)\b|\d\s?%/.test(c.text) &&
+      !/\b(?:whole|entire|everything|text|labels?|fade|blur)\b/.test(c.text) &&
+      c.parts.every(
+        p =>
+          (C.partReads(FAMILIES[p.on]?.[0] ?? p.on, 'background') ?? [])
+            .length > 0,
+      ) &&
+      (!c.aspects.length || c.aspects.every(x => x === 'background'))
+    ) {
+      c.aspects = ['background'];
+      const said = c.text.replace(/\b(?:translucent|frosted)\b/g, ' ');
+      // (A color asked is that color at 80%; with none, the part's own fill.)
+      if (c.colors.length) {
+        // (A light color is the light mode's, as a plain light fill is: on
+        // the dark page its text would not read.)
+        const rgb = parseColor(String(c.colors[0]));
+        if (!c.mode && rgb && relLum(rgb) > 0.5) c.mode = 'light';
+        c.colors = [`color-mix(in srgb, ${c.colors[0]} 80%, transparent)`];
+        c.text = `${said} background ${c.colors[0]}`
+          .replace(/\s+/g, ' ')
+          .trim();
+      } else
+        c.text = `${said} background alpha 0.8`.replace(/\s+/g, ' ').trim();
+    }
   // ("checkboxes 16px": a bare length said of a part that sets its own
   // width and height, and reads no size token, is its size.)
   for (const c of clauses)
@@ -13071,13 +13123,32 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       c.aspects = ['size'];
-  // ("checkboxes 16px with 3px corners": a part with a bare length, its
-  // look said only in its with-item, is its size, never the with-item's
-  // look twice.)
+  // ("footnotes 13px", "captions 13px": a bare length said of a text
+  // style, a part that is only text, is its text size.)
+  for (const c of clauses)
+    if (
+      c.parts.length &&
+      !c.aspects.length &&
+      c.lengths.length === 1 &&
+      !c.colors.length &&
+      c.parts.every(p => Boolean(p.role) || textOnlyPart(p.on))
+    )
+      c.aspects = ['fontsize'];
+  // ("checkboxes 16px with 3px corners", "checkboxes 18px, 4px corners": a
+  // part with a bare length, its look said only in the item after it, is
+  // its size, never that item's look twice.)
   for (let i = 0; i + 1 < clauses.length; i++) {
     const [c, b] = [clauses[i], clauses[i + 1]];
     if (
-      joinOf.get(b)?.sep === 'with' &&
+      (joinOf.get(b)?.sep === 'with' ||
+        (joinOf.get(b)?.sep === 'comma' &&
+          !lex.parts.some(([re]) => re.test(` ${b.text.toLowerCase()} `)) &&
+          ['width', 'height'].every(k =>
+            Object.hasOwn(
+              C.MAP[FAMILIES[c.parts[0]?.on]?.[0] ?? c.parts[0]?.on]?.at ?? {},
+              k,
+            ),
+          ))) &&
       c.parts.length &&
       c.lengths.length === 1 &&
       !c.colors.length &&
@@ -24057,6 +24128,9 @@ export function draftAnswer(ctx, env, question) {
       return {
         text: `the mode the app shows first is set where it renders the theme: <Theme mode="${w}"> (its default, "system", follows the device), and the theme keeps both modes for the switch; for a theme that is only ever ${w}, the line below: mode ${w}-only`,
         options: [[set('mode', `${w}-only`)]],
+        // (The mode shown first is no change to the theme: the line that
+        // drops the other mode is more than the ask, offered.)
+        offer: true,
       };
     }
     if (
@@ -25128,6 +25202,10 @@ export function draftAnswer(ctx, env, question) {
   const superseded = [];
   /** Steps folded into a later one's box-shadow layers. @type {Step[]} */
   const layered = [];
+  // (An offer, more than the ask, never joins the whole.)
+  for (let i = tops.length - 1; i >= 0; i--)
+    if (drafts.some(d => d.offer && d.options.includes(tops[i].steps)))
+      tops.splice(i, 1);
   for (const {clause, steps} of tops)
     for (const [k, st] of steps.entries()) {
       // A step one clause repeats ("2 steps rounder": the dial stepped
@@ -26934,6 +27012,8 @@ export function draftAnswer(ctx, env, question) {
           keptLines.push({
             text: `to change the ${colored.join(', ')} ${name} variants too: one line for each`,
             options: colored.map(v => [{...st, when: `variant:${v}`}]),
+            // (More than the ask: offered, never the answer itself.)
+            offer: true,
           });
       }
     }
@@ -27873,6 +27953,7 @@ export function draftAnswer(ctx, env, question) {
   // said.)
   {
     const only = result
+      .filter(d => !d.offer)
       .flatMap(d => d.options.flat())
       .find(
         st =>
@@ -27895,10 +27976,40 @@ export function draftAnswer(ctx, env, question) {
   }
   // Every clause ends as a command or a named line, never silence: a
   // clause no answer took (no line drafted for it, none of its colors or
-  // lengths written, not quoted by a line that refuses it) is named.
-  if (!gateAll && clauses.length > 1) {
+  // lengths written, not quoted by a line that refuses it) is named; and a
+  // value typed in the ask (a hex, a length) that no line writes or names,
+  // whatever reader folded its words away ("…, hover #0055CC, pressed
+  // #09326C", "… #E9E9EA when off"), is named in the words as typed.
+  if (!gateAll) {
     const steps = result.flatMap(d => d.options.flat());
     const texts = result.map(d => d.text.toLowerCase()).join('\n');
+    const vals = steps.map(st => String(st.value ?? '').toLowerCase());
+    const writtenColors = vals.flatMap(v =>
+      (v.match(/#[0-9a-f]{3,8}\b/g) ?? []).map(h => String(parseColor(h))),
+    );
+    /** @param {string} v */
+    const usedValue = v => {
+      if (texts.includes(v)) return true;
+      if (v.startsWith('#'))
+        return writtenColors.includes(String(parseColor(v)));
+      const n = /^-?(\d*\.?\d+)/.exec(v)?.[1];
+      return vals.some(
+        x =>
+          x.includes(v) ||
+          (n != null &&
+            new RegExp(`(?<![\\d.])${n.replace('.', '\\.')}(?![\\d])`).test(x)),
+      );
+    };
+    /** @type {string[]} */
+    const named = [];
+    for (const seg of raw0.split(/[,;\n]|\band\b|\bthen\b/i)) {
+      const words = seg.trim();
+      const typed = [
+        ...(words.toLowerCase().match(/#[0-9a-f]{3,8}\b/g) ?? []),
+        ...lengthsIn(words.toLowerCase()),
+      ];
+      if (typed.length && typed.some(v => !usedValue(v))) named.push(words);
+    }
     const taken = new Set(
       result.map(d => draftClause.get(d)).filter(x => x != null),
     );
@@ -27914,18 +28025,35 @@ export function draftAnswer(ctx, env, question) {
         )
       )
         return false;
-      const vals = steps.map(st => String(st.value ?? '').toLowerCase());
+      // ("in dark mode, cards …": a mode the other lines carry is used.)
+      const modeOnly =
+        /^(?:(?:in|for|on)\s+)?(?:the\s+)?(dark|light)(?:[- ]mode)?$/.exec(t);
+      if (modeOnly && steps.some(st => st.mode === modeOnly[1])) return false;
       if (
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
         )
       )
         return false;
+      // (Named already in the words as typed.)
+      if (
+        [...c.colors, ...c.lengths].length &&
+        named.some(w =>
+          [...c.colors, ...c.lengths].some(v =>
+            w.toLowerCase().includes(String(v).toLowerCase()),
+          ),
+        )
+      )
+        return false;
       return true;
     });
-    if (silent.length)
+    const lines = [
+      ...named.map(w => `"${w}"`),
+      ...(clauses.length > 1 ? silent.map(c => `"${c.text.trim()}"`) : []),
+    ];
+    if (lines.length)
       result.push({
-        text: `not used: ${silent.map(c => `"${c.text.trim()}"`).join(', ')}: no setting reads ${silent.length > 1 ? 'these' : 'this'} as said; say ${silent.length > 1 ? 'each' : 'it'} as a part and a look ("12px text on cards"), or look the setting up (how --list dials)`,
+        text: `not used: ${lines.join(', ')}: no setting reads ${lines.length > 1 ? 'these' : 'this'} as said; say ${lines.length > 1 ? 'each' : 'it'} as a part and a look ("12px text on cards"), or look the setting up (how --list dials)`,
         options: [],
       });
   }
