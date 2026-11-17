@@ -297,10 +297,17 @@ export default function Page() {
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(
-        ['experimental', 'render', 'src/counter.tsx', flag],
+        ['--json', 'experimental', 'render', 'src/counter.tsx', flag],
         dir,
       );
       expect(refused.status, flag).toBe(1);
+      const error = JSON.parse(refused.stdout);
+      expect(error.code, flag).toBe('ERR_INVALID_ARGUMENT');
+      expect(error.error, flag).toBe(
+        `${flag} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
+      );
+      const help = await runCli(['experimental', 'render', '--help'], dir);
+      expect(help.stdout).not.toContain(flag);
     }
   }, 120_000);
 

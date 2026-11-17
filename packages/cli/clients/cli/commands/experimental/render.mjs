@@ -18,7 +18,9 @@ import {shellArg} from '../../../../foundation/text/shell-arg.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {emit, section, text, record, list} from '../../formatters/index.mjs';
+import {Option} from 'commander';
 import {cliError} from '../../lib/cli-error.mjs';
+import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
 import {doc as renderCommand} from '../experimental-render.doc.mjs';
@@ -33,13 +35,20 @@ const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
  * @param {import('commander').Command} program the root program
  */
 export function registerExperimentalRender(group, program) {
-  defineCommand(group, renderCommand, {
+  const command = defineCommand(group, renderCommand, {
     fn: renderFn,
     action: async (
       /** @type {string | undefined} */ file,
-      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean}} */ options,
+      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean, static?: boolean, interactive?: boolean}} */ options,
     ) => {
       const json = program.opts().json || false;
+      const removed = options.static ? '--static' : options.interactive ? '--interactive' : null;
+      if (removed) {
+        return cliError(
+          `${removed} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
+          {code: ERROR_CODES.ERR_INVALID_ARGUMENT},
+        );
+      }
       /** @type {Awaited<ReturnType<typeof renderApi>>} */
       let result;
       try {
@@ -153,4 +162,10 @@ export function registerExperimentalRender(group, program) {
       return answered;
     },
   });
+  // Flags older docs and agents still pass. Every render carries the page's
+  // script now, so each is refused with what to do instead, not as an unknown
+  // option.
+  for (const flag of ['--static', '--interactive']) {
+    command.addOption(new Option(flag).hideHelp());
+  }
 }
