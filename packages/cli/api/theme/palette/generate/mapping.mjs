@@ -8,9 +8,9 @@
  *   candidate, the base theme's resolved colors, and optional exact settings
  * @output The generation request for the seeds, and each color token's stop
  *   in light and dark with the contrast checks behind each choice
- * @position The theme editor's palette-to-token mapping for a palette made
- *   from color settings. `themePalette()` runs it; the CLI holds a
- *   generated copy, which a test keeps equal to the editor's own mapping
+ * @position The palette-to-token mapping for a palette made from color
+ *   settings. `themePalette()` runs it, and the CLI theme editor runs its
+ *   generated copy
  */
 import {hexToOklch, luminance, normalizeColor} from './color.mjs';
 import {
@@ -356,7 +356,7 @@ export const NEUTRAL_STOPS = ownTable({
  * Neutral tokens whose shade stays inside the ramp, off its white and black ends.
  * @type {ReadonlyArray<string>}
  */
-const NEUTRAL_INSIDE = Object.freeze(['--color-background-inverted']);
+export const NEUTRAL_INSIDE = Object.freeze(['--color-background-inverted']);
 /**
  * Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`.
  * @type {Record< string, [[number, string], [number, string]] >}
@@ -384,15 +384,15 @@ export const NEUTRAL_TINTS = ownTable(
  * dark fill starts at 70 when the exact color does not read in dark. A
  * status tint is translucent in dark (`[stop, alpha]`).
  */
-const DARK_FILL = 70;
-const TEXT_STOP = officialStops('--color-text-info');
-const ACCENT_MUTED = officialStops('--color-accent-muted');
-const STATUS_MUTED = /** @type {[number, [number, string]]} */ (
+export const DARK_FILL = 70;
+export const TEXT_STOP = officialStops('--color-text-info');
+export const ACCENT_MUTED = officialStops('--color-accent-muted');
+export const STATUS_MUTED = /** @type {[ number, [number, string], ]} */ (
   (OFFICIAL_NEUTRAL_STOPS['--color-info-muted'] ?? []).map((x, i) =>
     i === 0 ? x.stop : [x.stop, String(x.alpha)],
   )
 );
-const ON_MUTED = officialStops('--color-on-info-muted');
+export const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official Neutral theme lifts, with
  * the block it lifts it in and what the text sits on: the accent tint,
@@ -424,7 +424,7 @@ function liftGround(part, block) {
  * What each lifted background is, and the parts on it, for notes.
  * @type {Record<string, {what: string; parts: string}>}
  */
-const LIFT_GROUNDS = {
+export const LIFT_GROUNDS = {
   '--color-accent-muted': {
     what: 'the accent tint',
     parts: 'selected items and rows, a dropzone, numbered citations',
@@ -443,7 +443,7 @@ const LIFT_GROUNDS = {
 /**
  * @type {[number, number]}
  */
-const BORDER = [80, 65];
+export const BORDER = [80, 65];
 /**
  * Text on a fill, from the neutral family as the official themes take it:
  * white (100) first in light, near-black (5) first in dark, and near-black
@@ -453,7 +453,7 @@ const [ON_LIGHT, ON_DARK] = officialStops('--color-on-accent');
 /**
  * @type {Record<PaletteMode, [number, number]>}
  */
-const ON_FILL = ownTable({
+export const ON_FILL = ownTable({
   light: [ON_LIGHT, ON_DARK],
   dark: [ON_DARK, ON_LIGHT],
 });
@@ -461,7 +461,7 @@ const ON_FILL = ownTable({
  * Text on surfaces darkens in light mode and lightens in dark mode.
  * @type {Record<PaletteMode, 1 | -1>}
  */
-const TOWARD_CONTRAST = ownTable({
+export const TOWARD_CONTRAST = ownTable({
   light: -1,
   dark: 1,
 });
@@ -616,7 +616,7 @@ export function grownGrays(seed, m) {
   }
 }
 /** A text shade, named for a sentence. */
-const textName =
+export const textName =
   /**
    * @param {StopRef} r
    * @returns {string}

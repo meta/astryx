@@ -136,7 +136,6 @@ import {
 } from './themeAdaptations';
 
 import type {DomainTokenName} from './domainTokens';
-import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
 import {deepMergeComponents} from './mergeComponents';
 import {tokenDefaults} from './tokenDefaults';
 import type {SyntaxThemeDefinition} from './syntax';

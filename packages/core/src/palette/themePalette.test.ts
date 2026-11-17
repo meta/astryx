@@ -14,7 +14,20 @@ import {describe, expect, it} from 'vitest';
 import {defineTheme, tokenDefaults} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {resolveThemeTokens} from '../theme/tokens';
-import {PALETTE_RECIPE, PALETTE_RECIPE_V2} from './generator';
+import {
+  PALETTE_RECIPE,
+  PALETTE_RECIPE_V2,
+  generateTonalPalette,
+} from './generator';
+import {
+  LIFT_PARTS,
+  PALETTE_DIALS,
+  hex,
+  mapPalette,
+  planPaletteRequest,
+  type PaletteMappingContext,
+} from './mapping';
+import {parseColor} from '../utils/color';
 import {themePalette} from './themePalette';
 import type {ThemePaletteInput} from './types';
 
@@ -177,6 +190,95 @@ describe('themePalette', () => {
     [{accent: '#5b3cc4', primary: '#000'}, '"primary" is not a palette key'],
   ])('refuses %j, saying what to fix', (input, words) => {
     expect(() => themePalette(input as ThemePaletteInput)).toThrow(words);
+  });
+});
+
+describe("themePalette's reading of Core's defaults", () => {
+  // The palette reads Core's defaults without the theme runtime. Measured
+  // against the defaults as `defineTheme` and `resolveThemeTokens` give
+  // them, every palette comes out the same.
+  const theme = defineTheme({name: 'astryx-defaults'});
+  const context: PaletteMappingContext = {
+    base: {
+      light: resolveThemeTokens(theme, {mode: 'light'}),
+      dark: resolveThemeTokens(theme, {mode: 'dark'}),
+      components: theme.components ?? {},
+    },
+    has: token => Object.hasOwn(tokenDefaults, token),
+    reader: {
+      rgb: value => {
+        const read = typeof value === 'string' ? parseColor(value) : null;
+        return read ? [read.r, read.g, read.b] : null;
+      },
+      alpha: value =>
+        typeof value !== 'string'
+          ? 1
+          : /^transparent$/i.test(value.trim())
+            ? 0
+            : (parseColor(value)?.a ?? 1),
+    },
+  };
+
+  it('gives the same palette for 300 random inputs', () => {
+    const {next, color} = seeded(300);
+    for (let i = 0; i < 300; i++) {
+      const input: Record<string, string | number> = {};
+      for (const d of DIALS) {
+        if (next() < 0.5) {
+          input[d] = color();
+        }
+      }
+      if (!Object.keys(input).length) {
+        input.accent = color();
+      }
+      if (next() < 0.4) {
+        input.vibrancy = Math.floor(next() * 101);
+      }
+      const recipe = next() < 0.5 ? PALETTE_RECIPE_V2 : PALETTE_RECIPE;
+      const palette = themePalette({...input, recipe} as ThemePaletteInput);
+      const dials = PALETTE_DIALS.filter(d => input[d] !== undefined).map(
+        id => {
+          const read = parseColor(String(input[id]));
+          return {id, seed: hex(read ? [read.r, read.g, read.b] : [])};
+        },
+      );
+      const plan = planPaletteRequest(
+        dials,
+        {
+          recipe,
+          vibrancy:
+            input.vibrancy === undefined ? undefined : Number(input.vibrancy),
+        },
+        context,
+      );
+      if (!plan) {
+        throw new Error('no plan');
+      }
+      const mapping = mapPalette(
+        generateTonalPalette(plan.config as never),
+        dials,
+        plan.fills,
+        context,
+      );
+      const tokens = Object.fromEntries(
+        Object.entries(mapping.tokens).map(([token, {light, dark}]) => [
+          token,
+          [light.color, dark.color],
+        ]),
+      );
+      expect(palette.tokens, JSON.stringify(input)).toEqual(tokens);
+      for (const [part, block, ground] of LIFT_PARTS) {
+        const lifted = mapping.lift?.[ground];
+        expect(palette.components[part]?.[block], `${part} ${block}`).toEqual(
+          lifted?.light && lifted.dark
+            ? {
+                '@light': {'--color-text-secondary': lifted.light.color},
+                '@dark': {'--color-text-secondary': lifted.dark.color},
+              }
+            : undefined,
+        );
+      }
+    }
   });
 });
 

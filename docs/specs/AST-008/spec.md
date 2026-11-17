@@ -267,9 +267,10 @@ TypeScript declaration metadata is not executable runtime behavior.
 - **FR20 — One engine, generated into the CLI.** The engine and the palette
   mapping have one source, in Core. The CLI runs a copy generated from that
   source, so `astryx theme palette generate` keeps working with no Core
-  installed or with an older one. A test fails when the copy differs from
-  what the source generates by one byte, and when the copy and Core give
-  different output for the same request.
+  installed or with an older one. The theme editor runs the same generated
+  mapping. A test fails when the copy differs from what the source generates
+  by one byte, and when the copy and Core give different output for the same
+  request.
 
 ## Deprecation lifecycle
 
@@ -376,6 +377,13 @@ approval for one id does not authorize removal of another.
 6. Focused agent fixtures cover anchor language, optional accents, clarification,
    and custom stops. Expected decisions remain evaluation-only and MUST NOT be
    included in prompts sent to agents.
+7. The palette input measures against Core's default token values, read from
+   `theme/tokenDefaults.ts` (every token's default) and `theme/tokenValues.ts`
+   (a value for one mode, with references and color functions resolved).
+   `resolveThemeTokens` reads defaults through the same two modules. They
+   import no theme compiler, so `@astryxdesign/core/palette` holds no module
+   state and is safe in a server component; `theme/tokens.ts` alone is not,
+   because it imports the theme compiler and its caches.
 
 ### `astryx-oklch-v1` normative recipe
 
@@ -582,8 +590,8 @@ vibrancy, recipe})` to `defineTheme({palette})` (FR19). The palette input is
 its own Core entry, so the generator ships only to apps that import it (FR13).
 `defineTheme` receives the resolved tokens, not palette metadata, and explicit
 `tokens` override them one by one. The mapping is the CLI theme editor's, so a
-theme made in the editor and one made with the same seeds in code get the same
-colors. A released recipe never changes. A recipe is fixed from the first
+theme made in the editor and one made in code with the same seeds and the same
+recipe get the same colors. A released recipe never changes. A recipe is fixed from the first
 package release that ships it, whether a CLI release or a Core release of this
 input, so `astryx-oklch-v2` is fixed and later tuning is a new recipe,
 `astryx-oklch-v3`.

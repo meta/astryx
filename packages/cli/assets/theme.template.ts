@@ -150,6 +150,14 @@ export const myTheme = defineTheme({
   // color: {accent: '#0064E0', neutralStyle: 'cool', contrast: 'standard'},
 
   /**
+   * Or take the color tokens from a few seeds: `themePalette()` from
+   * `@astryxdesign/core/palette` maps them as the theme editor maps its color
+   * settings, and explicit `tokens` still win, token by token. Name the
+   * recipe: a palette with none runs the first one, `astryx-oklch-v1`.
+   */
+  // palette: themePalette({accent: '#0064E0', recipe: 'astryx-oklch-v2'}),
+
+  /**
    * Type scale and the three font roles.
    *   scale.base   body size in px; scale.ratio  step between sizes
    *                (1.125 tight/dense · 1.2 default · 1.333 dramatic)

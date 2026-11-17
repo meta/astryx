@@ -6,9 +6,9 @@
  *   candidate, the base theme's resolved colors, and optional exact settings
  * @output The generation request for the seeds, and each color token's stop
  *   in light and dark with the contrast checks behind each choice
- * @position The theme editor's palette-to-token mapping for a palette made
- *   from color settings. `themePalette()` runs it; the CLI holds a
- *   generated copy, which a test keeps equal to the editor's own mapping
+ * @position The palette-to-token mapping for a palette made from color
+ *   settings. `themePalette()` runs it, and the CLI theme editor runs its
+ *   generated copy
  */
 
 import {hexToOklch, luminance, normalizeColor} from './color';
@@ -315,7 +315,7 @@ export const NEUTRAL_STOPS: Record<string, [number, number]> = ownTable({
   ].reverse() as [number, number],
 });
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
-const NEUTRAL_INSIDE: ReadonlyArray<string> = Object.freeze([
+export const NEUTRAL_INSIDE: ReadonlyArray<string> = Object.freeze([
   '--color-background-inverted',
 ]);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
@@ -341,13 +341,16 @@ export const NEUTRAL_TINTS: Record<
  * dark fill starts at 70 when the exact color does not read in dark. A
  * status tint is translucent in dark (`[stop, alpha]`).
  */
-const DARK_FILL = 70;
-const TEXT_STOP = officialStops('--color-text-info');
-const ACCENT_MUTED = officialStops('--color-accent-muted');
-const STATUS_MUTED = (OFFICIAL_NEUTRAL_STOPS['--color-info-muted'] ?? []).map(
-  (x, i) => (i === 0 ? x.stop : [x.stop, String(x.alpha)]),
-) as [number, [number, string]];
-const ON_MUTED = officialStops('--color-on-info-muted');
+export const DARK_FILL = 70;
+export const TEXT_STOP = officialStops('--color-text-info');
+export const ACCENT_MUTED = officialStops('--color-accent-muted');
+export const STATUS_MUTED = (
+  OFFICIAL_NEUTRAL_STOPS['--color-info-muted'] ?? []
+).map((x, i) => (i === 0 ? x.stop : [x.stop, String(x.alpha)])) as [
+  number,
+  [number, string],
+];
+export const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official Neutral theme lifts, with
  * the block it lifts it in and what the text sits on: the accent tint,
@@ -373,7 +376,7 @@ function liftGround(part: string, block: string): string {
   return color ? `--color-background-${color}` : '--color-accent-muted';
 }
 /** What each lifted background is, and the parts on it, for notes. */
-const LIFT_GROUNDS: Record<string, {what: string; parts: string}> = {
+export const LIFT_GROUNDS: Record<string, {what: string; parts: string}> = {
   '--color-accent-muted': {
     what: 'the accent tint',
     parts: 'selected items and rows, a dropzone, numbered citations',
@@ -389,19 +392,19 @@ const LIFT_GROUNDS: Record<string, {what: string; parts: string}> = {
     }),
   ),
 };
-const BORDER: [number, number] = [80, 65];
+export const BORDER: [number, number] = [80, 65];
 /**
  * Text on a fill, from the neutral family as the official themes take it:
  * white (100) first in light, near-black (5) first in dark, and near-black
  * first in both modes on warning. Without a neutral color, black and white.
  */
 const [ON_LIGHT, ON_DARK] = officialStops('--color-on-accent');
-const ON_FILL: Record<PaletteMode, [number, number]> = ownTable({
+export const ON_FILL: Record<PaletteMode, [number, number]> = ownTable({
   light: [ON_LIGHT, ON_DARK],
   dark: [ON_DARK, ON_LIGHT],
 });
 /** Text on surfaces darkens in light mode and lightens in dark mode. */
-const TOWARD_CONTRAST: Record<PaletteMode, 1 | -1> = ownTable({
+export const TOWARD_CONTRAST: Record<PaletteMode, 1 | -1> = ownTable({
   light: -1,
   dark: 1,
 });
@@ -534,7 +537,7 @@ export function grownGrays(
 }
 
 /** A text shade, named for a sentence. */
-const textName = (r: StopRef): string =>
+export const textName = (r: StopRef): string =>
   r.family === 'white' || (r.family === 'neutral' && r.stop >= 95)
     ? 'white'
     : r.family === 'black' || (r.family === 'neutral' && r.stop <= 10)
