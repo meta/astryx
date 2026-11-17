@@ -322,6 +322,8 @@ describe('DropdownMenu', () => {
 
   it('shows a disabled item reason in the bottom-sheet row', async () => {
     const user = userEvent.setup();
+    const reasonText =
+      'This export is unavailable because the project has no exportable rows yet.';
 
     render(
       <DropdownMenu
@@ -331,7 +333,7 @@ describe('DropdownMenu', () => {
           {
             label: 'Export CSV',
             isDisabled: true,
-            disabledMessage: 'There is nothing to export',
+            disabledMessage: reasonText,
           },
         ]}
       />,
@@ -339,8 +341,12 @@ describe('DropdownMenu', () => {
 
     await user.click(screen.getByRole('button', {name: /Project actions/}));
 
-    const reason = screen.getByText('There is nothing to export');
+    // A rich description node opts out of ListItem's default one-line string
+    // truncation, so a reason can wrap instead of disappearing behind an
+    // ellipsis in the sheet.
+    const reason = screen.getByText(reasonText);
     expect(reason.closest('li')).toHaveTextContent('Export CSV');
+    expect(reason.tagName).toBe('SPAN');
   });
 
   it('renders nothing of the sheet at rest and keeps it through its exit', async () => {
@@ -2438,6 +2444,7 @@ describe('DropdownMenu compound mode', () => {
           onClick={() => {}}
           isDisabled
           disabledMessage="There is nothing to export"
+          aria-describedby="export-hint"
         />
       </DropdownMenu>,
     );
@@ -2448,7 +2455,9 @@ describe('DropdownMenu compound mode', () => {
     });
     const describedBy = item.getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
-    expect(describedBy?.split(' ')).toHaveLength(1);
+    expect(describedBy?.split(' ')).toEqual(
+      expect.arrayContaining(['export-hint']),
+    );
 
     const realMatches = item.matches.bind(item);
     vi.spyOn(item, 'matches').mockImplementation((selector: string) =>
@@ -2458,6 +2467,7 @@ describe('DropdownMenu compound mode', () => {
     await waitFor(() => {
       const tooltip = screen.getByRole('tooltip', {hidden: true});
       expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(tooltip.closest('[role="menu"]')).toBeNull();
       expect(
         tooltip.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
       ).toBe(true);
@@ -3229,6 +3239,7 @@ describe('DropdownMenu data/compound parity', () => {
     await waitFor(() => {
       const tooltip = screen.getByRole('tooltip', {hidden: true});
       expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(tooltip.closest('[role="menu"]')).toBeNull();
       expect(
         tooltip.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
       ).toBe(true);

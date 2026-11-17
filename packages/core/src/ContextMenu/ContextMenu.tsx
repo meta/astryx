@@ -99,7 +99,6 @@ import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
 import type {
-  DropdownMenuOption,
   DropdownMenuItemData,
   DropdownMenuDividerData,
   DropdownMenuSection,
@@ -252,13 +251,21 @@ function keepAnchorInside(offset: number, size: number): number {
 // Types
 // =============================================================================
 
-export type ContextMenuItemData = DropdownMenuItemData;
+export type ContextMenuItemData = Omit<
+  DropdownMenuItemData,
+  'disabledMessage' | 'items'
+> & {
+  items?: ContextMenuOption[];
+};
 
 export type ContextMenuDividerData = DropdownMenuDividerData;
 
-export type ContextMenuSection = DropdownMenuSection;
+export type ContextMenuSection = Omit<DropdownMenuSection, 'items'> & {
+  items: ContextMenuItemData[];
+};
 
-export type ContextMenuOption = DropdownMenuOption;
+export type ContextMenuOption =
+  ContextMenuItemData | ContextMenuDividerData | ContextMenuSection;
 
 // =============================================================================
 // Props

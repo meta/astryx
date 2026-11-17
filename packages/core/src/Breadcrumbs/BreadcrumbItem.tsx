@@ -71,7 +71,7 @@ import {
   MENU_ITEM_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
 } from '../DropdownMenu/menuItemRoles';
-import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
+import type {BreadcrumbMenuOption} from './BreadcrumbMenuTypes';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
@@ -123,10 +123,10 @@ export interface BreadcrumbItemProps extends Omit<
    */
   startIcon?: ReactNode;
   /**
-   * Menu opened when the item is activated. Accepts the SAME item API as
-   * DropdownMenu / MoreMenu / ContextMenu, so a consumer's existing menu-item
-   * definitions are portable into a breadcrumb with no rewrite:
-   * - a `DropdownMenuOption[]` data array (items, sections, dividers), or
+   * Menu opened when the item is activated. Accepts the same menu-item shape as
+   * DropdownMenu / MoreMenu / ContextMenu. The breadcrumb data contract keeps
+   * `disabledMessage` scoped to DropdownMenu in this change:
+   * - a `BreadcrumbMenuOption[]` data array (items, sections, dividers), or
    * - composed `DropdownMenuItem` / `DropdownMenuCheckboxItem` /
    *   `DropdownMenuRadioGroup` children.
    *
@@ -136,7 +136,7 @@ export interface BreadcrumbItemProps extends Omit<
    * `useListFocus`. Takes precedence over `href` / `onClick` (which are
    * ignored when `menu` is set — a dev-time warning is logged).
    */
-  menu?: DropdownMenuOption[] | ReactNode;
+  menu?: BreadcrumbMenuOption[] | ReactNode;
   /**
    * Size passed to the menu items via `DropdownMenuContext` (item
    * padding/typography). Defaults from the breadcrumb variant:
@@ -522,7 +522,7 @@ interface BreadcrumbMenuTriggerProps {
   ref: React.Ref<HTMLElement>;
   /** The link-styled label content rendered inside the trigger button. */
   children: ReactNode;
-  menu: DropdownMenuOption[] | ReactNode;
+  menu: BreadcrumbMenuOption[] | ReactNode;
   menuSize: DropdownMenuSize;
   variant: BreadcrumbsVariant;
   isCurrent?: boolean;

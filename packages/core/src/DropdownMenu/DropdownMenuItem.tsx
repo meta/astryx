@@ -29,11 +29,13 @@
  */
 
 import {
+  use,
   useCallback,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {Item} from '../Item';
@@ -45,9 +47,12 @@ import {
   typeScaleVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {composeEventHandlers, mergeProps} from '../utils';
+import {composeEventHandlers, mergeIds, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {useDropdownMenuContext} from './DropdownMenuContext';
+import {
+  DropdownMenuSurfaceContext,
+  useDropdownMenuContext,
+} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
@@ -55,7 +60,7 @@ import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltip, type TooltipReturn} from '../Tooltip/useTooltip';
 
 const menuItemStyles = stylex.create({
   root: {
@@ -196,7 +201,34 @@ export interface DropdownMenuItemProps extends Omit<
  * </DropdownMenu>
  * ```
  */
-export function DropdownMenuItem({
+interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
+  disabledMessageTooltip?: TooltipReturn;
+}
+
+export function DropdownMenuItem(props: DropdownMenuItemProps) {
+  return props.isDisabled && !!props.disabledMessage ? (
+    <DropdownMenuItemWithDisabledMessage {...props} />
+  ) : (
+    <DropdownMenuItemRow {...props} />
+  );
+}
+
+function DropdownMenuItemWithDisabledMessage(props: DropdownMenuItemProps) {
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    focusTrigger: 'always',
+    isEnabled: true,
+  });
+
+  return (
+    <DropdownMenuItemRow
+      {...props}
+      disabledMessageTooltip={disabledMessageTooltip}
+    />
+  );
+}
+
+function DropdownMenuItemRow({
   icon,
   label,
   description,
@@ -216,24 +248,18 @@ export function DropdownMenuItem({
   'aria-describedby': ariaDescribedByProp,
   onPointerMove,
   onAuxClick,
+  disabledMessageTooltip,
   ...rest
-}: DropdownMenuItemProps) {
+}: DropdownMenuItemRowProps) {
   const ctx = useDropdownMenuContext();
+  const surface = use(DropdownMenuSurfaceContext);
+  const surfaceHost = surface?.host.getElement();
   const menuSize = ctx?.menuSize ?? 'md';
-  const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
-    placement: 'above',
-    focusTrigger: 'always',
-    isEnabled: showsDisabledMessage,
-  });
-  const ariaDescribedBy =
-    [
-      ariaDescribedByProp,
-      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
-    ]
-      .filter((id): id is string => id != null && id !== '')
-      .join(' ') || undefined;
-  const itemRef = useMergedRefs(ref, disabledMessageTooltip.ref);
+  const ariaDescribedBy = mergeIds(
+    ariaDescribedByProp,
+    disabledMessageTooltip?.describedBy,
+  );
+  const itemRef = useMergedRefs(ref, disabledMessageTooltip?.ref);
   // Item marks itself as a pressable surface too; naming the row here as well
   // keeps this file's own press arms (above) verifiably reachable by the
   // touch press controller (pressableCoverage.test.ts).
@@ -353,8 +379,13 @@ export function DropdownMenuItem({
           },
         )}
       />
-      {showsDisabledMessage &&
-        disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {disabledMessageTooltip != null &&
+        disabledMessage != null &&
+        surfaceHost != null &&
+        createPortal(
+          disabledMessageTooltip.renderTooltip(disabledMessage),
+          surfaceHost,
+        )}
     </>
   );
 }

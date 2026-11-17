@@ -93,16 +93,20 @@ export function MenuBottomSheetActionList({
     const isSubmenu = item.items != null && item.items.length > 0;
     const isDestructive = item.variant === 'destructive';
     const isLink = !isSubmenu && item.href != null;
+    const disabledReason =
+      item.isDisabled && isRenderable(item.disabledMessage) ? (
+        <span>{item.disabledMessage}</span>
+      ) : null;
     const description =
-      item.isDisabled && item.disabledMessage != null ? (
+      disabledReason != null ? (
         isRenderable(item.description) ? (
           <>
             {item.description}
             <br />
-            {item.disabledMessage}
+            {disabledReason}
           </>
         ) : (
-          item.disabledMessage
+          disabledReason
         )
       ) : (
         item.description
