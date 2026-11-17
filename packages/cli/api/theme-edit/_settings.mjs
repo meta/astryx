@@ -10709,9 +10709,10 @@ export async function contrastProblems(ctx, data, res) {
         /^variant:/.test(onVariant) &&
         it.x.fgToken &&
         it.x.bgPart &&
-        it.problem.fix?.includes(` --on ${it.x.bgPart} --when ${onVariant}`)
+        (it.problem.fix == null ||
+          it.problem.fix.includes(` --on ${it.x.bgPart} --when ${onVariant}`))
       ) {
-        const k = `variants|${it.x.fgToken}|${it.x.fg}|${it.x.textPart ?? ''}|${it.x.bgPart}|${it.x.sample}|${it.x.mode}`;
+        const k = `variants|${it.x.fgToken}|${it.x.fg}|${it.x.textPart ?? ''}|${it.x.bgPart}|${it.x.sample}|${it.x.mode}|${it.problem.fix == null ? 'none' : 'lines'}`;
         if (!variants.has(k)) {
           variants.set(k, []);
           out.push(k);
@@ -10751,7 +10752,9 @@ export async function contrastProblems(ctx, data, res) {
             text: `text ("${x.sample}") in ${x.textPart ?? x.part} on ${names.length} ${x.bgPart} variants (${names.slice(0, 4).join(', ')}${names.length > 4 ? ` and ${names.length - 4} more` : ''}) is ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode} (${x.fg} on each variant's fill); text needs 4.5:1`,
             // (Each variant's own line: a line on the ground for every
             // variant does not reach the ones whose own rules set the text.)
-            fix: across.map(g => g.problem.fix).join(' && '),
+            fix: across.every(g => g.problem.fix)
+              ? across.map(g => g.problem.fix).join(' && ')
+              : null,
           },
         ];
       }
@@ -11814,6 +11817,9 @@ function floatingEdgeProblems(ctx, data, res, base) {
         !/^\s*(none|0 0 transparent)?\s*$/.test(read(shadowValue, t, mode));
       if (shadow) continue;
       const fillSet = last(t, /^background(-color)?$/, mode);
+      // (A part the theme fills is judged only in the modes its fill is
+      // set for: in the others it is drawn as the base draws it.)
+      if (!floats && !fillSet) continue;
       const fillValue = fillSet
         ? String(fillSet.value)
         : String(
@@ -11826,6 +11832,9 @@ function floatingEdgeProblems(ctx, data, res, base) {
       if (!fill || !page || alphaOf(read(fillValue, t, mode)) < 1) continue;
       const r = ratio(fill, page);
       if (r >= FLOATING_SHOWS) continue;
+      // A part filled exactly as the page (the app frame painted the page
+      // color) is meant to be the page: nothing to see by.
+      if (!floats && hex(fill) === hex(page)) continue;
       out.push(
         floats
           ? {
