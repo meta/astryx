@@ -56,6 +56,7 @@ import {
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
+import {stylesheetLinkHrefs} from './built-checks.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
@@ -461,18 +462,26 @@ function themeImportPairEvidence(root, generatedModule, themes) {
   return {unpaired, unproven};
 }
 
+/**
+ * A known font service's stylesheet URL, whose `family=` names the families
+ * it loads (Google Fonts, and Bunny Fonts, which serves the same API).
+ */
+const FONT_SERVICE_HREF =
+  /^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css2?\?/iu;
+
 /** The app's page files a font `<link>` goes in, in the order frameworks keep them. */
 const PAGE_HEAD_FILES = [
   'index.html',
   'public/index.html',
   'src/index.html',
-  'app/layout.tsx',
-  'app/layout.jsx',
-  'src/app/layout.tsx',
-  'src/app/layout.jsx',
-  'pages/_document.tsx',
-  'pages/_document.jsx',
-  'src/pages/_document.tsx',
+  ...[
+    'app/layout',
+    'src/app/layout',
+    'pages/_document',
+    'src/pages/_document',
+  ].flatMap(file =>
+    ['.tsx', '.jsx', '.js', '.mjs', '.ts'].map(ext => `${file}${ext}`),
+  ),
 ];
 
 /**
@@ -492,9 +501,8 @@ function pageFontLinks(projectDir) {
     const source = readTextFileIfExists(file);
     if (source == null) continue;
     head ??= name;
-    for (const m of source.matchAll(/<link\b[^>]*>/gi)) {
-      const href = /\bhref\s*=\s*\{?\s*["'`]([^"'`]+)["'`]/i.exec(m[0])?.[1];
-      if (!href || !/\bstylesheet\b/i.test(m[0])) continue;
+    for (const href of stylesheetLinkHrefs(source)) {
+      if (!FONT_SERVICE_HREF.test(href)) continue;
       for (const family of fontServiceFamilies(href)) families.add(family);
     }
   }

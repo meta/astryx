@@ -1737,6 +1737,54 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 reads a Next.js root layout, and never a commented link or a preload', async () => {
+    const layout = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(layout.dir, 'app/layout.js'),
+      'export default function RootLayout({children}) {\n  return (<html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans&display=swap" /></head><body>{children}</body></html>);\n}\n',
+    );
+    expect(
+      check(await checkAppThemes(layout.dir), 'theme-fonts'),
+    ).toMatchObject({
+      status: 'pass',
+    });
+
+    const commented = await fixture([
+      {slug: 'ocean', fontFamily: 'Ocean Sans'},
+    ]);
+    write(
+      path.join(commented.dir, 'index.html'),
+      '<!doctype html><html><head><!-- <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans" /> --><link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Ocean+Sans&stylesheet" /></head></html>\n',
+    );
+    expect(
+      check(await checkAppThemes(commented.dir), 'theme-fonts'),
+    ).toMatchObject({status: 'warn'});
+  });
+
+  it('check 9 counts only a known font service, and only the families it names', async () => {
+    const other = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(other.dir, 'index.html'),
+      '<!doctype html><html><head><link rel="stylesheet" href="https://example.com/css2?family=Ocean+Sans" /></head></html>\n',
+    );
+    expect(check(await checkAppThemes(other.dir), 'theme-fonts')).toMatchObject(
+      {
+        status: 'warn',
+      },
+    );
+
+    const wrong = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(wrong.dir, 'index.html'),
+      '<!doctype html><html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap" /></head></html>\n',
+    );
+    expect(check(await checkAppThemes(wrong.dir), 'theme-fonts')).toMatchObject(
+      {
+        status: 'warn',
+      },
+    );
+  });
+
   it('check 9 names the page file its font link goes in', async () => {
     const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     write(
