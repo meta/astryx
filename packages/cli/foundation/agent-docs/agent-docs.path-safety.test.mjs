@@ -1366,8 +1366,11 @@ describe('a tracked .claude/CLAUDE.md is committed, whatever the ignore files sa
   });
 });
 
-describe("init's exit-code help names every soft exit-0 case these tests pin", () => {
-  const exit0 = initDoc.exitCodes.find(entry => entry.code === 0)?.when ?? '';
+describe("init's docs (the exit-0 line and its notes) name every soft exit-0 case these tests pin", () => {
+  const exit0 = [
+    initDoc.exitCodes.find(entry => entry.code === 0)?.when ?? '',
+    ...(initDoc.notes ?? []).map(note => ('text' in note ? note.text : '')),
+  ].join('\n');
   it.each([
     ['the home or a settings folder', /home folder, or in a settings folder/u],
     [

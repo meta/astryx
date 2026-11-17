@@ -804,6 +804,16 @@ function printThemeList(
 function printThemeApp(result) {
   const {themes, default: defaultSlug, modulePath, change} = result.data;
   if (result.package !== undefined) emit(record({package: result.package}));
+  // A command that chooses the default says what it did, before the state
+  // it shares with every other receipt.
+  if (change.action === 'use')
+    emit(
+      text(
+        change.changed
+          ? `[ok] ${change.slug} is now the app's default theme: themes[defaultThemeSlug] is ${change.slug}.`
+          : `[ok] ${change.slug} was already the app's default theme; nothing changed.`,
+      ),
+    );
   emit(
     section('App themes', `${themes.length} added`),
     records(themes, {

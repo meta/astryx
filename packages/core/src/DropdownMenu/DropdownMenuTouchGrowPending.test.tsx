@@ -7,9 +7,10 @@
  * @output A finger's open that the layer holds until its trigger is a valid
  *   anchor still grows the menu when it opens. That holds for a trigger in a
  *   closed dialog that the page displays. It also holds for a trigger that
- *   gains its box later, even when a key is pressed before the open. Another
- *   press cancels the wait. A keyboard open that waits keeps the layer's own
- *   entrance.
+ *   gains its box later, even when a key is pressed before the open. A press
+ *   elsewhere before the open does not cancel it: the menu opens once that
+ *   press's release is handled, and still grows. A keyboard open that waits
+ *   keeps the layer's own entrance.
  * @position Unit coverage of DropdownMenu's touch grow decision for an open
  *   that waits; DropdownMenuTouchGrow.test.tsx covers opens that do not wait
  */
@@ -228,7 +229,7 @@ describe("DropdownMenu: a finger's open that waits for its trigger", () => {
     expect(motion.enter).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels a finger's open that waits when another press lands before it opens: nothing opens or grows", async () => {
+  it("keeps a finger's open that waits when another press lands before it opens: it opens after that press's release, and grows", async () => {
     const {trigger, gainBox} = renderBoxless();
     fireEvent.pointerDown(trigger, touch);
     fireEvent.pointerUp(trigger, touch);
@@ -237,8 +238,14 @@ describe("DropdownMenu: a finger's open that waits for its trigger", () => {
     fireEvent.pointerDown(document.body, {...touch, pointerId: 2});
     fireEvent.pointerUp(document.body, {...touch, pointerId: 2});
     await gainBox();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(motion.enter).not.toHaveBeenCalled();
+    // The layer shows a light-dismiss open after the release in flight: at
+    // that release's click, or at the next task when no click comes.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await settle();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(motion.enter).toHaveBeenCalledTimes(1);
   });
 
   it("grows a finger's open that waits, also when a key is pressed before it opens", async () => {

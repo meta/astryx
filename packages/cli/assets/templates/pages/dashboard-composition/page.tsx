@@ -664,7 +664,7 @@ export default function DashboardPortfolioTemplate() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={6}>
             {/* Page header */}
             <HStack hAlign="between" vAlign="center">
@@ -704,7 +704,9 @@ export default function DashboardPortfolioTemplate() {
                 <Card>
                   <VStack gap={4}>
                     <HStack hAlign="between" vAlign="center">
-                      <Heading level={3}>Portfolio Value</Heading>
+                      <Heading level={3} accessibilityLevel={2}>
+                        Portfolio Value
+                      </Heading>
                       <Link href="#">View details</Link>
                     </HStack>
                     <PortfolioChart />
@@ -715,7 +717,9 @@ export default function DashboardPortfolioTemplate() {
                 <Card>
                   <VStack gap={4}>
                     <HStack hAlign="between" vAlign="center">
-                      <Heading level={3}>Top Assets</Heading>
+                      <Heading level={3} accessibilityLevel={2}>
+                        Top Assets
+                      </Heading>
                       <Link href="#">View all</Link>
                     </HStack>
                     <List density="spacious">
@@ -733,7 +737,9 @@ export default function DashboardPortfolioTemplate() {
             {/* Market section */}
             <HStack hAlign="between" vAlign="start">
               <VStack gap={1}>
-                <Heading level={1}>Market Today</Heading>
+                <Heading level={1} accessibilityLevel={2}>
+                  Market Today
+                </Heading>
                 <Text type="body" color="secondary">
                   Past 24 hours
                 </Text>
