@@ -452,8 +452,9 @@ a measured, sourced difference exists.
   Whether a press takes this profile follows that press's own `pointerType`,
   not the primary pointer: a mouse or a pen press takes it, painting at once on
   `pointerdown`, even where the primary pointer is coarse
-  (`architecture:press-feedback` INV5; DEC-10). Which profile a finger press
-  takes where the primary pointer is fine is open (OQ11).
+  (`architecture:press-feedback` INV5), so on a tablet with a mouse or a pen
+  a click does not wait like a finger. Which profile a finger press takes
+  where the primary pointer is fine is open (OQ11).
   A cell (a table or collection cell) highlights 150 ms after touch-down inside
   a scroll view, drops the highlight when the scroll wins (FR20), and activates on a
   lift inside it with no scroll taking the touch (FR20). A control is inside a scroll view when it sits in a scrollable container,
@@ -1272,23 +1273,6 @@ so a caller that wants copying puts a Copy action in its own menu.
 
 Rejected: a system Copy item; suppressing selection on every press-tracked control.
 
-### DEC-10 — A mouse or pen press follows its own pointer, not the primary pointer
-
-**Reference:** `spec:AST-094/DEC-10`
-**Decider:** pending owner confirmation
-
-On a device whose primary pointer is coarse, such as a tablet with a mouse or
-a pen, a mouse or pen press would otherwise take the touch press timing, so a
-mouse click waits like a finger. Press feedback reads each press's own
-`pointerType`, as `spec:AST-057`'s row swipe does: a mouse or a pen press
-takes FR11's fine-pointer profile and paints at once
-(`architecture:press-feedback` INV5). The presentation a component shows still
-follows FR13. A finger press where the primary pointer is fine is not decided
-here (OQ11).
-
-Rejected: keeping press feedback on the primary pointer for a mouse or a pen;
-a pen press that waits for the touch delay.
-
 ### DEC-11 — Touch motion roles stay internal until the public set is decided
 
 **Reference:** `spec:AST-094/DEC-11`
@@ -1669,4 +1653,5 @@ gesture until i release".
 - **OQ11 — A finger press where the primary pointer is fine.** On a hybrid
   device whose primary pointer is fine, does a finger press take FR11's
   control or cell profile, with its touch timing, or the fine-pointer
-  profile? DEC-10 settles only a mouse or a pen press. (`owner decision`)
+  profile? `architecture:press-feedback` INV5 settles only a mouse or a pen press.
+  (`owner decision`)
