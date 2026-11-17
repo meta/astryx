@@ -9105,7 +9105,7 @@ function passingDialValue(ctx, slug, data, base, step) {
  * @param {Array<{text: string}>} checked every contrast check's problem and note
  * @returns {string[]}
  */
-function drawnContrastNotes(drawn, checked) {
+export function drawnContrastNotes(drawn, checked) {
   /** @type {Map<string, import('./_context.mjs').LowContrast[]>} */
   const byPart = new Map();
   for (const x of drawn) {
