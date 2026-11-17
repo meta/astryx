@@ -60,6 +60,7 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import type {TranslatorFn} from '../i18n';
+import {useSize} from '../SizeContext/SizeContext';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFormatter} from '../i18n/useListFormatter';
@@ -227,7 +228,6 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    height: sizeVars['--size-element-md'],
     outline: 'none',
   },
   compactDisabled: {
@@ -315,9 +315,24 @@ const statusBorderStyles = stylex.create({
   },
 });
 
+// Compact control heights, shared with the other single-line inputs so
+// same-size fields align in a form row.
+const sizeStyles = stylex.create({
+  sm: {
+    height: sizeVars['--size-element-sm'],
+  },
+  md: {
+    height: sizeVars['--size-element-md'],
+  },
+  lg: {
+    height: sizeVars['--size-element-lg'],
+  },
+});
+
+export type FileInputSize = keyof typeof sizeStyles;
+
 export interface FileInputProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue' | 'value'
+  FieldInputBaseProps,  'onChange' | 'defaultValue' | 'value'
 > {
   /**
    * Ref to the native file input.
@@ -435,6 +450,18 @@ export interface FileInputProps extends Omit<
    */
   mode?: 'dropzone' | 'input';
   /**
+   * The size of the input.
+   * - 'sm': Compact size (28px height)
+   * - 'md': Default size (32px height)
+   * - 'lg': Large size (36px height)
+   *
+   * Sets the compact control height so same-size inputs align in a form
+   * row. Dropzone mode keeps its own padding; the
+   * size still reaches the file-input theme target there.
+   * @default 'md'
+   */
+  size?: FileInputSize;
+  /**
    * Whether the field is optional. Mutually exclusive with isRequired.
    * @default false
    */
@@ -478,6 +505,7 @@ export function FileInput({
   description,
   placeholder,
   mode = 'input',
+  size: sizeProp,
   isOptional = false,
   labelTooltip,
   width,
@@ -558,6 +586,9 @@ export function FileInput({
   // placement is detached there.
   const statusVariant =
     statusVariantProp ?? (mode === 'dropzone' ? 'detached' : 'attached');
+  // An explicit size wins; otherwise a surrounding container's size applies,
+  // else the family default. Unset keeps the released 32px control.
+  const size = useSize(sizeProp, 'md');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -954,9 +985,14 @@ export function FileInput({
         onMouseUp={!isSelectionDisabled ? onContainerMouseUp : undefined}
         {...dragDropProps}
         {...mergeProps(
-          themeProps('file-input', {mode, status: status?.type ?? null}),
+          themeProps('file-input', {
+            mode,
+            size,
+            status: status?.type ?? null,
+          }),
           stylex.props(
             isDropzone ? styles.dropzone : styles.compact,
+            !isDropzone && sizeStyles[size],
             isDropzone && !isSelectionDisabled && styles.dropzoneHover,
             isDropzone &&
               !isSelectionDisabled &&
