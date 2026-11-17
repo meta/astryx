@@ -19,6 +19,7 @@ import {
   isLookFamily,
   lookSeeds,
   statusSeeds,
+  tintStops,
 } from './derive-look.mjs';
 import {generatePaletteSet, perceptualDelta} from './generator.mjs';
 import {hexToOklch} from './color.mjs';
@@ -219,5 +220,23 @@ describe('derived look colors', () => {
     expect(
       perceptualDelta(apart.tokens['--color-info'].light.color, taken),
     ).toBeGreaterThanOrEqual(10);
+  });
+
+  it("keys the hues to the look's accent and neutral, not only its strength", () => {
+    const navyOnGray = lookSeeds('#000080', '#808080');
+    const blueOnSlate = lookSeeds('#0052cc', '#6b778c');
+    const turned = Object.keys(navyOnGray).filter(
+      h => navyOnGray[h] !== blueOnSlate[h],
+    );
+    expect(turned.length).toBeGreaterThanOrEqual(5);
+    // Every grown hue stays its own family: the turn is a few degrees.
+    for (const [h, seed] of Object.entries(blueOnSlate))
+      expect(isLookFamily({id: h, name: h, seed}), h).toBe(true);
+  });
+
+  it('draws card tints deeper for a dark or strong accent, paler for a pale one', () => {
+    expect(tintStops('#000080')[0]).toBeLessThan(tintStops('#0052cc')[0]);
+    expect(tintStops('#a7c7e7')[0]).toBeGreaterThan(tintStops('#0052cc')[0]);
+    expect(tintStops(null)).toEqual(tintStops('#808080'));
   });
 });
