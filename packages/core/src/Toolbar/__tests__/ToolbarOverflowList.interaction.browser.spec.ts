@@ -195,6 +195,39 @@ test.describe("a start lane's own OverflowList", () => {
       .toHaveLength(narrow.itemCount);
   });
 
+  test('wraps the end lane to a new line when the folded start lane and the end lane still exceed the row', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      'core-toolbar--overflow-actions',
+      'overflow-actions-frame',
+    );
+    const row = await rowAt(page, 'overflow-actions-frame', 160);
+    const lanes = await page.evaluate(() => {
+      const toolbar = document.querySelector<HTMLElement>(
+        '[data-testid="overflow-actions-frame"] [role="toolbar"]',
+      )!;
+      const [start, end] = [...toolbar.children].filter(
+        (lane): lane is HTMLElement =>
+          lane instanceof HTMLElement && lane.getBoundingClientRect().width > 0,
+      );
+      const s = start.getBoundingClientRect();
+      const e = end.getBoundingClientRect();
+      return {startBottom: s.bottom, endTop: e.top};
+    });
+    test.info().annotations.push({
+      type: 'wrap-160',
+      description: JSON.stringify({row, lanes}),
+    });
+    // The list folds as far as it can, then the end lane moves to a new line.
+    expect(row.labels.at(-1)).toMatch(/^\+\d+$/);
+    expect(lanes.endTop).toBeGreaterThanOrEqual(lanes.startBottom - 0.5);
+    expect(row.overlaps).toBe(false);
+    expect(row.endOutside).toBe(false);
+    expect(row.clipsTrigger).toBe(false);
+  });
+
   test('reports the width where the lanes first meet', async ({page}) => {
     await openStory(
       page,
