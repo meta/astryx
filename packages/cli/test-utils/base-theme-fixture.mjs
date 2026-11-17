@@ -53,8 +53,10 @@ export function writeFixtureBaseTheme(dir, like = 'neutral') {
     fontWeight: `var(--text-heading-${n}-weight)`,
     lineHeight: `var(--text-heading-${n}-leading)`,
   });
+  // A built module carries `__built`, as every one theme build writes does.
   const theme = {
     name: like,
+    __built: true,
     tokens: {
       '--color-background-body': ['#f1f1f1', '#1b1b1b'],
       '--color-background-card': ['#ffffff', '#1b1b1b'],

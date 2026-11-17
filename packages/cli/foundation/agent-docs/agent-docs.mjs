@@ -392,7 +392,7 @@ export function parseBlockVersion(content) {
  * }}
  */
 export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
-  const version = installedVersion ?? getXdsVersion(findCoreDir(targetDir));
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
 
@@ -749,7 +749,7 @@ export async function renderAgentDocsBlock(
   {installedVersion, fresh = false} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
-  const version = installedVersion ?? getXdsVersion(coreDir);
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   const project = await Project.load(targetDir, {fresh});
   const failedIntegration = project.loadedIntegrations.find(
     integration => integration.__loadError != null,
@@ -811,6 +811,16 @@ export async function renderAgentDocsBlock(
     topics,
     agentDocs,
   });
+}
+
+/**
+ * The version an agent-docs block names when no caller gives one, as `init`
+ * writes it: the Core the folder reads, else this CLI's own.
+ * @param {string} targetDir
+ * @returns {string}
+ */
+export function agentDocsVersion(targetDir) {
+  return getXdsVersion(findCoreDir(targetDir));
 }
 
 /**

@@ -71,11 +71,15 @@ own ranking and output, and template owners own what each template is.
   lead, the start MUST be the app shell, or a blank page template when the
   project has no shell. The app shell is the ready, shown Shell-family
   template the request describes when one leads, and otherwise the default
-  shell. The start never falls back to "compose from components".
+  shell; a request describes a shell variant only when it names one of that
+  variant's own keywords as a whole phrase. The start never falls back to "compose from components".
 - **FR3 — A part starts where it lives.** A request for a part of a page (a
   control, a state, a widget, a section) MUST start from the page template the
   request places that part in, when the request gives that page, and from the
-  app shell (FR2) when it gives no page. The blocks and components in the kit
+  app shell (FR2) when it gives no page. A family's base template is that page
+  only when the ranker leads with it, and never when the family word heads the
+  request and also ends a component's name: the request then asks for that
+  piece, not for a part of the family's page (DEC-13). The blocks and components in the kit
   carry the part itself. A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
   no template scaffolds it. A request that adds something to a place that
@@ -85,8 +89,7 @@ own ranking and output, and template owners own what each template is.
   template directly, and build's fixed shell-start decision reads the request as a
   whole page (DEC-10), the start is the best-ranked page template even when
   the request reads as a part. A request with an edit phrase keeps the app
-  shell, and the lift never restores a page the page pick turned down because
-  the request names no word of it (DEC-12).
+  shell.
 - **FR4 — Never an unready start.** A template marked not ready MUST NOT be the
   start or an alternative. When the request names one that search matches
   directly, the start's reason MUST say it is not ready yet and name the
@@ -415,8 +418,7 @@ Build's kind call reads some whole-page requests as parts, which leaves them on
 the empty app shell. When the start would be the app shell and search matched
 no ready template directly, a fixed decision over build's own ranking scores and a
 fixed word table reads the whole request; when its whole-page probability is
-at least 0.30, the start is the best-ranked page template, unless that is the
-page the page pick turned down under DEC-12. This is not DEC-2's best weak match:
+at least 0.30, the start is the best-ranked page template. This is not DEC-2's best weak match:
 one shared word never decides it, and it never applies to a direct match or to
 a request with an edit phrase, so DEC-4 still holds for changes to an existing
 page.
@@ -438,32 +440,28 @@ builder more often than the empty app shell does. DEC-2 still holds when no
 part of build's ranking leads: the start is the app shell. Requests build reads
 as parts or as changes to an existing page keep their placement rules (DEC-4);
 the edit-phrase check belongs to DEC-10's shell lift, not to the page pick.
-When the page ranker proposes no page, the pick's page must also share a word
-with its own descriptor (DEC-12).
 
 Rejected: sending every start the ranker cannot lead alone to the app shell,
 which leaves more whole pages on the empty shell than it keeps parts off a page
 template.
 
-### DEC-12 — The page pick needs a shared word when the ranker leads nothing
+### DEC-13 — A family base hosts a part only as the place it goes
 
-**Reference:** `spec:AST-048/DEC-12`
-**Decider:** recorded by the spec approval on the pull request that ships it.
+**Reference:** `spec:AST-048/DEC-13`
+**Decider:** `josephfarina`, `2026-11-16`
 
-When the page ranker proposes no page and search matched no ready template directly,
-a page chosen by build's word tables (DEC-11) becomes the start only if the
-request names at least one content word of that template's own descriptor: its
-display name, category, keywords, description or components. Otherwise the
-start is the app shell, and DEC-10's shell lift does not bring that same page
-back. The shell lift is otherwise unchanged: it may still choose a different
-page by its own decision. A request such as "an event page for a concert with
-a date, venue, lineup and a buy tickets button" leans toward a checkout page
-through the tables' learned words but names nothing the checkout template is;
-starting there would scaffold the wrong page.
+A part starts from a family's base template only when the ranker leads with
+that base and the request names the family as where the part goes. A family
+word that heads the request and also ends a component's name names the piece
+itself: "a sortable table" asks for a table, not for a part of the table page.
+Both facts come from the catalog: the families from the page templates, and
+the piece words from the components' names. So a new family or a new component
+follows the rule with no list to update.
 
-Rejected: requiring the request's leading phrase to name a kind of page some
-template calls itself, which sends more whole pages back to the empty shell
-than it saves from a wrong page.
+Rejected: hosting on any base whose family word appears anywhere in the
+request, which starts every request that mentions a table from the table page
+once a table base is ready; and a list of family words that never host, which
+needs an update for each new family.
 
 ## Open questions
 

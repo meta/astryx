@@ -34,6 +34,11 @@ export function findClosestComponents(name, components, maxDistance = 3) {
   return matches;
 }
 
+/** The score of a component whose name is the typed name, ignoring case. */
+export const EXACT_NAME_SCORE = 100;
+/** The score of a component with a keyword that is the typed name. */
+export const EXACT_KEYWORD_SCORE = 90;
+
 /**
  * Unified component search that scores matches across multiple signals:
  * name similarity, keyword matches, and description/feature text search.
@@ -62,7 +67,8 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  * has keeps Core's doc.
  *
  * @param {string} needle
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: only the
+ *   names in `components` are scored
  * @param {Record<string, string[]>} components
  * @param {Array<{name: string, view: ComponentMatchView | null}>} [others]
  * @returns {Promise<{name: string, score: number, reason: string}[]>}
@@ -74,9 +80,8 @@ export async function searchComponents(
   others = [],
 ) {
   const {readDocView} = await import('../doc-compiler/read.mjs');
-  const {listDirEntries, oncePerListing, pathExists} = await import(
-    '../fs/listing-cache.mjs'
-  );
+  const {listDirEntries, oncePerListing, pathExists} =
+    await import('../fs/listing-cache.mjs');
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
@@ -116,7 +121,7 @@ export async function searchComponents(
 
     // Exact name
     if (compLower === term) {
-      addMatch(comp, 100, 'exact name');
+      addMatch(comp, EXACT_NAME_SCORE, 'exact name');
       continue;
     }
 
@@ -148,13 +153,14 @@ export async function searchComponents(
   }
 
   // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  const srcDir = path.join(coreDir, 'src');
+  const srcDir = coreDir == null ? null : path.join(coreDir, 'src');
   /**
    * The doc that Pass 2 reads for `comp`, or null.
    * @param {string} comp
    * @returns {string | null}
    */
   function docPathOf(comp) {
+    if (srcDir == null) return null;
     const direct = path.join(srcDir, comp, comp + '.doc.mjs');
     if (pathExists(direct)) return direct;
     const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
@@ -199,8 +205,10 @@ export async function searchComponents(
 
           // Exact keyword
           if (kwLower === term) {
-            addMatch(comp, 90, 'keyword "' + kw + '"');
-            if (!keywordAt.has(comp) || before < 90) keywordAt.set(comp, at);
+            addMatch(comp, EXACT_KEYWORD_SCORE, 'keyword "' + kw + '"');
+            if (!keywordAt.has(comp) || before < EXACT_KEYWORD_SCORE) {
+              keywordAt.set(comp, at);
+            }
             break;
           }
 
@@ -276,7 +284,11 @@ export async function searchComponents(
         if (!comp) continue;
         const span = j - i;
         const atEnd = j === words.length ? 1 : 0;
-        addMatch(comp, 10 + Math.min(span, 4) + atEnd, 'name part "' + run + '"');
+        addMatch(
+          comp,
+          10 + Math.min(span, 4) + atEnd,
+          'name part "' + run + '"',
+        );
       }
     }
     // Keep only the strongest name parts, so a weaker part never sits
@@ -347,7 +359,9 @@ function definedFields(fields) {
  * @returns {string}
  */
 export function firstSentence(text) {
-  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const flat = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const ends = /[.!?](?=\s|$)/g;
   for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
     const before = flat.slice(0, m.index);

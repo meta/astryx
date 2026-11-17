@@ -43,6 +43,8 @@ import {
   sourceTitle,
   withSourceTitle,
 } from './docs-section-key.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
+import {topicLevel} from '../doc-compiler/generated-levels.mjs';
 
 export {withSourceTitle};
 
@@ -95,6 +97,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the doc declares
  * @property {string} [replaces] topic this doc takes the place of
  * @property {string} [extendsTopic] topic this doc merges onto (`extends`)
  */
@@ -109,6 +112,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string} [replaces] the topic this one took the place of
  * @property {string} [replacedPackage] the package whose topic or guide this
  *   one took the place of
@@ -127,6 +131,16 @@ export function isGuideRoute(target) {
  * @returns {Record<string, string>} topic name → absolute doc path
  */
 export function discoverBuiltinTopics() {
+  // These topics describe Core; they show only in a run whose base is Core.
+  if (currentNonCoreBase()) return Object.create(null);
+  return builtinTopicsForCore();
+}
+
+/**
+ * The CLI's own topics as a run on Core reads them, whatever the run's base.
+ * @returns {Record<string, string>} topic name → absolute doc path
+ */
+export function builtinTopicsForCore() {
   /** @type {Record<string, string>} */
   const topics = Object.create(null);
   if (!fs.existsSync(BUILTIN_DOCS_DIR)) return topics;
@@ -138,13 +152,15 @@ export function discoverBuiltinTopics() {
 }
 
 /**
- * The name an integration doc declares, and whether it is placed (has
- * `placement`, so it is no topic or root namespace), as docs discovery reads
- * the doc; null when the doc does not load or parse, or names nothing. A doc
- * of exported literals is read as data ({@link readDocAsData}).
+ * The name an integration doc declares, whether it is placed (has
+ * `placement`, so it is no topic or root namespace), and the generated level
+ * its category puts it in when it is a flat topic (null for a placed doc or
+ * a namespace, which sit in no level), as docs discovery reads the doc; null when
+ * the doc does not load or parse, or names nothing. A doc of exported
+ * literals is read as data ({@link readDocAsData}).
  *
  * @param {string} file an integration doc file
- * @returns {Promise<{name: string, placed: boolean} | null>}
+ * @returns {Promise<{name: string, placed: boolean, level: string | null} | null>}
  */
 export async function integrationDocDeclaration(file) {
   let doc;
@@ -156,7 +172,12 @@ export async function integrationDocDeclaration(file) {
     return null;
   }
   if (typeof doc?.name !== 'string') return null;
-  return {name: doc.name, placed: doc.placement != null};
+  const placed = doc.placement != null;
+  return {
+    name: doc.name,
+    placed,
+    level: placed || doc.type === 'namespace' ? null : topicLevel(doc.category),
+  };
 }
 
 /**
@@ -686,6 +707,7 @@ export async function discoverIntegrationDocs(
         title: parsed.title,
         // Rendered once, where the tree is built (api/docs/_adapter.mjs).
         summary: parsed.description,
+        ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
         group: null,
         placement: parsed.placement,
         ref: {topicFile: file},
@@ -707,6 +729,7 @@ export async function discoverIntegrationDocs(
       title: parsed.title,
       description: parsed.description,
       category: parsed.category ?? null,
+      ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
       replaces: parsed.replaces,
       extendsTopic: parsed.extends,
       ...(providerId === integration.name ? {} : {providerId}),
@@ -1148,6 +1171,7 @@ export class DocsCatalog {
         title: record.title,
         description: record.description,
         category: record.category,
+        ...(record.keywords ? {keywords: record.keywords} : {}),
         replaces: replaced,
         // The package whose topic it took over: an earlier replacement's, when
         // the topic was already replaced.
@@ -1186,6 +1210,7 @@ export class DocsCatalog {
       title: record.title,
       description: record.description,
       category: record.category,
+      ...(record.keywords ? {keywords: record.keywords} : {}),
       ...(record.providerId ? {providerId: record.providerId} : {}),
       extensions: [],
     });

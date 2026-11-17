@@ -715,18 +715,52 @@ async function answer(subject, options, cwd) {
       FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+    // (A missed entry never says otherwise than the question: where the
+    // question gives the part a fill or a text color, the missed list's
+    // fill or text for it is not offered, "tooltips #1f2328 with white
+    // text"; and where the question writes the part at all, its own
+    // answer leads and the missed list follows, "secondary buttons white
+    // …" before a disabled-primary entry.)
+    const asked = h.drafts.flatMap(d => d.options.flat());
+    /** @param {any} st */
+    const family = st =>
+      /^background(?:-color)?$|^--color-background-|^--color-[a-z]+-muted$/.test(
+        String(st.thing),
+      )
+        ? 'fill'
+        : st.thing === 'color' || /^--color-(?:text|on)-/.test(String(st.thing))
+          ? 'text'
+          : null;
+    // (An ask to match the rest, "tooltips grey like the rest", is the
+    // missed list's own ask: it leads.)
+    const matching =
+      /\b(?:like the rest|like everything else|match(?:es|ing)? the (?:theme|rest)|same as the rest)\b/i.test(
+        t,
+      );
     const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
-      x => parts.includes(x.part) && x.steps.length,
+      x =>
+        parts.includes(x.part) &&
+        x.steps.length &&
+        (matching ||
+          !x.steps.some(st => {
+            const f = family(st);
+            return (
+              f != null && asked.some(a => a.on === x.part && family(a) === f)
+            );
+          })),
     );
-    h.drafts.unshift(
-      .../** @type {any[]} */ (
-        mine.map(x => ({
-          text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
-          options: [x.steps.map(st => ({verb: 'set', ...st}))],
-          ...(x.steps.length > 1 ? {sequence: true} : {}),
-        }))
-      ),
+    const entries = /** @type {any[]} */ (
+      mine.map(x => ({
+        text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
+        options: [x.steps.map(st => ({verb: 'set', ...st}))],
+        ...(x.steps.length > 1 ? {sequence: true} : {}),
+      }))
     );
+    const written = new Set(
+      matching ? [] : asked.map(a => a.on).filter(Boolean),
+    );
+    h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
+    h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
   }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
@@ -1038,14 +1072,45 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   );
   const group = familyOf(key);
   const states = settableStates(ctx, env.slug, env.data, key);
+  // A token the base theme points at another one on the part or a part
+  // around it (neutral's progress track reads the muted fill, which it
+  // points at the emphasized border there): that token is what it shows.
+  const blocks =
+    /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
+      env.base
+    ).components ?? {};
+  const around = [
+    key,
+    ...Object.keys(C.MAP).filter(t => C.MAP[t]?.contains?.includes(key)),
+  ];
+  /** @param {string} token */
+  const pointedAt = token => {
+    for (const t of around) {
+      const v = blocks[t]?.base?.[token];
+      const to =
+        typeof v === 'string'
+          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          : null;
+      if (to) return {token: to, on: t};
+    }
+    return null;
+  };
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
-      C.partReads(key, g).map(r => ({
-        token: r.token,
-        props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
-      })),
+      C.partReads(key, g).map(r => {
+        const to = r.token ? pointedAt(r.token) : null;
+        return {
+          token: r.token,
+          ...(to
+            ? {
+                shows: `${to.token} (the ${env.data.like ?? 'base'} theme points ${r.token} at it on ${to.on})`,
+              }
+            : {}),
+          props: r.props,
+          when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
+        };
+      }),
     ]),
   );
   const components = [
