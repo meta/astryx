@@ -715,11 +715,11 @@ describe('useListFocus paging (hasPaging)', () => {
 });
 
 describe('useListFocus in a list inside a toolbar', () => {
-  function Group() {
+  function Group({wrap = true}: {wrap?: boolean}) {
     const {listRef, handleKeyDown} = useListFocus<HTMLDivElement>({
       itemSelector: 'button',
       orientation: 'horizontal',
-      wrap: true,
+      wrap,
     });
     return (
       <div ref={listRef} data-testid="group" onKeyDown={handleKeyDown}>
@@ -758,6 +758,17 @@ describe('useListFocus in a list inside a toolbar', () => {
     expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
   });
 
+  it('leaves the arrow at its edge to the toolbar when it does not wrap either', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <Group wrap={false} />
+      </div>,
+    );
+
+    expect(pressAt('Last', 'ArrowRight')).toBe(true);
+    expect(pressAt('First', 'ArrowLeft')).toBe(true);
+  });
+
   it('still moves between its own items and consumes the key', () => {
     render(
       <div role="toolbar" aria-orientation="horizontal">
@@ -786,6 +797,21 @@ describe('useListFocus in a list inside a toolbar', () => {
         <div popover="manual">
           <Group />
         </div>
+      </div>,
+    );
+
+    expect(pressAt('Last', 'ArrowRight')).toBe(false);
+    expect(
+      screen.getByRole('button', {name: 'First', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('wraps in a dialog the toolbar holds', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <dialog open>
+          <Group />
+        </dialog>
       </div>,
     );
 

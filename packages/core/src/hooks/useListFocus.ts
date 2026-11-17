@@ -402,13 +402,16 @@ export function oneTabStopAmong(
 
 /**
  * Whether `key` moves focus along a toolbar that holds `list` among its own
- * controls. A list in a popover, or a toolbar itself, is not in that row.
+ * controls. A list in a popover or a dialog, or a toolbar itself, is not in
+ * that row.
  */
 function isToolbarKey(list: HTMLElement | null, key: string): boolean {
   if (list == null || list.matches('[role="toolbar"]')) {
     return false;
   }
-  const owner = list.parentElement?.closest('[role="toolbar"], [popover]');
+  const owner = list.parentElement?.closest(
+    '[role="toolbar"], [popover], dialog',
+  );
   if (owner == null || owner.getAttribute('role') !== 'toolbar') {
     return false;
   }
@@ -860,7 +863,8 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         // A list inside a toolbar is part of the toolbar's row. At the list's
         // edge the key is the toolbar's: the list neither wraps nor consumes
         // it, so the toolbar moves focus to its next control.
-        const wrapsHere = wrap && !isToolbarKey(listRef.current, e.key);
+        const isInToolbarRow = isToolbarKey(listRef.current, e.key);
+        const wrapsHere = wrap && !isInToolbarRow;
         if (isNext) {
           target = findItemIndex(
             items,
@@ -890,7 +894,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         }
         if (target !== -1) {
           focusIndex(items, target);
-        } else if ((isNext || isPrev) && wrap && !wrapsHere) {
+        } else if ((isNext || isPrev) && isInToolbarRow) {
           return;
         }
       }
