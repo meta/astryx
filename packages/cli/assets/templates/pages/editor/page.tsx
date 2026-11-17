@@ -21,7 +21,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {Table} from '@astryxdesign/core/Table';
+import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Section} from '@astryxdesign/core/Section';
 import {
@@ -107,6 +107,10 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'name',
     header: 'Transaction',
+    // An icon and a name share this cell, so the default 60px floor leaves a
+    // letter or two per line on a phone. This floor keeps the name readable,
+    // and the Table scrolls sideways when the columns no longer fit.
+    width: proportional(1, {minWidth: 180}),
     renderCell: (item: Transaction) => (
       <HStack gap={3} vAlign="center">
         <Icon icon={CATEGORY_ICONS[item.category] || SparklesIcon} />
