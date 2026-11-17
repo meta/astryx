@@ -15,6 +15,7 @@
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {useState} from 'react';
+import {createPortal} from 'react-dom';
 import {Table} from './Table';
 import {useTableSelection} from './plugins/selection/useTableSelection';
 import {useTableSelectionState} from './plugins/selection/useTableSelectionState';
@@ -35,7 +36,9 @@ const rows: Row[] = [{payout: '$1,200'}];
 const columns: TableColumn<Row>[] = [{key: 'payout', header: HEADING}];
 
 /** Makes every element report content wider than its box, as a cut heading is. */
-function withOverflow(isOverflowing: boolean) {
+function withOverflow(
+  isOverflowing: boolean | ((element: HTMLElement) => boolean),
+) {
   const proto = window.HTMLElement.prototype;
   const original = {
     scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
@@ -43,7 +46,13 @@ function withOverflow(isOverflowing: boolean) {
   };
   Object.defineProperty(proto, 'scrollWidth', {
     configurable: true,
-    get: () => (isOverflowing ? 400 : 100),
+    get(this: HTMLElement) {
+      const isCut =
+        typeof isOverflowing === 'function'
+          ? isOverflowing(this)
+          : isOverflowing;
+      return isCut ? 400 : 100;
+    },
   });
   Object.defineProperty(proto, 'offsetWidth', {
     configurable: true,
@@ -278,6 +287,75 @@ describe('TableHeaderCell truncation tooltip with a field in the header', () => 
     act(() => {
       fireEvent.pointerDown(field, {pointerType: 'mouse'});
       field.focus();
+    });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(tooltip()).toBeNull();
+  });
+});
+
+describe('TableHeaderCell truncation tooltip with header controls', () => {
+  function withFocusVisible() {
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+  }
+
+  it('ignores focus that a portal inside the header delivers', async () => {
+    restore = withOverflow(true);
+    withFocusVisible();
+    render(
+      <Table
+        data={rows}
+        columns={[
+          {
+            key: 'payout',
+            header: (
+              <span>
+                {HEADING}
+                {createPortal(
+                  <button type="button">Apply filter</button>,
+                  document.body,
+                )}
+              </span>
+            ),
+          },
+        ]}
+      />,
+    );
+    act(() => {
+      screen.getByRole('button', {name: 'Apply filter'}).focus();
+    });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(tooltip()).toBeNull();
+  });
+
+  it("does not take a field's own overflow for a cut heading", async () => {
+    // Only the field's value is wider than its box; the heading fits.
+    restore = withOverflow(element => element.tagName === 'INPUT');
+    withFocusVisible();
+    render(
+      <Table
+        data={rows}
+        columns={[
+          {
+            key: 'payout',
+            header: (
+              <span>
+                Payout <input aria-label="Filter payouts" />
+              </span>
+            ),
+          },
+        ]}
+      />,
+    );
+    act(() => {
+      screen.getByLabelText('Filter payouts').focus();
     });
     await new Promise(resolve => setTimeout(resolve, 400));
     expect(tooltip()).toBeNull();

@@ -218,13 +218,15 @@ function isVisuallyHidden(element: Element): boolean {
 }
 
 /**
- * Whether an element is left out of what a sighted reader sees: hidden, a
- * hidden copy (ToggleButton's bold-width reservation), or visually hidden.
+ * Whether an element is left out of the measured text: hidden, a hidden copy
+ * (ToggleButton's bold-width reservation), visually hidden, or a form field,
+ * whose value scrolls inside its own box and is not the cut text.
  */
 function isLeftOut(element: Element): boolean {
   return (
-    element.closest('[hidden], [aria-hidden="true"]') != null ||
-    isVisuallyHidden(element)
+    element.closest(
+      '[hidden], [aria-hidden="true"], input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+    ) != null || isVisuallyHidden(element)
   );
 }
 
@@ -334,6 +336,9 @@ export function useCutTextOnKeyboardFocus({
       anchor == null ||
       measured == null ||
       !isElement(target) ||
+      // React delivers focus from a portal (a header's filter popover) to the
+      // anchor's handlers; only focus inside the anchor counts.
+      !anchor.contains(target) ||
       !target.matches(':focus-visible') ||
       readModality() !== 'keyboard'
     ) {
