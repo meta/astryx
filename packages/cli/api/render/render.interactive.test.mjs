@@ -235,6 +235,14 @@ describe("a render, which carries the page's script", () => {
     const markup = renderedMarkupOf(file) ?? '';
     expect(markup).toContain('aria-label="Search"');
     expect(markup).toContain('data-note="no autofocus here"');
+    // Raw HTML can quote a value with single quotes or none: its text stays.
+    const {withoutAutofocus} =
+      await import('../../foundation/render/render-page.mjs');
+    expect(
+      withoutAutofocus(
+        `<span title='press autofocus now' data-x=autofocus autofocus>x</span>`,
+      ),
+    ).toBe(`<span title='press autofocus now' data-x=autofocus>x</span>`);
     const painted = new JSDOM(markup).window.document.querySelector('input');
     expect(painted?.hasAttribute('autofocus')).toBe(false);
     const dom = new JSDOM(file, {
@@ -242,7 +250,9 @@ describe("a render, which carries the page's script", () => {
       pretendToBeVisual: true,
     });
     await new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    const input = dom.window.document.querySelector('input[aria-label="Search"]');
+    const input = dom.window.document.querySelector(
+      'input[aria-label="Search"]',
+    );
     expect(dom.window.document.activeElement).toBe(input);
     dom.window.close();
   });

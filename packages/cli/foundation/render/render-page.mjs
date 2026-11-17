@@ -722,7 +722,7 @@ export function linksOpenNewTabs(markup) {
  */
 export function withoutAutofocus(markup) {
   return markup.replace(/<[a-zA-Z][^>]*\sautofocus\b[^>]*>/gi, tag =>
-    tag.replace(/(\s+)([^\s=/>]+)(="[^"]*")?/g, (attr, _, /** @type {string} */ name) =>
+    tag.replace(/(\s+)([^\s=/>]+)(=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?/g, (attr, _, /** @type {string} */ name) =>
       name.toLowerCase() === 'autofocus' ? '' : attr,
     ),
   );
