@@ -3,7 +3,10 @@
 /**
  * @file Experimental isolation (spec:AST-017 FR27, spec:AST-084 FR0): in a
  *   project with no icon set installed and no `experimental.iconSet`, every
- *   stable command answers exactly as it does without icon sets.
+ *   stable command answers exactly as it does without icon sets. An
+ *   installed icon-set package turns icon features on
+ *   (foundation/integrations/icon-features.mjs); search still answers as it
+ *   does without icon sets.
  *
  *   The goldens under `__golden__/no-icon-set/` were written by the CLI
  *   without the icon-set feature, so a result, field, section, count, or
@@ -139,20 +142,23 @@ const NUDGE_CALLERS = {
 };
 /**
  * Every source file that reads an integration's icon-set root (`.iconSets`)
- * or runs icon-set discovery or checks, and why a project without
- * `experimental.iconSet` never sees what it reads (spec:AST-084 FR0, FR17).
+ * or runs icon-set discovery or checks, and why a project where the icon
+ * feature gate is off never sees what it reads (spec:AST-084 FR0, FR17).
  * A new reader fails the test below until it is listed with its gate.
  */
 const ICON_SET_READERS = {
+  // The gate itself.
+  'foundation/integrations/icon-features.mjs':
+    'the icon feature gate: whether a loaded integration names a root; it reads no set',
   // Readers that hold the gate.
   'foundation/config/project.mjs':
-    'iconSets() reads no set without the opt-in; integration issues strip the root without it',
+    'iconSets() reads no set with the gate off; integration issues strip the root with it off',
   'api/integration/validate-integration.mjs':
-    'an installed package is checked only with the opt-in; the package being authored always',
+    'an installed package is checked only with the gate on; the package being authored always',
   'api/upgrade/run/run.mjs':
-    'passes the opt-in to the nudge, which strips the root without it',
+    'passes the gate to the nudge, which strips the root with it off',
   'api/discover/_adapter.mjs':
-    'reads sets only with the opt-in, and strips the root before collecting identities',
+    'reads sets only with the gate on, and strips the root before collecting identities',
   // Readers behind a gated reader.
   'api/docs/_entry-names.mjs':
     "whether a loaded integration names a root, so the docs tree may hold more than the CLI's own; it reads the sets only through project.iconSets()",
@@ -184,7 +190,7 @@ const ICON_SET_READERS = {
   'clients/cli/commands/integration.mjs':
     'integration verify, for the package being authored',
   'clients/cli/commands/doctor.mjs':
-    "prints validate's iconSets, which validate fills only with its gate",
+    "prints validate's iconSets, which validate fills only with the gate on",
 };
 /** A read of an icon-set root, or a run of icon-set discovery or checks. */
 const ICON_SET_READ =
@@ -241,46 +247,6 @@ function placeholders(text, cwd) {
     .split(GOLDEN_REPO)
     .join('<repo>')
     .replace(VERSION_PATTERN, '$1<version>');
-}
-
-/** Doctor checks that read the computer, not the project. */
-const COMPUTER_CHECKS = new Set([
-  'newest-release',
-  'cli-on-path',
-  'computer-integrations',
-]);
-
-/**
- * A doctor JSON report with the computer's checks reduced to their ids, and
- * the summary counting only the project's: those checks answer from this
- * machine's cache and search path, which no golden can hold.
- * @param {string} stdout
- */
-function withoutComputerChecks(stdout) {
-  const report = JSON.parse(stdout);
-  const summary = {pass: 0, warn: 0, fail: 0, info: 0};
-  report.data.checks = report.data.checks.map((/** @type {any} */ check) => {
-    if (COMPUTER_CHECKS.has(check.id)) return {id: check.id};
-    summary[/** @type {keyof typeof summary} */ (check.status)] += 1;
-    // A message is prose; its counts are what icon sets could change. The
-    // Node version is the machine's, not the project's.
-    return {
-      ...check,
-      message: numbersIn(
-        check.id === 'node-version'
-          ? check.message.replace(/v\d+\.\d+\.\d+/u, 'v<node>')
-          : check.message,
-      ),
-    };
-  });
-  report.data.summary = summary;
-  const shaped = skeleton(report);
-  report.data.checks.forEach(
-    (/** @type {any} */ check, /** @type {number} */ at) => {
-      if (check.message != null) shaped.data.checks[at].message = check.message;
-    },
-  );
-  return asGolden(shaped);
 }
 
 /*
@@ -1158,69 +1124,20 @@ describe.skipIf(REGENERATING)(
   },
 );
 
-describe('with icon sets installed but no experimental.iconSet, stable output is unchanged', () => {
+// With no icon-set package installed and no `experimental.iconSet`, the
+// icon feature gate is off: a source's malformed icon-set entry is an
+// unknown kind, so the source still counts and discover answers as the CLI
+// without icon sets does.
+describe('with no icon-set package and no experimental.iconSet, discover reads no icon-set entry', () => {
   /** @type {string} */
   let root;
   beforeAll(() => {
-    root = fs.mkdtempSync(
-      path.join(PROJECTS_ROOT, '.astryx-icon-set-no-opt-in-'),
-    );
+    root = fs.mkdtempSync(path.join(PROJECTS_ROOT, '.astryx-icon-set-off-'));
   });
   afterAll(() => {
     fs.rmSync(root, {recursive: true, force: true});
   });
 
-  /**
-   * A project that loads an icon-set package, its set valid or not.
-   * @param {string} name
-   * @param {unknown} [data] the set's data file; omit for a valid one
-   */
-  function installed(name, data) {
-    const dir = writeIconSetProject(path.join(root, name), {
-      packages: [data === undefined ? {} : {data}],
-      config: {integrations: ['@acme/glyphs']},
-    });
-    fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), {recursive: true});
-    fs.writeFileSync(path.join(dir, 'node_modules', '.bin', 'astryx'), '');
-    if (REGENERATING) {
-      // Main's CLI warns about the manifest key it does not know.
-      fs.writeFileSync(
-        path.join(
-          dir,
-          'node_modules',
-          '@acme',
-          'glyphs',
-          'astryx.integration.mjs',
-        ),
-        'export default {};\n',
-      );
-    }
-    return dir;
-  }
-
-  // The goldens were written by the CLI without icon sets, in the same
-  // project with the package's manifest emptied: that CLI warns about the
-  // manifest key `experimental` it does not know, which is the one line no
-  // CLI with this feature can print.
-  it('discover lists no icon set, and --type icon-set is an unknown type', async () => {
-    const cwd = installed('discover');
-    await expect(
-      astryx(['discover', '--json'], cwd).stdout,
-    ).toMatchFileSnapshot(path.join(GOLDEN, 'discover.json'));
-    const typed = astryx(['discover', '--type', 'icon-set', '--json'], cwd);
-    expect(typed.status).toBe(1);
-    await expect(typed.stdout).toMatchFileSnapshot(
-      path.join(GOLDEN, 'discover-type-icon-set.json'),
-    );
-    const unknown = astryx(['discover', '--type', 'bogus', '--json'], cwd);
-    await expect(unknown.stdout).toMatchFileSnapshot(
-      path.join(GOLDEN, 'discover-type-bogus.json'),
-    );
-  });
-
-  // A source that lists a malformed icon-set entry: without the opt-in its
-  // fields are unknown and the entry is an unknown kind, so the source still
-  // counts and discover answers as the CLI without icon sets does.
   it('a malformed icon-set entry in a source does not fail it', async () => {
     const cwd = writeIconSetProject(path.join(root, 'malformed-source'), {
       packages: [],
@@ -1253,81 +1170,6 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     await expect(res.stdout).toMatchFileSnapshot(
       path.join(GOLDEN, 'discover-malformed-icon-set-source.json'),
     );
-  });
-
-  // The other difference FR0 names: every command that prints the
-  // integration-issue nudge to stderr (NUDGE_COMMANDS) prints one for the
-  // manifest key `experimental` in the CLI without icon sets; this CLI prints
-  // none, so its stderr equals what that CLI prints for the package with the
-  // key removed. The theme writers have no dry run and print the nudge only
-  // after they succeed, so they run in this block's own project: two themes
-  // are forked and their built files stubbed, then added, used, and removed.
-  // `upgrade` runs without `--apply`, a dry run, against the repo's Core.
-  // Each command is its own test, in this order, since the theme commands
-  // build on the ones before them; the last test compares what they printed.
-  describe('every command that prints the integration-issue nudge prints none', () => {
-    /** @type {string} */
-    let cwd;
-    /** @type {string[]} */
-    const printed = [];
-    beforeAll(() => {
-      cwd = installed('nudge');
-      const pkgFile = path.join(cwd, 'package.json');
-      const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-      pkgJson.dependencies['@astryxdesign/core'] = '*';
-      fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
-      fs.mkdirSync(path.join(cwd, 'src'));
-      fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
-      fs.symlinkSync(
-        path.join(PROJECTS_ROOT, 'packages', 'core'),
-        path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
-        'dir',
-      );
-    });
-    /** @type {Record<string, () => void>} */
-    const setup = {
-      'theme add': () => {
-        // `theme eject` above forked stone; matcha is the second theme.
-        expect(astryx(['theme', 'eject', 'matcha', '--json'], cwd).status).toBe(
-          0,
-        );
-        for (const slug of ['stone', 'matcha']) {
-          const dir = path.join(cwd, 'src', 'themes', slug);
-          fs.writeFileSync(
-            path.join(dir, `${slug}.js`),
-            `export const ${slug}Theme = {};\n`,
-          );
-          fs.writeFileSync(path.join(dir, `${slug}.css`), '\n');
-        }
-      },
-      'theme use': () => {
-        expect(astryx(['theme', 'add', 'matcha', '--json'], cwd).status).toBe(
-          0,
-        );
-      },
-    };
-    for (const {name, args} of NUDGE_COMMANDS) {
-      it(`astryx ${args.join(' ')}`, () => {
-        setup[name]?.();
-        const res = astryx(args, cwd);
-        expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
-        if (!REGENERATING) {
-          expect(res.stderr).not.toMatch(/integration issue/u);
-        }
-        printed.push(
-          `$ astryx ${args.join(' ')}\n${textShape(res.stderr, [
-            /^(?:Warning|Error):/u,
-            /^package: /u,
-          ])}`,
-        );
-      });
-    }
-    it('prints what the CLI without icon sets prints for the package without the key', async () => {
-      expect(printed).toHaveLength(NUDGE_COMMANDS.length);
-      await expect(printed.join('\n')).toMatchFileSnapshot(
-        path.join(GOLDEN, 'installed-set-stderr.txt'),
-      );
-    });
   });
 
   // The list is every caller of the nudge: a new caller fails here until it
@@ -1377,37 +1219,6 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     }
   });
 
-  // `doctor integration validate <installed package>` checks the package's
-  // icon sets only with the opt-in: here it reports what the CLI without
-  // icon sets reports for the package with the manifest key removed.
-  it('doctor integration validate of the installed package: text, JSON, and exit code', async () => {
-    const cwd = installed('validate');
-    const json = astryx(
-      ['doctor', 'integration', 'validate', '@acme/glyphs', '--json'],
-      cwd,
-    );
-    const text = astryx(
-      ['doctor', 'integration', 'validate', '@acme/glyphs'],
-      cwd,
-    );
-    if (!REGENERATING) {
-      expect(JSON.parse(json.stdout).data).not.toHaveProperty('iconSets');
-      expect(json.stdout).not.toMatch(/icon/iu);
-    }
-    // One exit code for both; the text golden holds it.
-    expect(json.status).toBe(text.status);
-    await expect(json.stdout).toMatchFileSnapshot(
-      path.join(GOLDEN, 'validate-installed-set.json'),
-    );
-    await expect(
-      `exit ${text.status}\n${textShape(`${text.stdout}${text.stderr}`, [
-        /^Validating integration: /u,
-        /^Summary: /u,
-        /^severity:|^code:/u,
-      ])}`,
-    ).toMatchFileSnapshot(path.join(GOLDEN, 'validate-installed-set.txt'));
-  });
-
   it('every reader of an icon-set root is listed with its gate', () => {
     /** @type {string[]} */
     const readers = [];
@@ -1433,34 +1244,192 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     }
     expect(readers.sort()).toEqual(Object.keys(ICON_SET_READERS).sort());
   });
-
-  // Doctor looks for Core's peers in the node_modules of a fixed number of
-  // folders above the project, and that search can leave the checkout. In a
-  // checkout nested inside another checkout's folder, it finds the outer
-  // install. So the project installs each peer itself, from Core's own
-  // install, and the result does not depend on where the checkout is.
-  it('doctor reports nothing about an invalid installed set', async () => {
-    const cwd = installed('doctor', '{nope');
-    const core = path.join(PROJECTS_ROOT, 'packages', 'core');
-    const {peerDependencies} = JSON.parse(
-      fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
-    );
-    for (const name of Object.keys(peerDependencies)) {
-      const link = path.join(cwd, 'node_modules', ...name.split('/'));
-      fs.mkdirSync(path.dirname(link), {recursive: true});
-      fs.symlinkSync(
-        fs.realpathSync(path.join(core, 'node_modules', ...name.split('/'))),
-        link,
-        'dir',
-      );
-    }
-    const res = astryx(['doctor', '--json'], cwd);
-    expect(res.stdout).not.toMatch(/icon/i);
-    await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(
-      path.join(GOLDEN, 'doctor-installed-set.json'),
-    );
-  });
 });
+
+// An installed icon-set package turns the icon feature gate on
+// (spec:AST-084 FR0) with no `experimental.iconSet`: discover, doctor,
+// `doctor integration validate`, and `docs icons` read the set. Copied
+// templates follow a set only with `experimental.iconSet`, and search never
+// reads one. Main's CLI has no icon sets, so regenerating from main skips
+// these.
+describe.skipIf(REGENERATING)(
+  'with an icon-set package installed and no experimental.iconSet, icon features are on',
+  () => {
+    /** @type {string} */
+    let root;
+    beforeAll(() => {
+      root = fs.mkdtempSync(path.join(PROJECTS_ROOT, '.astryx-icon-set-pack-'));
+    });
+    afterAll(() => {
+      fs.rmSync(root, {recursive: true, force: true});
+    });
+
+    /**
+     * A project that loads an icon-set package, its set valid or not.
+     * @param {string} name
+     * @param {unknown} [data] the set's data file; omit for a valid one
+     */
+    function installed(name, data) {
+      const dir = writeIconSetProject(path.join(root, name), {
+        packages: [data === undefined ? {} : {data}],
+        config: {integrations: ['@acme/glyphs']},
+      });
+      fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), {recursive: true});
+      fs.writeFileSync(path.join(dir, 'node_modules', '.bin', 'astryx'), '');
+      return dir;
+    }
+
+    it('a template prints and copies as it always has without experimental.iconSet', () => {
+      const cwd = installed('template');
+      const page = fs.readFileSync(
+        path.join(
+          CLI_ROOT,
+          'assets',
+          'templates',
+          'pages',
+          'settings-dialog',
+          'page.tsx',
+        ),
+        'utf-8',
+      );
+      const shown = JSON.parse(
+        astryx(['template', 'settings-dialog', '--json'], cwd).stdout,
+      );
+      expect(shown.data).not.toHaveProperty('icons');
+      expect(shown.data.source).toBe(page);
+      const copied = JSON.parse(
+        astryx(['template', 'settings-dialog', 'out', '--json'], cwd).stdout,
+      );
+      expect(copied.data).not.toHaveProperty('icons');
+      expect(fs.readFileSync(path.join(cwd, 'out', 'page.tsx'), 'utf-8')).toBe(
+        page,
+      );
+    });
+
+    it('discover lists the set, and --type icon-set lists its package', () => {
+      const cwd = installed('discover');
+      const all = JSON.parse(astryx(['discover', '--json'], cwd).stdout);
+      const glyphs = all.data.find(
+        (/** @type {any} */ each) => each.package === '@acme/glyphs',
+      );
+      expect(glyphs.iconSets).toEqual(['glyphs']);
+      const typed = astryx(['discover', '--type', 'icon-set', '--json'], cwd);
+      expect(typed.status).toBe(0);
+      expect(
+        JSON.parse(typed.stdout).data.map(
+          (/** @type {any} */ each) => each.package,
+        ),
+      ).toEqual(['@acme/glyphs']);
+    });
+
+    // A valid set draws no integration issue, so no command prints the
+    // nudge. The theme writers have no dry run and print the nudge only
+    // after they succeed, so they run in this block's own project: two
+    // themes are forked and their built files stubbed, then added, used,
+    // and removed. `upgrade` runs without `--apply`, a dry run, against the
+    // repo's Core. Each command is its own test, in this order, since the
+    // theme commands build on the ones before them.
+    describe('a valid set: no command prints the integration-issue nudge', () => {
+      /** @type {string} */
+      let cwd;
+      beforeAll(() => {
+        cwd = installed('nudge');
+        const pkgFile = path.join(cwd, 'package.json');
+        const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+        pkgJson.dependencies['@astryxdesign/core'] = '*';
+        fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
+        fs.mkdirSync(path.join(cwd, 'src'));
+        fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
+        fs.symlinkSync(
+          path.join(PROJECTS_ROOT, 'packages', 'core'),
+          path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+          'dir',
+        );
+      });
+      /** @type {Record<string, () => void>} */
+      const setup = {
+        'theme add': () => {
+          // `theme eject` above forked stone; matcha is the second theme.
+          expect(
+            astryx(['theme', 'eject', 'matcha', '--json'], cwd).status,
+          ).toBe(0);
+          for (const slug of ['stone', 'matcha']) {
+            const dir = path.join(cwd, 'src', 'themes', slug);
+            fs.writeFileSync(
+              path.join(dir, `${slug}.js`),
+              `export const ${slug}Theme = {};\n`,
+            );
+            fs.writeFileSync(path.join(dir, `${slug}.css`), '\n');
+          }
+        },
+        'theme use': () => {
+          expect(astryx(['theme', 'add', 'matcha', '--json'], cwd).status).toBe(
+            0,
+          );
+        },
+      };
+      for (const {name, args} of NUDGE_COMMANDS) {
+        it(`astryx ${args.join(' ')}`, () => {
+          setup[name]?.();
+          const res = astryx(args, cwd);
+          expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
+          expect(res.stderr).not.toMatch(/integration issue/u);
+        });
+      }
+    });
+
+    it('doctor integration validate of the installed package checks its set', () => {
+      const cwd = installed('validate');
+      const json = astryx(
+        ['doctor', 'integration', 'validate', '@acme/glyphs', '--json'],
+        cwd,
+      );
+      const body = JSON.parse(json.stdout);
+      expect(body.data.iconSets).toEqual([
+        expect.objectContaining({set: 'glyphs'}),
+      ]);
+    });
+
+    // Doctor looks for Core's peers in the node_modules of a fixed number of
+    // folders above the project, and that search can leave the checkout. So
+    // the project installs each peer itself, from Core's own install.
+    it('doctor reports an invalid installed set', () => {
+      const cwd = installed('doctor', '{nope');
+      const core = path.join(PROJECTS_ROOT, 'packages', 'core');
+      const {peerDependencies} = JSON.parse(
+        fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
+      );
+      for (const name of Object.keys(peerDependencies)) {
+        const link = path.join(cwd, 'node_modules', ...name.split('/'));
+        fs.mkdirSync(path.dirname(link), {recursive: true});
+        fs.symlinkSync(
+          fs.realpathSync(path.join(core, 'node_modules', ...name.split('/'))),
+          link,
+          'dir',
+        );
+      }
+      const res = astryx(['doctor', '--json'], cwd);
+      expect(res.stdout).toMatch(/Icon set \\"glyphs\\" in @acme\/glyphs/u);
+    });
+
+    // Search joins icon sets only through its own section; until then it
+    // answers as the CLI without icon sets does.
+    it.each(['close', 'icon set', 'experimental'])(
+      'search %s equals the output without icon sets, text and JSON',
+      async query => {
+        const cwd = installed(`search-${query.replace(/\s+/g, '-')}`);
+        const slug = query.replace(/\s+/g, '-');
+        const {json, text} = await searchGolden(query, cwd);
+        await expect(json).toMatchFileSnapshot(
+          path.join(GOLDEN, `search-${slug}.json`),
+        );
+        await expect(text).toMatchFileSnapshot(
+          path.join(GOLDEN, `search-${slug}.txt`),
+        );
+      },
+    );
+  },
+);
 
 describe('the theme editor exception is only the theme editor', () => {
   it.each([

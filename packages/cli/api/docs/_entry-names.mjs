@@ -32,8 +32,8 @@ import {inputsUnchanged} from '../../foundation/discovery/stored-self-audit.mjs'
  * @returns {Promise<string[]>}
  */
 export async function docsRoutesNow(cwd, integrations) {
-  // The docs tree joins an integration's docs and, with the opt-in, its icon
-  // sets' definitions; without either, the project's tree is the CLI's own.
+  // The docs tree joins an integration's docs and, where icon features are
+  // on, its icon sets' definitions; without either, the project's tree is the CLI's own.
   if (integrations.every(each => !each?.docs && !each?.iconSets)) {
     return storedCliRoutes() ?? (await cliDocsRoutesNow());
   }
