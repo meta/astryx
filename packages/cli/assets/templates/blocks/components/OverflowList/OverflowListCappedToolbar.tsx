@@ -55,6 +55,7 @@ export default function OverflowListCappedToolbar() {
               }}
               items={overflowItems.map(({index}) => ({
                 label: actions[index],
+                onClick: () => runAction(actions[index]),
               }))}
             />
           )}>

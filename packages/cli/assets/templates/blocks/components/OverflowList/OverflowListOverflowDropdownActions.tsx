@@ -60,7 +60,7 @@ export default function OverflowListOverflowDropdownActions() {
             }}
             items={overflowItems.map(({index}) => ({
               label: actions[index],
-              onClick: () => {},
+              onClick: () => runAction(actions[index]),
             }))}
           />
         )}>

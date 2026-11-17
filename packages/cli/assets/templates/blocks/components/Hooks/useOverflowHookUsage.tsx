@@ -46,17 +46,25 @@ const styles = stylex.create({
   },
 });
 
-function MoreMenu({items}: {items: string[]}) {
+function MoreMenu({
+  items,
+  onSelect,
+}: {
+  items: string[];
+  onSelect: (label: string) => void;
+}) {
   return (
     <DropdownMenu
       button={{label: 'More', variant: 'ghost', size: 'sm'}}
-      items={items.map(label => ({label}))}
+      items={items.map(label => ({label, onClick: () => onSelect(label)}))}
     />
   );
 }
 
 export default function UseOverflowHookUsage() {
   const showToast = useToast();
+  const applyFormat = (label: string) =>
+    showToast({body: `Demo: ${label} would apply to the text here`});
   const {containerRef, measureRef, visibleCount, hasOverflow} = useOverflow(
     actions.length,
     {gap: GAP},
@@ -73,7 +81,7 @@ export default function UseOverflowHookUsage() {
           <Button key={label} label={label} variant="ghost" size="sm" />
         ))}
         <div data-overflow-indicator>
-          <MoreMenu items={actions} />
+          <MoreMenu items={actions} onSelect={applyFormat} />
         </div>
       </div>
       <div
@@ -87,12 +95,15 @@ export default function UseOverflowHookUsage() {
             label={label}
             variant="ghost"
             size="sm"
-            onClick={() =>
-              showToast({body: `Demo: ${label} would apply to the text here`})
-            }
+            onClick={() => applyFormat(label)}
           />
         ))}
-        {hasOverflow && <MoreMenu items={actions.slice(visibleCount)} />}
+        {hasOverflow && (
+          <MoreMenu
+            items={actions.slice(visibleCount)}
+            onSelect={applyFormat}
+          />
+        )}
       </div>
     </Card>
   );
