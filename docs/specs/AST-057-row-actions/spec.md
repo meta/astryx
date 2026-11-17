@@ -58,8 +58,8 @@ review_triggers: [public-api, accessibility, behavior]
     "packages/core/src/Swipe/**",
     "packages/core/src/privateAttributes/pressHeld.stylex.ts",
     "packages/core/src/motion/uikit/swipeActions.ts",
-    "packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs",
-    "packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs",
+    "packages/cli/assets/codemods/transforms/*/migrate-item-swipe-actions-to-swipe.mjs",
+    "packages/cli/assets/codemods/transforms/*/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs",
     "packages/core/src/List/ListItem.swipeKey.test.tsx"
   ]
 }
