@@ -2012,7 +2012,8 @@ describe('render --reverse: a received file may carry only what a render embeds'
     put('cfg/page.tsx', "import pkg from './package.json';\nexport default function Page() { return <p>v{pkg.version}</p>; }\n");
     const r = /** @type {any} */ (await render('cfg/page.tsx', {cwd: dir}));
     expect(r.data.files).toEqual(['page.tsx']);
-    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
+    expect(r.data.notCarried).toEqual(['package.json']);
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-carried');
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
     const back = /** @type {any} */ (await render('cfg/page.html', {cwd: dir, reverse: true}));
@@ -2389,6 +2390,57 @@ describe('render(): a page outside a project', () => {
     // A page that imports nothing above its own folder is named as it is
     // listed among the files.
     expect(siteHtml).toContain('Page: page.tsx\n');
+  }, 60_000);
+
+  it('names an imported *.config.json it does not carry in the warnings, the note and notCarried', () => {
+    const tree = path.join(away, 'config-named');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['chart.config.json']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. Rename it, such as chart-data.json, to carry it.",
+    });
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Sales in USD');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (--reverse cannot give them back)\n');
+    expect(note).not.toContain('come back exactly');
+    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
+  }, 60_000);
+
+  it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
+    const tree = path.join(away, 'config-renamed');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart-data.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'chart-data.json']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-carried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).not.toContain('Not carried');
+    expect(html).toContain('so the page can come back exactly.');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, files: expect.arrayContaining(['page-restored/page.tsx', 'page-restored/chart-data.json'])});
+    expect(back.json.data).not.toHaveProperty('missing');
   }, 60_000);
 
   it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {

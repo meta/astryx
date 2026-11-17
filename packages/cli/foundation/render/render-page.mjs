@@ -35,7 +35,7 @@ import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
 import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
-import {embeddedPathProblem} from './embedded-files.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
@@ -53,7 +53,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -67,6 +67,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
+ * @property {string[]} [notCarried] - Files the page imports that the file does not carry because their names read as a tool's configuration; present only when there are some.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -1413,9 +1414,20 @@ export async function renderPage(entry, options = {}) {
   const ordered = [entry, ...files.filter(f => f !== entry)];
   /** @type {{path: string, bytes: Buffer}[]} */
   const embedded = [];
+  /** Imported files left out because their names read as configuration. @type {string[]} */
+  const configNamed = [];
   for (const f of ordered) {
     const rel = path.relative(base, f).split(path.sep).join('/');
-    if (f !== entry && embeddedPathProblem(rel)) {
+    const problem = f === entry ? null : embeddedPathProblem(rel);
+    if (problem?.toolConfig) {
+      configNamed.push(rel);
+      warnings.push({
+        code: 'not-carried',
+        message: `${rel} is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. Rename it, such as ${carriedNameFor(path.basename(f))}, to carry it.`,
+      });
+      continue;
+    }
+    if (problem) {
       warnings.push({
         code: 'not-embedded',
         message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so --reverse cannot give it back.`,
@@ -1494,6 +1506,7 @@ export async function renderPage(entry, options = {}) {
         : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
+      notCarried: configNamed,
       packages,
       install: Object.entries(packages)
         .filter(([name]) => !isServedPackage(name, []))
@@ -1558,6 +1571,7 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
+    ...(configNamed.length > 0 ? {notCarried: configNamed} : {}),
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
   };

@@ -83,10 +83,32 @@ const extOf = p => {
 };
 
 /**
+ * Whether a file name reads as a project's or a tool's configuration, which a
+ * render never carries and --reverse never writes.
+ * @param {string} base the file's name, without its folder
+ */
+export function readsAsToolConfig(base) {
+  const ext = extOf(base);
+  return ((ext === '.json' || ext === '.jsonc') && CONFIG_JSON.test(base)) || CONFIG_MODULE.test(base);
+}
+
+/**
+ * A name a render carries for a file whose name reads as configuration:
+ * `chart.config.json` becomes `chart-data.json`.
+ * @param {string} base the file's name, without its folder
+ */
+export function carriedNameFor(base) {
+  const ext = extOf(base);
+  const stem = base.slice(0, base.length - ext.length).replace(/\.config$/i, '').replace(/\./g, '-');
+  return `${stem}-data${ext}`;
+}
+
+/**
  * Why a path may not be carried by a rendered page, or null when it may.
  * @param {string} p a `/`-separated path relative to the embedded tree's root
  * @param {{page?: boolean}} [options] `page`: the path is the page itself
- * @returns {{code: 'ERR_PATH_TRAVERSAL' | 'ERR_RENDER_SOURCE_DAMAGED', reason: string} | null}
+ * @returns {{code: 'ERR_PATH_TRAVERSAL' | 'ERR_RENDER_SOURCE_DAMAGED', reason: string, toolConfig?: true} | null}
+ *   `toolConfig`: the only problem is a name that reads as configuration
  */
 export function embeddedPathProblem(p, options = {}) {
   if (typeof p !== 'string' || p.length === 0 || p.includes('\0')) {
@@ -120,8 +142,8 @@ export function embeddedPathProblem(p, options = {}) {
   if (runnerPicksUp(segments)) {
     return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a test, spec, story or benchmark file (${p})`};
   }
-  if (((ext === '.json' || ext === '.jsonc') && CONFIG_JSON.test(base)) || CONFIG_MODULE.test(base)) {
-    return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a project or tool configuration file (${p})`};
+  if (readsAsToolConfig(base)) {
+    return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a project or tool configuration file (${p})`, toolConfig: true};
   }
   if (MODULE_EXTENSIONS.includes(ext) || ext === '.css' || ext === '.json' || isAssetPath(p)) return null;
   return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a kind of file a render never embeds (${p})`};

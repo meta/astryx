@@ -2,7 +2,8 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, the time limit, and drawing the overlays a page opens.
+ * HTML reader, the time limit, drawing the overlays a page opens, and the
+ * names a render does not carry.
  */
 
 import * as fs from 'node:fs';
@@ -13,6 +14,7 @@ import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
 import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -268,3 +270,17 @@ describe('withUncarriedImages', () => {
   });
 });
 
+describe('a name that reads as configuration', () => {
+  it('is left out, and the name its warning suggests is carried', () => {
+    for (const name of ['chart.config.json', 'package.json', 'tsconfig.app.json', 'yarn-lock.json', 'vite.config.ts']) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(name)}`)).toBeNull();
+    }
+    expect(carriedNameFor('chart.config.json')).toBe('chart-data.json');
+  });
+
+  it('is not the reason a runner file or a dotfile is left out', () => {
+    expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
+    expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
+});
