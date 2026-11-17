@@ -33,8 +33,6 @@ export const docs = {
     'self-contained',
     'offline',
     'bundle',
-    'one file',
-    'html file',
     'portable',
     'send',
     'email',
