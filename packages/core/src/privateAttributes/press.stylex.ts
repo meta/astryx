@@ -13,6 +13,8 @@
  * @position Owner module of the private press attribute: the press controller
  *   (utils/pressFeedback.ts) writes it, and this file reads it.
  *   utils/interactionOverlay.cell.test.ts tests the row layer.
+ *   `controlPressLayerStyles.control` opts its control into the controller's
+ *   press placement through `--_press-place`, and reads the place it writes.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -391,11 +393,14 @@ export const controlPressLayerStyles = stylex.create({
    * hint names opacity, which keeps the layer and makes no containing block.
    * The layer then has the containing block's box, unless a press began on a
    * static control's own box. Then the control holds that box as the layer's
-   * inset (utils/pressLayerBox.ts). The layer reads it only while a press is
+   * inset (utils/pressFeedback.ts). The layer reads it only while a press is
    * on or fading, so a caller's own `::before` keeps its styles at rest.
-   * With any other pointer nothing here applies.
+   * Under a fine pointer only the `backgroundImage` arms and `--_press-place`
+   * apply.
    */
   control: {
+    // The press controller places a press only on a control that asks.
+    '--_press-place': 'control',
     willChange: {
       default: null,
       [COARSE]: {default: null, [PRESSED_ANY]: 'opacity'},
@@ -431,7 +436,7 @@ export const controlPressLayerStyles = stylex.create({
   /**
    * The row's tint under any pointer but a coarse primary one, on the
    * control's content wrapper. It shows while a press that began on the row
-   * outside a static control is held (utils/pressLayerBox.ts). The wrapper is
+   * outside a static control is held (utils/pressFeedback.ts). The wrapper is
    * static too, so its `::before` has the row's box. Without that press, its
    * content makes no box.
    */
@@ -444,6 +449,14 @@ export const controlPressLayerStyles = stylex.create({
       borderRadius: 'inherit',
       backgroundImage: pressedImage,
       pointerEvents: 'none',
+      // A finger's release fades it on the exit tokens, as the layer's does.
+      opacity: 'var(--_press-row-opacity, 1)',
+      transitionProperty: 'opacity',
+      transitionDuration: {
+        default: CELL_RELEASE,
+        [REDUCED_MOTION]: CELL_RELEASE_REDUCED,
+      },
+      transitionTimingFunction: RELEASE_EASE,
     },
   },
 });

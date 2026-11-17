@@ -521,6 +521,10 @@
       "status": "open",
       "group": "triage"
     },
+    "packages/core/src/utils/pressFeedback.ts:mousePlace": {
+      "status": "open",
+      "group": "triage"
+    },
     "packages/core/src/utils/pressFeedback.ts:stopTouchCancel": {
       "status": "open",
       "group": "triage"

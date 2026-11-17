@@ -16,7 +16,8 @@
  *   clicks from a raw touch sequence), and so does a mouse click (both
  *   engines)
  * @position Interaction evidence for privateAttributes/press.stylex.ts
- *   (`control`) and utils/pressLayerBox.ts as Button uses them
+ *   (`control`, `rowTint`) and the press controller (utils/pressFeedback.ts)
+ *   as Button uses them
  */
 
 import {
@@ -57,6 +58,7 @@ interface HitState {
   /** Under a fine primary pointer: the row's tint, and the Button's own. */
   rowTint: string;
   rowTintBox: number[];
+  rowOpacity: string;
   ownTint: string;
 }
 
@@ -149,9 +151,7 @@ async function pressAndRead(
 ): Promise<{states: HitState[]; log: string}> {
   await button.evaluate((el, points) => {
     const states: HitState[] = [];
-    // The press controller writes its attribute in the window's capture
-    // phase, before Button notes where the press began. So each state is
-    // read at the next frame, as it paints.
+    // Each state is read at the next frame, as it paints.
     const read = (press: string | null) => {
       const layer = getComputedStyle(el, '::before');
       const button = el as HTMLElement;
@@ -186,6 +186,9 @@ async function pressAndRead(
           rowTint.width,
           rowTint.height,
         ].map(value => Math.round(parseFloat(value))),
+        rowOpacity: getComputedStyle(el)
+          .getPropertyValue('--_press-row-opacity')
+          .trim(),
         ownTint: getComputedStyle(el).backgroundImage,
       });
     };
@@ -252,6 +255,30 @@ for (const pointer of ['finger', 'mouse'] as const) {
     const {states, log} = await pressAndRead(page, button, probes, at, press);
     // The Button is the pressed surface: its press layer has the Button's own
     // box, so the rest of the row shows no tint.
+    for (const state of states) {
+      expect(state.layer, log).toBe('""');
+      expect(state.layerBox, log).toEqual(state.buttonBox);
+    }
+  });
+}
+
+for (const gesture of ['held', 'tapped'] as const) {
+  test(`a finger ${gesture} on the Button's own box, on a page that scrolls, tints only the Button`, async ({
+    page,
+  }) => {
+    const {driver, button, probes} = await openRow(page);
+    // On a page that scrolls, a finger's press waits out its onset first.
+    await page.evaluate(() => {
+      document.body.style.minHeight = '300vh';
+    });
+    const at = await buttonCenter(button);
+    const press =
+      gesture === 'held'
+        ? fingerHold(driver, at)
+        : async () => {
+            await driver.tap(at);
+          };
+    const {states, log} = await pressAndRead(page, button, probes, at, press);
     for (const state of states) {
       expect(state.layer, log).toBe('""');
       expect(state.layerBox, log).toEqual(state.buttonBox);
@@ -358,6 +385,18 @@ test.describe('under a fine primary pointer', () => {
     expect(held.ownTint, log).toContain('gradient');
   });
 
+  test('a mouse press on the row of a disabled Button tints nothing', async ({
+    page,
+  }) => {
+    const {button, probes} = await findRow(page);
+    await button.evaluate(el => {
+      el.setAttribute('aria-disabled', 'true');
+    });
+    const {held, log} = await mouseHoldAndRead(page, button, probes, probes[0]);
+    expect(held.rowTint, log).not.toBe('""');
+    expect(held.ownTint, log).toBe('none');
+  });
+
   test('a click on the line under the Button activates the Button once', async ({
     page,
   }) => {
@@ -390,6 +429,9 @@ test.describe('under a fine primary pointer, with a finger', () => {
     for (const state of states) {
       expect(state.ownTint, log).toBe('none');
     }
+    // The release fades the row's tint, as it fades every finger's press.
+    expect(states[1].rowTint, log).toBe('""');
+    expect(states[1].rowOpacity, log).toBe('0');
   });
 
   test("a finger press on the Button's own box tints only the Button", async ({
