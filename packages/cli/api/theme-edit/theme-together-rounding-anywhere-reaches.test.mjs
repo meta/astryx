@@ -12,8 +12,6 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
-import {pillDrawnRadios} from './_check.mjs';
-import {context} from './_context.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -73,22 +71,15 @@ const T = 180_000;
 
 describe('answers that hold together', () => {
   it(
-    'no rounding anywhere squares the pills too, and names them',
+    'no rounding anywhere squares the pills too, names them, and keeps the circles',
     async test => {
       needsBases(test);
       const r = await answer('no rounding anywhere, badges and switches too');
-      // On a Core that draws a radio's circle with the pill token, the
-      // radio marks keep it at Core's value.
-      const radios = pillDrawnRadios((await context(cwd)).C);
-      expect(r.first).toEqual([
-        'set n corners square',
-        'set n --radius-full 0px',
-        ...radios.map(
-          m =>
-            `set n --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
-        ),
-      ]);
-      expect(r.text).toMatch(/badge/);
+      // (The dial squares the pills that are a styling choice; the circles
+      // keep their shape, said.)
+      expect(r.first).toEqual(['set n corners square']);
+      expect(r.text).toMatch(/squares the pills too \([^)]*badge/);
+      expect(r.text).toMatch(/circles keep their shape \([^)]*avatar/);
       expect((await answer('corners square')).first).toEqual([
         'set n corners square',
       ]);

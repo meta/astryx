@@ -6768,6 +6768,30 @@ export function compileTheme(ctx, data, base) {
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
+          // Square corners square every pill that is a styling choice (a
+          // badge, a progress track, a switch's track): its corners read the
+          // element radius, which is 0 there. A circle (an avatar, a
+          // switch's thumb) keeps its shape, and a part given corners of its
+          // own keeps them.
+          if (
+            /^(?:square|0px)$/.test(cornersPlain(String(s.value)) ?? '') &&
+            !data.settings.some(x => x.thing === '--radius-full' && !x.on)
+          )
+            for (const t of pillShapes(ctx.C).pills)
+              if (
+                ctx.project.target.has(t) &&
+                !data.settings.some(
+                  x =>
+                    x.on === t &&
+                    (x.thing === 'corners' || /radius$/.test(String(x.thing))),
+                )
+              )
+                putComp(
+                  {...s, mode: undefined},
+                  t,
+                  'borderRadius',
+                  'var(--radius-element)',
+                );
           // A part rule of the base theme that gives a radius other than the
           // dial token the part reads (a length, or a token the dial never
           // moves, such as --radius-full) would keep it over the dial: the
@@ -12938,6 +12962,57 @@ export function radioMark(C, part) {
  * @returns {boolean}
  */
 export function radioCircle(C, part) {
+  return radioCircleOf(C, part);
+}
+
+/**
+ * The parts drawn round with the pill token (--radius-full) as a styling
+ * choice: a pill whose box follows its content or its track (a badge, a
+ * progress track, a switch's track, an indicator line), never a circle.
+ * A part is a circle, and keeps its round shape, where in a rule its corners
+ * read the pill token its box is square (its width and height, or its
+ * minimum width and height or height, are one value: a switch's thumb, a
+ * calendar day, a numbered citation) or a visual prop names its shape a
+ * circle (an avatar's shape=circle), and so is a radio's mark. By the
+ * census, never by name.
+ * @param {{MAP: Record<string, any>}} C
+ * @returns {{pills: string[], circles: string[]}}
+ */
+export function pillShapes(C) {
+  /** @type {string[]} */
+  const pills = [];
+  /** @type {string[]} */
+  const circles = [];
+  for (const [part, rec] of Object.entries(C.MAP)) {
+    const radius = rec?.at?.['border-radius'] ?? {};
+    const full = Object.keys(radius).filter(
+      cond => !/:/.test(cond) && /--radius-full/.test(String(radius[cond])),
+    );
+    if (!full.length) continue;
+    /** @param {string} prop @param {string} cond */
+    const size = (prop, cond) => {
+      const v = rec?.at?.[prop]?.[cond];
+      return v == null ? null : String(v).trim();
+    };
+    const circle =
+      radioMark(C, part) ||
+      full.some(cond => {
+        if (/(?:^|,)shape=circle(?:,|$)/.test(cond.split(' ')[0])) return true;
+        const w = size('width', cond) ?? size('min-width', cond);
+        const h = size('height', cond) ?? size('min-height', cond);
+        return w != null && w === h && !/%$|fit-content|auto/.test(w);
+      });
+    (circle ? circles : pills).push(part);
+  }
+  return {pills, circles};
+}
+
+/**
+ * A radio's mark drawn as a circle with a percentage radius.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ */
+function radioCircleOf(C, part) {
   /** The radius values a part draws, in any rule. @param {string} t */
   const radii = t =>
     Object.entries(C.MAP[t]?.at ?? {})

@@ -49,6 +49,7 @@ import {
 import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
+  pillShapes,
   DIAL_RADII,
   borderParts,
   cornerParts,
@@ -67,8 +68,6 @@ import {
 import {
   borderlessSurfaces,
   indicatorLines,
-  pillDrawnRadios,
-  pillParts,
   selectedBoxes,
   dividerParts,
   drawsLine,
@@ -16324,39 +16323,40 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
-   * "No rounding anywhere", "… badges and switches too": the corners dial
-   * leaves the parts drawn as pills round (they read --radius-full), so
-   * that token goes square too, and the answer names those parts. Null
-   * unless the value is square and the question asks for it everywhere or
-   * names a pill part.
-   * On a Core that draws a radio's circle with the pill token, the radio
-   * marks keep the token at Core's value (pillDrawnRadios).
+   * "No rounding anywhere", "… badges and avatars too": the corners dial at
+   * square squares every pill that is a styling choice itself (a badge, a
+   * progress track); the parts drawn as circles keep their shape unless the
+   * question names one, which then goes square on its own. Null unless the
+   * value is square and the question asks for it everywhere or names a
+   * pill or circle part.
    * @param {string} value
    * @returns {{steps: Step[], said: string} | null}
    */
   function pillsSquare(value) {
     if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
-    const pills = pillParts(C);
-    const radios = pillDrawnRadios(C);
-    if (
-      !pills.length ||
-      !(
-        /\b(?:anywhere|everywhere|everything|at all|pills?|too|as well)\b/.test(
-          question.toLowerCase(),
-        ) ||
-        clauses.some(
-          o => !o.except && o.parts.some(p => pills.includes(one(p.on))),
-        )
+    const {pills, circles} = pillShapes(C);
+    const named = [
+      ...new Set(
+        clauses
+          .filter(o => !o.except)
+          .flatMap(o => o.parts.map(p => one(p.on)))
+          .filter(p => circles.includes(p)),
+      ),
+    ];
+    if (!(
+      named.length ||
+      /\b(?:anywhere|everywhere|everything|at all|pills?|too|as well)\b/.test(
+        question.toLowerCase(),
+      ) ||
+      clauses.some(
+        o => !o.except && o.parts.some(p => pills.includes(one(p.on))),
       )
-    )
+    ))
       return null;
-    const round = String(TOKENS['--radius-full'] ?? '9999px');
+    const kept = circles.filter(p => !named.includes(p));
     return {
-      steps: [
-        set('--radius-full', '0px'),
-        ...radios.map(m => set('--radius-full', round, {on: m})),
-      ],
-      said: `and --radius-full 0px for the parts drawn as pills (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`,
+      steps: named.map(m => set('corners', 'square', {on: m})),
+      said: `which squares the pills too (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${named.length ? `, and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own` : ''}${kept.length ? `; the parts drawn as circles keep their shape (${kept.slice(0, 6).join(', ')}${kept.length > 6 ? ` and ${kept.length - 6} more` : ''})` : ''}`,
     };
   }
   /**

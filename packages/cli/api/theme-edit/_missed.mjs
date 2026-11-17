@@ -17,8 +17,10 @@ import {
   modesOf,
   partsOf,
   roleReach,
+  cornersPlain,
+  pillShapes,
 } from './_settings.mjs';
-import {borderlessSurfaces, pillParts} from './_check.mjs';
+import {borderlessSurfaces} from './_check.mjs';
 import {parseColor, ratio, splitTop} from './_color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
@@ -740,9 +742,21 @@ export function missedSteps(ctx, data, res, base) {
   const squareCorners = modes.every(
     m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
+  // (The corners dial at square squares them itself.)
+  const squaresPills = data.settings.some(
+    x =>
+      x.source === 'dial' &&
+      x.thing === 'corners' &&
+      !x.on &&
+      /^(?:square|0px)$/.test(cornersPlain(String(x.value)) ?? ''),
+  );
+  // (Only a pill that is a styling choice: a circle keeps its shape.)
   if (corners && squareCorners)
-    for (const p of pillParts(C).filter(
-      x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
+    for (const p of pillShapes(C).pills.filter(
+      x =>
+        has(x) &&
+        !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/) &&
+        !squaresPills,
     ))
       found.push({
         kind: 4,

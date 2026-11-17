@@ -51,11 +51,15 @@ const notesOf = r =>
     .join('\n');
 
 describe('a whole-theme change', () => {
-  it('square corners names the pills they leave round, with the line', async () => {
+  it('square corners name the circles they keep round, with the line for one', async () => {
     await themeEditNew('c3', {cwd});
     const r = await themeEditSet('c3', 'corners', 'square', {cwd});
-    expect(notesOf(r)).toMatch(/pills stay round \([^)]*badge/);
-    expect(notesOf(r)).toContain(' set c3 --radius-full 0px');
+    // (The pills that are a styling choice, a badge, go square with the
+    // dial; only the circles are kept.)
+    expect(notesOf(r)).toMatch(/drawn as circles stay round \([^)]*avatar/);
+    expect(notesOf(r)).not.toMatch(/circles stay round \([^)]*\bbadge\b/);
+    expect(notesOf(r)).toContain(' set c3 corners square --on avatar');
+    expect(notesOf(r)).not.toContain('--radius-full 0px');
   }, 240_000);
 
   it('a border width names the surfaces it does not reach and the dividers it thickens', async () => {
