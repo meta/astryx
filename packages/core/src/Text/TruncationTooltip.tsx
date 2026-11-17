@@ -8,7 +8,7 @@
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
  *   module once text is truncated and tracks the first hover, tap or focus on
  *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
- * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
+ * @position Shared by Text, Heading, Button's cut label and Lab's LineClamp (through Core's internal
  *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
  *   answers that interaction as it would once mounted.
@@ -65,6 +65,12 @@ export interface TruncationTooltipInterest {
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
+  /**
+   * For an element that measures its text only when a hover or focus reaches
+   * it (Button's label): returns whether the text is cut at that moment.
+   * While it returns false, the interaction mounts nothing.
+   */
+  isCutOnInterest?: () => boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
@@ -98,14 +104,14 @@ export function useTruncationTooltipInterest(
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (!isEnabled || state.isRead) {
+      if (state.isRead || !(isEnabled || (isCutOnInterest?.() ?? false))) {
         return;
       }
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled],
+    [isEnabled, isCutOnInterest],
   );
   const forget = useCallback((interest: 'hover' | 'focus') => {
     const state = interestRef.current;

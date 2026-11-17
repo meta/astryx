@@ -116,6 +116,39 @@ describe('Button label truncation tooltip', () => {
     }
   });
 
+  it('closes when the pointer leaves, so crossing two cut buttons leaves none open', async () => {
+    restore = withOverflow(true);
+    const openLayers = new Set<HTMLElement>();
+    const proto = HTMLElement.prototype;
+    vi.spyOn(proto, 'showPopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.add(this);
+    });
+    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.delete(this);
+    });
+    render(
+      <>
+        <Button label={LABEL} />
+        <Button label="Another label that is cut short too" />
+      </>,
+    );
+    const [first, second] = screen.getAllByRole('button');
+    fireEvent.pointerEnter(first, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(first);
+    fireEvent.pointerLeave(first, {pointerType: 'mouse'});
+    fireEvent.mouseLeave(first);
+    fireEvent.pointerEnter(second, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(second);
+    fireEvent.pointerLeave(second, {pointerType: 'mouse'});
+    fireEvent.mouseLeave(second);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(openLayers.size).toBe(0);
+  });
+
   it('adds no description that repeats the name', async () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} />);

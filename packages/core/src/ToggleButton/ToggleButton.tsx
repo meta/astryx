@@ -76,11 +76,20 @@ const labelStyles = stylex.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    // Shrinks with the Button's label box, so a label too long for the row
+    // is cut on the visible line below with an ellipsis.
+    maxWidth: '100%',
+  },
+  visible: {
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   pressed: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
   },
   widthReservation: {
+    maxWidth: '100%',
     display: 'block',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     height: 0,
@@ -327,7 +336,11 @@ export function ToggleButton({
     // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- switching to isRenderable would show `label` for children of '', false or true, a visible change that needs a decision
     children != null ? (
       <span {...stylex.props(labelStyles.wrapper)}>
-        <span {...stylex.props(isPressed && labelStyles.pressed)}>
+        <span
+          {...stylex.props(
+            labelStyles.visible,
+            isPressed && labelStyles.pressed,
+          )}>
           {children}
         </span>
         <span
@@ -338,7 +351,13 @@ export function ToggleButton({
       </span>
     ) : !isIconOnly ? (
       <span {...stylex.props(labelStyles.wrapper)}>
-        <span {...stylex.props(isPressed && labelStyles.pressed)}>{label}</span>
+        <span
+          {...stylex.props(
+            labelStyles.visible,
+            isPressed && labelStyles.pressed,
+          )}>
+          {label}
+        </span>
         <span
           {...stylex.props(labelStyles.widthReservation)}
           aria-hidden="true">
