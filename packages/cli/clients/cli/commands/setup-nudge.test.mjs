@@ -6,10 +6,10 @@
  * Unit: isAstryxInitialized() detects the Astryx marker across EVERY agent-doc
  * location (including the previously-missed Hermes files) and legacy XDS blocks.
  *
- * Integration: the CLI reminds (stderr) after a successful command, at most
- * once a day per project, when the project hasn't run init. Quiet in --json,
- * under CI, after a failure, once set up, outside a project, and for the
- * installer command itself.
+ * Integration: the CLI reminds (stderr) before a command's own output, at
+ * most once a day per project, when the project hasn't run init. Quiet in
+ * --json, under CI, once set up, outside a project, and for the installer
+ * command itself.
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
@@ -131,7 +131,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
   const asProject = () =>
     write('package.json', '{"name":"t","dependencies":{"@astryxdesign/core":"*"}}');
 
-  it('nudges on stderr after a command when not set up', async () => {
+  it('nudges on stderr when not set up', async () => {
     asProject();
     const r = await runCli(['docs', 'tokens'], tmp);
     expect(r.stderr).toMatch(NUDGE);
@@ -182,14 +182,11 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
   });
 
   // An agent that leaves `init` to its person must not see the reminder
-  // before every command: once a day per project, after a command that
-  // succeeds.
+  // before every command: once a day per project.
   it('prints once a day per project: a second command the same day prints none', async () => {
     asProject();
     const first = await runCli(['docs', 'tokens'], tmp);
     expect(first.stderr).toMatch(NUDGE);
-    // After the command's own output, never before it.
-    expect(first.stderr.trimEnd().endsWith('install the Astryx agent prompt.')).toBe(true);
     expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
     expect((await runCli(['component', '--list'], tmp)).stderr).not.toMatch(NUDGE);
   });
@@ -215,13 +212,23 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
   });
 
-  it('prints none after a command that fails', async () => {
+  // Agents often keep only the start of a long answer (`2>&1 | head`), so a
+  // line printed after the output would be cut, and the day used up unseen.
+  it("prints before the command's own output, so a cut answer keeps it", async () => {
+    asProject();
+    const r = await runCli(['component', '--list'], tmp);
+    const combined = `${r.stderr}\n${r.stdout}`;
+    expect(r.stderr).toMatch(NUDGE);
+    expect(r.stderr.trimStart().startsWith('Next step: run')).toBe(true);
+    expect(combined.trimStart().startsWith('Next step: run')).toBe(true);
+  });
+
+  it('prints for a command that fails too, and that uses the day', async () => {
     asProject();
     const r = await runCli(['component', 'NoSuchComponentAnywhere'], tmp);
     expect(r.status).not.toBe(0);
-    expect(r.stderr).not.toMatch(NUDGE);
-    // The day is not used up: the next command that succeeds prints it.
-    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+    expect(r.stderr).toMatch(NUDGE);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
   });
 
   it("a reminder kept to once a day is no update notice: doctor's update line never names it", async () => {
