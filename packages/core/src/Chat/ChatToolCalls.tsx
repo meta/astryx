@@ -107,6 +107,10 @@ const styles = stylex.create({
   root: {
     display: 'flex',
     flexDirection: 'column',
+    // A message column aligns its children to the start, so the root sizes
+    // to its content and a long target never shrinks. The cap lets each row
+    // shrink to the column, so its target truncates.
+    maxWidth: '100%',
     marginBlockStart: spacingVars['--spacing-2'],
   },
   groupHeader: {
