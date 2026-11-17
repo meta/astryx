@@ -20,6 +20,7 @@ import {builtinModules} from 'node:module';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
+import {writtenString} from '../text/written-string.mjs';
 
 /** A name npm gives a package, scoped or not (older names may have capitals). */
 const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
@@ -207,6 +208,7 @@ function scanModule(source, file) {
   /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
   const add = (specifier, node, typeOnly = false) =>
     records.push({specifier, line: node.loc?.start?.line, typeOnly});
+  const written = writtenString;
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
@@ -222,16 +224,16 @@ function scanModule(source, file) {
       add(node.source.value, node, typesOnly(node));
     } else if (
       node.type === 'ImportExpression' &&
-      node.source?.type === 'StringLiteral'
+      written(node.source) != null
     ) {
-      add(node.source.value, node);
+      add(/** @type {string} */ (written(node.source)), node);
     } else if (
       node.type === 'CallExpression' &&
-      node.arguments?.[0]?.type === 'StringLiteral' &&
+      written(node.arguments?.[0]) != null &&
       (node.callee?.type === 'Import' ||
         (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
     ) {
-      add(node.arguments[0].value, node);
+      add(/** @type {string} */ (written(node.arguments[0])), node);
     }
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra')

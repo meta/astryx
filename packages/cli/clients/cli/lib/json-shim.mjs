@@ -59,24 +59,15 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
-
-/**
- * Fully-qualified name of a command relative to the root program, e.g.
- * `theme build`. The root itself is ''.
- * @param {import('commander').Command} cmd
- * @returns {string}
- */
-function fullNameOf(cmd) {
-  /** @type {string[]} */
-  const parts = [];
-  /** @type {any} */
-  let node = cmd;
-  while (node?.parent) {
-    parts.unshift(node.name());
-    node = node.parent;
-  }
-  return parts.join(' ');
-}
+import {
+  commandAvailable,
+  helpBase,
+  optionAvailable,
+  servedHelpDescription,
+  servedHelpOptionDescription,
+  servedSubcommands,
+} from './base-gate.mjs';
+import {commandPath} from './command-path.mjs';
 
 /**
  * Cheap argv check used before preAction has had a chance to engage
@@ -111,10 +102,11 @@ export function buildHelpEnvelope(cmd) {
     c = c.parent;
   }
 
+  const base = helpBase();
   /** @type {Array<{flags: string, description: string, defaultValue?: unknown, choices?: string[]}>} */
-  const options = cmd.options.map(o => {
+  const options = cmd.options.filter(o => optionAvailable(cmd, o, base)).map(o => {
     /** @type {any} */
-    const opt = {flags: o.flags, description: o.description || ''};
+    const opt = {flags: o.flags, description: servedHelpOptionDescription(cmd, o) || ''};
     if (o.defaultValue !== undefined) opt.defaultValue = o.defaultValue;
     if (Array.isArray(o.argChoices) && o.argChoices.length)
       opt.choices = o.argChoices;
@@ -122,15 +114,21 @@ export function buildHelpEnvelope(cmd) {
   });
 
   const subcommands = cmd.commands
-    .filter(s => !(/** @type {any} */ (s)._hidden))
-    .map(s => ({name: s.name(), description: s.description() || ''}));
+    .filter(s => !(/** @type {any} */ (s)._hidden) && commandAvailable(s, base))
+    // Off Core, a group's listing reads its summary, as text help does: its
+    // full description can name commands the base refuses.
+    .map(s => ({
+      name: s.name(),
+      description:
+        (base != null && !base.core && s.summary()) || servedHelpDescription(s) || '',
+    }));
 
   return {
     apiVersion: API_VERSION,
     type: 'help',
     data: {
       command: nameParts.join(' '),
-      description: cmd.description() || '',
+      description: servedHelpDescription(cmd) || '',
       usage: `${nameParts.join(' ')} ${cmd.usage()}`.trim(),
       options,
       subcommands,
@@ -149,7 +147,12 @@ export function buildHelpEnvelope(cmd) {
  */
 export function buildHelpErrorEnvelope(cmd) {
   const available = cmd.commands
-    .filter(s => !(/** @type {any} */ (s)._hidden) && s.name() !== 'help')
+    .filter(
+      s =>
+        !(/** @type {any} */ (s))._hidden &&
+        s.name() !== 'help' &&
+        commandAvailable(s, helpBase()),
+    )
     .map(s => s.name());
   if (!cmd.parent) {
     // Commander dispatches `help <name>` with ['help', <name>, ...] in args.
@@ -160,7 +163,7 @@ export function buildHelpErrorEnvelope(cmd) {
       ERROR_CODES.ERR_UNKNOWN_COMMAND,
     );
   }
-  const group = fullNameOf(cmd);
+  const group = commandPath(cmd);
   return toErrorEnvelope(
     `'${group}' needs a subcommand`,
     available.map(name => ({
@@ -275,7 +278,7 @@ function applyShimRecursively(cmd) {
   // recorded against the root program instead of `theme build`.
   cmd.exitOverride(err => {
     try {
-      setCommand(fullNameOf(cmd));
+      setCommand(commandPath(cmd));
     } catch {
       // Never let recording interfere with the error path.
     }
@@ -383,7 +386,7 @@ function optionsWithoutSubcommand(group) {
   }
   const rest = argv.slice(at);
   if (!rest.length || !rest[0].startsWith('-')) return null;
-  const subs = /** @type {any[]} */ (group.commands);
+  const subs = servedSubcommands(group);
   /** @type {string[]} */
   const flags = [];
   /** @type {string[]} */
@@ -450,7 +453,7 @@ function optionsBeforeSubcommand(group) {
   }
   const rest = argv.slice(at);
   if (!rest.length || !String(rest[0]).startsWith('-')) return null;
-  const subs = /** @type {any[]} */ (group.commands);
+  const subs = servedSubcommands(group);
   /** The command a list of commands names by a word. @param {any[]} list @param {unknown} w */
   const named = (list, w) =>
     list.find(c => c.name() === w || c.aliases().includes(w));
@@ -472,8 +475,8 @@ function optionsBeforeSubcommand(group) {
     let target = first;
     const words = [first.name()];
     let j = i + 1;
-    while (target.commands?.length && named(target.commands, rest[j])) {
-      target = named(target.commands, rest[j]);
+    while (named(servedSubcommands(target), rest[j])) {
+      target = named(servedSubcommands(target), rest[j]);
       words.push(target.name());
       j++;
     }
@@ -768,6 +771,30 @@ function editorMissingSuggestions(cmd) {
   const given = (cmd?.args ?? []).map(String);
   if (given.length && wants[0]?.name() === 'theme' && cmd.name() !== 'new') {
     const themes = editorThemesHere(process.cwd());
+    // A whole command pasted as one word (`set 'set t accent red'`, `set
+    // 'npx … editor set t accent red'`): the command it is, its words read
+    // as typed, when its theme is one here.
+    if (given.length === 1 && /\s/.test(given[0])) {
+      const pasted = given[0]
+        .trim()
+        .replace(/^.*?\beditor\s+/, '')
+        .replace(new RegExp(`^${cmd.name()}\\s+`), '')
+        .split(/\s+/);
+      if (themes.includes(pasted[0]))
+        return [
+          {
+            name: withTyped(
+              `${invocation} ${words} ${pasted.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+            ),
+            reason:
+              'do this instead: the command pasted as one word, read as its words',
+          },
+          {
+            name: `${invocation} ${words} --help`,
+            reason: 'what each argument is',
+          },
+        ];
+    }
     if (themes.length === 1 && !given.includes(themes[0]))
       return [
         {
@@ -1081,7 +1108,7 @@ export function handleCommanderError(err) {
       suggestions: unknownSubcommandSuggestions(
         `${getCliInvocation(process.cwd())} ${chain.join(' ')}`,
         word,
-        group.commands.map((/** @type {any} */ c) => c.name()),
+        servedSubcommands(group).map((/** @type {any} */ c) => c.name()),
       ),
     });
   }

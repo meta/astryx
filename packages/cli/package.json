@@ -2,7 +2,7 @@
   "name": "@astryxdesign/cli",
   "version": "0.7.17",
   "displayName": "CLI",
-  "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
+  "description": "The Astryx CLI: scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",

@@ -6,7 +6,8 @@
  * @input Nothing; css-tree is resolved once, here.
  * @output `cssTree`, the css-tree module, and `mdnCssProperties` and
  *   `mdnCssSelectors`, the MDN property and selector data at the version
- *   css-tree pins.
+ *   css-tree pins; `keptCssTreeAnswer`, an answer worked out with them and
+ *   kept between runs.
  * @position The one loader of css-tree, for the theme editor's CSS
  *   knowledge and the theme build's style-key checks. The entry is resolved
  *   before any command stats a file: after a stat of a named pipe, Node's
@@ -15,7 +16,11 @@
  *   not found. A resolved entry is already real.
  */
 
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {persistedSummary} from '../fs/gather-cache.mjs';
+import {loadedCodeStamps} from '../fs/loaded-files.mjs';
 
 const require = createRequire(import.meta.url);
 const CSS_TREE = require.resolve('css-tree');
@@ -47,3 +52,52 @@ let selectors = null;
  */
 export const mdnCssSelectors = () =>
   (selectors ??= fromCssTree('mdn-data/css/selectors.json'));
+
+/**
+ * What `answer` gives for `inputs`, a function of them, css-tree and the MDN
+ * data it ships alone. The answer is kept beside the kept gathers
+ * (fs/gather-cache.mjs persistedSummary) and read back, with no css-tree
+ * loaded, while the inputs and every file of css-tree's code and data that
+ * worked it out are unchanged.
+ * @template T
+ * @param {string} kind what the answer is
+ * @param {string[]} inputs
+ * @param {(inputs: string[]) => T} answer
+ * @returns {T}
+ */
+export function keptCssTreeAnswer(kind, inputs, answer) {
+  let current = false;
+  return persistedSummary(
+    [
+      'css-tree-answer',
+      kind,
+      CSS_TREE,
+      createHash('sha256').update(JSON.stringify(inputs)).digest('hex'),
+    ],
+    () => {
+      const value = answer(inputs);
+      // Kept only while css-tree's files, and the package folders they
+      // were found in, are those this process loaded: after a reinstall,
+      // the answer is the old css-tree's.
+      const {stamps, unchangedSinceStart} = loadedCodeStamps(
+        fileURLToPath(import.meta.url),
+        [CSS_TREE],
+        loadedData().map(file => [CSS_TREE, file]),
+      );
+      current = unchangedSinceStart;
+      return {value, stamps};
+    },
+    {keep: () => current},
+  );
+}
+
+/**
+ * Each MDN data file css-tree's checks have read, for a kept answer worked
+ * out with them.
+ * @returns {string[]}
+ */
+function loadedData() {
+  return ['mdn-data/css/properties.json', 'mdn-data/css/selectors.json']
+    .map(file => fromCssTree.resolve(file))
+    .filter(file => fromCssTree.cache[file] !== undefined);
+}

@@ -101,7 +101,7 @@ describe('rankPages on the shipped page templates', () => {
       await start(
         'a data table of campaigns with spend and revenue, plus summary metrics above it',
       ),
-    ).toMatch(/^table-/);
+    ).toMatch(/^table(-|$)/);
   });
 
   it('keeps a variant that leads when its family base cannot start alone', async () => {
@@ -497,6 +497,21 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
       pickStart(rankPages(idea, pages), 'part')?.name ?? null;
     expect(shellFor('a theme preview frame with top navigation')).toBeNull();
     expect(shellFor('an app frame with top navigation')).toBe('frame-top');
+  });
+
+  it('hosts a part on a family base only when the family is where it goes', () => {
+    const pages = [
+      page('content', 'Content - Basic', 'A plain content page.'),
+      page('content-article', 'Content - Article', 'A long-form article.'),
+      page('frame-top', 'Shell - Top Nav', 'An app frame with top navigation.'),
+    ];
+    // "content" also ends a component's name, so an idea headed by it asks
+    // for that piece; the same word after "for the" names the page it joins.
+    const pieceWords = new Set(['content', 'button']);
+    const hostFor = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages), 'part', pieceWords)?.name ?? null;
+    expect(hostFor('a content block with a heading and two links')).toBeNull();
+    expect(hostFor('a pull quote for the content page')).toBe('content');
   });
 
   it('starts an edit of an existing page or part from the app shell', async () => {
