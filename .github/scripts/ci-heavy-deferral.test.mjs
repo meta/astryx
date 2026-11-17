@@ -29,6 +29,7 @@ import {
   SHARED_AGENT_LOGINS,
   ungated,
 } from './ci-pr-gate.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const read = name =>
   yaml.parse(
@@ -240,7 +241,7 @@ describe('a deferred push', () => {
       // head check that stop reads (and, in
       // `test`, the PR report's record), so the context fails before any
       // join could pass.
-      const steps = ci.jobs[id].steps;
+      const steps = withoutCheckoutRetries(ci.jobs[id].steps);
       const step = deferralStep(id);
       const before = steps.slice(0, steps.indexOf(step)).map(item => item.name);
       expect(before.slice(0, 5), id).toEqual([

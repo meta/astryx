@@ -19,6 +19,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {isCheckoutRetry} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -444,7 +445,10 @@ describe('Node-tooling CI routing', () => {
         candidate.name === 'Skip heavy work for a specialized lane' ||
         candidate.name === 'Skip typechecks for a specialized lane' ||
         candidate.name === 'Lab-only: Lab tests + Storybook build' ||
-        candidate.name === 'Lab-only: typecheck Lab and its stories'
+        candidate.name === 'Lab-only: typecheck Lab and its stories' ||
+        // A checkout's second try and stop carry its own condition
+        // (ci-checkout-timeout.test.mjs).
+        isCheckoutRetry(candidate)
       ) {
         continue;
       }

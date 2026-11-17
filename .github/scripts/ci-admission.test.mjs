@@ -28,6 +28,7 @@ import {
   readDurations,
   stepOutputs,
 } from '../../scripts/vitest-node-legs.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '../..');
@@ -336,7 +337,9 @@ describe('where runs wait', () => {
     // A pull request looks twice; the rare main run about every four minutes.
     expect(limit(wait.with['max-looks'], 'pull_request')).toBe(2);
     expect(limit(wait.with['max-looks'], 'workflow_dispatch')).toBe(30);
-    expect(admission.steps.filter(step => step !== wait)).toEqual([
+    expect(
+      withoutCheckoutRetries(admission.steps).filter(step => step !== wait),
+    ).toEqual([
       expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
       expect.objectContaining({name: WIDE_STEP}),
@@ -348,7 +351,11 @@ describe('where runs wait', () => {
     // superseded head (superseded-runs.test.mjs), the Node leg plan, which
     // never fails the job, and its name for other runs' count (below), and
     // its stop when it found no room (above).
-    expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
+    expect(
+      withoutCheckoutRetries(ci.jobs.room.steps).filter(
+        step => step.name !== STEP,
+      ),
+    ).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
       expect.objectContaining({name: "Check the pull request's head"}),
       expect.objectContaining({name: 'Stop for a superseded head'}),
