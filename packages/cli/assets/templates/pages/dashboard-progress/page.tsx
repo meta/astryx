@@ -675,7 +675,9 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
 
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={height}>
+      {/* A chart keeps its axes in every reading direction: time runs left to
+          right and the row labels stay beside their bars. */}
+      <ResponsiveContainer width="100%" height={height} dir="ltr">
         <BarChart
           data={data}
           layout="vertical"
@@ -862,7 +864,8 @@ const BURNDOWN_HEIGHT = DONUT_SIZE;
 function BurndownChart() {
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT}>
+      {/* Left to right in every reading direction, like every chart. */}
+      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT} dir="ltr">
         <LineChart
           data={BURNDOWN}
           margin={{top: 16, right: 4, left: 4, bottom: 4}}>
@@ -1078,7 +1081,10 @@ export default function ProjectStatusPage() {
       height="fill"
       header={<ProgramHeader phase={phase} onPhaseChange={setPhase} />}
       content={
-        <LayoutContent padding={0} xstyle={pageStyles.contentBottomPad}>
+        <LayoutContent
+          role="main"
+          padding={0}
+          xstyle={pageStyles.contentBottomPad}>
           <Section padding={6} dividers={['bottom']}>
             <VStack gap={6} xstyle={pageStyles.contentColumn}>
               <SectionHeading
@@ -1120,24 +1126,24 @@ export default function ProjectStatusPage() {
               </Grid>
 
               <Card padding={6}>
-                <VStack gap={4}>
+                <VStack paddingBlockEnd={4}>
                   <CardHeading
                     title="Workstreams"
                     meta={`${workstreams.length} of ${WORKSTREAMS.length}`}
                   />
-                  {workstreams.length === 0 ? (
-                    <PhaseEmptyState noun="workstreams" />
-                  ) : (
-                    <Table<Workstream>
-                      data={workstreams}
-                      columns={WORKSTREAM_COLUMNS}
-                      idKey="id"
-                      density="balanced"
-                      dividers="rows"
-                      hasHover
-                    />
-                  )}
                 </VStack>
+                {workstreams.length === 0 ? (
+                  <PhaseEmptyState noun="workstreams" />
+                ) : (
+                  <Table<Workstream>
+                    data={workstreams}
+                    columns={WORKSTREAM_COLUMNS}
+                    idKey="id"
+                    density="balanced"
+                    dividers="rows"
+                    hasHover
+                  />
+                )}
               </Card>
             </VStack>
           </Section>

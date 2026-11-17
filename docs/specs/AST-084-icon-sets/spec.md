@@ -215,12 +215,19 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   bundled templates whose `icons` name it (FR9). When a set is known (the
   one `--set` names, else the project's main set, else the only set of the
   icon-set package the command runs in), the answer names it as `set` and
-  each definition has `mapped`, whether that set's `map` names it.
+  each definition has `mapped`, whether that set's `map` names it. With a
+  project look (FR8), a match from a set in the list names that look's
+  `module`, `export`, and `import`, or, when its icon lacks the look, keeps
+  its own and names both looks as `look`. With no set installed, the answer
+  says so (`reason`), names the Astryx definitions that match
+  (`definitions`), built-in ones first, and says how to get a set (`next`).
 - **FR7 — One icon and the installed sets.** `<set>/<id>` answers
   `icon.detail` with every variant's import line; `--list` answers `icon.list`
   with each set's coverage of built-in, Astryx, and its own definitions, the
   project's icon-set state, and each withdrawn set. A set is named by its name
   or `<package>/<set>`; a name two packages ship needs the qualified form.
+  With no set installed, `--list` and a command that names a set say so and
+  how to get one.
 - **FR8 — The project's main set and backups.** `experimental.iconSet` names
   the project's main set (`"<set>"` or `"<package>/<set>"`), or lists the main
   set first and then backup sets in order (`["<main>", "<backup>", ...]`; a

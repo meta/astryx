@@ -8734,6 +8734,9 @@ async function runBuild(ctx, slug, data) {
       {cwd},
       {compact: true},
       {
+        // The theme folder is the editor's: a half-written or damaged
+        // output there is repaired, never refused as a file of the user's.
+        ownsOutputs: true,
         colorModes: data
           ? oneColorMode(modesOf(data))
           : buildColorModes(cwd, slug),

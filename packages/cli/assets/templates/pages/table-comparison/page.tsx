@@ -1431,7 +1431,7 @@ export default function ModelComparisonTemplate() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           {/* No padding of its own: the table's cells carry the inset, so a
               second one would inset them twice and pull the group headers
               off the card's edges. The card is here for the border, the

@@ -27,6 +27,7 @@ import {
   currentGesture,
   isPressInFlight,
   isReleaseInFlight,
+  listenForGestures,
 } from './gestureCounter';
 import {armClickGuard, disarmClickGuard} from '../utils/clickGuard';
 
@@ -614,5 +615,44 @@ describe('the release in flight and afterRelease', () => {
     browserClick(button);
     vi.runOnlyPendingTimers();
     expect(callback).not.toHaveBeenCalled();
+  });
+});
+
+describe('listenForGestures', () => {
+  it('counts a press in another document once that document is listened to', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameWindow = frame.contentWindow as Window & typeof globalThis;
+    const zone = frameWindow.document.createElement('div');
+    frameWindow.document.body.append(zone);
+    // A press in the frame comes from the frame's own window.
+    const framePointer = (type: string, pointerId: number): Event =>
+      Object.assign(
+        new frameWindow.MouseEvent(type, {
+          bubbles: true,
+          composed: true,
+          view: frameWindow,
+        }),
+        {pointerId},
+      );
+
+    zone.dispatchEvent(framePointer('pointerdown', 21));
+    expect(isPressInFlight()).toBe(false);
+    zone.dispatchEvent(framePointer('pointerup', 21));
+
+    const before = currentGesture();
+    listenForGestures(frameWindow.document);
+    zone.dispatchEvent(framePointer('pointerdown', 22));
+    expect(isPressInFlight()).toBe(true);
+    expect(currentGesture()).toBe(before + 1);
+    zone.dispatchEvent(framePointer('pointerup', 22));
+    expect(isPressInFlight()).toBe(false);
+
+    // A second call adds no second listener, so one press counts once.
+    listenForGestures(frameWindow.document);
+    zone.dispatchEvent(framePointer('pointerdown', 23));
+    expect(currentGesture()).toBe(before + 2);
+    zone.dispatchEvent(framePointer('pointerup', 23));
+    frame.remove();
   });
 });
