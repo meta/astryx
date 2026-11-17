@@ -232,6 +232,52 @@ describe('family reach by default', () => {
     ).not.toContain('calendar-nav');
   }, 240_000);
 
+  it('a hover look reaches each member on hover and in the state it draws that moment in', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('hv', {cwd, like: 'neutral'});
+    const look = 'linear-gradient(#eeeeee, #dddddd)';
+    await themeEditSet('hv', 'background-image', look, {
+      cwd,
+      on: 'dropdown-menu-item',
+      state: 'hover',
+    });
+    const css = cssOf('hv');
+    const esc = look.replace(/[()#,]/g, '\\$&');
+    expect(css).toMatch(
+      new RegExp(`\\.astryx-typeahead-option:hover[^{]*\\{[^}]*${esc}`),
+    );
+    expect(css).toMatch(
+      new RegExp(`\\.astryx-typeahead-option\\[data-highlighted[^{]*\\{[^}]*${esc}`),
+    );
+  }, 240_000);
+
+  it('a text color set beside a fill goes only where that fill goes', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('tx', {cwd, like: 'neutral'});
+    const fill = await themeEditSet('tx', 'background-color', '#0069d6', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    const text = await themeEditSet('tx', 'color', '#ffffff', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    for (const p of text.data.parts) expect(fill.data.parts).toContain(p);
+  }, 240_000);
+
+  it('a see-through color stays on the part: it is a tint over its own ground', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('tr', {cwd, like: 'neutral'});
+    const r = await themeEditSet('tr', 'background-color', 'rgba(0, 0, 0, 0.5)', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+    });
+    expect(r.data.parts).toEqual(['top-nav-item']);
+  }, 240_000);
+
   it('a member that draws the thing differently is left as Core draws it', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('k', {cwd, like: 'neutral'});

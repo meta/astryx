@@ -4578,6 +4578,32 @@ export function memberState(ctx, s, member) {
 }
 
 /**
+ * The copies of a moment setting (hover, focus, pressed) that reach its
+ * family: for each member it writes that draws the moment in a state of its
+ * own (memberState), the setting on that member alone, in that state. The
+ * setting itself still writes the moment asked on every member, so a
+ * pointer over the member shows it too. A member with its own setting for
+ * that state keeps it.
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
+ * @returns {Setting[]}
+ */
+function momentCopies(ctx, data, s) {
+  if (!s.on || !s.state || !MOMENT_STATES.includes(s.state)) return [];
+  if (!spreads(ctx, s)) return [];
+  /** @type {Setting[]} */
+  const out = [];
+  for (const t of writtenPartsOf(ctx, data, s)) {
+    if (t === s.on) continue;
+    const st = memberState(ctx, s, t);
+    if (!st || st === s.state) continue;
+    const copy = {...s, on: t, state: st, only: true};
+    if (ownSettingOf(data, copy, t)) continue;
+    out.push(copy);
+  }
+  return out;
+}
+
+/**
  * A paint as Core resolves it when nothing sets its private variables:
  * `var(--_private, <fallback>)` is its fallback.
  * @param {string} v
@@ -4599,13 +4625,32 @@ function plainPaint(v) {
  */
 export function writtenPartsOf(ctx, data, s) {
   const parts = partsOf(/** @type {any} */ (ctx), s);
-  return spreads(ctx, s)
-    ? parts.filter(
-        t =>
-          t === s.on ||
-          !ownSettingOf(data, {...s, state: memberState(ctx, s, t)}, t),
-      )
-    : parts;
+  if (!spreads(ctx, s)) return parts;
+  // A text color set beside a fill on the same part, in the same variant,
+  // state and mode, goes where that fill goes: text and its ground come
+  // from one setting, never from two members (white text from a selected
+  // pill on a row that kept its own fill).
+  const fills =
+    kebab(String(s.thing)) === 'color'
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            x.on === s.on &&
+            /^background(-color)?$/.test(kebab(String(x.thing))) &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? '') &&
+            (x.mode ?? '') === (s.mode ?? '') &&
+            Boolean(x.only) === Boolean(s.only),
+        )
+      : [];
+  const grounds = fills.length
+    ? new Set(fills.flatMap(x => writtenPartsOf(ctx, data, x)))
+    : null;
+  return parts.filter(
+    t =>
+      t === s.on ||
+      (!ownSettingOf(data, s, t) && (!grounds || grounds.has(t))),
+  );
 }
 
 /**
@@ -4732,8 +4777,9 @@ function drawnKind(prop, value) {
  * setting only where its members are alike in Core: a radio is round where
  * a checkbox has small corners, so a checkbox's corners stay the
  * checkbox's; a button and a toggle button both draw a box, so a gradient
- * set on one reaches the other; a toast's fill is not a banner's. Unknown
- * either way counts as alike.
+ * set on one reaches the other; a toast's fill is not a banner's; a
+ * see-through color is a tint over the part's own ground and reaches no
+ * other member. Unknown either way counts as alike.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @param {string} member
@@ -4758,6 +4804,15 @@ function drawnAlike(ctx, s, member, exact = false) {
   // same color (a toast's fill never becomes a banner's). A shape, an edge,
   // a shadow or a layered fill is a look: by kind.
   const byValue = exact || COLOR_PROPS.test(prop);
+  // A see-through color is a tint over what lies under the part: it reads
+  // alike only on the same ground, so it stays on the part named.
+  if (
+    COLOR_PROPS.test(prop) &&
+    !exact &&
+    /** @type {any} */ (s).value != null &&
+    alphaOf(String(/** @type {any} */ (s).value)) < 1
+  )
+    return false;
   /** @type {Record<string, any> | undefined} */
   const MAP = /** @type {any} */ (ctx).C?.MAP;
   // (A condition is the part's own props and attributes, then what is
@@ -5806,7 +5861,7 @@ export function compileTheme(ctx, data, base) {
     const t = (theme.components[target] ??= {});
     const {key, pseudo} = stateSlot(
       ctx.project.target.get(target)?.states ?? [],
-      memberState(ctx, s, target),
+      s.state,
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
@@ -5825,7 +5880,7 @@ export function compileTheme(ctx, data, base) {
     const t = (theme.components[target] ??= {});
     const {key, pseudo} = stateSlot(
       ctx.project.target.get(target)?.states ?? [],
-      memberState(ctx, s, target),
+      s.state,
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
@@ -7200,11 +7255,15 @@ export function compileTheme(ctx, data, base) {
   // A dial on a part (a font for one role, corners on cards) comes after
   // the whole-theme dials, so the part keeps its own whatever the order.
   const onPart = (/** @type {Setting} */ x) => !!x.on;
+  // A setting for a moment (hover, focus, pressed) that reaches a family
+  // member drawing that moment in a state of its own (a list option's
+  // highlighted row, which the keyboard or the pointer moves) is written
+  // there too, right after it, as that member's.
   const ordered = [
     ...data.settings.filter(x => x.source === 'dial' && !onPart(x)),
     ...data.settings.filter(x => x.source === 'dial' && onPart(x)),
     ...data.settings.filter(x => x.source !== 'dial'),
-  ];
+  ].flatMap(x => [x, ...momentCopies(ctx, data, x)]);
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
   // A background for one mode is that region's in its mode block only:
