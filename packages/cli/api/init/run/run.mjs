@@ -145,7 +145,7 @@ function describeChange(shown, before, after) {
  */
 function changeLine({path: shown, change, from, to}) {
   const version = to ? ` (Astryx ${to})` : '';
-  if (change === 'removed') return `${shown}: block removed`;
+  if (change === 'removed') return `${shown}: Astryx block removed, another agent file holds it`;
   if (change === 'added') return `${shown} added${version}`;
   if (change === 'unchanged') return `${shown} already current${version}, nothing changed`;
   if (from && to && from !== to) return `${shown} updated (Astryx ${from} -> ${to})`;
