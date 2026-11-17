@@ -406,6 +406,25 @@ export const CLOSEST_OPEN_FONT = wordTable({
 });
 
 /** Heading weights (`headings` dial): rung -> font-weight. */
+/**
+ * Where the theme's page color shows, said by every answer that sets or
+ * names it: `--color-background-body` paints inside AppShell only.
+ */
+export const PAGE_COLOR_NOTE =
+  "Your theme's page color shows inside AppShell. Wrap the page in AppShell; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer AppShell).";
+
+/**
+ * The page color note for a theme in its mode: a theme that ships one mode
+ * draws its text for that mode's page, so the host page must take the
+ * theme's page color in every OS mode too.
+ * @param {string | undefined} mode the theme's mode setting
+ * @returns {string}
+ */
+export const pageColorNote = mode =>
+  /^(?:dark|light)-only$/.test(String(mode ?? ''))
+    ? `${PAGE_COLOR_NOTE} This theme has one mode (${mode}): its text is drawn for its own page, so the page must take the theme's page color in every OS mode, or text lands on the browser's white.`
+    : PAGE_COLOR_NOTE;
+
 export const HEADING_WEIGHTS = wordTable(
   /** @type {Record<string, string>} */ ({
     light: '300',
