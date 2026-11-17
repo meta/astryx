@@ -402,14 +402,24 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
  */
 function PaginationButton({
   isCurrent = false,
+  rowEnd,
   ...props
-}: React.ComponentProps<typeof Button> & {isCurrent?: boolean}) {
+}: React.ComponentProps<typeof Button> & {
+  isCurrent?: boolean;
+  /** The control's end of the controls row, when it is the first or last. */
+  rowEnd?: 'first' | 'last';
+}) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
   return (
     <Button
       {...props}
       {...themeProps('pagination-item', {
         selected: isCurrent ? 'selected' : null,
+        // The ends of the row, for a theme that joins the controls into one
+        // strip. Read from the controls, not `:first-child`/`:last-child`: a
+        // control with a tooltip renders its layer after it in the row.
+        first: rowEnd === 'first' ? 'first' : null,
+        last: rowEnd === 'last' ? 'last' : null,
       })}
       ref={ref}
     />
@@ -956,6 +966,7 @@ export function Pagination({
             {...controlProps(1, hasPrevious)}
             isDisabled={isDisabled || !hasPrevious}
             isIconOnly
+            rowEnd="first"
             xstyle={variant === 'compact' && styles.compactFirst}
           />
         )}
@@ -975,6 +986,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'first'}
         />
 
         {renderIndicator()}
@@ -994,6 +1006,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'last'}
         />
 
         {showFirstLast && (
@@ -1012,6 +1025,7 @@ export function Pagination({
             {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
             isDisabled={isDisabled || !hasNext}
             isIconOnly
+            rowEnd="last"
             xstyle={variant === 'compact' && styles.compactLast}
           />
         )}
