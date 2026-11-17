@@ -82,9 +82,9 @@ import {
 } from './useSheetGestures';
 
 const HEIGHT_BUDGETS = {
-  hug: '92dvh',
-  capped: '62dvh',
-  tall: '92dvh',
+  hug: '92svh',
+  capped: '62svh',
+  tall: '92svh',
 } as const;
 
 export type BottomSheetHeight = keyof typeof HEIGHT_BUDGETS;
@@ -200,12 +200,16 @@ function clearingScrimFade(panel: Element): Animation | undefined {
   ).at(-1);
 }
 
-// Measure the viewport that the height budgets use. They are `dvh`, which
-// the virtual keyboard does not shrink, so `visualViewport` would differ by
-// the keyboard's height. `useMobileKeyboard` handles the keyboard and does
-// not change the detents.
+// Measure the layout viewport used for snap-point math. The named height
+// budgets use `svh`, so a mobile browser's toolbar can move without changing
+// the sheet's CSS height. `useMobileKeyboard` handles the keyboard separately
+// and does not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
+}
+
+function layoutViewportWidth(): number {
+  return typeof window === 'undefined' ? 0 : window.innerWidth;
 }
 
 // The layout viewport's height, as the `resize` listener last read it. While
@@ -214,10 +218,20 @@ function layoutViewportHeight(): number {
 // and a layout. Open sheets share one listener. With no sheet open, the value
 // is null, because nothing keeps it current.
 let viewportHeight: number | null = null;
+let viewportWidth: number | null = null;
 const viewportHeightListeners = new Set<() => void>();
 let stopViewportResize: (() => void) | null = null;
 
 function handleViewportResize(): void {
+  const nextWidth = layoutViewportWidth();
+  // On a touch device, a height-only resize is the browser toolbar moving.
+  // Keep the numeric reserve stable just as `svh` keeps the CSS budget stable.
+  // Rotation and split-screen resize the layout width, so they still refresh
+  // the reserve and the gesture geometry.
+  if (viewportWidth === nextWidth) {
+    return;
+  }
+  viewportWidth = nextWidth;
   viewportHeight = layoutViewportHeight();
   for (const listener of viewportHeightListeners) {
     listener();
@@ -231,6 +245,7 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
     // A resize between the first render and this listener has no event left
     // to deliver. So read the height now, and let React compare it with the
     // height it rendered.
+    viewportWidth = layoutViewportWidth();
     viewportHeight = layoutViewportHeight();
     onChange();
   }
@@ -240,6 +255,7 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
       stopViewportResize?.();
       stopViewportResize = null;
       viewportHeight = null;
+      viewportWidth = null;
     }
   };
 }
@@ -251,6 +267,15 @@ function readViewportHeight(): number {
   }
   viewportHeight ??= layoutViewportHeight();
   return viewportHeight;
+}
+
+// Snap points share the same stable viewport while a touch sheet is tracking
+// it. This keeps a fraction such as `0.5` from moving on a toolbar-only
+// resize, while fine-pointer or caller-sized sheets retain live resize math.
+function snapPointViewportHeight(): number {
+  return stopViewportResize == null
+    ? layoutViewportHeight()
+    : readViewportHeight();
 }
 
 function readNoViewportHeight(): number {
@@ -869,7 +894,7 @@ export function BottomSheetPanel({
     const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
     return {
       snapHeights: () =>
-        resolveSnapPoints(points ?? [], layoutViewportHeight()),
+        resolveSnapPoints(points ?? [], snapPointViewportHeight()),
       ignoredSnapPointsMessage:
         ignored.length === 0
           ? ''

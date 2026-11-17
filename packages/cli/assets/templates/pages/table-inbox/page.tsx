@@ -1831,7 +1831,7 @@ function ComposeWindow({
       // The sheet has no built-in heading to take a name from, so this is not
       // decoration — without it the surface is announced unnamed.
       label="New message"
-      // `hug` is `height: fit-content` under a 92dvh ceiling, so the sheet is
+      // `hug` is `height: fit-content` under a 92svh ceiling, so the sheet is
       // as tall as the composer and no taller. The fixed budgets are the wrong
       // instrument here: `tall` opened a mostly-empty window over the list this
       // sheet gave up its scrim to keep usable, and `capped` picked a height

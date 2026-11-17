@@ -161,7 +161,8 @@ function mockVisualViewport(height: number, offsetTop = 0) {
   return viewport;
 }
 
-// The layout viewport — `100dvh`, `window.innerHeight` — which is what the
+// The layout viewport — `100svh`, the small viewport used by height budgets —
+// and `window.innerHeight`, which is what the
 // sheet's height budget and its detents are measured against. Deliberately
 // separate from the visual viewport above: the mobile keyboard shrinks that
 // one and leaves this one alone, and the sheet has to tell them apart.
@@ -1985,7 +1986,7 @@ describe('BottomSheet', () => {
       // 448px of layout height shows 400px of sheet: half the 800px window.
       expect(sheet.style.height).toBe('448px');
 
-      // Shrink the window. The sheet's budget is `92dvh`, so its border box
+      // Shrink the window. The sheet's budget is `92svh`, so its border box
       // follows: 0.92 * 600 + the 48px reserve = 600px.
       vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
         rect({
@@ -2201,7 +2202,7 @@ describe('BottomSheet', () => {
       dragHandleTo(336);
       expect(sheet.style.height).toBe('448px');
 
-      // Without an inline height the sheet renders its natural 92dvh budget.
+      // Without an inline height the sheet renders its natural 92svh budget.
       vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
         rect({
           top: 0,
@@ -2623,7 +2624,7 @@ describe('BottomSheet', () => {
 
       expect(sheet.getBoundingClientRect()).toEqual(initialRect);
       expect(sheet.style.height).toBe('');
-      expect(sheet.style.getPropertyValue('--_sheet-budget')).toBe('92dvh');
+      expect(sheet.style.getPropertyValue('--_sheet-budget')).toBe('92svh');
       expect(positioner.style.getPropertyValue('--_sheet-keyboard-lift')).toBe(
         '',
       );

@@ -314,13 +314,34 @@ describe('BottomSheetPanel', () => {
     expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
   });
 
-  it('follows the viewport with its reserve while it is presented', () => {
+  it('does not change its reserve when the mobile toolbar changes the height', () => {
     const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    renderPanel({kind: 'open', entering: false});
+    const initialReserve =
+      getPanel().style.getPropertyValue('--_sheet-reserve');
+    try {
+      act(() => {
+        window.innerHeight = 1000;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
+        initialReserve,
+      );
+    } finally {
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('follows the viewport with its reserve after a real layout resize', () => {
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
     stubTouchPointer();
     renderPanel({kind: 'open', entering: false});
     try {
       act(() => {
         window.innerHeight = 1000;
+        window.innerWidth = viewportWidth + 1;
         window.dispatchEvent(new Event('resize'));
       });
       expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
@@ -328,6 +349,7 @@ describe('BottomSheetPanel', () => {
       );
     } finally {
       window.innerHeight = viewportHeight;
+      window.innerWidth = viewportWidth;
     }
   });
 
@@ -356,6 +378,7 @@ describe('BottomSheetPanel', () => {
 
   it('shares one viewport height among open sheets, and forgets it when the last one closes', () => {
     const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
     const listeners = trackResizeListeners();
     stubTouchPointer();
     try {
@@ -363,6 +386,7 @@ describe('BottomSheetPanel', () => {
       const second = renderNamedPanel('Second sheet');
       act(() => {
         window.innerHeight = 1000;
+        window.innerWidth = viewportWidth + 1;
         window.dispatchEvent(new Event('resize'));
       });
       expect(
@@ -377,6 +401,7 @@ describe('BottomSheetPanel', () => {
       first.unmount();
       act(() => {
         window.innerHeight = 900;
+        window.innerWidth = viewportWidth + 2;
         window.dispatchEvent(new Event('resize'));
       });
       expect(
@@ -428,6 +453,7 @@ describe('BottomSheetPanel', () => {
     } finally {
       listeners.restore();
       window.innerHeight = viewportHeight;
+      window.innerWidth = viewportWidth;
     }
   });
 

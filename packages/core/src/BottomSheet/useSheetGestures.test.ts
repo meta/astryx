@@ -2749,7 +2749,8 @@ describe('useSheetGestures', () => {
 
   describe('viewport resize', () => {
     // The panel pins the sheet's height in px at a resizing detent; everywhere
-    // else the height comes from CSS (`92dvh`), which follows the viewport.
+    // else the height comes from CSS (`92svh`), which is stable while browser
+    // chrome moves.
     // Model both, so a measurement taken while pinned reads the pin back —
     // that is the trap the hook has to work around.
     const SNAP_FRACTIONS = [0.14, 0.5, 0.92];
