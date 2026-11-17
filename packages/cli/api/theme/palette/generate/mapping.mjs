@@ -96,8 +96,9 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
+ * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, icons at 3:1, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
+ * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader
  * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
  * @property {(value: string, mode: PaletteMode) => string | null} [colorIn] The fixed color a written value gives in a mode, or null.
@@ -1306,8 +1307,42 @@ export function mapPalette(candidate, dials, fills, context) {
       }
       return ref(id, m, b.stop);
     };
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   */
+  const nearCore =
+    /**
+     * @param {string} token
+     * @param {string} id
+     * @returns {Partial<Record<PaletteMode, StopRef>>}
+     */
+    (token, id) => {
+      const core = String(context.defaults?.[token] ?? '').trim();
+      const halves = /^light-dark\((.*)\)$/i.exec(core);
+      const parts = halves ? splitTopComma(halves[1]) : [core];
+      return each(m => {
+        const target = parseColor(
+          String(parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+        );
+        const best = target
+          ? stops.reduce((x, y) =>
+              perceptualDelta(ref(id, m, y).color, hex(target)) <
+              perceptualDelta(ref(id, m, x).color, hex(target))
+                ? y
+                : x,
+            )
+          : stops[Math.floor(stops.length / 2)];
+        return ref(id, m, best);
+      });
+    };
   const neutral = dials.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -1659,7 +1694,40 @@ export function mapPalette(candidate, dials, fills, context) {
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      context.editor
+        ? each(m => {
+            const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+            const from = /** @type {StopRef} */ (fill[m]);
+            const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+            if (
+              own &&
+              Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >=
+                NON_TEXT
+            ) {
+              return {...from, color: own};
+            }
+            return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+          })
+        : text,
+    );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it (its
+    // text takes the readable side of Core's media surface).
+    if (word === 'error') {
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
+    }
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(

@@ -213,6 +213,7 @@ describe("themePalette's reading of Core's defaults", () => {
       components: theme.components ?? {},
     },
     has: token => Object.hasOwn(tokenDefaults, token),
+    defaults: tokenDefaults,
     reader: {
       rgb: value => {
         const read = typeof value === 'string' ? parseColor(value) : null;

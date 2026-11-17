@@ -136,6 +136,7 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   const context: PaletteMappingContext = {
     base: defaultBase(),
     has: token => Object.hasOwn(tokenDefaults, token),
+    defaults: tokenDefaults,
     reader: coreReader,
   };
   const plan = planPaletteRequest(dials, {recipe, vibrancy}, context);
