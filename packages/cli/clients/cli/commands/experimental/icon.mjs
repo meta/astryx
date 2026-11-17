@@ -52,7 +52,7 @@ import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
-import {noIconSetNext} from '../../../../foundation/discovery/icon-set-discovery.mjs';
+import {noIconSetNext} from '../../../../foundation/text/icon-set-next.mjs';
 
 /** How many missing icons an `add --all` receipt names in text. */
 const MISSING_SHOWN = 10;

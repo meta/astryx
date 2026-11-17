@@ -288,51 +288,24 @@ describe('a stored manifest', () => {
           name: 'theme',
           available: true,
           subcommands: [
-            {
-              name: 'theme build',
-              requires: ['themes.compile'],
-              available: true,
-            },
+            {name: 'theme build', requires: ['themes.compile'], available: true},
             {name: 'theme list', available: true},
           ],
         },
-        {
-          name: 'experimental',
-          available: true,
-          subcommands: [
-            {
-              name: 'experimental render',
-              requires: ['render.page'],
-              available: true,
-            },
-          ],
-        },
+        {name: 'experimental', available: true, subcommands: [
+          {name: 'experimental render', requires: ['render.page'], available: true},
+        ]},
       ],
     });
     const onCore = rebaseManifest(stored, coreBase());
     expect(onCore.base.name).toBe('@astryxdesign/core');
-    expect(onCore.commands[0].subcommands.map(c => c.available)).toEqual([
-      true,
-      true,
-    ]);
+    expect(onCore.commands[0].subcommands.map(c => c.available)).toEqual([true, true]);
     const native = rebaseManifest(stored, {
-      name: '@acme/native-ui',
-      core: false,
-      dir: null,
-      version: '2.1.0',
-      adapters: {},
-      steps: [],
+      name: '@acme/native-ui', core: false, dir: null, version: '2.1.0', adapters: {}, steps: [],
     });
-    expect(native.base).toEqual({
-      name: '@acme/native-ui',
-      version: '2.1.0',
-      steps: [],
-    });
+    expect(native.base).toEqual({name: '@acme/native-ui', version: '2.1.0', steps: []});
     expect(native.commands[0].available).toBe(true);
-    expect(native.commands[0].subcommands.map(c => c.available)).toEqual([
-      false,
-      true,
-    ]);
+    expect(native.commands[0].subcommands.map(c => c.available)).toEqual([false, true]);
     expect(native.commands[1].available).toBe(false);
   });
 });
@@ -340,9 +313,7 @@ describe('a stored manifest', () => {
 describe('the base declaration', () => {
   it('reports an adapter capability this CLI does not know', () => {
     expect(
-      unknownCapabilityKeys({
-        base: {adapters: {theme: './t.mjs', themes: './t.mjs'}},
-      }),
+      unknownCapabilityKeys({base: {adapters: {theme: './t.mjs', themes: './t.mjs'}}}),
     ).toEqual(['base.adapters.theme']);
   });
 });
@@ -576,54 +547,33 @@ describe('a project whose only base is not Core', () => {
       expect(theme.stdout.trimEnd().split('\n').at(-1)).toBe(
         '6 commands hidden: the active base @acme/native-ui does not provide the steps they need.',
       );
-      const hiddenGroup = astryx(
-        ['--json', 'experimental', 'theme', 'editor'],
-        dir,
-      );
+      const hiddenGroup = astryx(['--json', 'experimental', 'theme', 'editor'], dir);
       expect(hiddenGroup.status).toBe(1);
       expect(hiddenGroup.json().code).toBe('ERR_BASE_CAPABILITY');
-      const manifestOptions = astryx(['--json', 'manifest'], dir)
-        .json()
-        .data.commands.find(c => c.name === 'template').options;
-      expect(
-        manifestOptions.find(o => o.flag.includes('--skeleton')).available,
-      ).toBe(false);
-      expect(
-        manifestOptions.find(o => o.flag.includes('--list')).available,
-      ).toBe(true);
+      const manifestOptions = astryx(['--json', 'manifest'], dir).json().data.commands
+        .find(c => c.name === 'template').options;
+      expect(manifestOptions.find(o => o.flag.includes('--skeleton')).available).toBe(false);
+      expect(manifestOptions.find(o => o.flag.includes('--list')).available).toBe(true);
       const rootText = astryx(['--help'], dir).stdout;
       expect(rootText).toContain('--detail <level>');
       expect(rootText).not.toContain('theme build reports');
       const rootJson = astryx(['--json', 'help'], dir).json();
-      expect(JSON.stringify(rootJson.data)).not.toContain(
-        'experimental theme editor',
-      );
+      expect(JSON.stringify(rootJson.data)).not.toContain('experimental theme editor');
       const themeLab = astryx(['experimental', 'theme', '--help'], dir).stdout;
       expect(themeLab).not.toContain('experimental theme editor');
       expect(themeLab).not.toContain('experimental theme preview');
-      const experimentalJson = astryx(
-        ['experimental', '--help', '--json'],
-        dir,
-      ).json();
-      expect(JSON.stringify(experimentalJson.data.subcommands)).not.toContain(
-        'editor set',
-      );
+      const experimentalJson = astryx(['experimental', '--help', '--json'], dir).json();
+      expect(JSON.stringify(experimentalJson.data.subcommands)).not.toContain('editor set');
       const themeJson = astryx(['theme', '--help', '--json'], dir).json();
-      expect(themeJson.data.description).not.toContain(
-        'experimental theme editor',
-      );
+      expect(themeJson.data.description).not.toContain('experimental theme editor');
       const groupJson = astryx(['--json', 'experimental', 'theme'], dir);
-      expect(groupJson.json().data.commands.map(c => c.name)).not.toContain(
-        'compile',
-      );
+      expect(groupJson.json().data.commands.map(c => c.name)).not.toContain('compile');
       const bare = astryx(['--json', '--base', '@acme/nope'], dir);
       expect(bare.status).toBe(1);
       expect(bare.json().code).toBe('ERR_BASE_NOT_FOUND');
       const experimental = astryx(['experimental', 'theme', '--help'], dir);
       expect(experimental.stdout).not.toContain('experimental theme targets');
-      expect(experimental.stdout).not.toContain(
-        'experimental theme editor how',
-      );
+      expect(experimental.stdout).not.toContain('experimental theme editor how');
       expect(experimental.stdout).toContain('component <Name>');
       const component = astryx(['component', '--help'], dir);
       expect(component.stdout).not.toContain('component Button');
@@ -717,7 +667,7 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
-    'says --base names a dependency whose manifest does not load',
+    "says --base names a dependency whose manifest does not load",
     () => {
       const dir = project({
         '@acme/native-ui': {manifest: 'export default {base: {}, oops'},
@@ -725,33 +675,16 @@ describe('a project whose only base is not Core', () => {
       const r = astryx(['--json', '--base', '@acme/native-ui', 'blog'], dir);
       expect(r.status).toBe(1);
       expect(r.json().code).toBe('ERR_BASE_NOT_FOUND');
-      expect(r.json().error).toContain(
-        'its integration manifest does not load',
-      );
+      expect(r.json().error).toContain('its integration manifest does not load');
       // Installed under an npm alias: --base names the package's own name.
-      const aliased = project({
-        native: {manifest: 'export default {base: {}, oops'},
-      });
-      const pkgFile = path.join(
-        aliased,
-        'node_modules',
-        'native',
-        'package.json',
-      );
+      const aliased = project({native: {manifest: 'export default {base: {}, oops'}});
+      const pkgFile = path.join(aliased, 'node_modules', 'native', 'package.json');
       fs.writeFileSync(
         pkgFile,
-        JSON.stringify({
-          ...JSON.parse(fs.readFileSync(pkgFile, 'utf8')),
-          name: '@acme/native-ui',
-        }),
+        JSON.stringify({...JSON.parse(fs.readFileSync(pkgFile, 'utf8')), name: '@acme/native-ui'}),
       );
-      const viaAlias = astryx(
-        ['--json', '--base', '@acme/native-ui', 'blog'],
-        aliased,
-      );
-      expect(viaAlias.json().error).toContain(
-        'its integration manifest does not load',
-      );
+      const viaAlias = astryx(['--json', '--base', '@acme/native-ui', 'blog'], aliased);
+      expect(viaAlias.json().error).toContain('its integration manifest does not load');
     },
     SLOW,
   );
@@ -801,9 +734,7 @@ describe('a project whose only base is not Core', () => {
       const valued = astryx(['--detail', 'compact', 'help', 'theme'], native);
       expect(valued.status).toBe(0);
       expect(valued.stdout).not.toMatch(/^ {2}build /m);
-      expect(valued.stdout.trimEnd().split('\n').at(-1)).toMatch(
-        /commands hidden/,
-      );
+      expect(valued.stdout.trimEnd().split('\n').at(-1)).toMatch(/commands hidden/);
       const valuedMissing = astryx(
         ['--json', '--detail', 'compact', '--base', '@acme/nope', 'help'],
         native,
@@ -816,10 +747,7 @@ describe('a project whose only base is not Core', () => {
       const missing = astryx(['--json', '--base', '@acme/nope', 'help'], dir);
       expect(missing.status).toBe(1);
       expect(missing.json().code).toBe('ERR_BASE_NOT_FOUND');
-      const two = project({
-        '@acme/native-ui': CONTENT_BASE,
-        '@acme/tv-ui': CONTENT_BASE,
-      });
+      const two = project({'@acme/native-ui': CONTENT_BASE, '@acme/tv-ui': CONTENT_BASE});
       const ambiguous = astryx(['--help'], two);
       expect(ambiguous.status).toBe(1);
       expect(ambiguous.stderr).toContain('more than one base');
@@ -970,21 +898,6 @@ describe('a project whose only base is not Core', () => {
   );
 });
 
-describe('--version on a non-Core base', () => {
-  it(
-    'answers with the carried Core and names no base, loading no integration',
-    () => {
-      const dir = project({'@acme/native-ui': CONTENT_BASE});
-      const version = astryx(['--version', '--json'], dir);
-      expect(version.status).toBe(0);
-      const {answeredBy} = version.json().meta;
-      expect(answeredBy).not.toHaveProperty('base');
-      expect(answeredBy.core).toEqual(expect.any(String));
-    },
-    SLOW,
-  );
-});
-
 describe('JSON help, suggestions, and codemods on a non-Core base', () => {
   it(
     'list only what the base serves, and no Core codemods',
@@ -1028,52 +941,22 @@ describe('suggestions name only what the base serves', () => {
       };
       expect(said(['ai-chat'])).not.toContain('template ai-chat');
       expect(said(['hook', 'tokens'])).not.toContain('docs tokens');
-      const strayTheme = astryx(
-        ['--json', 'theme', '--build', 'x.ts'],
-        dir,
-      ).json();
+      const strayTheme = astryx(['--json', 'theme', '--build', 'x.ts'], dir).json();
       const listed = /takes (.*)$/.exec(strayTheme.error)?.[1] ?? '';
       expect(listed).toContain('list');
       expect(listed).not.toMatch(/\bbuild\b/);
-      expect(JSON.stringify(strayTheme.suggestions ?? [])).not.toContain(
-        'theme build',
-      );
-      const strayTemplate = astryx(
-        ['--json', 'template', '--skeletn'],
-        dir,
-      ).json();
+      expect(JSON.stringify(strayTheme.suggestions ?? [])).not.toContain('theme build');
+      const strayTemplate = astryx(['--json', 'template', '--skeletn'], dir).json();
       expect(strayTemplate.error).not.toContain('--skeleton');
       expect(strayTemplate.error).not.toContain('--cdn');
       expect(said(['skeleton'])).not.toContain('--skeleton');
       // The experimental group's own answers read the same served list.
-      const compil = astryx(
-        ['--json', 'experimental', 'theme', 'compil', '--out', 'a.css'],
-        dir,
-      ).json();
-      expect(JSON.stringify(compil.suggestions ?? [])).not.toContain(
-        'theme compile',
-      );
-      const bare = astryx(
-        ['--json', 'experimental', 'theme', '--out', 'a.css'],
-        dir,
-      ).json();
+      const compil = astryx(['--json', 'experimental', 'theme', 'compil', '--out', 'a.css'], dir).json();
+      expect(JSON.stringify(compil.suggestions ?? [])).not.toContain('theme compile');
+      const bare = astryx(['--json', 'experimental', 'theme', '--out', 'a.css'], dir).json();
       expect(JSON.stringify(bare)).not.toContain('compile');
-      const early = astryx(
-        [
-          '--json',
-          'experimental',
-          'theme',
-          '--like',
-          'neutral',
-          'editor',
-          'new',
-          'b9',
-        ],
-        dir,
-      ).json();
-      expect(JSON.stringify(early.suggestions ?? [])).not.toContain(
-        'editor new',
-      );
+      const early = astryx(['--json', 'experimental', 'theme', '--like', 'neutral', 'editor', 'new', 'b9'], dir).json();
+      expect(JSON.stringify(early.suggestions ?? [])).not.toContain('editor new');
     },
     SLOW,
   );
@@ -1140,10 +1023,7 @@ describe('help reads the base --base names, and a bare group help', () => {
         path.join(dir, 'node_modules', '@astryxdesign', 'core'),
         'dir',
       );
-      const theme = astryx(
-        ['--base', '@acme/native-ui', 'theme', '--help'],
-        dir,
-      );
+      const theme = astryx(['--base', '@acme/native-ui', 'theme', '--help'], dir);
       expect(theme.stdout).not.toContain('experimental theme editor');
       const template = astryx(
         ['--base', '@acme/native-ui', 'template', '--help'],

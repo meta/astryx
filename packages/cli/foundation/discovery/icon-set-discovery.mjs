@@ -478,24 +478,6 @@ function resolveSelector(sets, selector, withdrawn) {
 export const ICON_USE_ORDER_COMMAND =
   'astryx experimental icon use <main> --backup <set>';
 
-/** The command that makes an installed set the project's main set. */
-export const ICON_USE_COMMAND = 'astryx experimental icon use <set>';
-
-/** The command that reads the guide to making an icon set. */
-export const ICON_SET_GUIDE_COMMAND = 'astryx docs cli/experimental/icon-sets';
-
-/**
- * What to do when no icon set is installed: no command can list sets to
- * install, since discover reads icon sets only in a project that already
- * chose one. The finder and `--list` say the same words: bare in JSON, and
- * in text with each command as the CLI picks it (`format`).
- * @param {(command: string) => string} [format]
- * @returns {string}
- */
-export function noIconSetNext(format = command => command) {
-  return `Install a package that ships an icon set, then run \`${format(ICON_USE_COMMAND)}\`. To make your own set, read \`${format(ICON_SET_GUIDE_COMMAND)}\`.`;
-}
-
 /**
  * The `experimental icon use` command for a main set, its backups in order,
  * and the project's look. `use` writes the whole choice, so a printed
