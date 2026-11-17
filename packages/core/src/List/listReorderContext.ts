@@ -112,6 +112,11 @@ export interface ListReorderHandleProps {
    * `'end'` without it. A List row's handle reads it from its list.
    */
   readonly placement?: 'start' | 'end';
+  /**
+   * The handle sits in the row's end slot, which already dims a disabled
+   * row's content. The handle then does not dim itself again.
+   */
+  readonly isInEndSlot?: boolean;
 }
 
 /**

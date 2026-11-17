@@ -226,6 +226,11 @@ const styles = stylex.create({
       ':is([aria-disabled="true"])': 0.5,
     },
   },
+  // In the row's end slot, the slot dims a disabled row. So the handle keeps
+  // its own opacity, and a disabled handle shows at half, not a quarter.
+  inEndSlot: {
+    opacity: 1,
+  },
   // `start`: at the top of the row's content.
   inRowStart: {
     alignSelf: 'flex-start',
@@ -479,6 +484,7 @@ export function ListReorderHandle({
   rowAlign,
   isInRow: isInRowProp,
   isAlwaysVisible: isAlwaysVisibleProp,
+  isInEndSlot = false,
   placement,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -634,6 +640,7 @@ export function ListReorderHandle({
         isAlwaysVisible
           ? styles.shown
           : [revealStyles.revealLayoutPreserved, styles.reveal],
+        isInEndSlot && styles.inEndSlot,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
         isAlwaysVisible || isInRow

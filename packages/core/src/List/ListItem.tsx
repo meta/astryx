@@ -513,12 +513,14 @@ export function ListItem({
           rowLabel={rowLabel}
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
+          isInEndSlot={isHandleInEndSlot}
         />
       ) : null,
     [
       Handle,
       hasHandle,
       isDisabled,
+      isHandleInEndSlot,
       itemKey,
       label,
       rowAlign,
