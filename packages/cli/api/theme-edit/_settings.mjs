@@ -7034,6 +7034,41 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
+        /**
+         * A surface's variant axis that tells its plain fills (the card,
+         * surface, page, popover or muted color, or none) from its colored
+         * ones (a blue card, a status tint), with the values that draw the
+         * plain one; null when every variant draws the plain surface.
+         * @param {string} t
+         */
+        const surfaceVariantsOf = t => {
+          const PLAIN =
+            /^(?:transparent|inherit|none|var\(--color-background-(?:card|surface|body|popover|muted)\))$/;
+          const fills = Object.entries(
+            ctx.C.MAP[t]?.at?.['background-color'] ?? {},
+          )
+            .filter(([c]) => !/[\s:[]/.test(c) && c !== 'always')
+            .map(([c, v]) => ({
+              props: Object.fromEntries(c.split(',').map(kv => kv.split('='))),
+              plain: PLAIN.test(String(v).trim()),
+            }));
+          if (!fills.some(f => !f.plain)) return null;
+          const axes = [...new Set(fills.flatMap(f => Object.keys(f.props)))];
+          for (const axis of axes) {
+            const plain = new Set(
+              fills.filter(f => f.plain).map(f => f.props[axis]),
+            );
+            const colored = new Set(
+              fills.filter(f => !f.plain).map(f => f.props[axis]),
+            );
+            if (
+              [...colored].every(v => v != null && !plain.has(v)) &&
+              [...plain].every(v => v != null)
+            )
+              return {axis, plain: [...plain]};
+          }
+          return null;
+        };
         for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
           // (A panel floating over the page keeps an edge under flat.)
           const look =
@@ -7054,6 +7089,20 @@ export function compileTheme(ctx, data, base) {
               )
             : undefined;
           if (!fill) {
+            // A plain surface change leaves the colored and status
+            // variants their own fill (a blue card stays blue under flat):
+            // the fill goes on the variants that draw the plain surface.
+            const keep = surfaceVariantsOf(t);
+            if (keep && look.backgroundColor != null) {
+              const {backgroundColor, ...others} = look;
+              Object.assign(block({...s, mode: undefined}, t), others);
+              for (const v of keep.plain)
+                block(
+                  {...s, mode: undefined, when: `${keep.axis}:${v}`},
+                  t,
+                ).backgroundColor = backgroundColor;
+              continue;
+            }
             Object.assign(block({...s, mode: undefined}, t), look);
             continue;
           }
