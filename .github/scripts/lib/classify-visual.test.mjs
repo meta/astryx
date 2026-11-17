@@ -947,80 +947,6 @@ describe('CSS-named keys count only in a style context', () => {
     expect(covered.has(20)).toBe(false);
   });
 
-  it('marks many bindings of one name, read many times, in time near linear in the file', () => {
-    const source = [
-      ...Array.from({length: 20000}, () => '{ const s = {width: 1}; }'),
-      ...Array.from({length: 125000}, () => 'f(s);'),
-      'const styles = stylex.create({x: s});',
-    ].join('\n');
-    const started = performance.now();
-    const covered = styleContextLines(source, false);
-    expect(covered.has(1)).toBe(true);
-    // A scan of every read per binding took tens of seconds on this input.
-    expect(performance.now() - started).toBeLessThan(10_000);
-  });
-
-  it('reads a style context with very many names, and a function called very many times, quickly', () => {
-    const names = [
-      'const styles = stylex.create({',
-      ...Array.from({length: 130000}, (_, i) => `  n${i}: {width: 1},`),
-      '});',
-    ].join('\n');
-    expect(styleContextLines(names, false)).not.toBeNull();
-    const calls = [
-      ...Array.from(
-        {length: 20000},
-        (_, i) => `function f${i % 5}() { return {width: 1}; }`,
-      ),
-      ...Array.from({length: 20000}, (_, i) => `const r${i} = f${i % 5}();`),
-      'const styles = stylex.create({x: r0});',
-    ].join('\n');
-    const started = performance.now();
-    expect(styleContextLines(calls, false)).not.toBeNull();
-    expect(performance.now() - started).toBeLessThan(10_000);
-  });
-
-  it('marks deeply nested functions and style properties quickly', () => {
-    const count = 27000;
-    const functions = [
-      ...Array.from({length: count}, (_, i) => `function f${i}() {`),
-      'return {width: 1};',
-      ...Array.from({length: count}, () => '}'),
-      'const styles = stylex.create({x: f0()});',
-    ].join('\n');
-    const properties = [
-      'const props = {',
-      ...Array.from({length: 85000}, () => 'style: {'),
-      'width: 1',
-      ...Array.from({length: 85000}, () => '}'),
-      '};',
-    ].join('\n');
-    for (const source of [functions, properties]) {
-      const started = performance.now();
-      expect(styleContextLines(source, false)).not.toBeNull();
-      // Marking every nested range in full took minutes on these inputs.
-      expect(performance.now() - started).toBeLessThan(10_000);
-    }
-  });
-
-  it('marks a long chain of named objects in time near linear in the file', () => {
-    const count = 20000;
-    const source = [
-      ...Array.from(
-        {length: count},
-        (_, i) => `const o${i} = {a${i}: o${i + 1}};`,
-      ),
-      `const o${count} = {color: 1};`,
-      'const styles = stylex.create({x: o0});',
-    ].join('\n');
-    const started = performance.now();
-    const covered = styleContextLines(source, false);
-    const elapsed = performance.now() - started;
-    expect(covered.has(count + 1)).toBe(true);
-    // A pass per object (quadratic) took minutes on this input.
-    expect(elapsed).toBeLessThan(10_000);
-  });
-
   it('scores a .css file and a .stylex.ts file throughout', () => {
     expect(
       cssCount(
@@ -1115,6 +1041,125 @@ describe('CSS-named keys count only in a style context', () => {
     ].join('\n');
     expect(styleContextPaths(diff)).toEqual({[file]: {base: true, head: true}});
   });
+});
+
+// The style-context test reads a pull request's files inside the review job,
+// so its cost must grow with the file, never faster, for every construct it
+// walks. Each case builds an input of size n and 10n and compares the times,
+// not a fixed limit: a linear pass grows about 10 times, a quadratic one about
+// 100 times. The best of three runs keeps a slow moment from deciding.
+describe('style-context cost grows with the file', () => {
+  const best = source => {
+    let fastest = Infinity;
+    for (let run = 0; run < 3; run += 1) {
+      const started = performance.now();
+      styleContextLines(source, true);
+      fastest = Math.min(fastest, performance.now() - started);
+    }
+    return fastest;
+  };
+  const lines = (count, each) => Array.from({length: count}, (_, i) => each(i));
+  // Each construct the test walks, as an input of size n.
+  const CONSTRUCTS = {
+    'plain code': n =>
+      lines(n, i => `const value${i} = compute(${i}) + 1;`).join('\n'),
+    'strings, templates, comments and regular expressions': n =>
+      lines(
+        n,
+        i => `const s${i} = '}' + \`\${a}{\` + /[{(]/.test(b); // } {`,
+      ).join('\n'),
+    'nested brackets and style contexts': n =>
+      [
+        'const styles = stylex.create({',
+        ...lines(n, () => 'a: {'),
+        'width: 1',
+        ...lines(n, () => '}'),
+        '});',
+      ].join('\n'),
+    'nested style-named properties': n =>
+      [
+        'const props = {',
+        ...lines(n, () => 'style: {'),
+        'width: 1',
+        ...lines(n, () => '}'),
+        '};',
+      ].join('\n'),
+    'nested functions': n =>
+      [
+        ...lines(n, i => `function f${i}() {`),
+        'return {width: 1};',
+        ...lines(n, () => '}'),
+        'const styles = stylex.create({x: f0()});',
+      ].join('\n'),
+    'many names in one style context (fan-out)': n =>
+      [
+        'const styles = stylex.create({',
+        ...lines(n, i => `  n${i}: {width: 1},`),
+        '});',
+      ].join('\n'),
+    'a chain of named objects': n =>
+      [
+        ...lines(n, i => `const o${i} = {a: o${i + 1}};`),
+        `const o${n} = {color: 1};`,
+        'const styles = stylex.create({x: o0});',
+      ].join('\n'),
+    'many bindings of one name, read many times': n =>
+      [
+        ...lines(n, () => '{ const s = {width: 1}; }'),
+        ...lines(n * 6, () => 'use(s);'),
+        'const styles = stylex.create({x: s});',
+      ].join('\n'),
+    'call results and the functions they call': n =>
+      [
+        ...lines(n, () => 'function make() { return {width: 1}; }'),
+        ...lines(n, i => `const r${i} = make();`),
+        `const styles = stylex.create({${lines(n, i => `a${i}: r${i}`).join(', ')}});`,
+      ].join('\n'),
+    'spreads onto intrinsic elements': n =>
+      [
+        'const svgProps = {fill: "none"};',
+        'export const A = () => (',
+        '  <div>',
+        ...lines(n, () => '    <svg {...svgProps} />'),
+        '  </div>',
+        ');',
+      ].join('\n'),
+    'deep JSX with style attributes': n =>
+      [
+        'export const A = () => (',
+        ...lines(n, () => '<div style={{color: "red"}}>text\'s {"x"}'),
+        ...lines(n, () => '</div>'),
+        ');',
+      ].join('\n'),
+    'generic arrows and type arguments': n =>
+      lines(
+        n,
+        i =>
+          `const p${i} = <T,>(v: T) => v; const t${i} = <Table<Row> rows={r} />;`,
+      ).join('\n'),
+    'declarations with conditional calls': n =>
+      lines(
+        n,
+        i =>
+          `const sizing${i} = ready ? ${'?'.repeat(60)} : resolve${i}(${i});`,
+      ).join('\n'),
+  };
+
+  for (const [construct, build] of Object.entries(CONSTRUCTS)) {
+    it(`grows about linearly for ${construct}`, () => {
+      const n = 6000;
+      const small = build(n);
+      const large = build(n * 10);
+      // Warm the function so the first run's compile time is not measured.
+      styleContextLines(small, true);
+      const ratio = best(large) / Math.max(best(small), 1);
+      // Linear is about 10; quadratic is about 100.
+      expect(
+        ratio,
+        `${construct}: ${ratio.toFixed(1)}x for 10x the input`,
+      ).toBeLessThan(30);
+    });
+  }
 });
 
 describe('review-signal loading contract', () => {

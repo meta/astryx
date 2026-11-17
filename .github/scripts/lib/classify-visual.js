@@ -969,11 +969,11 @@ function styleContextLines(source, jsx) {
         declaration = named
           ? {name: named[1], typed: STYLE_TYPE.test(named[2] ?? '')}
           : null;
-        const result = source
-          .slice(end, end + 400)
-          .match(
-            /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^;=]*?\?\s*[^;:]*?:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
-          );
+        const result = source.slice(end, end + 400).match(
+          // Each class excludes the character that ends it, so the match
+          // never backtracks inside the window.
+          /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^;=?]*\?[^;:]*:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
+        );
         if (result && /^stylex/.test(result[2])) styleSheets.add(result[1]);
         else if (result)
           callResults.push({name: result[1], calls: result[2], line});
