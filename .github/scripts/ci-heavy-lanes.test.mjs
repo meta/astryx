@@ -527,15 +527,14 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
   it('reads the commit a unit run names exactly as the release receipt does', () => {
     const NAME = '/^Main validation of ([0-9a-f]{40})$/';
     expect(JSON.stringify(heavy)).toContain(JSON.stringify(NAME).slice(1, -1));
-    expect(
-      fs.readFileSync(
-        new URL(
-          '../../scripts/release/release-check-receipt.mjs',
-          import.meta.url,
-        ),
-        'utf8',
-      ),
-    ).toContain(NAME);
+    // The receipt reads it through the shared reader, which holds the
+    // pattern.
+    const source = file =>
+      fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
+    expect(source('scripts/lib/main-run-commit.cjs')).toContain(NAME);
+    expect(source('scripts/release/release-check-receipt.mjs')).toContain(
+      "import {testedSha} from '../lib/main-run-commit.cjs';",
+    );
   });
 
   it('keeps counting a check a person re-runs', async () => {
