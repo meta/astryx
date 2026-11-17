@@ -43,6 +43,7 @@ verified_by:
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
     api/build/build.test.mjs,
+    clients/cli/lib/unknown-command.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -81,7 +82,13 @@ rather than left to the command author.
    the run with `ERR_VERSIONS_UNAVAILABLE` before any write.
 3. **Dispatch.** `clients/cli/index.mjs` parses with Commander, sets JSON mode
    in `preAction` before any command body runs, and rejects a command that
-   cannot support `--json` before any side effect.
+   cannot support `--json` before any side effect. A word that names no
+   command fails with suggestions that are runs that parse: besides the
+   command tree, the answer reads other command lines' word orders (`add
+theme matcha` is `theme add matcha`) and the table of their words in
+   `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
+   uses it and no word is a command or a command's plural. The answer only
+   suggests: it runs nothing and never names an experimental command.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -289,7 +296,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -352,6 +359,15 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   install INV14 reports is a warning). This invariant covers loading only; what
   `doctor` reports about the contributions of an integration that loads is
   owned by the checks that read them.
+- **INV39 — `astryx doctor` checks that an app loads Core's component
+  styles.** `doctor` warns (`core-stylesheets`) when no project stylesheet,
+  module or page loads `@astryxdesign/core/astryx.css`, and `doctor --built`
+  warns (`built-astryx-styles`) when output that uses Astryx carries none of
+  Core's component styles; that warning becomes a failure in the next minor
+  release, as its own `[breaking]` change. An app that compiles Core's styles
+  from source (`withAstryx()`, `astryxStylex()`, an `@astryx;` rule, or an
+  `@stylex;` rule with `@astryxdesign/build` in the PostCSS config) gets
+  neither warning.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or
@@ -1102,6 +1118,7 @@ refusal); accepting a relative path that climbs out (a path such as
 | INV35     | `api/integration/check/check.test.mjs`, `clients/cli/commands/integration-check.test.mjs`, `test/integration-check-failures.test.mjs`, `api/search/search.integration-check.test.mjs`, `foundation/discovery/prop-drift.test.mjs`, `foundation/discovery/type-match.test.mjs`, `foundation/discovery/doc-types.test.mjs`, `api/integration/authoring-checks.test.mjs`, `foundation/discovery/stray-pointers.test.mjs`, `foundation/integrations/cli-peer-version.test.mjs` | The default exit differs from a check's own, a warning or a skipped comparison passes `--strict`, text and JSON exit differently, a new failing finding is added without the list changing, a search for ci does not find the command first, a finding is reported on a doc the code does not contradict (for a type, one TypeScript accepts), or a copied passage or a fluff finding passes `--strict`, or a function-word run or shared boilerplate is reported as a copy, or a CLI outside a package's `@astryxdesign/cli` peer range is reported as a warning, fails `--strict`, reaches `integration verify`, or goes unlisted, or a `next` note fails `--strict` without `--next`, passes `--strict --next`, or goes unreported in the default run.                                                                                                                                                                                                                                                                                          |
 | INV36     | `api/gap-report/gap-report.test.mjs`, `clients/cli/commands/gap-report.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | A run without `--to` reaches an `issuesUrl` the handlers did not choose, `--to` runs a handler or files on GitHub without `--confirm-public`, an unknown `--to` sends anything, or the destinations list or its line telling the agent to ask the person is missing while a destination exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV37     | `api/integration/validate-integration.test.mjs`, `api/integration/validate-integration-fixes.test.mjs`, `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                              | A top-level source with no doc passes `--strict` (a dotted template id such as `landing.page` included), or a test, spec or story file or a subfolder helper is flagged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| INV39     | `api/doctor/doctor.test.mjs`, `api/doctor/built-checks.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                           | An app with no import of or link to Core's `astryx.css` passes `core-stylesheets`, output that uses Astryx without Core's component styles passes `built-astryx-styles`, or an app that compiles Core from source is warned by either.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Open questions
 

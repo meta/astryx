@@ -91,6 +91,13 @@ const STRUCTURAL_VARS = new Set([
   // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
   // Private runtime plumbing, never authored by a theme.
   '--_table-row-divider-width',
+  // A header cell's inline inset, the room its content may grow into before
+  // its label truncates, and the last column's container edge inset that the
+  // room reads (Table/TableHeaderCell.tsx, Table/table.stylex.ts). Private
+  // runtime plumbing, never authored by a theme.
+  '--_table-header-inline',
+  '--_table-header-end-room',
+  '--_table-edge-inline-end',
   // A gliding row's divider, carried on the row for the glide
   // (Table/glidingDivider.ts). Private runtime plumbing.
   '--_table-row-glide-width',
