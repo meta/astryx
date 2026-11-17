@@ -128,7 +128,7 @@ describe('N1: a family build over a file at its key', () => {
     );
     expect(err).toBeUndefined();
     const said =
-      "fam/index.js has no build header (an output from a CLI before 0.6.7, or a file of your own or another tool's), and this build of fam/ocean.ts replaces it";
+      "fam/index.js has no build header (an output of an earlier build, or a file of your own or another tool's), and this build of fam/ocean.ts replaces it";
     expect(lines.join('\n')).toContain(said);
     expect(result.data.warnings.join('\n')).toContain(said);
   });
