@@ -30,14 +30,17 @@ const SURFACE_TEXT = {
   '--color-text-accent': neutral.dark[95],
 };
 
+/** Core's selector for a striped table's painted rows. */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
 /**
  * The rules of the parts that paint a fill of their own (a surface, a
- * popover, the muted fill or a card fill). A coloured card's ink must not
- * reach them, so each sets the theme's own text and link colours again. A
- * transparent card is left out: it paints nothing, so it keeps its parent's
- * ink.
+ * popover, the muted fill or a card fill) and draw text on it, each as
+ * `[part, rule, selector?]`. A coloured card's ink must not reach them, so
+ * each sets the theme's own text and link colours again. A transparent card
+ * is left out: it paints nothing, so it keeps its parent's ink.
  */
-const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['card', 'variant:default'],
   ['card', 'variant:muted'],
   ['clickable-card', 'variant:default'],
@@ -46,7 +49,19 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
   ['selectable-card', 'variant:muted'],
   ['section', 'variant:section'],
   ['section', 'variant:muted'],
+  ['app-shell', 'variant:surface'],
+  ['app-shell', 'variant:section'],
+  ['app-shell-header', 'variant:surface'],
+  ['app-shell-sidenav', 'variant:surface'],
+  ['layout-panel', 'base'],
+  ['layout-content', 'base'],
   ['code', 'base'],
+  ['avatar', 'base'],
+  ['avatar-group-overflow', 'base'],
+  ['segmented-control-item', 'selected'],
+  ['step-indicator', 'progress:not-started'],
+  ['table-row', 'base', STRIPED_ROW],
+  ['input-group-text', 'base'],
   ['text-input', 'base'],
   ['text-area', 'base'],
   ['number-input', 'base'],
@@ -63,20 +78,34 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
   ['selector-popup', 'base'],
   ['multi-selector-popup', 'base'],
   ['dropdown-menu', 'base'],
+  ['dropdown-menu-radio', 'base'],
   ['context-menu', 'base'],
   ['popover', 'base'],
   ['hover-card', 'base'],
   ['dialog', 'base'],
-  ['alert-dialog', 'variant:standard'],
   ['drawer', 'base'],
   ['bottom-sheet', 'base'],
+  ['chat-composer-drawer', 'base'],
 ];
 
 /** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
 function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
   const out: ComponentStyleMap = {...components};
-  for (const [part, key] of OWN_FILL_RULES)
-    out[part] = {...out[part], [key]: {...SURFACE_TEXT, ...out[part]?.[key]}};
+  for (const [part, key, selector] of OWN_FILL_RULES) {
+    const rule = out[part]?.[key] ?? {};
+    out[part] = {
+      ...out[part],
+      [key]: selector
+        ? {
+            ...rule,
+            [selector]: {
+              ...SURFACE_TEXT,
+              ...((rule as Record<string, object>)[selector] ?? {}),
+            },
+          }
+        : {...SURFACE_TEXT, ...rule},
+    };
+  }
   return out;
 }
 

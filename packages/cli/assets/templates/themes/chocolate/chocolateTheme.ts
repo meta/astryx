@@ -11,7 +11,6 @@
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import {chocolateIconRegistry} from './icons';
 
-/** Chocolate syntax palette — warm browns and amber tones. */
 /**
  * Comments and operators in light code: stop 45 of the astryx-oklch-v1 ramp
  * grown from #B88859 (anchored at its own stop, 60), the nearest stop that
@@ -19,6 +18,7 @@ import {chocolateIconRegistry} from './icons';
  */
 const CODE_BROWN = '#955c26';
 
+/** Chocolate syntax palette — warm browns and amber tones. */
 const chocolateSyntax = defineSyntaxTheme({
   name: 'astryx-chocolate',
   tokens: {

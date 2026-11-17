@@ -11,8 +11,9 @@
  * - primary text, secondary text and links on the page, the surface, a
  *   popover, the muted fill and every card fill (with the card variant's own
  *   token overrides), and on the surfaces that repaint inside a card: a
- *   nested default card, a transparent card, a text field, inline code and
- *   an open menu;
+ *   nested default card, a transparent card, a text field, inline code, an
+ *   open menu, a selected segment, an input group addon, a step number and a
+ *   striped table row;
  * - selected-item and numbered-citation text on the accent tint, with the
  *   theme's own rules for those parts;
  * - status text on its pale status fill (a field status, a banner);
@@ -115,7 +116,29 @@ const NESTED = {
     fill: '--color-background-popover',
     own: theme => rule(theme, 'dropdown-menu'),
   },
+  'selected segment': {
+    fill: '--color-background-surface',
+    own: theme => rule(theme, 'segmented-control-item', 'selected'),
+  },
+  'input group addon': {
+    fill: '--color-background-muted',
+    own: theme => rule(theme, 'input-group-text'),
+  },
+  'step number': {
+    fill: '--color-background-surface',
+    own: theme => rule(theme, 'step-indicator', 'progress:not-started'),
+  },
+  'striped table row': {
+    fill: '--color-background-muted',
+    own: theme => ({
+      ...rule(theme, 'table-row'),
+      ...(rule(theme, 'table-row')[STRIPED_ROW] ?? {}),
+    }),
+  },
 };
+
+/** Core's selector for a striped table's painted rows. */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
 /** Parts drawn on the accent tint, with their own rule's key. */
 const ON_ACCENT_TINT = {
