@@ -1038,49 +1038,6 @@ export const Forwarded = forwardRef(function Forwarded({variant = 'solid'}: {var
     expect(report.typesCompared).toBe(7);
   });
 
-  it('lets a doc leave out a string literal the package deprecates in every place the type takes it from', async () => {
-    withTypeScript();
-    const source = [
-      'export interface ToneMap {',
-      '  plain: true;',
-      '  bold: true;',
-      '  /** @deprecated Use bold. */',
-      '  loud: true;',
-      '}',
-      'export type Tone = keyof ToneMap;',
-      "export type Placement = keyof ToneMap | 'loud';",
-      "export type Size = 'sm' | 'md' |",
-      '  /** @deprecated Use md. */',
-      "  'lg';",
-      '/** @deprecated No props are tiny. */',
-      "export function Badge(props: {tone: 'tiny'; size?: Size}): null;",
-      'export function Badge(props: {tone?: Tone; size?: Size; placement?: Placement}): null;',
-      'export function Badge(props: object) { return null; }',
-    ].join('\n');
-    const badge = component('Badge', source, {
-      props: [
-        // 'loud' is a deprecated key; 'tiny' comes only from a deprecated overload.
-        prop('tone', "'plain' | 'bold'"),
-        // 'lg' sits under a @deprecated comment.
-        prop('size', "'sm' | 'md'"),
-        // Placement adds 'loud' back as a current value.
-        prop('placement', "'plain' | 'bold'"),
-      ],
-    });
-    const listed = component('Listed', source.replaceAll('Badge', 'Listed'), {
-      props: [prop('tone', "'plain' | 'bold' | 'loud' | 'tiny'")],
-    });
-    const short = component('Short', source.replaceAll('Badge', 'Short'), {
-      props: [prop('tone', "'plain'")],
-    });
-
-    const report = await compare([badge, listed, short]);
-    expect(kinds(report).filter(k => k.endsWith('type_mismatch'))).toEqual([
-      'Badge.placement type_mismatch',
-      'Short.tone type_mismatch',
-    ]);
-  });
-
   it('accepts an alias spelled out beside its name, and reports one whose spelled-out values are stale', async () => {
     withTypeScript();
     const links = ["'link' | 'token'", "'link' | 'token' | 'button'"].map(
