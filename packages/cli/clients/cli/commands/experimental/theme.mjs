@@ -374,6 +374,7 @@ const changeOptions = o => ({
   mode: o.mode,
   only: o.only ?? false,
   png: o.png ?? false,
+  ...(o.ground ? {ground: o.ground} : {}),
 });
 
 /**
@@ -698,7 +699,16 @@ function missedLine(d) {
  */
 function problemList(problems) {
   return cappedList(
-    problems.map(p => (p.fix ? [p.problem, `fix: ${p.fix}`] : p.problem)),
+    problems.map(p => {
+      const accept = /** @type {any} */ (p).accept;
+      const lines = [
+        p.problem,
+        ...(p.fix ? [`fix: ${p.fix}`] : []),
+        // (A color the theme copies on purpose may be kept, with why.)
+        ...(accept ? [`or keep it as the original draws it: ${accept}`] : []),
+      ];
+      return lines.length > 1 ? lines : p.problem;
+    }),
     'every one, each with its fix',
   );
 }

@@ -58,6 +58,12 @@ export const doc = {
         'light or dark: only that color mode. Colors only; sizes, numbers, fonts and shadows are the same in both modes. A light-only or dark-only theme takes --mode for the other mode only, which applies where Core draws that mode (a toast, a lightbox); its own mode needs no --mode',
     },
     {
+      flag: '--ground <part>',
+      param: 'options.ground',
+      description:
+        "With contrast-accepted only: the part the text sits on, as the contrast problem's own accept line names it (a contrast problem whose failing color the theme typed, copied from an original, may be kept with the reason the original draws it so; one in a color the editor made must pass)",
+    },
+    {
       flag: '--only',
       param: 'options.only',
       description:

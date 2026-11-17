@@ -2441,7 +2441,46 @@ export async function checkAppThemes(cwd) {
 
   const migration = unmigratedCopyCheck(state.projectDir);
   if (migration) checks.push(migration);
+  const accepted = acceptedContrastCheck(available);
+  if (accepted) checks.push(accepted);
   return checks;
+}
+
+/**
+ * The contrast problems the app's editor themes keep as designed (a color
+ * copied from an original, with its reason): listed with their count, so
+ * an acceptance is never out of sight. Null when none keeps one.
+ * @param {DiscoveredTheme[]} themes
+ * @returns {DoctorCheck | null}
+ */
+export function acceptedContrastCheck(themes) {
+  /** @type {string[]} */
+  const lines = [];
+  for (const theme of themes) {
+    if (theme.source !== 'local') continue;
+    const text = readTextFileIfExists(
+      path.join(theme.sourceDir, `${theme.slug}.settings.json`),
+    );
+    /** @type {any} */
+    let data;
+    try {
+      data = text == null ? null : JSON.parse(text);
+    } catch {
+      continue;
+    }
+    for (const a of Array.isArray(data?.accepted) ? data.accepted : [])
+      if (a && typeof a.part === 'string' && typeof a.reason === 'string')
+        lines.push(
+          `${theme.slug}: ${a.part} on ${a.ground} in ${a.mode} at ${a.ratio}:1 (${a.reason})`,
+        );
+  }
+  if (!lines.length) return null;
+  return {
+    id: 'theme-accepted-contrast',
+    label: 'Contrast kept as designed',
+    status: 'info',
+    message: `${lines.length} contrast problem${lines.length > 1 ? 's are' : ' is'} kept as designed: ${lines.join('; ')}`,
+  };
 }
 
 /** @param {string} file */
