@@ -3,7 +3,7 @@
 /**
  * @file What each themeable part reads, derived from the installed Core
  * itself: render a catalog of every component on the server with the
- * project's own React (the machinery of `astryx experimental render`), then
+ * project's own React (the machinery of `astryx experimental export`), then
  * join each element's classes to the rules in Core's shipped stylesheet.
  * The result names, for every part, the CSS properties it sets and the
  * public tokens that feed each one (under which variant or state), the parts

@@ -50,7 +50,11 @@ const NO_ACTION_OF_THEIR_OWN = [];
  * separately below.
  * @type {string[]}
  */
-const RECORD_FOR_THEMSELVES = [];
+const RECORD_FOR_THEMSELVES = [
+  // A renamed command's old name: hidden, it records no result set and fails
+  // naming the new name (clients/cli/lib/renamed-commands.mjs).
+  'experimental render',
+];
 
 /**
  * Every command in the program, depth first, with its fully qualified name.
@@ -86,11 +90,13 @@ describe('every command reports what it answered with', () => {
     const unreported = commands
       .filter(({command}) => runs(command) && !reportsResult(command))
       .map(({name}) => name);
-    expect(unreported, unreported.length
-      ? `these commands run without reporting a result — return a CommandResult ` +
-        `from the action (see foundation/debug/command-result.mjs), or register ` +
-        `through defineCommand: ${unreported.join(', ')}`
-      : '',
+    expect(
+      unreported,
+      unreported.length
+        ? `these commands run without reporting a result — return a CommandResult ` +
+            `from the action (see foundation/debug/command-result.mjs), or register ` +
+            `through defineCommand: ${unreported.join(', ')}`
+        : '',
     ).toEqual([]);
   });
 
@@ -116,13 +122,15 @@ describe('every command reports what it answered with', () => {
     // MODULES failed to import and left its fallback stub in its place (the
     // stub carries the mark, so it lands here). The second is a broken CLI,
     // not a broken test.
-    expect(manual, unexpected.length
-      ? `unexpected commands recording for themselves: ${unexpected.join(', ')} ` +
-        `— either a hand-registered command is using markReportsResult instead ` +
-        `of returning a CommandResult, or that command's module failed to load ` +
-        `and left its fallback stub behind (run \`astryx <name>\` to see the ` +
-        `import error)`
-      : '',
+    expect(
+      manual,
+      unexpected.length
+        ? `unexpected commands recording for themselves: ${unexpected.join(', ')} ` +
+            `— either a hand-registered command is using markReportsResult instead ` +
+            `of returning a CommandResult, or that command's module failed to load ` +
+            `and left its fallback stub behind (run \`astryx <name>\` to see the ` +
+            `import error)`
+        : '',
     ).toEqual([...RECORD_FOR_THEMSELVES].sort());
   });
 

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render --reverse` without an embedded source:
+ * @file `astryx experimental export --reverse` without an embedded source:
  * rebuild a page module from Astryx markup. Each element whose class list
  * names an Astryx component (`astryx-<name>`) becomes that component, with
  * the props its `data-*` attributes record and its text. This keeps text and
@@ -245,7 +245,7 @@ export function rebuildPage(html, fromDir) {
     .map(([mod, names]) => `import {${[...names].sort().join(', ')}} from '${mod}';`);
   const title = decode(textOf(find(doc, 'title') ?? {text: ''})).trim();
   const source = [
-    `// Rebuilt by astryx experimental render --reverse from rendered markup${title ? `: ${oneLine(title)}` : ''}.`,
+    `// Rebuilt by astryx experimental export --reverse from rendered markup${title ? `: ${oneLine(title)}` : ''}.`,
     '// Text and layout come from the markup; styling, state and behavior do not,',
     '// so review it before use.',
     '',

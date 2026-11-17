@@ -294,7 +294,7 @@ describe('a stored manifest', () => {
           ],
         },
         {name: 'experimental', available: true, subcommands: [
-          {name: 'experimental render', requires: ['render.page'], available: true},
+          {name: 'experimental export', requires: ['render.page'], available: true},
         ]},
       ],
     });
@@ -485,8 +485,8 @@ const DECLARED = {
   'theme add': ['themes.appModule'],
   'theme use': ['themes.appModule'],
   'theme remove': ['themes.appModule'],
-  'experimental render': ['render.page'],
-  'experimental render --reverse': ['render.reverse'],
+  'experimental export': ['render.page'],
+  'experimental export --reverse': ['render.reverse'],
   'experimental theme compile': ['themes.compile'],
   'experimental theme add': ['themes.appModule'],
   'experimental theme use': ['themes.appModule'],

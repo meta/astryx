@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for render() (`astryx experimental render`): a page to one
+ * @file Tests for render() (`astryx experimental export`): a page to one
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
@@ -301,7 +301,7 @@ describe('render(): every write takes its place in one step', () => {
   }, 60_000);
 
   it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
-    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', '--reverse', 'page.html'])));
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'export', '--reverse', 'page.html'])));
     expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
     const pages = runs.map(r => JSON.parse(r.out).data.output);
     expect(new Set(pages.map(p => path.dirname(p))).size).toBe(8);
@@ -811,7 +811,7 @@ describe('render(): every write stays inside the current folder', () => {
     for (const name of ['app/team/page.tsx', 'components/Header.tsx', 'lib/members.ts']) {
       expect(fs.readFileSync(path.join(cwd, 'team-restored', name))).toEqual(fs.readFileSync(path.join(dir, 'alias-home/src', name)));
     }
-    const {stdout} = await runCli(['experimental', 'render', '--reverse', 'team.html'], {cwd});
+    const {stdout} = await runCli(['experimental', 'export', '--reverse', 'team.html'], {cwd});
     expect(stdout).toContain('set the "paths" of tsconfig.json (create it if it is not there) to: "@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"].');
     // The entries are written for the config TypeScript reads there, from
     // its baseUrl.
@@ -2027,19 +2027,19 @@ describe('render --reverse: a received file may carry only what a render embeds'
   }, 60_000);
 });
 
-describe('astryx experimental render (CLI)', () => {
+describe('astryx experimental export (CLI)', () => {
   it('refuses an unknown experimental subcommand with exit 1', async () => {
     const r = await runCli(['--json', 'experimental', 'nope'], dir);
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
     expect(
-      out.suggestions.some((/** @type {any} */ s) => /experimental render$/.test(s.name)),
+      out.suggestions.some((/** @type {any} */ s) => /experimental export$/.test(s.name)),
     ).toBe(true);
   });
 
   it('fails with exit 1 and a readable message without --json', async () => {
-    const r = await runCli(['experimental', 'render', '--reverse', 'plain.html'], dir);
+    const r = await runCli(['experimental', 'export', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('is not an Astryx page');
     expect(r.stderr).toContain('astryx build');
@@ -2047,7 +2047,7 @@ describe('astryx experimental render (CLI)', () => {
 
 
   it('answers --json with the render.page envelope and --title', async () => {
-    const r = await runCli(['--json', 'experimental', 'render', 'page.tsx', '--out', 'cli.html', '--title', 'From the CLI'], dir);
+    const r = await runCli(['--json', 'experimental', 'export', 'page.tsx', '--out', 'cli.html', '--title', 'From the CLI'], dir);
     expect(r.status).toBe(0);
     const json = JSON.parse(r.stdout);
     expect(json.type).toBe('render.page');
@@ -2061,15 +2061,15 @@ describe('astryx experimental render (CLI)', () => {
       const out = path.join(elsewhere, 'shared report.html');
       // Twice: the second round trip names the next free folder.
       for (const folder of ['shared report-restored', 'shared report-restored-2']) {
-        const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
+        const rendered = await runCli(['experimental', 'export', 'page.tsx', '--out', out], dir);
         expect(rendered.status, rendered.stderr).toBe(0);
         const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
         expect(line).toBeDefined();
         // The printed command, run as printed after the CLI's own name.
-        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental export ')[1];
         const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
         expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
-        const back = await runCli(['experimental', 'render', ...args], dir);
+        const back = await runCli(['experimental', 'export', ...args], dir);
         expect(back.status, back.stderr).toBe(0);
         expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
           fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
@@ -2084,7 +2084,7 @@ describe('astryx experimental render (CLI)', () => {
   }, 120_000);
 
   it('fails with exit 1 and a JSON error envelope', async () => {
-    const r = await runCli(['--json', 'experimental', 'render', '--reverse', 'plain.html'], dir);
+    const r = await runCli(['--json', 'experimental', 'export', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
     const json = JSON.parse(r.stdout);
     expect(json.code).toBe('ERR_RENDER_NOT_ASTRYX');
@@ -2093,7 +2093,7 @@ describe('astryx experimental render (CLI)', () => {
 
   it('marks itself experimental in help', async () => {
     const r = await runCli(['experimental', '--help'], dir);
-    expect(r.stdout).toMatch(/render[^\n]*\[experimental\]/);
+    expect(r.stdout).toMatch(/export[^\n]*\[experimental\]/);
   });
 
   it('names at most 10 restored files in text and keeps every file in JSON', async () => {
@@ -2339,7 +2339,7 @@ describe('render(): a crash of Node itself', () => {
       `${name}.tsx`,
       `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(path.join(dir, `${name}.pid`))}, String(process.pid));\nwhile (true) {}\nexport default () => <p>Hi</p>;\n`,
     );
-    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'render', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
+    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'export', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
     const pidFile = path.join(dir, `${name}.pid`);
     const until = async (/** @type {() => boolean} */ done, /** @type {number} */ ms) => {
       for (const start = Date.now(); !done() && Date.now() - start < ms; ) await new Promise(r => setTimeout(r, 50));
@@ -2458,14 +2458,14 @@ describe('render(): a page outside a project', () => {
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
     fs.writeFileSync(path.join(away, 'dot.png'), PNG);
-    const run = runBin(away, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(away, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('no-astryx-styles');
     const html = fs.readFileSync(path.join(away, 'page.html'), 'utf8');
     expect(html).toContain('Café ✓ report');
     expect(html).toContain('astryx-button');
-    const back = runBin(away, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(away, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.json.data.exact).toBe(true);
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
   }, 60_000);
@@ -2476,10 +2476,10 @@ describe('render(): a page outside a project', () => {
     fs.mkdirSync(path.join(tree, 'components'), {recursive: true});
     fs.writeFileSync(path.join(tree, 'components/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above the page</p>;\n}\n');
     fs.writeFileSync(path.join(tree, 'app/x/page.tsx'), "import {Banner} from '../../components/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
-    const run = runBin(tree, ['experimental', 'render', 'app/x/page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'app/x/page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
-    const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'app/x/page.html']);
     expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
     // The note names the page by its path among the files it lists.
     const note = fs.readFileSync(path.join(tree, 'app/x/page.html'), 'utf8');
@@ -2493,7 +2493,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(tree, 'site/public/logo.png'), PNG);
     fs.writeFileSync(path.join(tree, 'site/Note.tsx'), 'export function Note() {\n  return <p>Note by alias</p>;\n}\n');
     fs.writeFileSync(path.join(tree, 'site/page.tsx'), "import {Note} from '@/Note';\nexport default function Page() {\n  return <main><Note /><img src=\"/logo.png\" alt=\"\" /></main>;\n}\n");
-    const site = runBin(tree, ['experimental', 'render', 'site/page.tsx']);
+    const site = runBin(tree, ['experimental', 'export', 'site/page.tsx']);
     expect(site.status).toBe(0);
     const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
     expect(siteHtml).toContain('Note by alias');
@@ -2741,11 +2741,11 @@ describe('render(): a page outside a project', () => {
     fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
     fs.writeFileSync(path.join(tree, 'shared/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above</p>;\n}\n');
     fs.writeFileSync(path.join(tree, '..x/page.tsx'), "import {Banner} from '../shared/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
-    const run = runBin(tree, ['experimental', 'render', '..x/page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', '..x/page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
-    const back = runBin(path.join(tree, '..x'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, '..x'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
@@ -2761,7 +2761,7 @@ describe('render(): a page outside a project', () => {
       path.join(sub, 'page.jsx'),
       "import {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core';\nexport default function Page() {\n  const [v] = useState('typed');\n  return <TextInput label=\"Name\" value={v} onChange={() => {}} />;\n}\n",
     );
-    const run = runBin(sub, ['experimental', 'render', 'page.jsx']);
+    const run = runBin(sub, ['experimental', 'export', 'page.jsx']);
     expect(run.status).toBe(0);
     expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
   }, 60_000);
@@ -2790,7 +2790,7 @@ describe('render(): a page outside a project', () => {
       `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n${body}  return <Button label={a + ' ' + b} />;\n}\n`,
     );
     for (const page of ['plain', 'core']) {
-      const run = runBin(sub, ['experimental', 'render', `${page}.jsx`]);
+      const run = runBin(sub, ['experimental', 'export', `${page}.jsx`]);
       expect(run.status).toBe(0);
       const html = fs.readFileSync(path.join(sub, `${page}.html`), 'utf8');
       expect(html).toContain('cjs-hook');
@@ -2840,7 +2840,7 @@ console.log(JSON.stringify({inside, outside}));
         '',
       ].join('\n'),
     );
-    const run = runBin(sub, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(sub, ['experimental', 'export', 'page.tsx']);
     expect(run.status, JSON.stringify(run.json)).toBe(0);
     const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
     const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
@@ -2852,7 +2852,7 @@ console.log(JSON.stringify({inside, outside}));
 
   it('still names a package the CLI does not carry as not installed', () => {
     fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
-    const run = runBin(away, ['experimental', 'render', 'dep.jsx']);
+    const run = runBin(away, ['experimental', 'export', 'dep.jsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 

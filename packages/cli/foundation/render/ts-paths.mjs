@@ -2,7 +2,7 @@
 
 /**
  * @file A project's `compilerOptions.paths` (tsconfig.json or jsconfig.json),
- * read and matched by TypeScript's rules, for `astryx experimental render`,
+ * read and matched by TypeScript's rules, for `astryx experimental export`,
  * `theme build`, and Doctor.
  * The config of a file is the nearest tsconfig.json (else jsconfig.json) in
  * its folder or above, read through its `extends`; a config that does not

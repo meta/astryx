@@ -77,6 +77,27 @@ function offers(cmd, long) {
 }
 
 /**
+ * The experimental commands a stable answer may name (spec:AST-017 FR27, the
+ * shareable-page exception), with the words people and agents type when they
+ * mean each one. The reason says the command is experimental.
+ */
+const NAMED_EXPERIMENTAL = [
+  {
+    words: ['experimental', 'export'],
+    asks: [
+      'export',
+      'render',
+      'share',
+      'bundle',
+      'snapshot',
+      'standalone',
+    ],
+    reason:
+      'the command is experimental export (experimental): a page as one shareable HTML file',
+  },
+];
+
+/**
  * Every visible command in the tree, by its words: `[['theme', 'build'], …]`.
  * @param {CommandLike} program
  * @returns {Array<{words: string[], cmd: CommandLike}>}
@@ -597,6 +618,21 @@ async function pointed({word, before, after: rest}, program, findEntry) {
     );
   };
   if (nested.length > 0) return nested.slice(0, 3).map(asRun);
+
+  // An experimental command a stable answer may name, asked for by a word
+  // that means it (`share page.tsx` is `experimental export page.tsx`).
+  const asked = NAMED_EXPERIMENTAL.find(e =>
+    spellings(word).some(w => e.asks.includes(w)),
+  );
+  if (asked && runParses(program, [...before, ...asked.words]))
+    return [
+      run(
+        runParses(program, [...before, ...asked.words, ...rest])
+          ? [...asked.words, ...rest]
+          : [...asked.words, '--help'],
+        asked.reason,
+      ),
+    ];
 
   // A name another command reads: the next word (`info Text`), else the
   // word itself (`astryx tokens`).

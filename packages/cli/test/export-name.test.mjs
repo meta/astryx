@@ -1,0 +1,63 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file The command that writes a page as one HTML file is `experimental
+ * export`. No published file, help, docs page, or written file names the old
+ * name `experimental render`, and the old name fails and names the new one;
+ * it is no alias.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {describe, expect, it} from 'vitest';
+import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {publishedFiles} from '../scripts/published-files.mjs';
+import {runCli} from '../test-utils/run-cli.mjs';
+
+const OLD = /experimental[ -/]render\b/u;
+
+describe('experimental export is the name', () => {
+  it('no published file names experimental render', () => {
+    const named = publishedFiles(CLI_ROOT).filter(
+      rel =>
+        !rel.endsWith('CHANGELOG.md') &&
+        OLD.test(fs.readFileSync(path.join(CLI_ROOT, rel), 'utf8')),
+    );
+    expect(named).toEqual([]);
+  });
+
+  it.each([
+    [['experimental', '--help']],
+    [['experimental', 'export', '--help']],
+    [['docs', 'cli/experimental/share-a-page', '--full']],
+    [['docs', 'cli/experimental/export-pages', '--full']],
+    [['docs', 'cli/commands/experimental-export']],
+  ])('`astryx %s` names experimental export, never render', async args => {
+    const {status, stdout} = await runCli(args);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/experimental export/u);
+    expect(stdout).not.toMatch(OLD);
+  });
+
+  it('the old name fails and names the new one', async () => {
+    const {status, stdout, stderr} = await runCli([
+      'experimental',
+      'render',
+      'page.tsx',
+    ]);
+    expect(status).toBe(1);
+    expect(stdout + stderr).toMatch(
+      /experimental render is now experimental export/u,
+    );
+    expect(stdout + stderr).toMatch(/experimental export page\.tsx/u);
+  });
+
+  it.each(['render', 'export', 'share', 'bundle', 'snapshot'])(
+    'an unknown `astryx %s` names experimental export',
+    async word => {
+      const {status, stdout, stderr} = await runCli([word]);
+      expect(status).toBe(1);
+      expect(stdout + stderr).toMatch(/experimental export/u);
+    },
+  );
+});
