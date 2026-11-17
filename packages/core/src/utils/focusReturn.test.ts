@@ -140,25 +140,52 @@ describe('returnFocusForLastInput', () => {
     document.body.innerHTML = '';
   });
 
-  it('returns focus without a scroll after keyboard input', () => {
+  it('returns focus to a Tab stop and scrolls it just into view after keyboard input', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
     const focus = vi.spyOn(opener, 'focus');
+    const reveal = vi.fn();
+    opener.scrollIntoView = reveal;
     returnFocusForLastInput(opener);
     expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
+    expect(reveal.mock.calls).toEqual([
+      [{block: 'nearest', inline: 'nearest'}],
+    ]);
     expect(document.activeElement).toBe(opener);
   });
 
-  it('returns focus without a scroll and without a ring after pointer input', () => {
+  it('returns focus to a Tab stop without a ring, and scrolls it just into view, after pointer input', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
     document.dispatchEvent(new Event('pointerdown'));
     const focus = vi.spyOn(opener, 'focus');
+    const reveal = vi.fn();
+    opener.scrollIntoView = reveal;
     returnFocusForLastInput(opener);
     expect(focus.mock.calls).toEqual([
       [{preventScroll: true, focusVisible: false}],
     ]);
+    expect(reveal.mock.calls).toEqual([
+      [{block: 'nearest', inline: 'nearest'}],
+    ]);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('never scrolls to an opener that is no Tab stop, as WebKit records a tapped button\u2019s tabindex="-1" region', () => {
+    const region = document.createElement('div');
+    region.tabIndex = -1;
+    document.body.appendChild(region);
+    const focus = vi.spyOn(region, 'focus');
+    const reveal = vi.fn();
+    region.scrollIntoView = reveal;
+    returnFocusForLastInput(region);
+    document.dispatchEvent(new Event('pointerdown'));
+    returnFocusForLastInput(region);
+    expect(focus.mock.calls).toEqual([
+      [{preventScroll: true}],
+      [{preventScroll: true, focusVisible: false}],
+    ]);
+    expect(reveal).not.toHaveBeenCalled();
   });
 
   it('takes the ring from the modality it is given', () => {

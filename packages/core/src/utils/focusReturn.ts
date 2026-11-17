@@ -14,7 +14,7 @@
  *   which exports only it, does not reach this module.
  */
 
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {FOCUSABLE_SELECTOR, isTabStop} from '../hooks/focusableSelector';
 import {sharedWeakMap} from './sharedRealm';
 import {
   getInteractionModality,
@@ -182,16 +182,22 @@ export function focusForLastInput(
 }
 
 /**
- * Returns focus to `opener` after an overlay closes, without a scroll and with
- * the ring the last input calls for. WebKit records the nearest focusable
+ * Returns focus to `opener` after an overlay closes, with the ring the last
+ * input calls for. An opener that is a Tab stop and sits outside the visible
+ * area scrolls just into view (`nearest`), so a person sees where focus went;
+ * one already in view does not move. WebKit records the nearest focusable
  * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
- * region. A reveal of that region scrolls the page to its top edge.
+ * region. A reveal of that region scrolls the page to its top edge, so an
+ * opener that is no Tab stop never scrolls.
  */
 export function returnFocusForLastInput(
   opener: HTMLElement,
   modality?: InteractionModality,
 ): void {
   focusForLastInput(opener, {preventScroll: true}, modality);
+  if (isTabStop(opener) && typeof opener.scrollIntoView === 'function') {
+    opener.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  }
 }
 
 /**
