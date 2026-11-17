@@ -48,7 +48,7 @@ async function maskOf(viewport: Locator): Promise<string> {
 }
 
 async function scrollTo(viewport: Locator, edge: 'start' | 'middle' | 'end') {
-  await viewport.evaluate((element, where) => {
+  await viewport.evaluate((element: HTMLElement, where) => {
     const max = element.scrollWidth - element.clientWidth;
     const rtl = getComputedStyle(element).direction === 'rtl';
     const offset = where === 'start' ? 0 : where === 'end' ? max : max / 2;

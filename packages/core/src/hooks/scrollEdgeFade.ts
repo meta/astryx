@@ -41,10 +41,10 @@ const FADE = {
   '@media (forced-colors: active)': 'none',
 } as const;
 
-// A mask on a scroll container also covers its classic scrollbar. Browsers
-// on a coarse primary pointer (phones, tablets) overlay their scrollbars and
-// show them only while scrolling, so a viewport with a native scrollbar fades
-// only there. Everywhere else its classic scrollbar is the sign.
+// A mask on a scroll container also covers its classic scrollbar. Phones and
+// tablets overlay their scrollbars and show them only while scrolling. So a
+// viewport with its native scrollbar fades only under a coarse primary
+// pointer. A mouse or a trackpad sees no fade.
 const TOUCH = '@media (pointer: coarse)';
 
 const NATIVE = {

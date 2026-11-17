@@ -218,31 +218,7 @@ the behavior.
   `stickyContainment="always"` option MAY preserve that boundary while fitting, but
   containment MUST be explicit rather than an incidental result of scroll intent.
 
-- **FR22 — An overflowing inline edge fades where nothing else shows it.**
-  While a viewport's inline axis is effective, each inline edge that hides
-  content fades the content toward transparent, with the strip-fade look of
-  TabList and Tokenizer (`--spacing-8` by default). A mask on a scroll
-  container also covers its classic scrollbar, so a viewport that shows its
-  native scrollbar fades only under a coarse primary pointer, where browsers
-  overlay the scrollbar and show it only while scrolling. Everywhere else its
-  classic scrollbar is the sign, and nothing masks it (FR15, FR16). A viewport
-  that hides its native scrollbar fades with every pointer. An edge at the
-  content's end, a fitting viewport, and a viewport with keyboard focus (in
-  either direction) show no fade, and forced colors drop it. The fade does not
-  animate. While it shows, the viewport's inline scroll padding is the fade's
-  width, so keyboard scrolling brings a focused child clear of it. The
-  internal module `hooks/scrollEdgeFade.ts` is the one presenter: an adopter
-  passes the inline state from `useScrollableArea`, and `hidden` when it hides
-  its native scrollbar, to `scrollEdgeFadeStyles`, and spreads the result into
-  its viewport's styles. An adopter may set the clear band at the edge
-  (`--_scroll-fade-inset`) and the fade length (`--_scroll-fade-length`), and
-  `scrollEdgeFadeOff` turns off one edge that marks its overflow another way.
-  Table and CodeBlock apply it with their native scrollbars, Tokenizer's
-  grouped strip applies it with its scrollbar hidden, and Table turns off a
-  pinned column's edge. The module exists because `useScrollableArea`
-  publishes edge state but paints nothing, and each adopter otherwise kept its
-  own copy of the same mapping. Implementation gap: in a vertical writing mode
-  the fade follows the physical horizontal axis.
+- **FR22 — An overflowing inline edge fades where nothing else shows it.** While a viewport's inline axis is effective, each inline edge that hides content fades the content toward transparent, with the strip-fade look of TabList and Tokenizer (`--spacing-8` by default). A mask on a scroll container also covers its classic scrollbar, so a viewport that shows its native scrollbar fades only under a coarse primary pointer, where browsers overlay the scrollbar and show it only while scrolling. With a mouse or a trackpad nothing masks the viewport, so a classic scrollbar keeps its paint (FR15, FR16). A viewport that hides its native scrollbar fades with every pointer. An edge at the content's end, a fitting viewport, and a viewport with keyboard focus (in either direction) show no fade, and forced colors drop it. The fade does not animate. While it shows, the viewport's inline scroll padding is the fade's width, so keyboard scrolling brings a focused child clear of it. The internal module `hooks/scrollEdgeFade.ts` is the one presenter: an adopter passes the inline state from `useScrollableArea`, and `hidden` when it hides its native scrollbar, to `scrollEdgeFadeStyles`, and spreads the result into its viewport's styles. An adopter may set the clear band at the edge (`--_scroll-fade-inset`) and the fade length (`--_scroll-fade-length`), and `scrollEdgeFadeOff` turns off one edge that marks its overflow another way. Table and CodeBlock apply it with their native scrollbars, Tokenizer's grouped strip applies it with its scrollbar hidden, and Table turns off a pinned column's edge. The module exists because `useScrollableArea` publishes edge state but paints nothing, and each adopter otherwise kept its own copy of the same mapping. Implementation gap: in a vertical writing mode the fade follows the physical horizontal axis.
 
 ### Delivery requirements
 

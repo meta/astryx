@@ -36,7 +36,7 @@ async function arrowPixel(viewport: Locator): Promise<number> {
     throw new Error('Table scroll viewport has no rendered bounds');
   }
   const bar = await viewport.evaluate(
-    element => element.offsetHeight - element.clientHeight,
+    (element: HTMLElement) => element.offsetHeight - element.clientHeight,
   );
   // The end arrow button sits at the inline end of the scrollbar.
   const shot = await viewport.page().screenshot({
@@ -78,11 +78,11 @@ test('a fine pointer with a classic scrollbar shows the scrollbar unfaded', asyn
   const viewport = page.locator('.astryx-table-scroll-wrapper').first();
   await expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
   const bar = await viewport.evaluate(
-    element => element.offsetHeight - element.clientHeight,
+    (element: HTMLElement) => element.offsetHeight - element.clientHeight,
   );
   test.skip(bar < 4, 'this platform overlays its scrollbar');
   // In the middle both edges hide content, so a fade would cover both arrows.
-  await viewport.evaluate(element => {
+  await viewport.evaluate((element: HTMLElement) => {
     element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
   });
   await expect(viewport).not.toHaveAttribute('data-scroll-inline-end', 'true');
@@ -92,7 +92,7 @@ test('a fine pointer with a classic scrollbar shows the scrollbar unfaded', asyn
 
   // The arrow reads the same as with every mask removed.
   const shown = await arrowPixel(viewport);
-  await viewport.evaluate(element => {
+  await viewport.evaluate((element: HTMLElement) => {
     element.style.setProperty('mask-image', 'none', 'important');
   });
   expect(await arrowPixel(viewport)).toBe(shown);

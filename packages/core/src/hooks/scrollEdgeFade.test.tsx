@@ -3,12 +3,13 @@
 import {describe, expect, it} from 'vitest';
 import {render} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
-import type {StyleXStyles} from '@stylexjs/stylex';
+// Table's plugin styles use this loose type, as the off style does there.
+import type {StyleXStyles} from '../theme/types';
 import {scrollEdgeFadeOff, scrollEdgeFadeStyles} from './scrollEdgeFade';
 import type {ScrollAxisState} from './useScrollableArea';
 
-function fadeLengths(styles: StyleXStyles) {
-  const {container} = render(<div {...stylex.props(styles)} />);
+function fadeLengths(...styles: StyleXStyles[]) {
+  const {container} = render(<div {...stylex.props(...styles)} />);
   const style = getComputedStyle(container.firstElementChild!);
   return {
     mask: style.getPropertyValue('mask-image') !== '',
@@ -60,10 +61,10 @@ describe('scrollEdgeFadeStyles', () => {
   });
 
   it('lets an adopter turn off the fade on an edge it marks another way', () => {
-    const lengths = fadeLengths([
+    const lengths = fadeLengths(
       scrollEdgeFadeStyles(axis(true, false, false)),
       scrollEdgeFadeOff.start,
-    ]);
+    );
     expect(lengths.start).toBe('0px');
     expect(lengths.end).not.toBe('0px');
   });
