@@ -319,10 +319,17 @@ export function registerDiscover(program) {
     fn: discoverFn,
     action:
       /**
-       * @param {string | undefined} query
+       * @param {string[] | string | undefined} words
        * @param {{components?: boolean, type?: string, installed?: boolean, available?: boolean, limit?: string}} options
        */
-      async (query, options) => {
+      async (words, options) => {
+        // The query is variadic, as search's is: `astryx discover bar chart`
+        // is one query, "bar chart".
+        const query = Array.isArray(words)
+          ? words.length > 0
+            ? words.join(' ')
+            : undefined
+          : words;
         rejectEmptyArgument('query', query, 'astryx discover');
         const detail = program.opts().detail || 'full';
         const json = program.opts().json || false;

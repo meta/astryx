@@ -48,6 +48,7 @@ import {
   parseDiscoverCatalog,
 } from '../../authoring/discover/parse.mjs';
 import {AstryxError} from '../error.mjs';
+import {CORE_PACKAGE_NAME} from '../../foundation/release/project.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000;
@@ -746,16 +747,21 @@ function sourceOrigins(project) {
 }
 
 /**
- * The packages in the saved copies of the discover sources' full catalogs,
- * read without calling a source. Null when no source has a saved copy. A
- * copy is read as saved: it was checked before it was saved, and checking it
- * again costs more than a hint may. A caller treats a copy that does not
+ * The packages discover lists from the saved copies of the discover sources'
+ * full catalogs, read without calling a source, and the official packages no
+ * source covers, as discover adds them. Null when no source has a saved copy.
+ * A copy is read as saved: it was checked before it was saved, and checking
+ * it again costs more than a hint may. A caller treats a copy that does not
  * read as unknown.
  * @param {Project | undefined} project
- * @param {{cacheDir?: string}} [options]
+ * @param {{cacheDir?: string, official?: OfficialList}} [options]
+ *   `official`: the list {@link officialList} read; read here when absent
  * @returns {CatalogResult['packages'] | null}
  */
-export function savedCatalog(project, {cacheDir = defaultCacheDir()} = {}) {
+export function savedCatalog(
+  project,
+  {cacheDir = defaultCacheDir(), official = officialList({project})} = {},
+) {
   /** @type {CatalogResult['packages']} */
   const packages = [];
   /** @type {Set<unknown>} */
@@ -777,7 +783,11 @@ export function savedCatalog(project, {cacheDir = defaultCacheDir()} = {}) {
       packages.push({...pkg, source: catalog.source.name});
     }
   }
-  return saved ? withoutUnreadKinds(project, packages) : null;
+  if (!saved) return null;
+  return withoutUnreadKinds(project, [
+    ...packages,
+    ...officialNotCovered(packages, official),
+  ]);
 }
 
 /**
@@ -886,18 +896,7 @@ async function callOwnSources(project, request = {}, options = {}) {
 export async function callSources(project, request = {}, options = {}) {
   const {official = officialList({project}), ...rest} = options;
   const own = await callOwnSources(project, request, rest);
-  // A source's entry wins for its package and for the integration it
-  // publishes under any name (FR7), so a fork or mirror keeps its place.
-  const seen = new Set(
-    own.packages.flatMap(pkg => [pkg.package, pkg.integration, ...pkg.aliases]),
-  );
-  /** @type {CatalogResult['packages']} */
-  const added = [];
-  for (const {pin: _pin, ...pkg} of official.packages) {
-    if (seen.has(pkg.package)) continue;
-    if (request.package && pkg.package !== request.package) continue;
-    added.push({...pkg, source: OFFICIAL_SOURCE_NAME, official: true});
-  }
+  const added = officialNotCovered(own.packages, official, request);
   return {
     sources: [
       ...own.sources,
@@ -921,6 +920,29 @@ export async function callSources(project, request = {}, options = {}) {
     // opts in, so its items are ignored like any unknown kind (FR7).
     packages: withoutUnreadKinds(project, [...own.packages, ...added]),
   };
+}
+
+/**
+ * The official packages no source's entry covers, as catalog packages. A
+ * source's entry wins for its package and for the integration it publishes
+ * under any name (FR7), so a fork or mirror keeps its place.
+ * @param {CatalogResult['packages']} packages the sources' packages
+ * @param {OfficialList} official
+ * @param {{package?: string}} [request] keep only this package
+ * @returns {CatalogResult['packages']}
+ */
+function officialNotCovered(packages, official, request = {}) {
+  const seen = new Set(
+    packages.flatMap(pkg => [pkg.package, pkg.integration, ...pkg.aliases]),
+  );
+  /** @type {CatalogResult['packages']} */
+  const added = [];
+  for (const {pin: _pin, ...pkg} of official.packages) {
+    if (seen.has(pkg.package)) continue;
+    if (request.package && pkg.package !== request.package) continue;
+    added.push({...pkg, source: OFFICIAL_SOURCE_NAME, official: true});
+  }
+  return added;
 }
 
 /**
@@ -1259,4 +1281,44 @@ export async function loadValidatedDoc(result, {lang, zh}) {
       ERROR_CODES.ERR_INVALID_DOC,
     );
   return docs;
+}
+
+/**
+ * The not-found error with Core's match for the query in its suggestions:
+ * the first Core component or hook `astryx search` gives in `cwd`, as the
+ * lookups' shared hint (foundation/suggest/other-command.mjs) names it. The
+ * error is unchanged when search gives none, or fails.
+ * @param {AstryxError} err
+ * @param {string} query
+ * @param {string} cwd
+ * @returns {Promise<AstryxError>}
+ */
+export async function withCoreMatch(err, query, cwd) {
+  try {
+    const [{search}, {hintFor, withOtherCommand, MATCH_TIER}] =
+      await Promise.all([
+        import('../search/search.mjs'),
+        import('../../foundation/suggest/other-command.mjs'),
+      ]);
+    const {results} = (await search(query, {cwd})).data;
+    const core = results.find(
+      r =>
+        (r.domain === 'component' || r.domain === 'hook') &&
+        r.package === CORE_PACKAGE_NAME,
+    );
+    if (!core) return err;
+    const command = /** @type {'component' | 'hook'} */ (core.domain);
+    return new AstryxError(
+      err.message,
+      withOtherCommand(
+        err.suggestions,
+        hintFor(command, core.name, undefined, MATCH_TIER.words),
+        query,
+        {from: command},
+      ),
+      err.code,
+    );
+  } catch {
+    return err;
+  }
 }

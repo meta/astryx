@@ -93,6 +93,24 @@ async function search(args) {
 const withoutHint = (/** @type {string} */ out) =>
   out.replace(/\n\nMore in packages you could add: .*$/m, '');
 
+describe('discover reads every word of an unquoted query', () => {
+  it(
+    'finds an item by the words of its name and summary, typed unquoted',
+    async () => {
+      const r = await runCli(['discover', 'chart', 'categories', '--json'], {
+        cwd: project,
+      });
+      expect(r.status).toBe(0);
+      const {data} = JSON.parse(r.stdout);
+      expect(data.query).toBe('chart categories');
+      expect(data.matches.map((/** @type {any} */ m) => m.component)).toEqual([
+        'BarChart',
+      ]);
+    },
+    TIMEOUT,
+  );
+});
+
 describe('search points at discover by the saved catalog copy', () => {
   it(
     'prints the line as always when no saved copy exists, and never calls a source',

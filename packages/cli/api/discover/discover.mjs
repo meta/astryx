@@ -39,6 +39,7 @@ import {
   officialFirst,
   officialList,
   savedCatalog,
+  withCoreMatch,
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
@@ -56,7 +57,6 @@ import {anyAvailableWord, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
-import {CORE_PACKAGE_NAME} from '../../foundation/release/project.mjs';
 
 const DEFAULT_LIMIT = 20;
 
@@ -179,12 +179,14 @@ export function answersQueries(project) {
  * @returns {boolean | null}
  */
 export function addableMatch(project, query, {type} = {}) {
-  const packages = savedCatalog(project);
+  const official = officialList({project});
+  const packages = savedCatalog(project, {official});
   if (packages == null) return null;
   const items = searchItems(
     [],
     {sources: [], packages},
     declaredDependencies(project),
+    officialDeclarations(project, official.packages).any,
   );
   const kind = /** @type {readonly string[]} */ (DISCOVER_KINDS).includes(
     type ?? '',
@@ -418,51 +420,8 @@ export async function discover(query, options = {}) {
     });
   } catch (err) {
     if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_NOT_FOUND) {
-      throw await withCoreMatch(err, query, project?.cwd);
+      throw await withCoreMatch(err, query, project?.cwd ?? process.cwd());
     }
     throw err;
-  }
-}
-
-/**
- * The not-found error with Core's match for the query in its suggestions:
- * the first Core component or hook `astryx search` gives, as the lookups'
- * shared hint (foundation/suggest/other-command.mjs) names it. The error is
- * unchanged when search gives none, or fails.
- * @param {AstryxError} err
- * @param {string} query
- * @param {string | undefined} cwd
- * @returns {Promise<AstryxError>}
- */
-async function withCoreMatch(err, query, cwd) {
-  try {
-    const [{search: searchAll}, {hintFor, withOtherCommand, MATCH_TIER}] =
-      await Promise.all([
-        import('../search/search.mjs'),
-        import('../../foundation/suggest/other-command.mjs'),
-      ]);
-    const {results} = (await searchAll(query, {cwd: cwd ?? process.cwd()}))
-      .data;
-    const core = results.find(
-      r =>
-        (r.domain === 'component' || r.domain === 'hook') &&
-        r.package === CORE_PACKAGE_NAME,
-    );
-    if (!core) return err;
-    const found = hintFor(
-      /** @type {'component' | 'hook'} */ (core.domain),
-      core.name,
-      undefined,
-      MATCH_TIER.words,
-    );
-    return new AstryxError(
-      err.message,
-      withOtherCommand(err.suggestions, found, query, {
-        from: /** @type {'component' | 'hook'} */ (core.domain),
-      }),
-      err.code,
-    );
-  } catch {
-    return err;
   }
 }

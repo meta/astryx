@@ -898,13 +898,39 @@ describe('savedCatalog', () => {
     );
     source.mockClear();
 
-    const packages = savedCatalog(proj, {cacheDir});
+    const packages = savedCatalog(proj, {cacheDir, official: NO_OFFICIAL});
     expect(source).not.toHaveBeenCalled();
     expect(packages?.map(p => [p.package, p.source])).toEqual([
       ['@acme/charts', 'Acme'],
     ]);
     expect(packages?.[0].contributions).toEqual([
       {kind: 'component', name: 'BarChart'},
+    ]);
+  });
+
+  it('adds the official packages no source covers, as discover does', async () => {
+    const source = vi.fn(async () =>
+      catalog('Acme', [pkg('@acme/charts'), pkg('@astryxdesign/theme-a')]),
+    );
+    const proj = project({
+      integrations: [{name: '@x/one', __discover: source}],
+    });
+    await callSources(proj, {}, {cacheDir, official: NO_OFFICIAL});
+    const list = {
+      packages: [
+        official('@astryxdesign/theme-a'),
+        official('@astryxdesign/theme-b'),
+      ],
+    };
+    expect(
+      savedCatalog(proj, {cacheDir, official: list})?.map(p => [
+        p.package,
+        p.source,
+      ]),
+    ).toEqual([
+      ['@acme/charts', 'Acme'],
+      ['@astryxdesign/theme-a', 'Acme'],
+      ['@astryxdesign/theme-b', 'Astryx'],
     ]);
   });
 
