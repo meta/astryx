@@ -35,6 +35,7 @@ import {getRegisteredTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {createSharedContext} from '../utils/sharedContext';
+import {sharedState} from '../utils/sharedRealm';
 
 // =============================================================================
 // Context
@@ -218,9 +219,17 @@ function subscribeNoop(): () => void {
 // A system consumer under no forced Theme resolves the way a system Theme's
 // CSS does: from the one scheme the page root names, such as a host's
 // `color-scheme: dark`. One observer serves them all, and it runs only while
-// one listens.
-const rootSchemeListeners = new Set<() => void>();
-let rootSchemeObserver: MutationObserver | null = null;
+// one listens. Every copy of Core on the page shares the listeners and the
+// observer's `stop`, so the last copy to unsubscribe stops what the first
+// started.
+const rootScheme = sharedState(
+  'theme/use-theme/root-scheme',
+  1,
+  (): {listeners: Set<() => void>; stop: (() => void) | null} => ({
+    listeners: new Set(),
+    stop: null,
+  }),
+);
 
 const STYLE_NODES = 'style, link[rel~="stylesheet"]';
 
@@ -266,7 +275,7 @@ function changesRootScheme(records: MutationRecord[]): boolean {
 }
 
 function notifyRootSchemeChange(): void {
-  for (const listener of rootSchemeListeners) {
+  for (const listener of rootScheme.listeners) {
     listener();
   }
 }
@@ -289,14 +298,14 @@ function onStylesheetLoad(event: Event): void {
 }
 
 function subscribeRootScheme(onStoreChange: () => void): () => void {
-  rootSchemeListeners.add(onStoreChange);
+  rootScheme.listeners.add(onStoreChange);
   if (
-    rootSchemeListeners.size === 1 &&
+    rootScheme.listeners.size === 1 &&
     typeof MutationObserver !== 'undefined'
   ) {
-    rootSchemeObserver = new MutationObserver(notifyRootSchemeListeners);
-    rootSchemeObserver.observe(document.documentElement, {attributes: true});
-    rootSchemeObserver.observe(document.head, {
+    const observer = new MutationObserver(notifyRootSchemeListeners);
+    observer.observe(document.documentElement, {attributes: true});
+    observer.observe(document.head, {
       childList: true,
       subtree: true,
       characterData: true,
@@ -304,13 +313,16 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
       attributeFilter: ['href', 'media', 'disabled', 'rel'],
     });
     document.addEventListener('load', onStylesheetLoad, true);
+    rootScheme.stop = () => {
+      observer.disconnect();
+      document.removeEventListener('load', onStylesheetLoad, true);
+    };
   }
   return () => {
-    rootSchemeListeners.delete(onStoreChange);
-    if (rootSchemeListeners.size === 0 && rootSchemeObserver) {
-      rootSchemeObserver.disconnect();
-      rootSchemeObserver = null;
-      document.removeEventListener('load', onStylesheetLoad, true);
+    rootScheme.listeners.delete(onStoreChange);
+    if (rootScheme.listeners.size === 0 && rootScheme.stop != null) {
+      rootScheme.stop();
+      rootScheme.stop = null;
     }
   };
 }
