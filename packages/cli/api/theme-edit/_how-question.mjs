@@ -874,6 +874,9 @@ const NOT_COLORS = new Set([
  * The words for the product a look is for, the app, the site, a page, a
  * dashboard or a view: the whole theme's subject, never a part.
  */
+/** The nouns a whole look is said with ("a calm theme", "a warm vibe"). */
+const LOOK_NOUNS = String.raw`(?:theme|look|vibe|aesthetic|palette)`;
+
 const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?|tools?|products?|platforms?|portals?)`;
 
 /** Lengths written in a clause, in order. @param {string} c */
@@ -4460,7 +4463,10 @@ export function draftAnswer(ctx, env, question) {
     // with a hue is the dark mode and that hue as the accent; "dark purple
     // buttons" stays a shade.)
     .replace(
-      /\b(dark|light)\s+([a-z]+)(?=\s+(?:theme|look|vibe|aesthetic|palette)\b|\s*(?:[,;:]|$))/gi,
+      new RegExp(
+        String.raw`\b(dark|light)\s+([a-z]+)(?=\s+${LOOK_NOUNS}\b|\s*(?:[,;:]|$))`,
+        'gi',
+      ),
       (m, mode, hue, at, whole) =>
         Object.hasOwn(HUES, String(hue).toLowerCase()) &&
         // (A whole look: no part named anywhere in the ask.)
@@ -5669,6 +5675,17 @@ export function draftAnswer(ctx, env, question) {
     // ("a calm, dark theme": a look said for the theme, its mode, is an
     // ask of its own.)
     if (/\b(?:dark|light)-only (?:theme|look|ui|interface|design)\b/i.test(x))
+      return true;
+    // ("whatsapp theme", "a stripe-like look", "cozy warm vibe": the look
+    // named for the whole theme, said bare, asks for that look; the words
+    // no setting reads are named.)
+    if (
+      new RegExp(
+        String.raw`^\s*(?:an? |the |my |our )?(?:(?!(?:what|which|this|that|whose|any|no|your|their)\b)[a-z][a-z-]*,?\s+){1,4}${LOOK_NOUNS}\s*[.!]?\s*$`,
+        'i',
+      ).test(x) &&
+      !VETO.test(x)
+    )
       return true;
     // ("the app should open in dark mode by default": the mode it shows
     // first, an ask about the theme.)
@@ -27363,6 +27380,8 @@ export function draftAnswer(ctx, env, question) {
             !aspectsOf(w).length &&
             stateWord(w) == null &&
             !colorsIn(w).length &&
+            // (A warm or cool look is read by the neutral dial's grays.)
+            !/^(?:warm|cool)(?:er)?$/.test(w) &&
             !/^(?:dark|light)(?:-only)?$/.test(w) &&
             // (A way, "softer", is read by the way readers.)
             !/[a-z]{3}er$/.test(w) &&
@@ -27372,9 +27391,27 @@ export function draftAnswer(ctx, env, question) {
         ),
       ),
     ];
-    if (notTaken.length)
+    // (A word the look is named for, "whatsapp theme", "a stripe-like
+    // look", names something how cannot see: its colors are asked for,
+    // never guessed.)
+    const lookWrites = result.some(r => r.options.some(o => o.length));
+    const namedFor = notTaken.filter(
+      w =>
+        !lookWrites &&
+        new RegExp(
+          String.raw`\b${w.replace(/-like$/, '')}(?:-like)?\s+${LOOK_NOUNS}\b|\b(?:like|as)\s+${w}\b`,
+        ).test(q.toLowerCase()),
+    );
+    if (namedFor.length)
       result.push({
-        text: `not taken: ${notTaken.map(w => `"${w}"`).join(', ')}: no setting reads ${notTaken.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
+        text: `how does not know what ${namedFor.map(w => `"${w.replace(/-like$/, '')}"`).join(', ')} looks like and never guesses a brand's colors: give them as hex (the accent, the page, the text), with its font and how round its corners are, and how writes each`,
+        options: [],
+        lookup: `${HOW} "accent #<hex>, page #<hex>, text #<hex>"`,
+      });
+    const rest = notTaken.filter(w => !namedFor.includes(w));
+    if (rest.length)
+      result.push({
+        text: `not taken: ${rest.map(w => `"${w}"`).join(', ')}: no setting reads ${rest.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
         options: [],
       });
   }
