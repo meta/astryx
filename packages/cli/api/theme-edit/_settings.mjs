@@ -6440,16 +6440,20 @@ export function compileTheme(ctx, data, base) {
     // drops the ring.
     if (kebab(prop) === 'box-shadow') v = withCoreShadowLayers(target, v);
     const b = block(s, target);
-    // A gradient background for one mode goes into the rule's block for
-    // that mode as its image layers (with their positions, sizes and
-    // repeats), and a layer that is a color alone as that mode's color: the
-    // other mode keeps every image and color it had, Core's own included.
+    // A gradient background for a variant, a state or a mode is written as
+    // the background longhands its value gives, never the background
+    // shorthand: its image layers, the positions, sizes and repeats a layer
+    // gives, and a layer that is a color alone as the color. A longhand set
+    // on the whole part (its repeat, its size) stays in every variant and
+    // state the gradient is written for. For one mode it goes into the
+    // rule's block for that mode: the other mode keeps every image and
+    // color it had, Core's own included.
     if (
-      s.mode &&
+      (s.mode || s.when || s.state) &&
       /^background(-image)?$/.test(kebab(prop)) &&
       /gradient\(/i.test(v)
     ) {
-      const mb = modeBlock(s, target, s.mode);
+      const mb = s.mode ? modeBlock(s, target, s.mode) : b;
       // The background shorthand's last layer may carry the color under
       // the images: that color is this mode's background color, and the
       // rest are the images.
@@ -6461,22 +6465,21 @@ export function compileTheme(ctx, data, base) {
         .map(x => x.trim())
         .filter(Boolean)
         .map(layerParts);
-      for (const k of [
-        'background',
-        'backgroundImage',
-        'backgroundPosition',
-        'backgroundSize',
-        'backgroundRepeat',
-      ])
-        delete mb[k];
+      for (const k of ['background', 'image', 'position', 'size', 'repeat']) {
+        delete mb[k === 'background' ? k : `background-${k}`];
+        delete mb[camel(`background-${k}`)];
+      }
       mb.backgroundImage = parts.map(x => x.image).join(', ');
-      if (parts.some(x => x.position || x.size || x.repeat)) {
+      // (Only the longhands a layer gives: one it leaves out keeps what the
+      // part has, a whole-part repeat included.)
+      if (parts.some(x => x.position))
         mb.backgroundPosition = parts
           .map(x => x.position || '0% 0%')
           .join(', ');
+      if (parts.some(x => x.size))
         mb.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
+      if (parts.some(x => x.repeat))
         mb.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
-      }
       if (!parts.length) delete mb.backgroundImage;
       if (color) mb.backgroundColor = color;
       return;
@@ -6533,7 +6536,9 @@ export function compileTheme(ctx, data, base) {
         ];
         // A variant whose own background is an image (a gradient) keeps
         // it: one mode's color is not written there, and the result says so.
-        const image = family
+        // (Its image is written as background-image, or in a background
+        // shorthand.)
+        const image = [...family, 'background-image']
           .map(k => vb[camel(k)])
           .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y));
         if (image) {
@@ -6586,6 +6591,25 @@ export function compileTheme(ctx, data, base) {
     // context, apply as they would without it.
     // The background shorthand and its color are one property there: the
     // later setting replaces the earlier.
+    // A shorthand written for a variant, a state or a mode resets, there,
+    // each longhand it covers that the theme sets on the whole part: the
+    // result says which, so a whole-part longhand is never lost silently.
+    if (s.when || s.state || mode) {
+      const lost = (data?.settings ?? []).filter(
+        x =>
+          x !== s &&
+          x.source === 'property' &&
+          !x.when &&
+          !x.state &&
+          !x.mode &&
+          coversProperty(kebab(prop), kebab(x.thing)) &&
+          partsOf(ctx, x).includes(target),
+      );
+      for (const x of lost)
+        (ctx.compileNotes ??= []).push(
+          `${target}${s.when ? ` ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}${mode ? ` in ${mode}` : ''}: its ${kebab(prop)} resets the ${kebab(x.thing)} set on the whole ${target}, so that ${kebab(x.thing)} does not apply there; set ${kebab(x.thing)} in the same scope too, or give ${kebab(prop)} as its longhands`,
+        );
+    }
     if (mode) {
       const mb = modeBlock(s, target, mode);
       if (colorFamily(prop) === 'background-color')
