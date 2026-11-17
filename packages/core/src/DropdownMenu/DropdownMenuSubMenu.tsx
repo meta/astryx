@@ -192,8 +192,8 @@ const triggerSizeStyles = stylex.create({
   lg: {},
 });
 
-// A flyout paints its own box, so it carries the popup target the root menu's
-// popover surface carries: one theme entry reaches every pointer menu's box.
+// A flyout paints its own box. It carries the popup target, as the root menu's
+// popover surface does.
 const POPUP_CLASS_NAME = stableClassName('dropdown-menu-popup');
 
 const flyoutStyles = stylex.create({

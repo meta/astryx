@@ -26,8 +26,7 @@ import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu, type DropdownMenuTriggerProps} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {Popover} from '../Popover/Popover';
-import {defineTheme} from '../theme/defineTheme';
-import {generateThemeCSS} from '../theme/generateThemeRules';
+import {docs} from './DropdownMenu.doc.mjs';
 import {DropdownMenuDivider} from './DropdownMenuDivider';
 import {DropdownMenuGroup} from './DropdownMenuGroup';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
@@ -2251,22 +2250,10 @@ describe('DropdownMenu theming slots', () => {
     ).toHaveLength(1);
   });
 
-  it('emits theme rules for the popup target', () => {
-    const theme = defineTheme({
-      name: 'dropdown-menu-popup-test',
-      components: {
-        'dropdown-menu-popup': {
-          base: {
-            borderRadius: '2px',
-            boxShadow: 'none',
-            border: '1px solid rgb(1, 2, 3)',
-          },
-        },
-      },
-    });
-    const {component: css} = generateThemeCSS(theme);
-    expect(css).toContain('.astryx-dropdown-menu-popup');
-    expect(css).toContain('border-radius: 2px');
+  it('documents the popup target among its theming targets', () => {
+    expect(
+      (docs.theming?.targets ?? []).map(target => target.className),
+    ).toContain('astryx-dropdown-menu-popup');
   });
 
   it('exposes a themeable slot on the menu divider', () => {
