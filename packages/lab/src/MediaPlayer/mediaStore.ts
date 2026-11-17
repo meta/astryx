@@ -45,7 +45,10 @@ export interface MediaPlayerState {
   isFullscreen: boolean;
   /** The player or its video can go fullscreen. */
   canFullscreen: boolean;
-  /** Script can set the volume. iOS Safari keeps volume under hardware control. */
+  /**
+   * Script can set the volume. Where the browser ignores script changes, the
+   * device's own volume controls set it.
+   */
   canSetVolume: boolean;
   textTracks: readonly MediaTextTrackInfo[];
   activeTextTrackId: string | null;
@@ -142,7 +145,7 @@ interface WebKitVideoElement extends HTMLVideoElement {
 
 /**
  * iOS Safari ignores script writes to `volume`, so a probe element shows
- * whether the platform lets script set it. Each store probes once.
+ * whether the platform lets script set it.
  */
 function canScriptSetVolume(): boolean {
   if (typeof document === 'undefined') {
@@ -229,6 +232,9 @@ export function createMediaStore(): MediaStore {
   let container: HTMLElement | null = null;
   let detachMedia: (() => void) | null = null;
   let lastTextTrackId: string | null = null;
+  // The platform does not change while the page lives, so one probe serves
+  // every media event.
+  let canSetVolume: boolean | null = null;
   const listeners = new Set<() => void>();
 
   function setState(patch: Partial<MediaPlayerState>) {
@@ -308,7 +314,7 @@ export function createMediaStore(): MediaStore {
       playbackRate: element.playbackRate,
       isFullscreen: readFullscreen(),
       canFullscreen: readCanFullscreen(),
-      canSetVolume: canScriptSetVolume(),
+      canSetVolume: (canSetVolume ??= canScriptSetVolume()),
       textTracks,
       activeTextTrackId,
     };

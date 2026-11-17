@@ -12,7 +12,7 @@
  *   parts
  */
 
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useRef, type RefCallback} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {useTranslator} from '@astryxdesign/core/i18n';
@@ -294,111 +294,154 @@ interface SavedCuePosition {
 }
 
 /**
- * Keeps captions above the control bar, whether the bar shows or hides, so
- * they never jump and the bar never covers them. The gap above the bar
- * equals the bar's inset. Only cues that use the default bottom position
- * move; cues the caption author placed keep their position.
+ * Keeps the caption cues of `video` above `bar`, whether the bar shows or
+ * hides, so they never jump and the bar never covers them. The gap above the
+ * bar equals the bar's inset. Only cues that use the default bottom position
+ * move; cues the caption author placed keep their position. Returns the
+ * cleanup, which puts every moved cue back.
  */
-function useCueLayout(
-  video: HTMLVideoElement | null,
-  bar: HTMLDivElement | null,
-) {
-  // Syncs the caption cue positions on the video's text tracks with the bar.
-  useEffect(() => {
-    const tracks = video?.textTracks;
-    if (
-      video == null ||
-      bar == null ||
-      tracks == null ||
-      typeof tracks.addEventListener !== 'function' ||
-      typeof VTTCue === 'undefined'
-    ) {
+function layOutCues(video: HTMLVideoElement, bar: HTMLDivElement): () => void {
+  const tracks = video.textTracks;
+  if (
+    tracks == null ||
+    typeof tracks.addEventListener !== 'function' ||
+    typeof VTTCue === 'undefined'
+  ) {
+    return () => {};
+  }
+  const saved = new Map<VTTCue, SavedCuePosition>();
+  const watched = new Set<TextTrack>();
+  const watchedElements = new Set<HTMLTrackElement>();
+  const apply = () => {
+    // A track's cues arrive with its element's load event, which no
+    // text track event reports while the media is paused.
+    for (const element of video.querySelectorAll('track')) {
+      if (!watchedElements.has(element)) {
+        watchedElements.add(element);
+        element.addEventListener('load', apply);
+      }
+    }
+    const height = video.clientHeight;
+    if (height <= 0) {
       return;
     }
-    const saved = new Map<VTTCue, SavedCuePosition>();
-    const watched = new Set<TextTrack>();
-    const watchedElements = new Set<HTMLTrackElement>();
-    const apply = () => {
-      // A track's cues arrive with its element's load event, which no
-      // text track event reports while the media is paused.
-      for (const element of video.querySelectorAll('track')) {
-        if (!watchedElements.has(element)) {
-          watchedElements.add(element);
-          element.addEventListener('load', apply);
-        }
+    // Layout offsets ignore the bar's hide transform, so the line holds
+    // still while the bar fades in and out.
+    const inset = height - (bar.offsetTop + bar.offsetHeight);
+    const clearance = height - bar.offsetTop + inset;
+    const line = Math.min(Math.max((1 - clearance / height) * 100, 0), 100);
+    for (let index = 0; index < tracks.length; index++) {
+      const track = tracks[index];
+      if (track == null) {
+        continue;
       }
-      const height = video.clientHeight;
-      if (height <= 0) {
-        return;
+      if (!watched.has(track)) {
+        watched.add(track);
+        track.addEventListener('cuechange', apply);
       }
-      // Layout offsets ignore the bar's hide transform, so the line holds
-      // still while the bar fades in and out.
-      const inset = height - (bar.offsetTop + bar.offsetHeight);
-      const clearance = height - bar.offsetTop + inset;
-      const line = Math.min(Math.max((1 - clearance / height) * 100, 0), 100);
-      for (let index = 0; index < tracks.length; index++) {
-        const track = tracks[index];
-        if (track == null) {
+      const cues = track.mode === 'disabled' ? null : track.cues;
+      for (
+        let cueIndex = 0;
+        cues != null && cueIndex < cues.length;
+        cueIndex++
+      ) {
+        const cue = cues[cueIndex];
+        if (!(cue instanceof VTTCue)) {
           continue;
         }
-        if (!watched.has(track)) {
-          watched.add(track);
-          track.addEventListener('cuechange', apply);
+        const original = saved.get(cue) ?? {
+          line: cue.line,
+          lineAlign: cue.lineAlign,
+          snapToLines: cue.snapToLines,
+        };
+        if (original.line !== 'auto') {
+          continue;
         }
-        const cues = track.mode === 'disabled' ? null : track.cues;
-        for (
-          let cueIndex = 0;
-          cues != null && cueIndex < cues.length;
-          cueIndex++
-        ) {
-          const cue = cues[cueIndex];
-          if (!(cue instanceof VTTCue)) {
-            continue;
-          }
-          const original = saved.get(cue) ?? {
-            line: cue.line,
-            lineAlign: cue.lineAlign,
-            snapToLines: cue.snapToLines,
-          };
-          if (original.line !== 'auto') {
-            continue;
-          }
-          saved.set(cue, original);
-          cue.snapToLines = false;
-          cue.lineAlign = 'end';
-          cue.line = line;
+        saved.set(cue, original);
+        cue.snapToLines = false;
+        cue.lineAlign = 'end';
+        cue.line = line;
+      }
+    }
+  };
+  apply();
+  tracks.addEventListener('change', apply);
+  tracks.addEventListener('addtrack', apply);
+  const stopObserving = observeResize(video, apply);
+  return () => {
+    stopObserving();
+    tracks.removeEventListener('change', apply);
+    tracks.removeEventListener('addtrack', apply);
+    for (const track of watched) {
+      track.removeEventListener('cuechange', apply);
+    }
+    for (const element of watchedElements) {
+      element.removeEventListener('load', apply);
+    }
+    for (const [cue, original] of saved) {
+      cue.snapToLines = original.snapToLines;
+      cue.lineAlign = original.lineAlign;
+      cue.line = original.line;
+    }
+  };
+}
+
+/**
+ * Callback refs for the video and the control bar. The caption layout follows
+ * the elements they receive, so a replaced video or bar is laid out again.
+ */
+function useCueLayout(): {
+  videoRef: RefCallback<HTMLVideoElement>;
+  barRef: RefCallback<HTMLDivElement>;
+} {
+  const layoutRef = useRef<{
+    video: HTMLVideoElement | null;
+    bar: HTMLDivElement | null;
+    stop: (() => void) | null;
+  }>({video: null, bar: null, stop: null});
+  const relayout = useCallback(() => {
+    const layout = layoutRef.current;
+    layout.stop?.();
+    layout.stop =
+      layout.video != null && layout.bar != null
+        ? layOutCues(layout.video, layout.bar)
+        : null;
+  }, []);
+  const videoRef = useCallback(
+    (video: HTMLVideoElement | null) => {
+      layoutRef.current.video = video;
+      relayout();
+      return () => {
+        if (layoutRef.current.video === video) {
+          layoutRef.current.video = null;
+          relayout();
         }
-      }
-    };
-    apply();
-    tracks.addEventListener('change', apply);
-    tracks.addEventListener('addtrack', apply);
-    const stopObserving = observeResize(video, apply);
-    return () => {
-      stopObserving();
-      tracks.removeEventListener('change', apply);
-      tracks.removeEventListener('addtrack', apply);
-      for (const track of watched) {
-        track.removeEventListener('cuechange', apply);
-      }
-      for (const element of watchedElements) {
-        element.removeEventListener('load', apply);
-      }
-      for (const [cue, original] of saved) {
-        cue.snapToLines = original.snapToLines;
-        cue.lineAlign = original.lineAlign;
-        cue.line = original.line;
-      }
-    };
-  }, [video, bar]);
+      };
+    },
+    [relayout],
+  );
+  const barRef = useCallback(
+    (bar: HTMLDivElement | null) => {
+      layoutRef.current.bar = bar;
+      relayout();
+      return () => {
+        if (layoutRef.current.bar === bar) {
+          layoutRef.current.bar = null;
+          relayout();
+        }
+      };
+    },
+    [relayout],
+  );
+  return {videoRef, barRef};
 }
 
 function VideoControlBar({
-  video,
+  barRef,
   chapters,
   markers,
 }: {
-  video: HTMLVideoElement | null;
+  barRef: RefCallback<HTMLDivElement>;
   chapters?: readonly MediaTimelineChapter[];
   markers?: readonly MediaTimelineMarker[];
 }) {
@@ -409,13 +452,10 @@ function VideoControlBar({
     'VideoPlayer',
     state => state.error == null && !state.hasStarted,
   );
-  // State, not refs, so a replaced video or bar element is laid out again.
-  const [bar, setBar] = useState<HTMLDivElement | null>(null);
-  useCueLayout(video, bar);
   return (
     <MediaTheme mode="dark">
       <div
-        ref={setBar}
+        ref={barRef}
         dir="ltr"
         data-visible={isControlsVisible ? 'true' : 'false'}
         {...stylex.props(
@@ -465,7 +505,7 @@ export function VideoPlayer({
   xstyle,
   ...rest
 }: VideoPlayerProps) {
-  const [video, setVideo] = useState<HTMLVideoElement | null>(null);
+  const cueLayout = useCueLayout();
   return (
     <MediaPlayer
       {...rest}
@@ -473,7 +513,7 @@ export function VideoPlayer({
       xstyle={[styles.root, styles.aspectRatio(aspectRatio), xstyle]}>
       <MediaPlayerElement
         kind="video"
-        ref={setVideo}
+        ref={cueLayout.videoRef}
         src={src}
         poster={poster}
         preload={preload}
@@ -493,7 +533,11 @@ export function VideoPlayer({
         ))}
       </MediaPlayerElement>
       <VideoStatusLayer />
-      <VideoControlBar video={video} chapters={chapters} markers={markers} />
+      <VideoControlBar
+        barRef={cueLayout.barRef}
+        chapters={chapters}
+        markers={markers}
+      />
     </MediaPlayer>
   );
 }

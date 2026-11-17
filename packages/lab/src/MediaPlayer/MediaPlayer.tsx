@@ -15,7 +15,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -29,6 +28,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useAnnounce, useMergedRefs} from '@astryxdesign/core/hooks';
+import {useCommittedRef} from '@astryxdesign/core/internal/committed-ref';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {useInteractionModalityTracking} from '@astryxdesign/core/internal/touch';
 import {
@@ -294,11 +294,8 @@ export function MediaPlayer({
   const t = useTranslator();
   const locale = useLocale();
 
-  const callbacksRef = useRef({onPlay, onPause, onEnded, onError});
-  // Syncs the latest callbacks into the ref the store listener reads.
-  useLayoutEffect(() => {
-    callbacksRef.current = {onPlay, onPause, onEnded, onError};
-  });
+  // The store listener reads the latest callbacks.
+  const callbacksRef = useCommittedRef({onPlay, onPause, onEnded, onError});
 
   // Syncs media element events to the playback callbacks. The listener runs
   // inside the media event, so each callback fires once per transition.

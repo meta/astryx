@@ -10,16 +10,9 @@
  * @position Internal to MediaPlayer; every part reads its player from here
  */
 
-import {
-  createContext,
-  use,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import {use, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {createSharedContext} from '@astryxdesign/core/internal/shared-context';
 import {
   INITIAL_MEDIA_STATE,
   type MediaPlayerActions,
@@ -67,9 +60,13 @@ export interface MediaPlayerContextValue {
  */
 export const MARKER_CONTENT_ATTRIBUTE = 'data-media-marker-content';
 
-export const MediaPlayerContext = createContext<MediaPlayerContextValue | null>(
-  null,
-);
+// A shared context, so a swizzled copy of a part reads the package's player.
+export const MediaPlayerContext =
+  createSharedContext<MediaPlayerContextValue | null>(
+    'MediaPlayerContext',
+    1,
+    null,
+  );
 
 export function useMediaPlayerContext(part: string): MediaPlayerContextValue {
   const context = use(MediaPlayerContext);
@@ -161,17 +158,12 @@ export function useMediaPlaybackTime(): number {
     state => state.playbackRate,
   );
   const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const anchorRef = useRef({time: currentTime, at: 0});
   // The smoothed time and the reported time it grew from. A new reported
   // time, such as after a seek, applies in the same render.
   const [smooth, setSmooth] = useState({from: currentTime, time: currentTime});
 
-  // Syncs the animation frames' starting point with each reported time.
-  useEffect(() => {
-    anchorRef.current = {time: currentTime, at: performance.now()};
-  }, [currentTime]);
-
   // Syncs the smoothed time with the animation frames while the media plays.
+  // Each reported time starts the frames again from that time.
   useEffect(() => {
     if (
       !isAdvancing ||
@@ -181,13 +173,13 @@ export function useMediaPlaybackTime(): number {
       return;
     }
     const end = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+    const startedAt = performance.now();
     let frame = 0;
     const tick = (now: number) => {
-      const {time, at} = anchorRef.current;
       setSmooth({
-        from: time,
+        from: currentTime,
         time: Math.min(
-          time + (Math.max(now - at, 0) / 1000) * playbackRate,
+          currentTime + (Math.max(now - startedAt, 0) / 1000) * playbackRate,
           end,
         ),
       });
@@ -195,7 +187,7 @@ export function useMediaPlaybackTime(): number {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [isAdvancing, isReducedMotion, duration, playbackRate]);
+  }, [currentTime, isAdvancing, isReducedMotion, duration, playbackRate]);
 
   return isAdvancing && !isReducedMotion && smooth.from === currentTime
     ? smooth.time

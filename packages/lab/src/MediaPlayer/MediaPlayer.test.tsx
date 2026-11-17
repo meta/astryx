@@ -968,6 +968,28 @@ describe('useMediaPlayer', () => {
     expect(seen.find(([reported]) => reported === 30)?.[1]).toBe(30);
   });
 
+  it('checks whether script can set the volume once, not on every media event', () => {
+    const {container} = render(
+      <MediaPlayer label="Memo">
+        <MediaPlayerElement kind="audio" src="/memo.m4a" />
+      </MediaPlayer>,
+    );
+    const audio = container.querySelector('audio')!;
+    fakePlayback(audio, {duration: 60});
+    act(() => {
+      audio.dispatchEvent(new Event('timeupdate'));
+    });
+    const create = vi.spyOn(document, 'createElement');
+    act(() => {
+      for (let index = 0; index < 5; index++) {
+        audio.dispatchEvent(new Event('timeupdate'));
+      }
+    });
+    expect(create.mock.calls.filter(([tag]) => tag === 'audio')).toHaveLength(
+      0,
+    );
+  });
+
   it('throws outside a MediaPlayer', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => renderHook(() => useMediaPlayer())).toThrow(

@@ -262,8 +262,9 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
   },
   // A button with a slider that opens beside it. The slider's column opens
-  // while the button is hovered or holds focus, and stays open on touch, in
-  // step with the container reveal.
+  // while the button is hovered or holds focus, and stays open under a coarse
+  // primary pointer. These are the container reveal's own conditions, so the
+  // column and the slider in it open together.
   revealGroup: {
     display: 'grid',
     alignItems: 'center',
@@ -290,7 +291,7 @@ const styles = stylex.create({
         '@media (hover: hover)': '1fr auto',
       },
       ':focus-within': '1fr auto',
-      '@media (any-pointer: coarse)': '1fr auto',
+      '@media (pointer: coarse)': '1fr auto',
     },
   },
   // The slider opens after the button; the tracks hug the start.
@@ -302,7 +303,7 @@ const styles = stylex.create({
         '@media (hover: hover)': 'auto 1fr',
       },
       ':focus-within': 'auto 1fr',
-      '@media (any-pointer: coarse)': 'auto 1fr',
+      '@media (pointer: coarse)': 'auto 1fr',
     },
   },
   revealSlot: {

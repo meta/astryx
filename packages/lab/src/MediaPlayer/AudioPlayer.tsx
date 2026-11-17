@@ -12,7 +12,8 @@
  *   parts inside a Section container
  */
 
-import {useEffect, useRef, type ReactNode} from 'react';
+import {useEffect, type ReactNode} from 'react';
+import {useCommittedRef} from '@astryxdesign/core/internal/committed-ref';
 import * as stylex from '@stylexjs/stylex';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {useTranslator} from '@astryxdesign/core/i18n';
@@ -203,13 +204,13 @@ function useMediaSession({
   skipForwardSeconds: number;
 } & TrackHandlers) {
   const {store} = useMediaPlayerContext('AudioPlayer');
-  const trackHandlersRef = useRef<TrackHandlers>({});
+  // The system media actions read the latest track handlers.
+  const trackHandlersRef = useCommittedRef<TrackHandlers>({
+    onPreviousTrack,
+    onNextTrack,
+  });
   const hasPreviousTrack = onPreviousTrack != null;
   const hasNextTrack = onNextTrack != null;
-  // Syncs the latest track handlers for the system media actions.
-  useEffect(() => {
-    trackHandlersRef.current = {onPreviousTrack, onNextTrack};
-  });
   // Syncs the system media session with this player while it owns playback.
   useEffect(() => {
     if (
