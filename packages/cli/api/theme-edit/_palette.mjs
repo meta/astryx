@@ -1473,7 +1473,10 @@ function planPalette(cwd, slug, data, base) {
   // again below while the theme has a color; any other hue the config
   // holds is the author's, and stays as written.
   const derived = fams.length
-    ? lookSeeds(fams.find(f => f.id === 'accent')?.seed)
+    ? lookSeeds(
+        fams.find(f => f.id === 'accent')?.seed,
+        fams.find(f => f.id === 'neutral')?.seed,
+      )
     : null;
   const grown = isLookFamily;
   for (let i = families.length - 1; i >= 0; i--)
@@ -3260,6 +3263,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       text: m => lookColors(LOOK_TEXT, m),
       grounds: m => lookColors(LOOK_GROUNDS, m),
       wanted: k => has(k) && !setExactly(k),
+      accent: fams.find(f => f.id === 'accent')?.seed ?? null,
     });
     for (const [k, v] of Object.entries(derived.tokens))
       tokens[k] = {family: v.family, light: v.light, dark: v.dark};
