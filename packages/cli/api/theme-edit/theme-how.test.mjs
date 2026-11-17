@@ -1833,7 +1833,8 @@ const QUESTIONS_3 = [
   ],
   [
     'make the switch green',
-    {top: /^set q background-color '#16a34a' --on switch$/},
+    // (Its on look: an off switch keeps its own.)
+    {top: /^set q background-color '#16a34a' --on switch --state checked$/},
   ],
   [
     'all radius values are 0, it is very sharp',
