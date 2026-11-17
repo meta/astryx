@@ -6,6 +6,10 @@
  * (how reads words, never a picture), never read as the app's own photos.
  * A product said to be dark ("a dark editorial analytics dashboard") is a
  * dark theme, as "a dark theme" is; a page said dark is still the page.
+ * A look named for the whole theme and said bare ("cozy warm vibe") takes
+ * the words a setting reads and names the rest; a look named for
+ * something how cannot see ("whatsapp theme") asks for its colors as hex,
+ * never guessing them.
  *
  * @position api/theme-edit — tests
  */
@@ -82,5 +86,24 @@ describe('a product said to be dark', () => {
     expect((await answer('the dark side of the app')).sets).not.toContain(
       'mode dark-only',
     );
+  }, 240_000);
+});
+
+describe('a look named for the whole theme, said bare', () => {
+  it('"cozy warm vibe" takes warm and names cozy', async ctx => {
+    if (unbuilt) return ctx.skip();
+    const a = await answer('cozy warm vibe');
+    expect(a.sets.some(l => /^neutral '#/.test(l))).toBe(true);
+    expect(a.text).toMatch(/not taken: "cozy": no setting reads this word/);
+    expect(a.text).not.toMatch(/"warm"/);
+  }, 240_000);
+
+  it('"whatsapp theme" asks for its colors and writes nothing', async ctx => {
+    if (unbuilt) return ctx.skip();
+    const a = await answer('whatsapp theme');
+    expect(a.text).toMatch(
+      /how does not know what "whatsapp" looks like and never guesses a brand's colors: give them as hex/,
+    );
+    expect(a.sets).toEqual([]);
   }, 240_000);
 });
