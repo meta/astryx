@@ -358,6 +358,26 @@ export default function Page() {
     expect(root?.textContent).toContain('Kept on screen');
   }, 120_000);
 
+  it('refuses a named import its module does not export, as a build does, naming the file and line', async () => {
+    put('src/lib-x.ts', 'export const a = 1;\n');
+    put(
+      'src/no-export.tsx',
+      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\n",
+    );
+    const local = await errorOf(() => render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}));
+    expect(local?.code).toBe('ERR_RENDER_COMPILE');
+    expect(local?.message).toContain('line 1): ./lib-x has no export b');
+    put(
+      'src/no-token.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {colors} from '@astryxdesign/core/theme/tokens.stylex';\nconst styles = stylex.create({p: {color: colors.text}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
+    );
+    const token = await errorOf(() => render('src/no-token.tsx', {cwd: dir, out: 'no-token.html'}));
+    expect(token?.code).toBe('ERR_RENDER_COMPILE');
+    expect(token?.message).toContain('line 2): @astryxdesign/core/theme/tokens.stylex has no export colors');
+    expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
+    expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
+  });
+
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
     put(
       'src/later.tsx',

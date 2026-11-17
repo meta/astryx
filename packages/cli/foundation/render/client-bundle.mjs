@@ -145,11 +145,14 @@ export class BundleError extends Error {
    * @param {Record<string, unknown>} [detail]
    * @param {unknown} [compile] the error of one of the page's own files that
    *   does not compile, which the render reports as a static import's
+   * @param {string} [code] the render's error code: a named import that the
+   *   module does not export is ERR_RENDER_COMPILE, as a build refuses it
    */
-  constructor(message, detail = {}, compile = undefined) {
+  constructor(message, detail = {}, compile = undefined, code = 'ERR_RENDER_SCRIPT') {
     super(message);
     this.detail = detail;
     this.compile = compile;
+    this.code = code;
   }
 }
 
@@ -331,6 +334,19 @@ export async function bundleForBrowser({
       throw new BundleError(first.text, {}, first.detail.compile);
     }
     const located = first.location?.file ? locatedFile(first.location.file) : null;
+    // A named import its module does not export, in one of the page's own
+    // files: refused as a build refuses it, naming the module as written.
+    const noExport = /^No matching export in "[^"]+" for import "([^"]+)"$/.exec(first.text);
+    if (noExport && located && isPageFile(located)) {
+      const file = describe(located);
+      const module = /\bfrom\s*(['"])([^'"]+)\1/.exec(first.location.lineText ?? '')?.[2] ?? 'its module';
+      throw new BundleError(
+        `The page does not compile (${file}, line ${first.location.line}): ${module} has no export ${noExport[1]}`,
+        {file, line: first.location.line},
+        undefined,
+        'ERR_RENDER_COMPILE',
+      );
+    }
     const where = located ? `${describe(located)}:${first.location.line}: ` : '';
     // A message that leads with a file's absolute path names it as the page does.
     const text = stripVTControlCharacters(first.text).replace(
