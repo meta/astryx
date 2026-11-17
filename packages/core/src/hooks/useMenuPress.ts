@@ -6,7 +6,8 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, the marker attributes and the activation mark
+ * @output useMenuPress, useMenuPressInternal for DropdownMenu, the marker
+ *   attributes and the activation mark
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -112,6 +113,8 @@ interface MenuTriggerContext {
   // argument as mutating it.
   /** Marks the gesture whose long press opened the menu. */
   readonly setTriggerGesture: (gesture: number | null) => void;
+  /** Records the press the model takes on the trigger, for its click. */
+  readonly setTriggerPress: (pointerType: MenuPressPointerType) => void;
   /**
    * This render's two hold detectors, in a scroll view or not; the model
    * keeps the one the live press uses.
@@ -285,23 +288,23 @@ function normalizePointerType(type: string): MenuPressPointerType | null {
 }
 
 /**
- * The identifier of the touch that a pointer's touchstart started. WebKit
- * gives the touch the pointer's id. Chromium gives it its own id, so a lone
- * changed touch is the pointer's. Several changed touches, none with the
- * pointer's id, name no touch.
+ * The touch that a pointer's touchstart started. WebKit gives the touch the
+ * pointer's id. Chromium gives it its own id, so a lone changed touch is the
+ * pointer's. Several changed touches, none with the pointer's id, name no
+ * touch.
  */
 function touchOfPointer(
   changed: TouchList | undefined,
   pointerId: number,
-): number | null {
+): Touch | null {
   if (changed == null) {
     return null;
   }
   const touches = Array.from(changed);
-  if (touches.some(touch => touch.identifier === pointerId)) {
-    return pointerId;
-  }
-  return touches.length === 1 ? touches[0].identifier : null;
+  return (
+    touches.find(touch => touch.identifier === pointerId) ??
+    (touches.length === 1 ? touches[0] : null)
+  );
 }
 
 function isRowFocusable(row: HTMLElement): boolean {
@@ -394,6 +397,19 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
+  return useMenuPressInternal(input).press;
+}
+
+/**
+ * For DropdownMenu (internal): useMenuPress's calls, and the pointer type of
+ * the press on the trigger that the click reaching it comes from. That is
+ * null when the model took no press on the trigger in this gesture: the
+ * keyboard, or a press it ignores.
+ */
+export function useMenuPressInternal(input: UseMenuPressOptions): {
+  press: UseMenuPressReturn;
+  triggerClickPointerType: () => MenuPressPointerType | null;
+} {
   // The touch model is the hook's own: an untyped caller's `touchModel` does
   // not reach the model.
   const {touchModel: _touchModel, ...publicOptions} = input as MenuPressConfig;
@@ -413,6 +429,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   const gestureRef = useRef<MenuPressState<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
   const touchIdentifierRef = useRef<number | null>(null);
+  const touchTargetRef = useRef<EventTarget | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // `useLongPress` detects the held finger, as in ContextMenu, so the hold
   // time and the movement tolerance have one home. A ref holds the handle,
@@ -453,6 +470,10 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
+  const triggerPressRef = useRef<{
+    gesture: number;
+    pointerType: MenuPressPointerType;
+  } | null>(null);
   // The second pointer that ended a gesture must not start the next one.
   const ignoredPointerIdRef = useRef<number | null>(null);
 
@@ -669,6 +690,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
             staysInstalled: true,
             cancelsTouchEnd: native?.pointerType === 'touch',
             touchIdentifier: touchIdentifierRef.current ?? undefined,
+            touchTarget: touchTargetRef.current ?? undefined,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -701,6 +723,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
               staysInstalled: true,
               cancelsTouchEnd: native?.pointerType === 'touch',
               touchIdentifier: touchIdentifierRef.current ?? undefined,
+              touchTarget: touchTargetRef.current ?? undefined,
             });
           }
           if (effect.dismiss) {
@@ -798,18 +821,19 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       const view = doc.defaultView;
       pointerIdRef.current = pointerId;
       touchIdentifierRef.current = null;
+      touchTargetRef.current = null;
 
-      // The touchstart after this pointerdown names the touch, so the guard
-      // at the lift cancels only that touch's touchend.
+      // The touchstart after this pointerdown names the touch. So the guard
+      // at the lift cancels only that touch's touchend, also on the node the
+      // touch began on.
       let stopTouchStart: (() => void) | null = null;
       if (view != null) {
         stopTouchStart = subscribeInput(view, 'touchstart', event => {
           stopTouchStart?.();
           stopTouchStart = null;
-          touchIdentifierRef.current = touchOfPointer(
-            event.changedTouches,
-            pointerId,
-          );
+          const named = touchOfPointer(event.changedTouches, pointerId);
+          touchIdentifierRef.current = named?.identifier ?? null;
+          touchTargetRef.current = named?.target ?? null;
         });
       }
       const onMove = (event: PointerEvent) => {
@@ -942,6 +966,9 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     setTriggerGesture: gesture => {
       triggerGestureRef.current = gesture;
     },
+    setTriggerPress: pointerType => {
+      triggerPressRef.current = {gesture: currentGesture(), pointerType};
+    },
     setHoldDetectors: detectors => {
       holdDetectorsRef.current = detectors;
       longPressApiRef.current =
@@ -1035,6 +1062,14 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     );
   }, []);
 
+  const triggerClickPointerType =
+    useCallback((): MenuPressPointerType | null => {
+      const press = triggerPressRef.current;
+      return press != null && press.gesture === currentGesture()
+        ? press.pointerType
+        : null;
+    }, []);
+
   const cancel = useCallback(() => {
     // The host closed the menu under the gesture: end it with no effect of
     // its own.
@@ -1115,6 +1150,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         // Control-click is the context menu's on macOS.
         return;
       }
+      ctx.setTriggerPress(pointerType);
       const native = event.nativeEvent;
       const down = {
         type: 'down',
@@ -1174,5 +1210,12 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     }),
     [handleTriggerPointerDown, handleTriggerContextMenu],
   );
-  return useMemo(() => ({...surface, triggerProps}), [surface, triggerProps]);
+  const press = useMemo(
+    () => ({...surface, triggerProps}),
+    [surface, triggerProps],
+  );
+  return useMemo(
+    () => ({press, triggerClickPointerType}),
+    [press, triggerClickPointerType],
+  );
 }

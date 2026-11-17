@@ -201,14 +201,29 @@ describe('problems a change makes', () => {
     'a color that fails its contrast check is a new problem, and show ends with it',
     async () => {
       const r = await cli([...ED, 'set', 't', 'accent', '#FFE600']);
-      expect(r.data.newProblems).toEqual([
-        {
-          problem: expect.stringContaining(
-            'in light, your exact accent stands out from the page at only 1.12:1',
-          ),
-          fix: null,
-        },
-      ]);
+      // The pale yellow also vanishes on the progress and slider tracks it
+      // draws a value on: each is a problem, with the fill's nearest color
+      // that reads on that part alone.
+      expect(r.data.newProblems).toEqual(
+        expect.arrayContaining([
+          {
+            problem: expect.stringContaining(
+              'in light, your exact accent stands out from the page at only 1.12:1',
+            ),
+            // The nearest darker accent that stands out from the page.
+            fix: expect.stringMatching(/ set t accent '#[0-9a-f]{6}'$/),
+          },
+          {
+            problem: expect.stringMatching(
+              /^the progress-bar-fill \(#ffe600\) is [\d.]+:1 on the progress-bar-track/,
+            ),
+            fix: expect.stringMatching(
+              /set t background-color '#[0-9a-f]{6}' --on progress-bar-fill --mode light$/,
+            ),
+          },
+        ]),
+      );
+      expect(r.data.newProblems).toHaveLength(3);
       const out = (await text([...ED, 'show', 't'])).trimEnd().split('\n');
       const at = out.findIndex(l => l.startsWith('openProblems:'));
       expect(at).toBeGreaterThan(0);

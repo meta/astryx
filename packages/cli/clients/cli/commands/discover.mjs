@@ -547,7 +547,10 @@ export function registerDiscover(program) {
                 : detail === 'compact'
                   ? formatCompact(docs, docs.name, '')
                   : formatFull(docs);
-            emit(record({package: result.package}), code(md));
+            emit(
+              record({package: result.package}),
+              code(md, {lang: 'markdown'}),
+            );
             break;
           }
 

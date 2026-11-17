@@ -443,7 +443,9 @@ function KpiTile({kpi}: {kpi: Kpi}) {
           {kpi.label}
         </Text>
         <HStack gap={3}>
-          <Heading level={1}>{kpi.value}</Heading>
+          <Heading level={1} accessibilityLevel={2}>
+            {kpi.value}
+          </Heading>
           <HStack gap={1} vAlign="center">
             <Icon
               icon={kpi.delta >= 0 ? ArrowUpIcon : ArrowDownIcon}
@@ -589,7 +591,9 @@ function FunnelSteps({segment}: {segment: Segment}) {
               {step.label}
             </Text>
             <HStack gap={2} vAlign="center">
-              <Heading level={2}>{step.conv.toFixed(1)}%</Heading>
+              <Heading level={2} accessibilityLevel={3}>
+                {step.conv.toFixed(1)}%
+              </Heading>
               <Token
                 size="sm"
                 color={leaky ? 'red' : 'green'}
@@ -848,7 +852,7 @@ export default function FunnelCohortAnalyticsPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={10}>
             <VStack gap={4}>
               {/* KPI row */}
