@@ -9,9 +9,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
+import {JSDOM} from 'jsdom';
+import {render} from '../../api/render/render.mjs';
 import {imageTypeOf, remoteImages} from './remote-images.mjs';
 import {renderPage} from './render-page.mjs';
 import {readSourceBlock, renderedMarkupOf} from './source-block.mjs';
+import {ROOT_ID} from './client-bundle.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -248,6 +251,85 @@ describe('a render with images from the web', () => {
         message:
           'https://example.com/away.png is loaded from the network, which a sandboxed page cannot reach (the render could not fetch it: the network could not reach it); save it beside the page and import it instead.',
       });
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
+  it('carries the images a feed shows after a click, fetches no link, and warns for an address built in code', async () => {
+    const dir = makeLinkedFixture('astryx-render-remote-late-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      const source = [
+        "import {useState} from 'react';",
+        'const feed = [',
+        "  {name: 'Alex', avatarUrl: 'https://i.example.com/40?u=alex', docsUrl: 'https://example.com/guide'},",
+        "  {name: 'Jo', avatarUrl: 'https://i.example.com/40?u=jo', docsUrl: 'https://example.com/api/items'},",
+        '];',
+        "const cover = {photoUrl: 'https://example.com/not-really-an-image'};",
+        'export default function Page() {',
+        '  const [open, setOpen] = useState(false);',
+        '  return (',
+        '    <main>',
+        '      <button type="button" onClick={() => setOpen(true)}>Show the feed</button>',
+        '      {open && feed.map(item => (',
+        '        <p key={item.name}>',
+        '          <img src={item.avatarUrl} alt={item.name} />',
+        '          <img src={`https://i.example.com/40?u=${item.name}&big=1`} alt={`${item.name} large`} />',
+        '          <a href={item.docsUrl}>Guide</a>',
+        '        </p>',
+        '      ))}',
+        '      {open && <img src={cover.photoUrl} alt="Cover" />}',
+        '    </main>',
+        '  );',
+        '}',
+        '',
+      ].join('\n');
+      fs.writeFileSync(file, source);
+      const {fetch, asked} = fetchFrom({
+        'https://i.example.com/40?u=alex': png(),
+        'https://i.example.com/40?u=jo': png(),
+        'https://example.com/not-really-an-image': respond('<html></html>', {headers: {'content-type': 'text/html'}}),
+      });
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      // A link or an API address is never fetched; only image-named literals are.
+      expect(asked.map(a => a.url).sort()).toEqual([
+        'https://example.com/not-really-an-image',
+        'https://i.example.com/40?u=alex',
+        'https://i.example.com/40?u=jo',
+      ]);
+      expect(page.remoteImages).toEqual({
+        fetched: ['https://i.example.com/40?u=alex', 'https://i.example.com/40?u=jo'],
+        failed: [{url: 'https://example.com/not-really-an-image', reason: 'not an image'}],
+      });
+      expect(page.warnings).toContainEqual({
+        code: 'remote-asset',
+        message:
+          '`https://i.example.com/40?u=${item.name}&big=1` (page.jsx:15) builds an image address in code, so the render cannot carry it: the file asks the network for it when the script draws it. Write the address whole, or save the image beside the page and import it.',
+      });
+      // Opened after the click, offline: the avatars draw from the carried data.
+      fs.writeFileSync(path.join(dir, 'page.html'), page.html);
+      const dom = new JSDOM(page.html, {runScripts: 'dangerously', pretendToBeVisual: true});
+      const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      await settle();
+      const doc = dom.window.document;
+      expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
+      /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+      await settle();
+      const srcOf = (/** @type {string} */ alt) => doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src');
+      const data = `data:image/png;base64,${PNG.toString('base64')}`;
+      expect(srcOf('Alex')).toBe(data);
+      expect(srcOf('Jo')).toBe(data);
+      expect(srcOf('Cover')).toBe('https://example.com/not-really-an-image');
+      expect(doc.querySelector(`#${ROOT_ID} a`)?.getAttribute('href')).toBe('https://example.com/guide');
+      dom.window.close();
+      // The way back is the page as written.
+      const back = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true, out: 'back/page.jsx'}));
+      expect(back.data.exact).toBe(true);
+      expect(fs.readFileSync(path.join(dir, 'back/page.jsx'), 'utf8')).toBe(source);
     } finally {
       removeLinkedFixture(dir);
     }

@@ -1193,6 +1193,28 @@ export async function renderPage(entry, options = {}) {
   const used = classesIn(markup);
   /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
+  // https images the page's files name as literals that the first paint may
+  // not show (the next view, a feed after a click): fetched the same way, so
+  // the script draws them from the same carried data.
+  if (remote && script !== null) {
+    const literals = /** @type {string[]} */ (message.remoteLiterals ?? []);
+    await remote.get(literals);
+    for (const url of literals) {
+      const fetched = remote.results.get(url);
+      if (fetched && 'uri' in fetched && !ctx.rewrites.has(url)) ctx.rewrites.set(url, fetched.uri);
+    }
+  }
+  /** Built addresses named in a warning already. @type {Set<string>} */
+  const builtNamed = new Set();
+  for (const built of /** @type {{text: string, file: string, line: number}[]} */ (message.builtRemote ?? [])) {
+    const where = `${path.relative(dir, built.file).split(path.sep).join('/')}:${built.line}`;
+    if (builtNamed.has(`${where} ${built.text}`)) continue;
+    builtNamed.add(`${where} ${built.text}`);
+    warnings.push({
+      code: 'remote-asset',
+      message: `${built.text} (${where}) builds an image address in code, so the render cannot carry it: the file asks the network for it when the script draws it. Write the address whole, or save the image beside the page and import it.`,
+    });
+  }
   // The script draws the page again with the paths the page wrote, so each
   // image the first paint shows from its carried data keeps showing.
   const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);

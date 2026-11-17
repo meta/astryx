@@ -98,6 +98,10 @@ const localFiles = [];
 const packageCss = [];
 /** Sass and Less stylesheets the page imports, which a render cannot compile. @type {string[]} */
 const skippedCss = [];
+/** https image addresses the page's own files name as literals, which the first paint may not show. @type {Set<string>} */
+const remoteLiterals = new Set();
+/** https image addresses the page builds in code where an image goes, which a render cannot carry. @type {{text: string, file: string, line: number}[]} */
+const builtRemote = [];
 /** Local files inlined from asset imports. */
 /** @type {Set<string>} */
 const assetsInlined = new Set();
@@ -654,6 +658,70 @@ function aliasPlugin() {
   };
 }
 
+/** An image file's extension at the end of an address's path. */
+const IMAGE_PATH = /\.(png|jpe?g|gif|webp|avif|svg|ico)$/i;
+
+/** A property or attribute name that names an image (`avatarUrl`, `coverImage`, `src`). */
+const IMAGE_NAME = /avatar|image|img|photo|picture|thumbnail|thumb|logo|icon|cover|banner|poster|background/i;
+
+/** The attributes where JSX puts an image's address. */
+const SRC_ATTR = /^(src|srcset|poster)$/i;
+
+/**
+ * The name a value is given, through the expressions that only choose or
+ * wrap it (`a ? x : y`, `x ?? y`, `x as string`): the key of the object
+ * property it is the value of, or the JSX attribute it is in.
+ * @param {any} p a path to the value
+ * @returns {{name: string, jsx: boolean} | null}
+ */
+function nameOfValue(p) {
+  let at = p;
+  while (
+    at.parentPath &&
+    (at.parentPath.isConditionalExpression() ||
+      at.parentPath.isLogicalExpression() ||
+      at.parentPath.isParenthesizedExpression?.() ||
+      at.parentPath.isTSAsExpression?.() ||
+      at.parentPath.isTSSatisfiesExpression?.() ||
+      at.parentPath.isJSXExpressionContainer())
+  ) {
+    if (at.parentPath.isConditionalExpression() && at.parentPath.node.test === at.node) return null;
+    at = at.parentPath;
+  }
+  const holder = at.parentPath;
+  if (!holder) return null;
+  if (holder.isJSXAttribute() && holder.node.value === at.node) {
+    const n = holder.node.name;
+    return {name: n.type === 'JSXNamespacedName' ? n.name.name : n.name, jsx: true};
+  }
+  if (holder.isObjectProperty() && holder.node.value === at.node && !holder.node.computed) {
+    const k = holder.node.key;
+    const name = k.type === 'Identifier' ? k.name : k.type === 'StringLiteral' ? k.value : null;
+    return name === null ? null : {name, jsx: false};
+  }
+  return null;
+}
+
+/**
+ * Whether an https address the page writes as a literal is an image the
+ * render fetches: its path ends in an image extension, it is the value of a
+ * JSX `src`, `srcSet` or `poster`, or the property or attribute it is the
+ * value of names an image. Any other address (a link, an API) is never
+ * fetched.
+ * @param {string} value
+ * @param {any} p a path to the literal
+ */
+function isImageLiteral(value, p) {
+  if (!/^https:\/\//i.test(value)) return false;
+  try {
+    if (IMAGE_PATH.test(new URL(value).pathname)) return true;
+  } catch {
+    return false;
+  }
+  const named = nameOfValue(p);
+  return Boolean(named && (SRC_ATTR.test(named.name) || IMAGE_NAME.test(named.name)));
+}
+
 /**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
@@ -667,6 +735,21 @@ function aliasPlugin() {
  */
 function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
+  /**
+   * Record an https image address the page builds in code (a template with
+   * values, or `+`) where an image goes: the render cannot know it, so the
+   * file asks the network for it when the script draws it.
+   * @param {any} p
+   * @param {boolean} https whether the address starts with https://
+   */
+  const builtAddress = (p, https) => {
+    if (!https) return;
+    const named = nameOfValue(p);
+    if (!named || !(SRC_ATTR.test(named.name) || IMAGE_NAME.test(named.name))) return;
+    const {start, end} = p.node;
+    const text = typeof start === 'number' && typeof end === 'number' ? p.hub?.file?.code?.slice(start, end) : null;
+    builtRemote.push({text: text ?? '(an address built in code)', file: filename, line: p.node.loc?.start.line ?? 0});
+  };
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
@@ -798,6 +881,26 @@ function pagePlugin(filename, browser = false) {
         if (browser) return;
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
+      },
+      StringLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isImportDeclaration() || p.parentPath.isExportDeclaration()) return;
+        if (isImageLiteral(p.node.value, p)) remoteLiterals.add(p.node.value);
+      },
+      TemplateLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isTaggedTemplateExpression()) return;
+        if (p.node.expressions.length === 0) {
+          const value = p.node.quasis[0]?.value.cooked ?? '';
+          if (isImageLiteral(value, p)) remoteLiterals.add(value);
+          return;
+        }
+        builtAddress(p, /^https:\/\//i.test(p.node.quasis[0]?.value.cooked ?? ''));
+      },
+      BinaryExpression(/** @type {any} */ p) {
+        if (browser || p.node.operator !== '+' || p.parentPath.isBinaryExpression({operator: '+'})) return;
+        let left = p.node;
+        while (left.type === 'BinaryExpression' && left.operator === '+') left = left.left;
+        const start = left.type === 'StringLiteral' ? left.value : left.type === 'TemplateLiteral' ? left.quasis[0]?.value.cooked ?? '' : '';
+        builtAddress(p, /^https:\/\//i.test(start));
       },
       JSXText(/** @type {any} */ p) {
         if (browser) return;
@@ -1519,6 +1622,8 @@ try {
     texts,
     fnTexts,
     screenQueries,
+    remoteLiterals: [...remoteLiterals],
+    builtRemote,
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
