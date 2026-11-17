@@ -28,6 +28,24 @@ describe('payment form template contract', () => {
     );
   });
 
+  // Spacing steps are 4px each. The fold must land where the hook switches to
+  // the phone layout, or a band of widths gets two columns in phone order.
+  it('folds at the same width the media-query hook treats as a phone', () => {
+    const minWidth = Number(
+      source.match(/<Grid columns=\{\{minWidth: (\d+)/u)?.[1],
+    );
+    const gap = Number(
+      source.match(/<Grid columns=\{[^>]*gap=\{(\d+)\}/u)?.[1],
+    );
+    const padding = Number(
+      source.match(/<Section[^>]*?padding=\{(\d+)\}/su)?.[1],
+    );
+    const phoneMax = Number(
+      source.match(/useMediaQuery\('\(max-width: (\d+)px\)'\)/u)?.[1],
+    );
+    expect(2 * minWidth + gap * 4 + 2 * padding * 4).toBe(phoneMax + 1);
+  });
+
   it('chooses no layout direction or column width from the media-query hook', () => {
     expect(source).not.toMatch(/direction=\{isMobile/u);
     expect(source).not.toMatch(/flexBasis/u);

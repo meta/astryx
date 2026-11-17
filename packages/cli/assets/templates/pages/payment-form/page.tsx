@@ -268,8 +268,8 @@ export default function PaymentFormPage() {
                   <Divider />
                 </VStack>
 
-                {/* CSS folds the two columns into one below about 768px, so the first paint fits a phone. */}
-                <Grid columns={{minWidth: 340, max: 2}} gap={8} align="start">
+                {/* CSS folds the two columns into one below 768px, the same width the hook treats as a phone, so the first paint fits a phone. */}
+                <Grid columns={{minWidth: 344, max: 2}} gap={8} align="start">
                   <VStack gap={8}>
                     {/* Sign in */}
                     <VStack gap={1}>
