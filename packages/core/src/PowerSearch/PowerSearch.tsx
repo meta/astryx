@@ -613,6 +613,13 @@ export function PowerSearch({
       'is required: the fields people can filter by, for example config={{fields: [...]}}.',
     );
   }
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(filters)) {
+    throw devPropError(
+      'PowerSearch',
+      'filters',
+      'must be an array of the applied filters, for example filters={filters} with onChange={setFilters} and useState([]).',
+    );
+  }
   const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
