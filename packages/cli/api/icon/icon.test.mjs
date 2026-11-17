@@ -524,7 +524,9 @@ describe('a word matches whole words (FR6)', () => {
     });
   /** @param {any} set @param {string} query */
   const answer = (set, query) =>
-    answeringMatches(rankIcons([set], query)).map(each => each.id);
+    answeringMatches(rankIcons([set], query, {words: true})).map(
+      each => each.id,
+    );
 
   it('never offers a longer word that only starts with the query beside a whole-word answer', () => {
     const set = setOf([
@@ -578,6 +580,26 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'XMarkIcon')).toEqual(['x-mark']);
   });
 
+  it('keeps the reading whose best match scores higher, the word as typed on a tie', () => {
+    // A set whose ids keep the compound word whole answers it as typed.
+    const whole = setOf([
+      {id: 'paperclip'},
+      {id: 'paper-plane'},
+      {id: 'lightbulb'},
+    ]);
+    expect(rankIcons([whole], 'PaperClip icon')[0]).toMatchObject({
+      id: 'paperclip',
+      score: 90,
+    });
+    expect(answer(whole, 'LightBulb icon')).toEqual(['lightbulb']);
+    // A set that splits it answers the split reading.
+    const split = setOf([{id: 'paper-clip'}, {id: 'paper-plane'}]);
+    expect(rankIcons([split], 'PaperClip icon')[0]).toMatchObject({
+      id: 'paper-clip',
+      score: 90,
+    });
+  });
+
   it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
     const set = setOf([
       {id: 'arrow-up-to-line'},
@@ -614,7 +636,9 @@ describe('a word matches whole words (FR6)', () => {
       {id: 'clipboard-copy'},
       {id: 'house'},
     ]);
-    const ranked = rankIcons([set], 'copy button clipboard icon');
+    const ranked = rankIcons([set], 'copy button clipboard icon', {
+      words: true,
+    });
     // No icon carries `button`, so it counts for nothing.
     expect(ranked[0]).toMatchObject({
       id: 'clipboard-copy',
@@ -636,10 +660,41 @@ describe('a word matches whole words (FR6)', () => {
       {id: 'info'},
     ]);
     expect(answer(set, 'info circle tooltip')[0]).toBe('info');
-    // Equal weights keep the icon whose id asks for fewer other words first.
+    // Equal weights keep the icon whose id holds fewer parts no query word
+    // names first.
     expect(
       answer(setOf([{id: 'lock-open'}, {id: 'lock'}]), 'lock button'),
     ).toEqual(['lock', 'lock-open']);
+    // A word carried only as a tag names no id part: `padlock` and
+    // `lock-open` each hold one unnamed part, so id order decides.
+    expect(
+      answer(
+        setOf([{id: 'padlock', words: ['padlock', 'lock']}, {id: 'lock-open'}]),
+        'lock button',
+      ),
+    ).toEqual(['lock-open', 'padlock']);
+  });
+
+  it('keeps set order first among word matches, as among every equal score', () => {
+    const main = setOf([{id: 'clipboard'}]);
+    const backup = /** @type {any} */ ({
+      ...setOf([{id: 'clipboard-copy'}]),
+      name: 'backup',
+      package: '@acme/backup-icons',
+    });
+    expect(
+      answeringMatches(
+        rankIcons([main, backup], 'copy button clipboard', {words: true}),
+      ).map(each => each.set),
+    ).toEqual(['brand', 'backup']);
+  });
+
+  it('answers with word matches only when asked for them', () => {
+    const set = setOf([{id: 'copy'}, {id: 'clipboard-copy'}]);
+    expect(rankIcons([set], 'copy button clipboard')).toEqual([]);
+    expect(
+      rankIcons([set], 'copy button clipboard', {words: true}).length,
+    ).toBe(2);
   });
 
   it('counts the words of a definition the icon is mapped to, and their plural or singular', () => {

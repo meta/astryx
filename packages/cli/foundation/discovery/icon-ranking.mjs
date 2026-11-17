@@ -22,23 +22,26 @@
  * A query is scored as typed first. Only when nothing answers it with a
  * whole word are the words that only phrase it (`go`, `the`, `icon`) left
  * out of a query of several words, so `go home` asks for `home` while
- * `arrow up to line` still names `arrow-up-to-line`. At that step a word
- * written as an export name counts as its words, so `SearchIcon` asks for
- * `search`.
+ * `arrow up to line` still names `arrow-up-to-line`. At that step the
+ * query is also read with each word written as an export name split into
+ * its words, so `SearchIcon` asks for `search`; the reading whose best match
+ * scores higher answers, and on a tie the word as typed does, so
+ * `PaperClip` still finds a `paperclip` icon.
  *
  * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
- * icon carries every word. When nothing answers a query of several words,
- * as typed or without its filler words, each icon that carries one or more
- * of its words is a word match. An icon carries a word when the word, or its
+ * icon carries every word. For the finder's own search answers only, when
+ * no reading answers a query of several words, each icon that carries one
+ * or more of its words is a word match. An icon carries a word when the word, or its
  * plural or singular, is one of its id parts, a part of one of its words, or
  * a part of a word of a definition the set maps it for. A word weighs more
  * the fewer searched icons carry it, so the word that names the glyph
  * outweighs a common one, and a word no icon carries counts for nothing.
  * A word counts twice when, alone or with other query words, it spells out
  * the whole name of a definition the set maps the icon for: the map is the
- * set's own statement of what the icon means. Word matches rank by the
- * weight of the words they carry; equal weights keep set order, then the
- * icon whose id holds fewer words the query does not ask for, then id order.
+ * set's own statement of what the icon means. Word matches share one
+ * score, so they keep set order first, as every equal score does; within a
+ * set they rank by the weight of the words they carry, then the icon whose
+ * id holds fewer parts that no query word names, then id order.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -261,13 +264,11 @@ function typedQuery(query) {
 
 /**
  * The query without the words that only phrase it, when it has several
- * words and some word names something; else the query as typed. A word
- * written as an export name counts as the words it runs together
- * (`ChevronDownIcon` asks for `chevron down`).
+ * words and some word names something; else the query as typed.
  * @param {string} query
  */
 export function iconQuery(query) {
-  const words = typedQuery(exportNameWords(query)).split(' ').filter(Boolean);
+  const words = typedQuery(query).split(' ').filter(Boolean);
   const named = words.filter(word => !FILLER_WORDS.has(word));
   return (words.length > 1 && named.length > 0 ? named : words).join(' ');
 }
@@ -390,30 +391,48 @@ export function withDefinitionWords(icon, definitions, lookup) {
 /**
  * Every icon in `sets` that answers the query, ranked. The query is
  * scored as typed; when nothing answers it with a whole word (80 and up),
- * it is scored again without its filler words ({@link iconQuery}); when
- * nothing answers it either way, a query of several words is ranked by the
- * words each icon carries ({@link rankWords}).
+ * it is scored again without its filler words ({@link iconQuery}), and
+ * again with each word written as an export name read as its words
+ * ({@link exportNameWords}); the reading whose best match scores higher
+ * answers, the one without filler words on a tie. With `words`, a query
+ * of several words that no reading answers is ranked by the words each
+ * icon carries ({@link rankWords}): the finder's own search answers ask
+ * for that, while callers that look for a near spelling or a fitting
+ * definition do not.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
+ * @param {{words?: boolean}} [options]
  * @returns {IconMatchEntry[]}
  */
-export function rankIcons(sets, query) {
+export function rankIcons(sets, query, {words = false} = {}) {
   const typed = typedQuery(query);
   const asTyped = rankTerm(sets, typed);
   if (asTyped.some(each => each.score >= 80)) return asTyped;
   const named = iconQuery(query);
-  const withoutFiller = named === typed ? asTyped : rankTerm(sets, named);
-  if (withoutFiller.length > 0) return withoutFiller;
-  if (asTyped.length > 0) return asTyped;
-  return named.includes(' ') ? rankWords(sets, named) : [];
+  const asNamed = named === typed ? asTyped : rankTerm(sets, named);
+  const answered = asNamed.length > 0 ? asNamed : asTyped;
+  const spelled = iconQuery(exportNameWords(query));
+  const asSpelled =
+    spelled === named || spelled === typed ? [] : rankTerm(sets, spelled);
+  const best = topScore(asSpelled) > topScore(answered) ? asSpelled : answered;
+  if (best.length > 0) return best;
+  return words && spelled.includes(' ') ? rankWords(sets, spelled) : [];
+}
+
+/**
+ * The score of the first entry of a ranked list, or -Infinity for none.
+ * @param {IconMatchEntry[]} ranked best first
+ */
+function topScore(ranked) {
+  return ranked.length > 0 ? ranked[0].score : -Infinity;
 }
 
 /** The score of a word match ({@link rankWords}): below every other tier. */
 const WORD_MATCH_SCORE = 20;
 
 /**
- * Icons that carry one or more words of a query of several words, best
- * first. A word weighs the log of how many searched icons there are over how
+ * Icons that carry one or more words of a query of several words, set
+ * order first and then best first within a set. A word weighs the log of how many searched icons there are over how
  * many carry it, so a rare word counts more than a common one. An icon's
  * weight is the sum of the weights of the words it carries, with the words
  * that name a definition the set maps it for counted twice
@@ -468,12 +487,16 @@ function rankWords(sets, term) {
       (sum, word) => sum + weight(word),
       0,
     ),
-    unasked: hit.icon.id.split('-').length - hit.carried.length,
+    unasked: hit.icon.id
+      .split('-')
+      .filter(
+        part => !words.some(word => word === part || sameWord(word, part)),
+      ).length,
   }));
   ranked.sort(
     (a, b) =>
-      b.value - a.value ||
       a.hit.setIndex - b.hit.setIndex ||
+      b.value - a.value ||
       a.unasked - b.unasked ||
       (a.hit.icon.id < b.hit.icon.id
         ? -1
