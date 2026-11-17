@@ -51,7 +51,7 @@ system_specs: [spec:AST-094/FR13, spec:AST-094/FR35]
 
 | Area                    | Contract                                                                                                                                                                                                                                                                                                                   |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `MobileNav` with `isOpen`, `onOpenChange`, `header`, `width` (320), `side` (`start`, `end`, `auto`; default `auto`), `label`, and `children`; target `mobile-nav` with a `side` state; `MobileNavToggle` with `label` and `children`.                                                                                      |
+| Public contract         | `MobileNav` with `isOpen`, `onOpenChange`, `header`, `width` (320), `side` (`start`, `end`, `auto`; default `auto`), `label`, and `children`; targets `mobile-nav` (the overlay) and `mobile-nav-drawer` (the painted panel), each with a `side` state; `MobileNavToggle` with `label` and `children`.                     |
 | Behavior                | A modal native dialog with a drawer that slides in from one inline edge, a header with a Close button, and a scrolling content region. Escape, the backdrop, and Close request closing; the dialog stays open while the drawer starts sliding out and closes within the slide-out (FR5), then focus returns to the opener. |
 | End-user impact         | Phone users open navigation in a drawer that contains focus, lock the page behind it, close it any usual way, and land back on the control that opened it.                                                                                                                                                                 |
 | Builder impact          | None.                                                                                                                                                                                                                                                                                                                      |
@@ -112,7 +112,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The Navigation overlay and its current `mobile-nav` target.
+- The Navigation overlay and its `mobile-nav` target; the Drawer and its
+  `mobile-nav-drawer` target.
 - Drawer placement and motion, the stable Header and Content regions, and the
   connection between AppShell state, MobileNav, and MobileNavToggle (FR1–FR12).
 - The backdrop's appearance (FR13).
@@ -125,7 +126,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - The Close and Toggle button surfaces — delegated to `component:Button`.
 - Header or navigation content supplied by the caller.
-- A public target for the painted Drawer, Header, or Content region; none exists.
+- A public target for the Header or Content region; none exists.
 - AppShell responsive policy, when the drawer renders, and its close hold —
   owned by `component:AppShell`.
 - Shared Escape and close-request ordering — owned by `family:overlay-dismissal`;
@@ -141,7 +142,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 | ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Basis                                                                                                                                                                                                                      |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1  | MobileNav renders one native `<dialog>` Navigation overlay containing a Drawer with a stable Header, Close button, and scrollable Content region. The overlay carries `mobile-nav` with the resolved `side`; Drawer, Header, and Content carry no MobileNav public target.                                                                                                                                                                                                | Current source, docs, and tests                                                                                                                                                                                            |
+| FR1  | MobileNav renders one native `<dialog>` Navigation overlay containing a Drawer with a stable Header, Close button, and scrollable Content region. The overlay carries `mobile-nav` and the Drawer carries `mobile-nav-drawer`, each with the resolved `side`; Header and Content carry no MobileNav public target.                                                                                                                                                        | Current source, docs, and tests                                                                                                                                                                                            |
 | FR2  | `isOpen` and `onOpenChange` win when given; otherwise the drawer reads and changes the enclosing AppShell's drawer state. The dialog uses AppShell's drawer id when there is one, else its own; a caller `id` replaces either (Current-state impact).                                                                                                                                                                                                                     | Current source and tests                                                                                                                                                                                                   |
 | FR3  | Opening calls `showModal()`, and records the focused element as the opener; where focus lands inside the open drawer is uncontracted here. While open, the page's scroller clips its overflow and keeps its scrollbar gutter: the root, or `<body>` when `<body>` sets its own overflow and the root's stays `visible`. Pull-to-refresh and the page's bounce stop, because a scroll lock under a modal holds the page (`spec:AST-094` FR19). Closing releases all three. | Current source and tests                                                                                                                                                                                                   |
 | FR4  | The native cancel request (Escape) is routed through the shared dismissal stack and requests close only when this drawer is topmost. A click on the overlay outside the Drawer requests close; a click inside does not. The Close button, named by `@astryx.mobileNav.closeNavigation`, requests close. A caller `onClick` on the dialog runs before the backdrop check; one that calls `preventDefault()` cancels that backdrop close.                                   | Current source and tests                                                                                                                                                                                                   |
@@ -213,11 +214,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Close button       | Dismisses the current drawer.                                         | `component:Button`             | Supporting     | FR4                |
 | Toggle button      | Opens or closes the AppShell-owned mobile drawer state.               | `component:Button`             | Supporting     | FR11               |
 
-Drawer is the primary painted surface, but the only current MobileNav target is
-on the full-viewport dialog overlay. Its `none` disposition is a factual
-reachability gap, not a decision that the Drawer must remain unthemeable. Header
-and Content likewise have no current local target. Close and Toggle retain Button
-ownership.
+Drawer is the primary painted surface and carries `mobile-nav-drawer` with the
+resolved `side`, so a theme styles the panel without the full-viewport overlay
+behind it. Header and Content have no current local target; their `none`
+dispositions are factual reachability gaps, not a decision that they must
+remain unthemeable. Close and Toggle retain Button ownership.
 
 ### Theming anatomy
 
@@ -226,11 +227,7 @@ ownership.
 ```json
 {
   "Navigation overlay": {"target": "mobile-nav"},
-  "Drawer": {
-    "none": {
-      "reason": "reachability-gap: No current public target is applied to the painted drawer panel"
-    }
-  },
+  "Drawer": {"target": "mobile-nav-drawer"},
   "Header": {
     "none": {
       "reason": "reachability-gap: No current public target is applied to the stable header row"
