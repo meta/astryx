@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx theme build` warns, and `astryx experimental theme` refuses, a radius scale with no `base` or `multiplier`, or one Core cannot read as a number (a boolean is read as 1 or 0, so it builds). Core builds every scaled corner from it as NaNpx, which the browser drops. A radius of `0`, `''` or `false` is said too: Core skips it and builds no corner token, so the base theme's corners stay (`radius: {base: 0, multiplier: 1}` squares them).
+[fix] `astryx theme build` warns, and `astryx experimental theme` refuses, a radius scale with no `base` or `multiplier`, or one Core cannot read as a number (a boolean is read as 1 or 0, so it builds). Core builds every scaled corner from it as NaNpx, which the browser drops. A radius of `0` or `''` is said too: Core skips it and builds no corner token, so the base theme's corners stay (`radius: {base: 0, multiplier: 1}` squares them).
 
 In the editor:
 
