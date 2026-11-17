@@ -726,8 +726,9 @@ export function registerDocs(program) {
         program.getOptionValueSource('detail') === 'default' ? 'brief' : detail;
       // A text read prints a topic whole, as JSON and docs() do: agents act
       // on the first read, and most never open a section from an index. Only
-      // a topic too long for one read (DOC_OUTPUT_BUDGET_BYTES, the same
-      // budget doctor holds every docs read to) lists its sections instead.
+      // a topic whose whole doc is over DOC_OUTPUT_BUDGET_BYTES (the budget
+      // doctor holds each section index and each section to) lists its
+      // sections instead.
       // --index always lists them, --full always prints the whole topic, and
       // the dense variant is written to be read whole.
       const mayList =
@@ -850,7 +851,19 @@ export function registerDocs(program) {
                 detail,
               ),
             ),
-            text(linkLines(result.data.links).join('\n')),
+            text(
+              [
+                // A whole read ends with its moves too: down to one section
+                // and to the section list, then up and across.
+                ...(result.data.sections.length > 1
+                  ? [
+                      `Read one section: ${run} docs ${result.data.name} <section>`,
+                      `List its sections: ${run} docs ${result.data.name} --index`,
+                    ]
+                  : []),
+                ...linkLines(result.data.links),
+              ].join('\n'),
+            ),
           );
           break;
         }

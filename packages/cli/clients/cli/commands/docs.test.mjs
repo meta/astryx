@@ -143,10 +143,17 @@ describe('progressive reads', () => {
     const index = await runCli(['docs', 'theme', '--index']);
     expect(index.stdout).toMatch(/Read one section: /);
     expect(whole.stdout.length).toBeGreaterThan(index.stdout.length);
-    // A guide from the docs tree reads the same way.
+    // A guide from the docs tree reads the same way, and a whole read ends
+    // with its moves down: one section, and the section list.
     const guide = await runCli(['docs', 'layout/responsive']);
     expect(guide.stdout).toMatch(/^## Breakpoints/m);
-    expect(guide.stdout).not.toContain('Read one section:');
+    expect(guide.stdout).not.toContain('Read everything:');
+    expect(guide.stdout).toMatch(
+      /^Read one section: .*docs layout\/responsive <section>$/m,
+    );
+    expect(guide.stdout).toMatch(
+      /^List its sections: .*docs layout\/responsive --index$/m,
+    );
   }, SLOW);
 
   it('lists the sections of a topic too long for one read; --full prints it whole', async () => {
@@ -158,7 +165,7 @@ describe('progressive reads', () => {
     expect(bare.stdout).toBe((await runCli(['docs', route, '--index'])).stdout);
     const full = await runCli(['docs', route, '--full']);
     expect(full.stdout.length).toBeGreaterThan(bare.stdout.length);
-    expect(full.stdout).not.toContain('Read one section:');
+    expect(full.stdout).not.toContain('Read everything:');
   }, SLOW);
 
   it('returns the matching envelopes as JSON', async () => {
@@ -345,7 +352,7 @@ describe('the docs tree, one level at a time', () => {
     for (const args of [['--dense', 'docs', 'theme'], ['--lang', 'dense', 'docs', 'theme']]) {
       const {status, stdout} = await runCli(args);
       expect(status).toBe(0);
-      expect(stdout).not.toContain('Read one section:');
+      expect(stdout).not.toContain('Read everything:');
     }
   }, SLOW);
 

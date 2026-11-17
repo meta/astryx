@@ -16,8 +16,8 @@ export const doc = {
   summary: 'Print reference docs',
   description:
     'Reads the reference docs: with no topic it lists every topic; a topic prints whole, ' +
-    'unless the whole topic is more than one docs read may return, and then it lists its ' +
-    'sections, each with the key to read it by; `--index` lists the sections of any topic, ' +
+    'unless its whole doc is over the size doctor allows one section or one section list ' +
+    '(32 KB), and then it lists its sections, each with the key to read it by; `--index` lists the sections of any topic, ' +
     'and `--full` prints any topic whole; a topic plus a section prints that section. With ' +
     '`--json`, a topic returns its whole doc, as docs() does, and `--index` its section ' +
     'index. A route ' +
@@ -46,7 +46,7 @@ export const doc = {
     {
       flag: '--full',
       description:
-        'Print the whole topic, even one too long for one read that otherwise lists its sections (`--json` returns the whole topic unless --index). Cannot be set with --index',
+        'Print the whole topic, even one whose whole doc is over 32 KB, which otherwise lists its sections (`--json` returns the whole topic unless --index). Cannot be set with --index',
     },
     {
       flag: '--depth <levels>',

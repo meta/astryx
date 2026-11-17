@@ -7,11 +7,11 @@
  * @output Its size in bytes as `--json` prints it.
  * @position Read by `astryx docs` to choose between a whole topic and its
  *   section list, and by Doctor's docs checks and the self-doc audits
- *   (through foundation/discovery/docs-output-budget.mjs), so every docs read
- *   is held to the same limit.
+ *   (through foundation/discovery/docs-output-budget.mjs), which hold each
+ *   section index and each section to it.
  */
 
-/** The most one docs read may return, in bytes. */
+/** The most one section index or one section may hold, in bytes. */
 export const DOC_OUTPUT_BUDGET_BYTES = 32 * 1024;
 
 /**
