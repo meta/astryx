@@ -714,6 +714,21 @@ export function linksOpenNewTabs(markup) {
 }
 
 /**
+ * The markup without `autofocus`. The file's script owns focus once it draws
+ * the page, as the app does. A viewer's cross-origin frame blocks focus that
+ * markup asks for, and logs an error.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function withoutAutofocus(markup) {
+  return markup.replace(/<[a-zA-Z][^>]*\sautofocus\b[^>]*>/gi, tag =>
+    tag.replace(/(\s+)([^\s=/>]+)(="[^"]*")?/g, (attr, _, /** @type {string} */ name) =>
+      name.toLowerCase() === 'autofocus' ? '' : attr,
+    ),
+  );
+}
+
+/**
  * The page's script with each string the markup's rewrite replaced (an
  * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
  * same carried data, so the page the script draws shows what the first paint
@@ -1035,7 +1050,7 @@ export async function renderPage(entry, options = {}) {
     );
   }
   /** @type {string} */
-  let markup = linksOpenNewTabs(message.markup);
+  let markup = withoutAutofocus(linksOpenNewTabs(message.markup));
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.

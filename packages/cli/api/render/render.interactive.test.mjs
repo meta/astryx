@@ -218,6 +218,35 @@ describe("a render, which carries the page's script", () => {
     dom.window.close();
   });
 
+  it('asks for no focus in its first paint, and the drawn page focuses as the app does', async () => {
+    put(
+      'src/focus.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <input aria-label="Search" autoFocus data-note="no autofocus here" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/focus.tsx', {cwd: dir, out: 'focus.html'});
+    const file = read('focus.html');
+    const markup = renderedMarkupOf(file) ?? '';
+    expect(markup).toContain('aria-label="Search"');
+    expect(markup).toContain('data-note="no autofocus here"');
+    const painted = new JSDOM(markup).window.document.querySelector('input');
+    expect(painted?.hasAttribute('autofocus')).toBe(false);
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const input = dom.window.document.querySelector('input[aria-label="Search"]');
+    expect(dom.window.document.activeElement).toBe(input);
+    dom.window.close();
+  });
+
   it('opens a link out of the file in a new tab, and submits a form itself, also on Enter', async () => {
     put(
       'src/form.tsx',
