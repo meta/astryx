@@ -287,7 +287,7 @@ remain unthemeable. Close and Toggle retain Button ownership.
 | FR13                 | `modalBackdrop.test.tsx`; `ModalBackdrop.a11y.browser.spec.ts` in Chromium and WebKit                                              | A finger at phone width; a mouse at desktop width; forced colors under either pointer                   | A `backdrop-filter` on the backdrop at either width, or no visible edge in forced colors, fails.                                                                                                     | `audit:MobileNav/theming`       |
 | FR15                 | `MobileNav.test.tsx` ("draws the panel's own text in the surface's text color"); `MobileNav.textColor.a11y.chromium.spec.ts`       | Open panel with a selected row, light and dark                                                          | A selected row in `CanvasText`, or under 4.5:1 on the panel, fails.                                                                                                                                  | `audit:MobileNav/theming`       |
 
-Read from source, with no focused test yet:
+Read from source, with no focused test:
 
 - FR1: the distinct Drawer, Header, and Content elements, and the `mobile-nav`
   target with its `side` state.
@@ -324,15 +324,13 @@ Rejected: leaving the drawer without a landmark, so landmark navigation on a pho
 **Reference:** `component:MobileNav/DEC-2`
 **Decider:** `josephfarina`
 
-The Drawer is the surface people see; the only target was on the
-full-viewport overlay behind it, so a theme's background on `mobile-nav`
-painted the overlay and the panel kept the default surface. The Drawer now
-carries `mobile-nav-drawer` with the resolved `side` (FR1), additive under
-`spec:AST-017` FR7; the default look does not change.
+The Drawer is the surface people see, and it carries its own target,
+`mobile-nav-drawer`, with the resolved `side` (FR1), so a theme styles the
+panel without the full-viewport overlay behind it. The target is an optional
+capability, nonbreaking under `spec:AST-017` FR5; the default look is the
+same with or without it.
 
-Rejected: styling the panel through the overlay target (it paints the whole
-screen), and moving `mobile-nav` to the panel (it would change what existing
-themes reach).
+Rejected: styling the panel through `mobile-nav`, which paints the whole screen.
 
 ## Open questions
 
