@@ -401,13 +401,20 @@ export function Timestamp({
   const fullAbsoluteText = isValidDate
     ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
-  const ariaLabelText = isValidDate
+  const fullAbsoluteSpokenText = isValidDate
     ? formatInstant(date, 'full', locale, {
         timeZone: undefined,
         timeZoneNameStyle: 'long',
         calendar,
       })
     : '';
+  // A relative name starts with the words the timestamp shows, then the full
+  // date. A control named from its content then keeps its visible words in its
+  // name, so voice control can find it (WCAG 2.5.3).
+  const ariaLabelText =
+    fullAbsoluteSpokenText === ''
+      ? ''
+      : `${displayText}, ${fullAbsoluteSpokenText}`;
 
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
