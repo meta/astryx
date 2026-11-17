@@ -29,9 +29,13 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function openStory(page: Page, story: string): Promise<void> {
+async function openStory(
+  page: Page,
+  story: string,
+  theme: string,
+): Promise<void> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-segmentedcontrol--${story}&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-segmentedcontrol--${story}&viewMode=story&globals=astryxTheme:${theme}`,
   );
   await page.locator('#storybook-root [role="radio"]').first().waitFor();
 }
@@ -60,9 +64,14 @@ async function readSegments(page: Page) {
   );
 }
 
-// The default theme's segment heights per size, as shipped before segments
-// grew with their text.
-const SHIPPED_HEIGHTS: Record<string, number> = {sm: 20, md: 24, lg: 28};
+// Each theme's segment heights per size, as shipped before segments grew with
+// their text. Stone sets no segment height, so it shows Core's own rule;
+// Neutral overrides it.
+const SHIPPED_HEIGHTS: Record<string, Record<string, number>> = {
+  neutral: {sm: 20, md: 24, lg: 28},
+  stone: {sm: 24, md: 28, lg: 32},
+};
+const THEMES = Object.keys(SHIPPED_HEIGHTS);
 
 test.describe('a desktop page', () => {
   // On a phone the small size's label line is 21 px, a pixel taller than its
@@ -74,47 +83,51 @@ test.describe('a desktop page', () => {
     deviceScaleFactor: 1,
   });
 
-  test('at the default text size each segment keeps its shipped height', async ({
-    page,
-  }) => {
-    await openStory(page, 'size-variants');
-    const heights = await page.evaluate(() =>
-      [
-        ...document.querySelectorAll<HTMLElement>(
-          '#storybook-root [role="radiogroup"]',
-        ),
-      ].map(group => ({
-        size: group.dataset.size ?? 'md',
-        heights: [...group.querySelectorAll('[role="radio"]')].map(
-          segment => segment.getBoundingClientRect().height,
-        ),
-      })),
-    );
-    expect(heights.map(group => group.size)).toEqual(['sm', 'md', 'lg']);
-    for (const group of heights) {
-      for (const height of group.heights) {
-        expect(height).toBeCloseTo(SHIPPED_HEIGHTS[group.size], 1);
+  for (const theme of THEMES) {
+    test(`at the default text size each segment keeps its shipped height: ${theme}`, async ({
+      page,
+    }) => {
+      await openStory(page, 'size-variants', theme);
+      const heights = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '#storybook-root [role="radiogroup"]',
+          ),
+        ].map(group => ({
+          size: group.dataset.size ?? 'md',
+          heights: [...group.querySelectorAll('[role="radio"]')].map(
+            segment => segment.getBoundingClientRect().height,
+          ),
+        })),
+      );
+      expect(heights.map(group => group.size)).toEqual(['sm', 'md', 'lg']);
+      for (const group of heights) {
+        for (const height of group.heights) {
+          expect(height).toBeCloseTo(SHIPPED_HEIGHTS[theme][group.size], 1);
+        }
       }
-    }
-  });
+    });
+  }
 });
 
-for (const story of ['default', 'size-variants', 'with-icons']) {
-  test(`a label larger than the segment grows its segment: ${story}`, async ({
-    page,
-  }) => {
-    await openStory(page, story);
-    // Grows the labels' text, but not the element sizes, the way iOS Dynamic
-    // Type grows theme text at its accessibility sizes.
-    await page.addStyleTag({
-      content:
-        '#storybook-root [role="radio"] { font-size: 40px; line-height: 60px; }',
+for (const theme of THEMES) {
+  for (const story of ['default', 'size-variants', 'with-icons']) {
+    test(`a label larger than the segment grows its segment: ${story}, ${theme}`, async ({
+      page,
+    }) => {
+      await openStory(page, story, theme);
+      // Grows the labels' text, but not the element sizes, the way iOS Dynamic
+      // Type grows theme text at its accessibility sizes.
+      await page.addStyleTag({
+        content:
+          '#storybook-root [role="radio"] { font-size: 40px; line-height: 60px; }',
+      });
+      const segments = await readSegments(page);
+      expect(segments.length).toBeGreaterThan(0);
+      for (const segment of segments) {
+        expect(segment.above, segment.name).toBeLessThanOrEqual(1);
+        expect(segment.below, segment.name).toBeLessThanOrEqual(1);
+      }
     });
-    const segments = await readSegments(page);
-    expect(segments.length).toBeGreaterThan(0);
-    for (const segment of segments) {
-      expect(segment.above, segment.name).toBeLessThanOrEqual(1);
-      expect(segment.below, segment.name).toBeLessThanOrEqual(1);
-    }
-  });
+  }
 }

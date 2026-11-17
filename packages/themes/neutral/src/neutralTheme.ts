@@ -368,8 +368,7 @@ export const neutralTheme = defineTheme({
       base: {
         '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
-      // Each size is its height at the default text size, and an item grows
-      // with its label when the text grows past it.
+      // A label line taller than the size grows the item.
       'size:sm': {
         height: 'max(calc(var(--size-element-sm) - 8px), 1lh)',
       },
