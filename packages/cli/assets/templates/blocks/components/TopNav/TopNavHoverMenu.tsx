@@ -72,6 +72,7 @@ export default function TopNavHoverMenu() {
           variant="ghost"
           icon={<UserCircleIcon />}
           isIconOnly
+          href="#"
         />
       }
     />

@@ -32,6 +32,7 @@ export default function TopNavWithLogo() {
           variant="ghost"
           icon={<UserCircleIcon />}
           isIconOnly
+          href="#"
         />
       }
     />

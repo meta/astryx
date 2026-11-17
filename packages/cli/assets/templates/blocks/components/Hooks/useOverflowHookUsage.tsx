@@ -7,6 +7,7 @@ import {useOverflow} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const actions = [
   'Bold',
@@ -55,6 +56,7 @@ function MoreMenu({items}: {items: string[]}) {
 }
 
 export default function UseOverflowHookUsage() {
+  const showToast = useToast();
   const {containerRef, measureRef, visibleCount, hasOverflow} = useOverflow(
     actions.length,
     {gap: GAP},
@@ -80,7 +82,15 @@ export default function UseOverflowHookUsage() {
         aria-label="Text formatting"
         {...stylex.props(styles.row)}>
         {actions.slice(0, visibleCount).map(label => (
-          <Button key={label} label={label} variant="ghost" size="sm" />
+          <Button
+            key={label}
+            label={label}
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              showToast({body: `Demo: ${label} would apply to the text here`})
+            }
+          />
         ))}
         {hasOverflow && <MoreMenu items={actions.slice(visibleCount)} />}
       </div>
