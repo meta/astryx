@@ -169,6 +169,21 @@ describe('traits from a picture', () => {
     expect(g?.options?.[0]).toMatch(/linear-gradient\(to bottom, #/);
   });
 
+  it('writes no control trait from a crop of badges alone, and says why', () => {
+    // Small colored tags with centered labels: one kind of control only,
+    // which a picture cannot tell from buttons.
+    const c = canvas(420, 60);
+    const colors = /** @type {RGB[]} */ ([[70, 165, 70], [248, 148, 6], [196, 60, 53], [98, 207, 252], [120, 120, 120]]);
+    colors.forEach((fill, k) => c.box({x: 10 + k * 80, y: 18, w: 64, h: 24, r: 6, fill, label: true}));
+    const {traits, unsure} = readTraits(c.png());
+    expect(traits.filter(t => t.on === 'button-like' || t.on === 'inputs')).toEqual([]);
+    for (const thing of ['--size-element-md', '--radius-element', '--border-width', 'accent'])
+      expect(traits.some(t => t.step.thing === thing)).toBe(false);
+    const height = unsure.find(u => u.trait === 'height');
+    expect(height?.why).toMatch(/read 24px, but only one kind of control shows, so this crop cannot tell controls from badges; send a full page/);
+    expect(height?.options).toEqual(['set my --size-element-md 24px']);
+  });
+
   it('never names a typeface', () => {
     const {unsure} = readTraits(controlsPage());
     expect(unsure.find(u => u.trait === 'font')?.why).toMatch(/not read from pictures/);
@@ -178,6 +193,8 @@ describe('traits from a picture', () => {
     const c = canvas(800, 200);
     for (let k = 0; k < 4; k++)
       c.box({x: 20 + k * 180, y: 20, w: 160, h: 56, r: 8, edge: 2, edgeColor: [0, 0, 0], fill: [240, 240, 240], label: true});
+    for (let k = 0; k < 2; k++)
+      c.box({x: 20 + k * 380, y: 110, w: 360, h: 56, r: 8, edge: 2, edgeColor: [0, 0, 0], fill: [255, 255, 255], label: true, labelAt: 'start'});
     const {traits} = readTraits(c.png(), 2);
     expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--size-element-md', value: '28px'});
     expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--radius-element', value: '4px'});
