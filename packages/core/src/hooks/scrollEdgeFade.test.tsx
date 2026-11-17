@@ -12,8 +12,8 @@ function fadeLengths(styles: StyleXStyles) {
   const style = getComputedStyle(container.firstElementChild!);
   return {
     mask: style.getPropertyValue('mask-image') !== '',
-    start: style.getPropertyValue('--_scroll-fade-start'),
-    end: style.getPropertyValue('--_scroll-fade-end'),
+    start: style.getPropertyValue('--_scroll-fade-start-1'),
+    end: style.getPropertyValue('--_scroll-fade-end-1'),
   };
 }
 
