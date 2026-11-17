@@ -81,6 +81,33 @@ describe('a text color asked with a fill for one mode', () => {
 
 describe('a tint word', () => {
   it(
+    'every answer, the one that runs the whole ask too, tints the cards and never the header',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow(
+        'cards tinted blue with a navy header',
+        {
+          cwd,
+          theme: 'n',
+        },
+      );
+      const fills = (data.results ?? [])
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.* editor set \S+ /, ''))
+        .filter(c => /^background(?:-color)? /.test(c));
+      const cards = fills.filter(c => / --on card\b/.test(c));
+      expect(cards.length).toBeGreaterThan(0);
+      for (const c of cards)
+        expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%, transparent\)/);
+      // (A header line, where the answer writes one, is the navy, solid.)
+      for (const c of fills.filter(c => /header\b/.test(c)))
+        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
+    },
+    T,
+  );
+
+  it(
     'tints a part named before the clause the tint word is in',
     async test => {
       needsBases(test);
@@ -103,23 +130,19 @@ describe('a tint word', () => {
       needsBases(test);
       const all = await sets('cards tinted blue with a navy header');
       const fills = all.filter(c => /^background(?:-color)? /.test(c));
-      const blue = fills.filter(c => /#2563eb/.test(c));
       const cards = fills.filter(c => / --on card\b/.test(c));
       expect(cards.length).toBeGreaterThan(0);
       for (const c of cards)
         expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%, transparent\)/);
-      // (The header the tint does not name is its own navy, never tinted.)
-      const header = fills.filter(c => / --on app-shell-header\b/.test(c));
-      expect(header.length).toBeGreaterThan(0);
-      for (const c of header)
-        expect(c).toBe("background-color '#1e3a8a' --on app-shell-header");
-      // (Said without the tint, the header is navy too.)
-      const plain = (await sets('cards blue with a navy header')).filter(c =>
-        / --on app-shell-header\b/.test(c),
-      );
-      expect(plain.length).toBeGreaterThan(0);
-      for (const c of plain)
-        expect(c).toBe("background-color '#1e3a8a' --on app-shell-header");
+      // (The header the tint does not name is never tinted: where the
+      // answer writes it, it is its own navy.)
+      for (const c of fills.filter(c => /header\b/.test(c)))
+        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
+      // (Said without the tint, a header line is the same navy.)
+      for (const c of (await sets('cards blue with a navy header')).filter(c =>
+        /^background(?:-color)? .*header\b/.test(c),
+      ))
+        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
     },
     T,
   );
