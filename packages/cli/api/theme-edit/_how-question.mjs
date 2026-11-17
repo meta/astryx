@@ -418,6 +418,7 @@ const HUES = wordTable(
     coral: '#f87171',
     salmon: '#fa8072',
     sand: '#d6c6a5',
+    sky: '#38bdf8',
     taupe: '#8b7d6b',
     slate: '#64748b',
     emerald: '#059669',
@@ -448,6 +449,7 @@ const HUES = wordTable(
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
 const PALETTE_NAMES = new Set([
+  'sky',
   'tan',
   'paper',
   'offwhite',
@@ -763,6 +765,24 @@ function ownWords(k) {
     })[last] ?? last
   );
 }
+
+/**
+ * Each status role with the words its own dial's help gives for it (the
+ * words in its parentheses: success "done, valid, positive"), and its own
+ * name: the vocabulary a color "for" a thing is matched against.
+ * @type {Array<[string, string[]]>}
+ */
+const ROLE_VOCAB = ['success', 'warning', 'danger', 'info'].map(role => {
+  const help = String(
+    /** @type {Record<string, {help?: string}>} */ (DIALS)[role]?.help ?? '',
+  );
+  const inParens = /\(([^)]*)\)/.exec(help)?.[1] ?? '';
+  const vocab = inParens
+    .split(',')
+    .map(x => x.trim().split(/\s+/)[0]?.toLowerCase())
+    .filter(Boolean);
+  return [role, [role, ...vocab].map(w => w.replace(/s$/, ''))];
+});
 
 /**
  * A typed value no page could show, for the properties whose range is
@@ -4332,6 +4352,8 @@ export function draftAnswer(ctx, env, question) {
   // "darker by 20%", "transparent by 40%": a way by an amount is that
   // amount of the way, as the one amount reader takes it ("20% darker",
   // "40% more transparent").
+  /** The "<color> for <thing>" pieces no role took, to name as not taken. @type {string[]} */
+  const untakenFor = [];
   question = question
     .replace(
       /\b(?:more\s+)?(transparent|translucent|see-through)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi,
@@ -4627,6 +4649,63 @@ export function draftAnswer(ctx, env, question) {
       /\bno\s+borders?((?:\s+on\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?)\s*,?\s*(?:except|but|apart from|other than)\s+(?:the\s+|a\s+)?(top|bottom|left|right)(?:\s+(?:one|side|edge|border))?\b/gi,
       'only a $2 border$1',
     )
+    // ("a confident, modern look: deep navy, …"): the list after a look's
+    // colon is pieces of their own.
+    .replace(/\b(look|feel|theme|vibe|style|palette)\s*:\s*/gi, '$1, ')
+    // ("sunny yellow highlights"): a highlight color with no part that
+    // draws it is no part's fill; the color is named in the answer as not
+    // taken, never carried onto the part before.
+    .replace(
+      /\b((?:[a-z]+\s+)?[a-z]+)\s+(highlights?|accents?)\b(?!\s+(?:on|for|in)\b)/gi,
+      (m, color, what, at, whole) =>
+        colorsIn(String(color).toLowerCase()).length &&
+        /\baccent\b/.test(String(whole).slice(0, at)) === false &&
+        /^highlight/i.test(String(what)) &&
+        colorsIn(String(whole).slice(0, at).toLowerCase()).length
+          ? 'highlights'
+          : m,
+    )
+    // ("sky blue", "near-black"): names in two words.
+    .replace(/\bsky[- ]blue\b/gi, 'sky')
+    .replace(/\b(?:near|almost|nearly|soft)[- ]black\b/gi, '#111111')
+    // ("navy tinted grays", "warm gray neutrals"): the grays a color
+    // tints are the neutral color.
+    .replace(/\b([a-z]+)[- ]tinted\s+(?:gr[ae]ys|neutrals?)\b/gi, (m, color) =>
+      colorsIn(String(color).toLowerCase()).length ? `neutral ${color}` : m,
+    )
+    // ("mint green for positive numbers", "red for destructive actions"):
+    // a color for a thing a status role names, in the words its own dial
+    // gives for it (success: done, valid, positive; danger: errors,
+    // destructive), is that role's color. Any other thing is named as not
+    // taken.
+    .replace(
+      /(?<![\w#-])((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+for\s+(?:the\s+|all\s+)?((?:[a-z]+\s+){0,2}[a-z]+)/gi,
+      (m, color, thing) => {
+        if (!colorsIn(String(color).toLowerCase()).length) return m;
+        const words = String(thing).toLowerCase().split(/\s+/);
+        const role = ROLE_VOCAB.find(([, vocab]) =>
+          words.some(
+            w => vocab.includes(w) || vocab.includes(w.replace(/s$/, '')),
+          ),
+        )?.[0];
+        if (role) return `${role} color ${color}`;
+        untakenFor.push(`${color} for ${thing}`);
+        return m;
+      },
+    )
+    // ("tabular numbers", "tabular figures"): numbers in even columns.
+    .replace(
+      /\btabular\s+(?:numbers|figures|nums|digits|numerals)\b(\s+(?:on|in|for)\s+)?/gi,
+      (_m, on) =>
+        on
+          ? `font-variant-numeric tabular-nums${on}`
+          : 'font-variant-numeric tabular-nums on app-shell ',
+    )
+    // ("works in light and dark"): both modes.
+    .replace(
+      /\b(?:works?|working)\s+in\s+(?:both\s+)?light\s+and\s+dark(?:\s+modes?)?\b/gi,
+      'mode both',
+    )
     // ("amber warnings", "red errors": a role's color said before it.)
     .replace(
       /(?<![\w#-])([a-z]+|#[0-9a-f]{3,8})\s+(warnings|errors|alerts)\b(?!\s+(?:badges?|banners?|toasts?|text|icons?|messages?|borders?|states?))/gi,
@@ -4637,6 +4716,16 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("make it brighter and more cheerful": a livelier, more colorful
     // theme.)
+    // (Said of a color, "a cheerful sky blue", it is about that color.)
+    .replace(
+      /\b(?:cheerful|lively|joyful|sunny|happy|friendly)\s+/gi,
+      (m, at, whole) => {
+        const next = /^((?:[a-z]+\s+)?[a-z]+)/i.exec(
+          String(whole).slice(at + m.length),
+        )?.[1];
+        return next && colorsIn(next.toLowerCase()).length ? '' : m;
+      },
+    )
     .replace(
       /\bmore\s+(?:cheerful|lively|vibrant|joyful|fun)\b|\b(?:cheerful|lively|joyful)\b/gi,
       'more colorful',
@@ -27462,8 +27551,12 @@ export function draftAnswer(ctx, env, question) {
     /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
+    const answeredText = result
+      .map(d => `${d.text} ${JSON.stringify(d.options)}`)
+      .join(' ')
+      .toLowerCase();
     const STOP =
-      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses)$/;
+      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses|high|low)$/;
     const notTaken = [
       ...new Set(
         (q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).filter(
@@ -27482,11 +27575,24 @@ export function draftAnswer(ctx, env, question) {
             // (A way, "softer", is read by the way readers.)
             !/[a-z]{3}er$/.test(w) &&
             !chartWords.test(w) &&
+            // (A word an answer above already took, "contrast" in "more
+            // contrast", "tabular-nums" in its line, is no word left out.)
+            !answeredText.includes(w) &&
             !/^(?:dark|light|bright|pale|soft|subtle)$/.test(w) &&
             !partsSeen.some(p => w.startsWith(String(p))),
         ),
       ),
     ];
+    // (Unless a later reader took its color: "… for highlights" is the
+    // accent.)
+    for (const piece of untakenFor)
+      if (
+        !notTaken.includes(piece) &&
+        !colorsIn(piece.toLowerCase()).some(x =>
+          answeredText.includes(String(x).toLowerCase()),
+        )
+      )
+        notTaken.push(piece);
     // (A word the look is named for, "whatsapp theme", "a stripe-like
     // look", names something how cannot see: its colors are asked for,
     // never guessed.)
