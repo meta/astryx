@@ -189,7 +189,7 @@ import {
   cycleProblem,
   writtenPrimitive,
 } from '../theme/build/written-values.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {alphaOf, colorProblem, hex, parseColor} from './_color.mjs';
 import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
 import {
   PALETTE_DIALS,
@@ -6984,6 +6984,53 @@ async function changeOnce(
             : ''
         }${lines.length ? `; to fill only one of them: ${undo}, then ${lines.slice(0, 3).join('; or ')}` : ''}`,
       );
+    }
+  }
+  // A fill on a part whose own sub-parts keep a resting fill of their own
+  // (a code block's header) leaves the part in two tones: said, with the
+  // line that gives each the same fill.
+  if (
+    sub === 'set' &&
+    s.on &&
+    !s.state &&
+    !s.when &&
+    /^background(-color)?$/.test(s.thing)
+  ) {
+    const mode = /** @type {'light' | 'dark'} */ (
+      s.mode ?? modesOf(data)[0] ?? 'light'
+    );
+    const tokens = /** @type {any} */ (r.res)?.[mode] ?? {};
+    const now = parseColor(String(s.value));
+    for (const t of parts) {
+      const inner = /** @type {string[]} */ (
+        /** @type {any} */ (ctx.C.MAP[t])?.contains ?? []
+      ).filter(c => c.startsWith(`${t}-`));
+      for (const c of inner) {
+        if (
+          data.settings.some(
+            x =>
+              x.on &&
+              partsOf(ctx, x).includes(c) &&
+              /^background(-color)?$/.test(x.thing) &&
+              !x.state &&
+              !x.when,
+          )
+        )
+          continue;
+        const read = (ctx.C.partReads(c, 'background') ?? []).find(
+          q =>
+            q.when.includes('') &&
+            q.props.some(p => /^background(-color)?$/.test(p)) &&
+            !/overlay|tint/.test(q.token),
+        );
+        const value = read ? String(tokens[read.token] ?? '') : '';
+        const own = parseColor(value);
+        if (!read || !own || alphaOf(value) < 1) continue;
+        if (now && hex(now) === hex(own)) continue;
+        notes.push(
+          `${c} inside ${t} keeps its own fill (${read.token}, ${hex(own)}${s.mode ? ` in ${s.mode} mode` : ''}), so ${t} now shows two tones; to give it the same fill: ${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${c}${s.mode ? ` --mode ${s.mode}` : ''}`,
+        );
+      }
     }
   }
   // A color dial or token that a plain part's own fill covers no longer
