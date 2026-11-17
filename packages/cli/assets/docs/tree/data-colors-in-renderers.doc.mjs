@@ -133,8 +133,9 @@ export function QuarterlyRechartsChart() {
           style: 'unordered',
           items: [
             'Prebuilt `astryx.css` defines all 56 data colors. This is also the setup when StyleX compiles only your own code.',
-            'In a source build with `@astryxdesign/build`, the `dataVars` import puts the definitions in your CSS, inside `@layer astryx-base`, below theme overrides. StyleX keeps the data colors as one group: when your code imports any `dataVars` key, the build includes all 56, and when it imports none, the build includes none. It does not keep only the keys you use. The `@astryxdesign/build` PostCSS integration always includes all 56.',
-            "A source build that compiles Astryx with a bare StyleX transform and no layer wrapper emits the group with no layer. On the document root, that unlayered default beats a theme's data-color override, so content that inherits from the root, such as a portal, shows the default color instead of the theme's.",
+            'Next.js with `withAstryx()` from `@astryxdesign/build`, under webpack or Turbopack, and the `@astryxdesign/build` PostCSS plugin always define all 56, inside `@layer astryx-base`, below theme overrides.',
+            'A graph-based source build, such as the `@astryxdesign/build` Vite plugin or a bare StyleX transform, gets the data colors only from a `dataVars` import. StyleX keeps them as one group: when your code imports any `dataVars` key, the build includes all 56, and when it imports none, the build includes none. It does not keep only the keys you use. The Vite plugin puts the group in `@layer astryx-base`.',
+            "A bare StyleX transform with no layer wrapper emits the group with no layer. On the document root, that unlayered default beats a theme's data-color override, so content that inherits from the root, such as a portal, shows the default color instead of the theme's.",
           ],
         },
         {
@@ -149,7 +150,7 @@ export function QuarterlyRechartsChart() {
           type: 'list',
           style: 'dont',
           items: [
-            'Write a `var(--color-data-*)` string by hand in code that StyleX compiles from source. Without a `dataVars` import, that build does not define the variable.',
+            'Write a `var(--color-data-*)` string by hand in a graph-based source build. Without a `dataVars` import, that build does not define the variable.',
           ],
         },
       ],
