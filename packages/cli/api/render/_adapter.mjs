@@ -413,7 +413,13 @@ function asAstryxError(e) {
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      suggestions.push({name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'});
+      // The install command in the project's package manager, when the
+      // render named one.
+      suggestions.push(
+        typeof e.detail.install === 'string'
+          ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
+          : {name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'},
+      );
     }
     return new AstryxError(e.message, suggestions, code);
   }
@@ -533,6 +539,8 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
+    scriptBytes: page.scriptBytes ?? 0,
+    scriptModules: page.scriptModules ?? 0,
   };
 }
 

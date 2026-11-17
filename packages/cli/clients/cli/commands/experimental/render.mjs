@@ -86,6 +86,8 @@ export function registerExperimentalRender(group, program) {
             images: d.images,
             files: d.files.join(', '),
             stylesheets: d.stylesheets.join(', ') || 'none',
+            scriptBytes: kb(d.scriptBytes),
+            scriptModules: d.scriptModules,
           }),
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
