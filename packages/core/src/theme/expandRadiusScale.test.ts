@@ -15,7 +15,7 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('8px');
     expect(tokens['--radius-container']).toBe('12px');
     expect(tokens['--radius-page']).toBe('28px');
-    expect(tokens['--radius-chat']).toBe('12px');
+    expect(tokens).not.toHaveProperty('--radius-chat');
     expect(tokens['--radius-full']).toBe('9999px');
   });
 
@@ -25,7 +25,6 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('12px');
     expect(tokens['--radius-container']).toBe('18px');
     expect(tokens['--radius-page']).toBe('42px');
-    expect(tokens['--radius-chat']).toBe('18px');
   });
 
   it('multiplier 0 produces all zeros', () => {
@@ -35,7 +34,6 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('0px');
     expect(tokens['--radius-container']).toBe('0px');
     expect(tokens['--radius-page']).toBe('0px');
-    expect(tokens['--radius-chat']).toBe('0px');
     expect(tokens['--radius-full']).toBe('9999px');
   });
 
@@ -84,10 +82,26 @@ describe('--radius-chat', () => {
     });
   });
 
-  it('takes the container step from a radius scale', () => {
-    const scaled = css({name: 'ChatScale', radius: {base: 4, multiplier: 1.5}});
-    expect(scaled).toContain('--radius-chat: 18px;');
-    expect(scaled).not.toContain('--radius-chat: var(--radius-container);');
+  it('follows the container of a radius scale, and a container the theme sets over the scale', () => {
+    const scaled = defineTheme({
+      name: 'ChatScale',
+      radius: {base: 4, multiplier: 1.5},
+    });
+    expect(css(scaled)).toContain('--radius-chat: var(--radius-container);');
+    expect(resolveThemeTokens(scaled, {mode: 'light'})).toMatchObject({
+      '--radius-chat': '18px',
+    });
+
+    const container = defineTheme({
+      name: 'ChatScaleContainer',
+      radius: {base: 4, multiplier: 1.35},
+      tokens: {'--radius-container': '8px'},
+    });
+    expect(css(container)).toContain('--radius-chat: var(--radius-container);');
+    expect(resolveThemeTokens(container, {mode: 'light'})).toMatchObject({
+      '--radius-container': '8px',
+      '--radius-chat': '8px',
+    });
   });
 
   it('keeps a value the theme sets or inherits, and is not declared by a theme with no radius', () => {
