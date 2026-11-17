@@ -217,14 +217,20 @@ function isVisuallyHidden(element: Element): boolean {
   );
 }
 
+// A field and its value: an input, or a widget that shows a chosen value (a
+// Selector's combobox). Its value is not the component's text.
+const FIELD_SELECTOR =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="searchbox"], [role="spinbutton"], [role="slider"], [role="textbox"]';
+
 /**
- * Whether an element is left out of what a sighted reader sees: hidden, a
- * hidden copy (ToggleButton's bold-width reservation), or visually hidden.
+ * Whether an element is left out of the measured text: hidden, a hidden copy
+ * (ToggleButton's bold-width reservation), visually hidden, or a field, whose
+ * value clips inside its own box and is not the cut text.
  */
 function isLeftOut(element: Element): boolean {
   return (
-    element.closest('[hidden], [aria-hidden="true"]') != null ||
-    isVisuallyHidden(element)
+    element.closest(`[hidden], [aria-hidden="true"], ${FIELD_SELECTOR}`) !=
+      null || isVisuallyHidden(element)
   );
 }
 
@@ -238,18 +244,16 @@ function isTextCut(element: HTMLElement): boolean {
   );
 }
 
-/** The text a sighted reader sees: hidden and visually hidden text is left out. */
+/**
+ * The text a sighted reader sees, without hidden, visually hidden and field
+ * text: the label or heading itself.
+ */
 function visibleText(root: HTMLElement): string {
   let text = '';
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       text += node.textContent ?? '';
-    } else if (
-      node instanceof Element &&
-      !node.hasAttribute('hidden') &&
-      node.getAttribute('aria-hidden') !== 'true' &&
-      !isVisuallyHidden(node)
-    ) {
+    } else if (node instanceof Element && !isLeftOut(node)) {
       node.childNodes.forEach(walk);
     }
   };
@@ -334,6 +338,9 @@ export function useCutTextOnKeyboardFocus({
       anchor == null ||
       measured == null ||
       !isElement(target) ||
+      // React delivers focus from a portal (a header's filter popover) to the
+      // anchor's handlers; only focus inside the anchor counts.
+      !anchor.contains(target) ||
       !target.matches(':focus-visible') ||
       readModality() !== 'keyboard'
     ) {
