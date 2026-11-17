@@ -49,6 +49,7 @@ import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   BarChart,
   Bar,
@@ -571,6 +572,7 @@ function ProgramHeader({
   phase: Phase;
   onPhaseChange: (phase: Phase) => void;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <HStack
@@ -612,6 +614,13 @@ function ProgramHeader({
             label="Export status"
             variant="secondary"
             icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: the program status would export here',
+                uniqueID: 'export-status',
+              })
+            }
           />
         </HStack>
       </HStack>
@@ -666,7 +675,9 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
 
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={height}>
+      {/* A chart keeps its axes in every reading direction: time runs left to
+          right and the row labels stay beside their bars. */}
+      <ResponsiveContainer width="100%" height={height} dir="ltr">
         <BarChart
           data={data}
           layout="vertical"
@@ -853,7 +864,8 @@ const BURNDOWN_HEIGHT = DONUT_SIZE;
 function BurndownChart() {
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT}>
+      {/* Left to right in every reading direction, like every chart. */}
+      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT} dir="ltr">
         <LineChart
           data={BURNDOWN}
           margin={{top: 16, right: 4, left: 4, bottom: 4}}>
@@ -1111,24 +1123,24 @@ export default function ProjectStatusPage() {
               </Grid>
 
               <Card padding={6}>
-                <VStack gap={4}>
+                <VStack paddingBlockEnd={4}>
                   <CardHeading
                     title="Workstreams"
                     meta={`${workstreams.length} of ${WORKSTREAMS.length}`}
                   />
-                  {workstreams.length === 0 ? (
-                    <PhaseEmptyState noun="workstreams" />
-                  ) : (
-                    <Table<Workstream>
-                      data={workstreams}
-                      columns={WORKSTREAM_COLUMNS}
-                      idKey="id"
-                      density="balanced"
-                      dividers="rows"
-                      hasHover
-                    />
-                  )}
                 </VStack>
+                {workstreams.length === 0 ? (
+                  <PhaseEmptyState noun="workstreams" />
+                ) : (
+                  <Table<Workstream>
+                    data={workstreams}
+                    columns={WORKSTREAM_COLUMNS}
+                    idKey="id"
+                    density="balanced"
+                    dividers="rows"
+                    hasHover
+                  />
+                )}
               </Card>
             </VStack>
           </Section>

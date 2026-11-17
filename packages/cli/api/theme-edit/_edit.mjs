@@ -138,11 +138,14 @@ import {
   setArgs,
   editedThemes,
   entryFieldNames,
+  propertySpelling,
   entryProblem,
   namesSetting,
   namesSettingAsTyped,
+  dialSettingsInText,
   skips,
   OPEN_SECTION,
+  FOLLOWS,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -161,7 +164,11 @@ import {
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
 import {
+  isHeadingLevel,
+  levelDuplicates,
+  missingScaleFieldWhy,
   noLevelWhy,
+  typographyBlockWhy,
   noScaleWeightWhy,
   roleWeightTokens,
   typographyValueProblem,
@@ -172,6 +179,7 @@ import {
 } from '../../foundation/config/theme-private-vars.mjs';
 import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
 import {
+  CUSTOM_PROPERTY,
   customPropertyCycle,
   cycleProblem,
 } from '../theme/build/written-values.mjs';
@@ -203,6 +211,7 @@ import {
   appCopyStale,
   copyFontsCss,
   writeAppCopy,
+  touchedFamilies,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 /** The preview command, as a person runs it. */
@@ -223,6 +232,9 @@ import {
   requireProject,
   context,
   pictures,
+  SAMPLE_PAGE_NAME,
+  cutShortNote,
+  cutShortProblem,
   openStatesPage,
   fontNotes,
   themeImageNotes,
@@ -231,6 +243,9 @@ import {
   checkSection,
   stampSheet,
   lookAtPictures,
+  familyPages,
+  FAMILY_SECTIONS,
+  FAMILY_OVERVIEW,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {readThemeState} from '../../foundation/config/theme-state.mjs';
@@ -374,10 +389,16 @@ export async function themeEditNew(name, options = {}) {
       await newTheme(name, options)
     );
   } catch (e) {
+    // Settings typed where the name goes are typed settings too: the line
+    // that carries them is checked against them.
+    const fromName =
+      typeof name === 'string' && !slugOk(name)
+        ? dialSettingsInText(name)
+        : null;
     throw await vetNewLines(
       e,
       options.cwd ?? process.cwd(),
-      options.settings ?? {},
+      {...Object.fromEntries(fromName ?? []), ...(options.settings ?? {})},
       options.like,
     );
   }
@@ -756,7 +777,14 @@ async function newTheme(
         : undefined
       : LIKE.includes(like)
         ? like
-        : (nearest(like, LIKE)[0] ?? null);
+        : (nearest(like, LIKE)[0] ??
+          // Two bases in one value (`neutral,stone`, `neutral stone`): the
+          // first built-in one named, as for --like given twice.
+          String(options.like ?? like)
+            .split(/[\s,|;]+/)
+            .map(w => w.toLowerCase())
+            .find(w => LIKE.includes(w)) ??
+          null);
   // A dial value the dial does not take is left out of a suggested `new`
   // (a corrected name must not repeat it), and the refusal says so.
   /** @type {Array<[string, string]>} */
@@ -904,7 +932,9 @@ async function newTheme(
     // A file name, the app copy's export (tTheme), camelCase or spaces
     // (BrandDark, "Brand Dark") name the theme they read as: when it is
     // here already, that is said, never a numbered second copy offered.
-    const typed = String(name ?? '');
+    // The name typed as an option (`--theme=t2`, `--name=t2`) is that name.
+    const asOption = /^--?(?:theme|name)=(.+)$/i.exec(String(name ?? ''));
+    const typed = asOption ? asOption[1] : String(name ?? '');
     const path_ = /[\\/]/.test(typed);
     const readings = themeNameReadings(typed);
     const present = readings.find(n =>
@@ -913,6 +943,24 @@ async function newTheme(
     const fixed =
       present ?? readings[0] ?? slugFor(path_ ? typedThemeName(typed) : typed);
     const exists = Boolean(present);
+    // Dial settings typed where the name goes (`'accent: red'`, `{"accent":
+    // "red"}`): a free name, with those settings as their options, checked
+    // as every new line is.
+    const typedSettings = exists ? null : dialSettingsInText(typed);
+    if (typedSettings) {
+      const free = usableNewName(cwd, 'my-theme');
+      const merged = {...settings, ...Object.fromEntries(typedSettings)};
+      const lines = await checkedNewLines(
+        `${P} new ${free}${newFlags(likeFixed ?? undefined, merged, png)}`,
+        free,
+        {...options, cwd, like: likeFixed ?? undefined, settings: merged},
+      );
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `"${String(name ?? '').slice(0, 80)}" holds settings, not a theme name (${NAME_RULE}).${dropped}`,
+        {run: lines.map(x => x.name)},
+      );
+    }
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.${dropped}`,
@@ -1192,7 +1240,14 @@ async function newTheme(
   }
   refuseIfLockLost();
   fs.rmSync(marker, {force: true});
-  const p = await previewAndRoute(ctx, name, data, png, 'overview', 'new');
+  const {cutShort, ...p} = await previewAndRoute(
+    ctx,
+    name,
+    data,
+    png,
+    'overview',
+    'new',
+  );
   /** @type {string[]} */
   const notes = [
     ...keptNotes,
@@ -1200,6 +1255,7 @@ async function newTheme(
     ...(data.settings.some(s => s.thing === 'font')
       ? fontNotes(ctx, data)
       : []),
+    ...cutShort.map(cutShortNote),
   ];
   return {
     type: 'themeEdit.new',
@@ -2667,16 +2723,26 @@ async function swappedOrder(e, sub, words, options) {
   )
     return e;
   const cwd = options.cwd ?? process.cwd();
-  const [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
+  let [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
   if (slugOk(first) && fs.existsSync(themeFiles(cwd, first).settings)) return e;
+  // The theme typed as an option (`--theme t`, `--theme=t`): the option word
+  // is no word of the command, and the words after the theme are read as
+  // the command reads them (a set's thing, then its value).
+  const asOption = /^--?theme(?:=(.*))?$/i.exec(first);
+  if (asOption) {
+    rest = asOption[1] ? [asOption[1], ...rest] : rest;
+    first = '';
+  }
   const at = rest.findIndex(
     w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
   );
   if (at < 0) return e;
   const theme = rest[at];
-  const moved = [first, ...rest.filter((_, i) => i !== at)].filter(
-    w => w !== '',
-  );
+  let moved = [first, ...rest.filter((_, i) => i !== at)].filter(w => w !== '');
+  if (asOption && sub === 'set' && moved.length === 1 && /\s/.test(moved[0])) {
+    const [thing, ...value] = moved[0].trim().split(/\s+/);
+    moved = [thing, value.join(' ')];
+  }
   const flags = [
     ...(options.on ? ['--on', options.on] : []),
     ...(options.when ? ['--when', options.when] : []),
@@ -3184,7 +3250,9 @@ async function ownTokenProblems(ctx, slug, data) {
     // A var() of a custom property the theme's own page sets reads the
     // text it gives: the property must take that text there.
     if (typeof value === 'string')
-      for (const m of value.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/gi)) {
+      for (const m of value.matchAll(
+        new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*\)`, 'gi'),
+      )) {
         const text = ownText.get(m[1]);
         if (
           text === undefined ||
@@ -3241,7 +3309,9 @@ async function ownTokenProblems(ctx, slug, data) {
   /** @param {unknown} node @param {number} depth */
   const collectReads = (node, depth) => {
     if (typeof node === 'string')
-      for (const m of node.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g))
+      for (const m of node.matchAll(
+        new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'g'),
+      ))
         readVars.add(m[1]);
     else if (node && typeof node === 'object' && depth < 24)
       for (const v of Object.values(node)) collectReads(v, depth + 1);
@@ -3595,7 +3665,10 @@ async function ownTokenProblems(ctx, slug, data) {
           // A part variable that defaults to a design token takes what
           // that token takes.
           const reads = own
-            ? /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(own.default)?.[1]
+            ? new RegExp(
+                String.raw`^var\(\s*(${CUSTOM_PROPERTY})\s*\)$`,
+                'i',
+              ).exec(own.default)?.[1]
             : undefined;
           if (reads && reads in known) {
             const loc = where(at.join('.'), k);
@@ -3787,8 +3860,13 @@ async function ownTokenProblems(ctx, slug, data) {
     for (const [k, v] of Object.entries(node)) {
       const key = [...path, k].join('.');
       if (v === undefined) continue;
-      if (takes && !takes.includes(k)) {
-        const levels = path.at(-1) === 'weights';
+      // A weights key is a level as Core reads it (`'01'` is level 1).
+      const isLevelKey = path.at(-1) === 'weights';
+      if (
+        takes &&
+        !(isLevelKey ? isHeadingLevel(k, takes) : takes.includes(k))
+      ) {
+        const levels = isLevelKey;
         const near = levels ? undefined : nearest(k, takes)[0];
         const e = typo.find(x => x.key === key || x.key.startsWith(`${key}.`));
         flagged.add(path[0] ?? k);
@@ -3819,7 +3897,41 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     }
   };
+  if (
+    input.typography != null &&
+    (typeof input.typography !== 'object' || Array.isArray(input.typography))
+  ) {
+    const e = typo[0];
+    out.push({
+      token: 'typography',
+      value: typeof input.typography === 'string' ? input.typography : '',
+      why: typographyBlockWhy(input.typography),
+      ...(e ? atOf(e) : {line: null, file: null}),
+    });
+  }
   fields(input.typography, []);
+  // Two keys for one heading level ('01' and 1): Core keeps one.
+  if (input.typography && typeof input.typography === 'object')
+    for (const [role, r] of Object.entries(input.typography)) {
+      const weights = r && typeof r === 'object' ? r.weights : undefined;
+      if (!weights || typeof weights !== 'object' || Array.isArray(weights))
+        continue;
+      for (const d of levelDuplicates(
+        role,
+        weights,
+        typeFields?.levels ?? [],
+      )) {
+        const key = `${role}.weights.${d.key}`;
+        const e = typo.find(x => x.key === key) ?? typo[0];
+        flagged.add(role);
+        out.push({
+          token: `typography.${key}`,
+          value: typeof weights[d.key] === 'string' ? weights[d.key] : '',
+          why: d.why,
+          ...(e ? atOf(e) : {line: null, file: null}),
+        });
+      }
+    }
   // Core builds a role's font list from its family, with the fallbacks
   // after it: fallbacks with no family in that role build nothing.
   if (input.typography && typeof input.typography === 'object')
@@ -3900,10 +4012,7 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     }
   const scale = input.typography?.scale;
-  for (const [field, add] of /** @type {const} */ ([
-    ['base', 'the body size in pixels, such as scale: {base: 16, ratio: …}'],
-    ['ratio', 'the step between sizes, such as scale: {base: …, ratio: 1.2}'],
-  ]))
+  for (const field of /** @type {const} */ (['base', 'ratio']))
     if (
       scale &&
       typeof scale === 'object' &&
@@ -3918,7 +4027,7 @@ async function ownTokenProblems(ctx, slug, data) {
       out.push({
         token: 'typography.scale',
         value: '',
-        why: `the type scale is given no ${field}, and Core reads the sizes from the base and the ratio together: add ${add}`,
+        why: missingScaleFieldWhy(field),
         ...(e ? atOf(e) : {line: null, file: null}),
       });
     }
@@ -4428,7 +4537,13 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
         sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
         slug,
       );
-      if (!read) return null;
+      // A line set does not read (an option it does not take, an option
+      // with no value) fails when followed: never offered as working.
+      if (!read)
+        return new AstryxError(
+          'the line does not read as the command takes it',
+          [],
+        );
       try {
         const s = checkSetting(
           ctx,
@@ -4714,7 +4829,12 @@ async function change(sub, slug, thing, value, options) {
     // The saved form is read by its thing and value; a key beside them the
     // editor does not write (`comment`, `id`) is left out, and said.
     const SAVED = ['thing', 'value', 'source', 'axis'];
-    const savedForm = typeof obj?.thing === 'string' && 'value' in obj;
+    // An entry in the saved form names its thing under `thing`, with its
+    // value or (an undo needs none) without one: never a setting named
+    // "thing".
+    const savedForm =
+      typeof obj?.thing === 'string' &&
+      ('value' in obj || rest.every(k => SAVED.includes(k)));
     const unread = savedForm ? rest.filter(k => !SAVED.includes(k)) : [];
     const scoped =
       !savedForm &&
@@ -5121,8 +5241,18 @@ async function changeOnce(
   // The setting this command changes or removes may be the bad one; any
   // other bad setting still refuses (or is left out when this fixes one).
   const target = /** @type {Partial<import('./_settings.mjs').Setting>} */ ({
-    // An undo may name a saved entry exactly as written.
-    thing: sub === 'undo' ? typedThing : thing,
+    // An undo may name a saved entry exactly as written; a set names the
+    // setting as the settings file holds it (a property or token typed in
+    // other letters, `Background-Color`, is that property or token), so it
+    // is the change that fixes that setting listed twice.
+    thing:
+      sub === 'undo'
+        ? typedThing
+        : options.on && !String(thing).startsWith('--')
+          ? (propertySpelling(String(thing)) ?? thing)
+          : String(thing).startsWith('--')
+            ? String(thing).toLowerCase()
+            : thing,
     on: options.on,
     when: options.when,
     state: options.state,
@@ -5402,50 +5532,116 @@ async function changeOnce(
             : typed,
           e.code,
         );
+        /**
+         * The scope the flags typed name, as a `set|undo <theme> …` line
+         * reads them back: the scope of the first such line offered, else
+         * the flags as typed (`--on Card`, `cards`, `--mode drak`,
+         * `--state hovered` are read by set's own check, which writes the
+         * line).
+         * @param {Array<{name: string}>} offered
+         * @returns {Record<string, string | undefined>}
+         */
+        const scopeFromLines = offered => {
+          /** @type {Record<string, string | undefined>} */
+          const read = {
+            on: flags.on,
+            when: flags.when,
+            state: flags.state,
+            mode: flags.mode,
+          };
+          for (const x of offered) {
+            const at = x.name.indexOf(' editor ');
+            const words =
+              at >= 0
+                ? splitCommand(x.name.slice(at + ' editor '.length))
+                : null;
+            if (
+              !words ||
+              !['set', 'undo'].includes(words[0]) ||
+              words[1] !== slug
+            )
+              continue;
+            for (const k of /** @type {const} */ ([
+              'on',
+              'when',
+              'state',
+              'mode',
+            ])) {
+              const n = words.indexOf(`--${k}`);
+              if (flags[k] != null && n > 0 && words[n + 1] != null)
+                read[k] = words[n + 1];
+            }
+            break;
+          }
+          return read;
+        };
+        /**
+         * The typed scope as set's own check reads it for a thing: the
+         * scope of the setting it reads, or of the line its refusal
+         * offers (scopeFromLines).
+         * @param {string} th
+         * @param {string} val
+         * @returns {Record<string, string | undefined>}
+         */
+        const scopeAsRead = (th, val) => {
+          if (!(flags.on || flags.when || flags.state || flags.mode))
+            return scopeFromLines([]);
+          try {
+            const got = checkSetting(
+              ctx,
+              slug,
+              structuredClone(data),
+              th,
+              val,
+              flags,
+              true,
+            );
+            return {
+              on: got.on,
+              when: got.when,
+              state: got.state,
+              mode: got.mode,
+            };
+          } catch (err) {
+            return scopeFromLines(/** @type {any} */ (err)?.suggestions ?? []);
+          }
+        };
         // The setting whose scope is the one typed (no --on: the whole
         // theme's) leads; with none of that scope, the message says so and
         // the others are listed after it.
-        // The scope as typed is read as set's own check read it (`--on
-        // Card`, `cards`, `--mode drak`, `--state hovered`): the scope of
-        // the line its refusal offers for this setting.
         /** @type {Record<string, string | undefined>} */
-        const meant = {
-          on: flags.on,
-          when: flags.when,
-          state: flags.state,
-          mode: flags.mode,
-        };
-        for (const x of e.suggestions ?? []) {
-          const at = x.name.indexOf(' editor ');
-          const words =
-            at >= 0 ? splitCommand(x.name.slice(at + ' editor '.length)) : null;
-          if (
-            !words ||
-            !['set', 'undo'].includes(words[0]) ||
-            words[1] !== slug
-          )
-            continue;
-          for (const k of /** @type {const} */ ([
-            'on',
-            'when',
-            'state',
-            'mode',
-          ])) {
-            const i = words.indexOf(`--${k}`);
-            if (flags[k] != null && i > 0 && words[i + 1] != null)
-              meant[k] = words[i + 1];
-          }
-          break;
-        }
+        const meant = scopeFromLines(e.suggestions ?? []);
         const sameScope = (/** @type {any} */ x) =>
           (x.on ?? null) === (meant.on ?? null) &&
           (x.when ?? null) === (meant.when ?? null) &&
           stateKeyOf(x.state) === stateKeyOf(meant.state) &&
           (x.mode ?? null) === (meant.mode ?? null);
-        const ordered = [
-          ...matches.filter(sameScope),
-          ...matches.filter(x => !sameScope(x)),
-        ];
+        /**
+         * How near a saved setting is to the scope typed, read as `m`: its
+         * whole scope (the most), else how many of the flags typed it
+         * shares (`--on card` with a card setting in a state leads ahead
+         * of a whole-theme one).
+         * @param {any} x
+         * @param {Record<string, string | undefined>} m
+         */
+        const nearness = (x, m) => {
+          const same = (/** @type {string} */ k) =>
+            k === 'state'
+              ? stateKeyOf(x.state) === stateKeyOf(m.state)
+              : (x[k] ?? null) === (m[k] ?? null);
+          const keys = /** @type {const} */ (['on', 'when', 'state', 'mode']);
+          if (keys.every(same)) return 10;
+          return keys.filter(
+            k => /** @type {any} */ (flags)[k] != null && same(k),
+          ).length;
+        };
+        /** Stable, nearest first. @param {any[]} list @param {(x: any) => number} by */
+        const nearestFirst = (list, by) =>
+          list
+            .map((x, i) => ({x, i, n: by(x)}))
+            .sort((a, b) => b.n - a.n || a.i - b.i)
+            .map(e => e.x);
+        const ordered = nearestFirst(matches, x => nearness(x, meant));
         const scoped = flags.on || flags.when || flags.state || flags.mode;
         // A word that is a value the theme holds (`undo t red`) names the
         // setting that holds it: its undo, never a step back that takes back
@@ -5469,10 +5665,15 @@ async function changeOnce(
             })),
             e.code,
           );
-        const byValue =
+        const holding =
           matches.length || (value != null && value !== '')
             ? []
             : data.settings.filter(x => valueIs(x.value, typed));
+        // The one in the scope typed (read as set reads it for that
+        // setting) leads.
+        const byValue = nearestFirst(holding, x =>
+          nearness(x, scopeAsRead(x.thing, String(x.value))),
+        );
         if (byValue.length)
           throw new AstryxError(
             `"${thing}" is no setting; ${slug} holds it as the value of ${byValue.map(x => describe(x)).join(', ')}. Nothing was changed.`,
@@ -5508,7 +5709,14 @@ async function changeOnce(
                   },
                   {name: `${P} show ${slug}`, reason: 'see what it sets'},
                 ]
-              : [{name: `${P} show ${slug}`, reason: 'see what it sets'}],
+              : [
+                  // An undo the check itself offers for the word (`like`
+                  // is the base: `undo t base`) leads.
+                  ...(e.suggestions ?? []).filter(x =>
+                    new RegExp(`^${P} undo ${slug} base$`).test(x.name),
+                  ),
+                  {name: `${P} show ${slug}`, reason: 'see what it sets'},
+                ],
           e.code,
         );
       }
@@ -5516,6 +5724,35 @@ async function changeOnce(
     }
     s = stored;
   }
+  // A color set with no --mode in a one-mode theme is that mode's color, as
+  // the build reads it (it fills that mode's half): saved with the mode, so
+  // the theme going back to both modes keeps it there, and a color saved
+  // for the other mode (the half a toast or a lightbox reads) stays. An
+  // undo with no --mode names that entry too.
+  const ownMode =
+    data.mode === 'dark-only'
+      ? 'dark'
+      : data.mode === 'light-only'
+        ? 'light'
+        : null;
+  if (
+    ownMode &&
+    sub === 'set' &&
+    !s.mode &&
+    s.source !== 'dial' &&
+    typeof s.value === 'string' &&
+    parseColor(s.value.trim()) != null &&
+    (s.source === 'property' || MODAL.has(ctx.C.typeOf(s.thing)))
+  )
+    s = {...s, mode: ownMode};
+  if (
+    ownMode &&
+    sub === 'undo' &&
+    !s.mode &&
+    !data.settings.some(x => keyOf(x) === keyOf(s)) &&
+    data.settings.some(x => keyOf(x) === keyOf({...s, mode: ownMode}))
+  )
+    s = {...s, mode: ownMode};
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
@@ -5701,7 +5938,14 @@ async function changeOnce(
     } else
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
-    const p = await previewAndRoute(ctx, slug, data, png, 'overview', sub);
+    const {cutShort, ...p} = await previewAndRoute(
+      ctx,
+      slug,
+      data,
+      png,
+      'overview',
+      sub,
+    );
     const after = await baseResolved(ctx.project, data.like).catch(() => base);
     return {
       type: 'themeEdit.set',
@@ -5781,9 +6025,13 @@ async function changeOnce(
                 modesOf(data),
               ).slice(0, -1),
             ),
+          ...cutShort.map(cutShortNote),
         ],
         problems: r.problems,
-        newProblems: problemLines(r.newProblems),
+        newProblems: [
+          ...problemLines(r.newProblems),
+          ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
+        ],
         warnings: r.warnings,
         ...p,
       },
@@ -6218,6 +6466,33 @@ async function changeOnce(
           break;
         }
     }
+  // A radius the own source sets on a part wins over a radius setting
+  // there, which the editor writes as the part's radius token (a button's
+  // --radius-element): the own border-radius does not read it.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^border(-[a-z]+)*-radius$/.test(s.thing)
+  )
+    for (const target of partsOf(ctx, s)) {
+      const state = s.state ? `:${s.state}` : null;
+      for (const [prop, value] of ownPartTokens(
+        cwd,
+        slug,
+        target,
+        s.when ?? 'base',
+        state,
+      ))
+        if (
+          /^border(-[a-z]+)*-radius$/.test(prop) &&
+          !String(value ?? '').includes('var(--radius-') &&
+          !ownPartHits.some(h => h.target === target && h.prop === prop)
+        ) {
+          ownPartHits.push({target, key: s.when ?? 'base', state, prop, value});
+          break;
+        }
+    }
   // A direct setting on exactly the rule the own source sets: its undo
   // takes it back (anything else the file wins over either way).
   const ownHitDirect =
@@ -6356,6 +6631,29 @@ async function changeOnce(
     !ctx.unchecked
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
+          // A mode's own setting under one the theme sets for every mode:
+          // that one still draws the other modes, which this does not
+          // change.
+          ...(() => {
+            if (!s.mode) return [];
+            const whole = data.settings.find(
+              x =>
+                x !== s &&
+                !x.mode &&
+                x.source === s.source &&
+                x.thing === s.thing &&
+                (x.on ?? null) === (s.on ?? null) &&
+                (x.when ?? null) === (s.when ?? null) &&
+                (x.state ?? null) === (s.state ?? null),
+            );
+            if (!whole) return [];
+            const others = modesOf(data).filter(m => m !== s.mode);
+            return others.length
+              ? [
+                  `your setting for every mode (${describe(whole)}) still draws ${others.join(' and ')}; to keep it for ${s.mode} only, take that one back (this one stays): ${P} undo ${slug} ${undoArgs(whole)}`,
+                ]
+              : [];
+          })(),
         ]
       : []),
     // A card's content takes one radius from Core, whatever its corners.
@@ -6583,18 +6881,60 @@ async function changeOnce(
           ]
         : []),
     );
+  // A token another one follows (the surface's fills, the emphasized
+  // border) says what moved with it.
+  if (sub === 'set' && s.source === 'token' && !s.on && !s.when && !s.state) {
+    const followers = Object.keys(FOLLOWS).filter(
+      k =>
+        FOLLOWS[k] === s.thing &&
+        r.changed.some(
+          (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0] === k,
+        ),
+    );
+    // The parts the base theme draws from a follower besides its own
+    // token (neutral's progress and switch tracks, from the emphasized
+    // border) move with it too.
+    /** @param {string} token */
+    const drawnFrom = token =>
+      Object.entries(
+        /** @type {{components?: Record<string, Record<string, unknown>>}} */ (
+          base
+        ).components ?? {},
+      )
+        .filter(([, keys]) =>
+          Object.values(keys).some(
+            b =>
+              b &&
+              typeof b === 'object' &&
+              Object.values(b).some(
+                v => typeof v === 'string' && v.includes(`var(${token})`),
+              ),
+          ),
+        )
+        .map(([t]) => t);
+    if (followers.length) {
+      const also = [...new Set(followers.flatMap(drawnFrom))];
+      notes.push(
+        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'the frames of inputs and selectors, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"})${also.length ? `, and so do the parts the base theme draws from ${followers.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
+      );
+    }
+  }
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.
     const modes = modesOf(data);
-    const pages = modes
-      .map(m => [m, base[m]['--color-background-body']])
-      .filter(([, v]) => v)
-      .map(([m, v]) => `${v} in ${m}`);
+    const pinned = data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === '--color-background-body' &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
     notes.push(
-      `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
+      `${pinned ? 'the page background keeps the color you set for it' : "the page background follows it too, at the official theme's page shade of this gray"}${
         modes.includes('light')
           ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
-          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#f8fafc')}`
+          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
       }`,
     );
   }
@@ -6637,7 +6977,7 @@ async function changeOnce(
   // package installed or removed since).
   if (r.unchanged && appCopyBehind(cwd, slug, copyFontsCss(ctx, slug, data)))
     writeAppCopy(ctx, slug, data);
-  const p =
+  const {cutShort, ...p} =
     r.unchanged &&
     !png &&
     fs.existsSync(f0.preview) &&
@@ -6646,6 +6986,8 @@ async function changeOnce(
           preview: shown(cwd, f0.preview),
           pictures: [],
           pictureProblem: null,
+          // No pictures: nothing measured.
+          cutShort: [],
           notChecked: null,
           previewStale: [],
           see: seeLine(cwd, slug, changeFocus(s)),
@@ -6681,7 +7023,9 @@ async function changeOnce(
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
           ? prev.value
           : null,
-      notes,
+      // What else to know, then the text the sample page's pictures draw
+      // cut short.
+      notes: [...notes, ...cutShort.map(cutShortNote)],
       // What the whole-theme change leaves out, with the lines that reach
       // it; the text output prints it right under the status line.
       leftOut: leftOutParts(ctx, slug, data, sub, s),
@@ -6704,6 +7048,9 @@ async function changeOnce(
       newProblems: [
         ...problemLines(r.newProblems),
         ...colorFails.map(problem => ({problem, fix: null})),
+        // Text the sample page's pictures draw cut short, with the line
+        // the browser measured as keeping it whole.
+        ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
       ],
       // How many misses the theme's own changes left (show lists each with
       // the line that reaches it), and on how many parts (a part can miss
@@ -6865,9 +7212,7 @@ export async function themeEditShow(theme, options = {}) {
   }
   const ctx = await context(cwd);
   // show --png takes its sheet too, after any build it makes.
-  ctx.takesPictures = png
-    ? {sheet: section ? `sheet-${section}` : 'sheet'}
-    : null;
+  ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.
   holdAfterBuild(ctx);
@@ -7039,7 +7384,20 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
-  const {colorProblems, ...colorPart} = colorsReport(pal, data, res, theme);
+  /** @type {Record<string, string>} */
+  let ownTokens = {};
+  try {
+    ownTokens = ownSourceTokenValues(cwd, theme);
+  } catch {
+    // A source that cannot be read sets nothing here.
+  }
+  const {colorProblems, ...colorPart} = colorsReport(
+    pal,
+    data,
+    res,
+    theme,
+    ownTokens,
+  );
   // A render that fails here (two copies of React, a component that
   // throws) is refused as the one above: what this show built goes back,
   // and the result says so.
@@ -7073,14 +7431,15 @@ export async function themeEditShow(theme, options = {}) {
   const sheetFile = section
     ? path.join(f.dir, `sheet-${section}.html`)
     : f.sheet;
-  /** @type {Array<{html: string, png: string, kind: 'link' | 'file' | 'other', page: string}>} */
+  /** @type {Array<{html: string, png: string | null, kind: 'link' | 'file' | 'other', page: string}>} */
   const leftPages = noPages
     ? []
     : [
         {html: f.preview, png: f.previewPng, page: 'the sample page'},
         {
           html: sheetFile,
-          png: section ? path.join(f.dir, `sheet-${section}.png`) : f.sheetPng,
+          // The full sheet is not photographed.
+          png: section ? path.join(f.dir, `sheet-${section}.png`) : null,
           page: section ? `the ${section} sheet` : 'the sheet',
         },
       ].flatMap(x => {
@@ -7108,9 +7467,26 @@ export async function themeEditShow(theme, options = {}) {
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
   if (!noPages && !left(sheetFile)) stampSheet(sheetFile, theme, cwd);
+  // The full sheet is too tall to read whole: --png also takes each family
+  // of components on a page of its own, cut from it.
+  // Each takes a browser run, so --png pictures the families the theme sets
+  // a part of (the buttons when it sets none); --section <family> takes any
+  // other, and sheet.html holds every component.
+  const touched = touchedFamilies(ctx.project, data).filter(f =>
+    FAMILY_SECTIONS.includes(f),
+  );
+  const families =
+    png && !noPages && !section && !left(sheetFile)
+      ? familyPages(
+          sheetFile,
+          theme,
+          cwd,
+          touched.length ? touched : [FAMILY_OVERVIEW],
+        )
+      : {pages: [], problems: []};
   const leftWords = leftPages.map(
     x =>
-      `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
+      `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png && x.png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
   );
   const modes = modesOf(data);
   // The open states (every overlay drawn open) beside the sample page: the
@@ -7136,27 +7512,33 @@ export async function themeEditShow(theme, options = {}) {
           }
         })
       : null;
-  /** @type {{files: string[], problem: string | null}} */
+  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[]}} */
   const shots =
     png && !noPages
       ? await pictures(
           ctx.project,
           [
-            {html: f.preview, png: f.previewPng},
+            {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
             ...(open && !('problem' in open) ? [open] : []),
-            // A section is photographed from its own sheet.
-            section
-              ? {
-                  html: path.join(f.dir, `sheet-${section}.html`),
-                  png: path.join(f.dir, `sheet-${section}.png`),
-                }
-              : {html: f.sheet, png: f.sheetPng},
+            ...families.pages.map(({html, png: out}) => ({html, png: out})),
+            // A section is photographed from its own sheet. The full sheet,
+            // every component, is too tall to read whole and slow to take:
+            // it is not photographed.
+            ...(section
+              ? [
+                  {
+                    html: path.join(f.dir, `sheet-${section}.html`),
+                    png: path.join(f.dir, `sheet-${section}.png`),
+                  },
+                ]
+              : []),
           ].filter(x => !left(x.html)),
           modes,
         )
       : // Pictures asked for but not taken: said, never a quiet none.
         {
           files: [],
+          cutShort: [],
           problem: png
             ? readOnly
               ? 'no picture was taken: show ran read-only (the project or its install cannot be written, so it could not hold the theme lock), and the pages the pictures are taken of were not made; run show --png where the project can be written'
@@ -7169,6 +7551,10 @@ export async function themeEditShow(theme, options = {}) {
     shots.problem = [open.problem, shots.problem].filter(Boolean).join('; ');
   if (png && leftWords.length)
     shots.problem = [...leftWords, shots.problem].filter(Boolean).join('; ');
+  if (families.problems.length)
+    shots.problem = [...families.problems, shots.problem]
+      .filter(Boolean)
+      .join('; ');
   const look = lookAtPictures(shots.files);
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
@@ -7220,6 +7606,8 @@ export async function themeEditShow(theme, options = {}) {
         ...rebuiltNotes,
         ...(png ? [] : leftWords),
         ...sheet.notes,
+        // Text the sample page's pictures draw cut short.
+        ...shots.cutShort.map(cutShortNote),
         ...misplacedNotes(theme, data),
         ...(noReact
           ? [
@@ -7302,6 +7690,9 @@ export async function themeEditShow(theme, options = {}) {
       openProblems: [
         ...problemLines(shownChecks),
         ...colorProblems.map(problem => ({problem, fix: null})),
+        // Text the sample page's pictures draw cut short, with the line
+        // the browser measured as keeping it whole.
+        ...shots.cutShort.map(c => cutShortProblem(ctx, theme, c)),
       ],
       preview,
       previewStale,
@@ -8050,10 +8441,11 @@ function partValues(ctx, data, res, mode) {
  *   built theme's resolved values: where one differs from the generated
  *   shade with no exact setting, the theme's own source changed it
  * @param {string} [slug]
+ * @param {Record<string, string>} [own] the tokens the theme's own source sets
  * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[], colorProblems: string[]}}
  *   `colorProblems`: the color notes of pairings that fail their contrast
  */
-function colorsReport(pal, data, built, slug = '') {
+function colorsReport(pal, data, built, slug = '', own = {}) {
   if (!pal)
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /** What the user set for each token exactly, in each mode. */
@@ -8067,6 +8459,9 @@ function colorsReport(pal, data, built, slug = '') {
   /** Tokens the theme's own source sets to another value than generated. */
   const ownBy =
     /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
+  /** Tokens that follow another the theme sets exactly ({@link FOLLOWS}). */
+  const followBy =
+    /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
   for (const [k, v] of Object.entries(pal.tokens))
     for (const m of /** @type {const} */ (['light', 'dark'])) {
       const now = built?.[m]?.[k];
@@ -8075,7 +8470,9 @@ function colorsReport(pal, data, built, slug = '') {
         !exactBy[k]?.[m] &&
         now.trim().toLowerCase() !== String(v[m].color).trim().toLowerCase()
       )
-        (ownBy[k] ??= {})[m] = now;
+        (FOLLOWS[k] && exactBy[FOLLOWS[k]]?.[m] != null && !(k in own)
+          ? (followBy[k] ??= {})
+          : (ownBy[k] ??= {}))[m] = now;
     }
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
@@ -8114,14 +8511,16 @@ function colorsReport(pal, data, built, slug = '') {
             k,
             // Each mode says what it shows: the exact setting where one is
             // made for it, else the generated shade.
-            exactBy[k] || ownBy[k]
+            exactBy[k] || ownBy[k] || followBy[k]
               ? modes
                   .map(m =>
                     exactBy[k]?.[m] != null
                       ? `${m} ${exactBy[k][m]} (your exact setting wins over the generated ${shade(v[m])})`
                       : ownBy[k]?.[m] != null
                         ? `${m} ${ownBy[k][m]} (your change in ${slug}.theme.ts wins over the generated ${shade(v[m])})`
-                        : `${m} ${shade(v[m])}`,
+                        : followBy[k]?.[m] != null
+                          ? `${m} ${followBy[k][m]} (follows your ${FOLLOWS[k]}, over the generated ${shade(v[m])})`
+                          : `${m} ${shade(v[m])}`,
                   )
                   .join(', ')
               : shades(v),
@@ -8207,7 +8606,11 @@ export async function themeEditUndo(theme, options = {}) {
       const settingName = namesSettingAsTyped(theme);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
-      const near = (shows.length === 1 && !settingName ? shows : []).find(x => {
+      // (A list where the theme goes, `Inter, Arial`, is no typo of one.)
+      const listed = /[,;|]/.test(String(theme ?? ''));
+      const near = (
+        shows.length === 1 && !settingName && !listed ? shows : []
+      ).find(x => {
         const n = showOf(x);
         return (
           n != null &&
@@ -8811,7 +9214,14 @@ async function undoTheme(theme, options) {
     : touched.includes('components')
       ? 'components'
       : 'overview';
-  const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
+  const {cutShort, ...p} = await previewAndRoute(
+    ctx,
+    theme,
+    prev,
+    png,
+    focus,
+    'undo',
+  );
   // What the step took back, for the headline: each setting, base and mode
   // it changed, in one line.
   const took = current ? stepTakesBack(current, prev) : [];
@@ -8858,7 +9268,12 @@ async function undoTheme(theme, options) {
       // What the step back changed, as a change reports it.
       changedTokens: committed.changed,
       problems: committed.problems,
-      newProblems: problemLines(committed.newProblems),
+      newProblems: [
+        ...problemLines(committed.newProblems),
+        ...cutShort.map(c => cutShortProblem(ctx, theme, c)),
+      ],
+      // Text the sample page's pictures draw cut short.
+      ...(cutShort.length ? {notes: cutShort.map(cutShortNote)} : {}),
       ...p,
     },
   };

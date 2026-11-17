@@ -68,6 +68,8 @@ import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
+import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -117,6 +119,76 @@ function groupOf(name, category) {
 }
 
 /**
+ * A container's or a layout's props on the sheet, with two lines of sample
+ * text when its doc suggests no children (a section, a form layout): empty,
+ * it draws nothing of the theme. The part data reads the doc's own props.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {Record<string, unknown>} props
+ * @returns {Record<string, unknown>}
+ */
+function withSampleContent(project, name, props) {
+  const info = project.components[name];
+  const kids = info?.props?.children;
+  if (
+    'children' in props ||
+    !kids ||
+    kids.slots?.length ||
+    !/ReactNode/.test(String(kids.type ?? '')) ||
+    !/^(container|layout)$/i.test(String(info.category ?? '')) ||
+    !project.components.Text
+  )
+    return props;
+  return {
+    ...props,
+    children: [
+      {__element: 'Text', props: {}, children: ['Content']},
+      {__element: 'Text', props: {}, children: ['More content']},
+    ],
+  };
+}
+
+/**
+ * The section of the theme-building page a component sits in; a part with
+ * no category of its own sits with its parent.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function familyOf(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf
+    ? project.components[info.subComponentOf]
+    : null;
+  return groupOf(name, info?.category || parent?.category || '');
+}
+
+/**
+ * The sections of the theme-building page whose parts the theme's settings
+ * set on their own (`--on badge`): the components that part names a class
+ * of, each in its section. A setting for the whole theme (a color, the
+ * corners) sets no section here: the sample page and the open states show
+ * it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function touchedFamilies(project, data) {
+  const parts = new Set(
+    (data.settings ?? []).flatMap(s => (s.on ? [s.on] : [])),
+  );
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const [name, info] of Object.entries(project.components)) {
+    if (!info.targets.some(t => parts.has(t.className.replace(/^astryx-/, ''))))
+      continue;
+    const family = familyOf(project, name);
+    if (family) out.add(family);
+  }
+  return [...out];
+}
+
+/**
  * Items of the theme-building page: each component once per variant
  * (overlays open), the sample page, and template pages
  * whose packages the project has.
@@ -128,14 +200,7 @@ export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
-  const groupFor = name => {
-    const info = project.components[name];
-    // A part with no category of its own sits with its parent.
-    const parent = info?.subComponentOf
-      ? project.components[info.subComponentOf]
-      : null;
-    return groupOf(name, info?.category || parent?.category || '');
-  };
+  const groupFor = name => familyOf(project, name);
   for (const name of Object.keys(project.components)) {
     const g = groupFor(name);
     if (!g) continue;
@@ -155,7 +220,10 @@ export function showcaseItems(project, group) {
         group: g,
         name,
         label: v.label,
-        tree: inParent({__element: name, props: v.props}),
+        tree: inParent({
+          __element: name,
+          props: withSampleContent(project, name, v.props),
+        }),
         // An overlay shown open is drawn open: Core places a popover,
         // tooltip or hover card only once it is mounted. Any other part, as
         // first shown, is shown open with the overlays too when a press
@@ -1851,14 +1919,17 @@ export function newPictureRun() {
  * gets its own time bound, and the next one its turn when one fails or
  * hangs. Not ok with a reason when none is there or every one failed: the
  * reason then names each one's real error. When a later browser took the
- * picture, `note` says why an earlier one did not.
+ * picture, `note` says why an earlier one did not. `cutShort` is the text
+ * the page draws cut short, measured in it by the browser that took the
+ * picture, each with whether its part keeping its width draws it whole;
+ * absent when that browser's script measured nothing.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
- * @returns {Promise<{ok: true, file: string, note?: string} | {ok: false, reason: string, stopped?: string}>}
+ * @returns {Promise<{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean}>} | {ok: false, reason: string, stopped?: string}>}
  */
 export async function screenshot(
   project,
@@ -1938,16 +2009,19 @@ export async function screenshot(
         ok: false,
         reason: `no browser was started: the system temp folder cannot be written (${r.noTemp}), and a browser needs a profile folder of its own there; fix the temp folder (TMPDIR), then run the command again`,
       };
-    if (r.status === 0 && fs.existsSync(png))
+    if (r.status === 0 && fs.existsSync(png)) {
       return {
         ok: true,
         file: shown(project.cwd, png),
-        ...(failed.length
-          ? {
-              note: `the picture was taken with ${t.who}; ${failed.join('; ')}`,
-            }
-          : {}),
+        notes: [
+          ...(failed.length
+            ? [`the picture was taken with ${t.who}; ${failed.join('; ')}`]
+            : []),
+          ...pictureFontNotes(r.stdout ?? ''),
+        ],
+        ...measuredCutShort(r.stdout ?? ''),
       };
+    }
     const text = r.error ? String(r.error.message) : r.stderr;
     if (
       t.script === PLAYWRIGHT_PICTURE &&
@@ -1978,6 +2052,76 @@ export async function screenshot(
   return {
     ok: false,
     reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
+  };
+}
+
+/** The generic families any font of a common kind stands in for. */
+const PLAIN_GENERICS = ['sans-serif', 'system-ui', 'ui-sans-serif'];
+
+/**
+ * What a picture shows in place of a font stack: a role whose stack ends in
+ * a generic of a kind (serif, monospace, cursive) and none of whose named
+ * families this machine has is drawn in this machine's font for that
+ * generic, which may be of another kind (a system with no serif font draws
+ * serif in a sans-serif one). A stack that ends in sans-serif falls back
+ * to a font of its own kind, so it is not named.
+ * @param {string} stdout what the picture script printed
+ * @returns {string[]}
+ */
+export function pictureFontNotes(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(FONT_PROBE_PREFIX));
+  if (!line) return [];
+  /** @type {Record<string, {stack: string[], shown: string | null} | null>} */
+  let probe;
+  try {
+    probe = JSON.parse(line.slice(FONT_PROBE_PREFIX.length));
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const out = [];
+  for (const [role, label] of /** @type {const} */ ([
+    ['heading', 'headings'],
+    ['body', 'body text'],
+  ])) {
+    const r = probe?.[role];
+    const generic = r?.stack.at(-1)?.toLowerCase();
+    if (!r?.shown || !generic || PLAIN_GENERICS.includes(generic)) continue;
+    const named = r.stack.slice(0, -1);
+    const drawn = r.shown.toLowerCase();
+    if (!named.length || named.some(f => f.toLowerCase() === drawn)) continue;
+    out.push(
+      `this machine has none of ${named.join(', ')}, so the pictures draw the ${label} in ${r.shown}, its font for ${generic}; a system with ${named[0]} shows them as set (an open font with its package installed shows everywhere, the pictures included)`,
+    );
+  }
+  return out;
+}
+
+/**
+ * The text a picture script measured cut short, from the line it prints
+ * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean}>}}
+ */
+function measuredCutShort(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(CUT_SHORT_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    cutShort: found
+      .filter(x => x && typeof x.text === 'string')
+      .map(x => ({
+        part: typeof x.part === 'string' ? x.part : null,
+        text: x.text,
+        whole: x.whole === true,
+      })),
   };
 }
 
@@ -2493,12 +2637,13 @@ export function takeFirstAppCopy(cwd, slug) {
  * A stop or the bound asks the whole group to close, waits for it (killing
  * it past a short grace), then removes the temp folder and the `drop` files
  * (a picture part a stopped run leaves); a run that ends on its own removes
- * the temp folder only.
+ * the temp folder only, and gives what the script wrote on its standard
+ * output (`stdout`: what it measured in the page).
  * @param {string} script a picture script
  * @param {string[]} args
  * @param {number} [bound] milliseconds before the run is stopped
  * @param {{drop?: string[]}} [opts]
- * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, stdout?: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
  */
 export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
   const drop = opts.drop ?? [];
@@ -2516,9 +2661,10 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
   }
   return new Promise(resolve => {
     let stderr = '';
+    let stdout = '';
     const posix = process.platform !== 'win32';
     const child = spawn(process.execPath, [script, ...args], {
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {...process.env, TMPDIR: temp, TMP: temp, TEMP: temp},
       // A group of its own, so a stop reaches the browser it starts too.
       detached: posix,
@@ -2566,6 +2712,12 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', d => {
       if (stderr.length < 8000) stderr += d;
+    });
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', d => {
+      // Room for every line the script prints: the fonts, and the text cut
+      // short on a page of every component.
+      if (stdout.length < 64_000) stdout += d;
     });
     /** Set once the run is being stopped (bound, signal): it ends there. */
     let stopping = false;
@@ -2615,7 +2767,7 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     child.once('close', (status, signal) => {
       if (stopping) return;
       clean();
-      settle({status, signal, stderr});
+      settle({status, signal, stderr, stdout});
     });
   });
 }

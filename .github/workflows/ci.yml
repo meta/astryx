@@ -169,7 +169,9 @@ jobs:
         with:
           # scripts/lib brings the scripts/ files beside it too: the Node leg
           # planner, the modules it imports and the recorded Node times;
-          # .github/scripts/lib holds the glob matcher it shares.
+          # .github/scripts/lib holds the glob matcher it shares, and brings
+          # the .github/scripts files the release-critical label check reads
+          # (run-labels.cjs and review-signal-decision.cjs).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
@@ -243,9 +245,11 @@ jobs:
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
     runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
+    # pull-requests: read reads who applied a release-critical label.
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       full: ${{ steps.rest.outputs.full }}
       # How many legs of each widening matrix run at once (ci-admission).
@@ -261,7 +265,12 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 8
         with:
-          sparse-checkout: .github/actions/ci-admission
+          # .github/scripts/lib brings the .github/scripts files beside it, the
+          # ones the release-critical label check reads (run-labels.cjs and
+          # review-signal-decision.cjs).
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
           path: .ci-admission
           persist-credentials: false
 
@@ -1066,6 +1075,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
@@ -1239,7 +1254,7 @@ jobs:
       # inside the job limit, at most eight (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
-      # at its first step.
+      # before any setup.
       matrix:
         shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
@@ -1250,6 +1265,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # A Node suite that does not fit its legs fails every leg with room's
       # reason, before any setup, so the run cannot pass on legs that would
       # outrun their job limit.
@@ -1481,6 +1502,17 @@ jobs:
           pnpm -F @astryxdesign/build build
           pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
 
+      # template-noscript-first-paint.browser.test.mjs renders the page
+      # templates people share as a file to static HTML and checks their
+      # first paint with script off at a phone's and a desktop's width. The
+      # Node legs skip it; with ASTRYX_TEMPLATE_NOSCRIPT_BROWSER set, a
+      # missing browser fails it.
+      - name: Template no-script first paint browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_NOSCRIPT_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/template-noscript-first-paint.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -1572,6 +1604,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       - uses: actions/checkout@v7
         timeout-minutes: 8
         with:
@@ -3548,7 +3586,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
@@ -3887,7 +3929,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps

@@ -247,6 +247,10 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // css-tree's lexer forgives a last word ending in an old browser hack's
+  // escape (`8px\9`, `none\0`); a browser reads the escape as part of the
+  // word (a unit `px` and a tab), so it drops the value.
+  if (/\\[09]\s*$/.test(value)) return null;
   // A color function holding a variable (color-mix(…, var(--x))) is a
   // color whatever the variable holds: it is matched as one, so a value
   // with many of them is read like the same value with plain colors.
@@ -258,8 +262,23 @@ function matchWith(value, match) {
     if (next === value) break;
     value = next;
   }
-  const vars =
-    value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
+  const refs = varReferences(value);
+  const vars = refs.map(r => r.text);
+  /**
+   * The value with each reference replaced by its stand-in, each set apart
+   * by spaces: a reference is its tokens, so the text glued to it
+   * (`var(--x)px`) stays a token of its own, as the browser reads it.
+   * @param {string[]} stands
+   */
+  const standIn = stands => {
+    let out = '';
+    let last = 0;
+    refs.forEach((r, i) => {
+      out += `${value.slice(last, r.at)} ${stands[i]} `;
+      last = r.at + r.text.length;
+    });
+    return out + value.slice(last);
+  };
   /** @param {string} v */
   const tryOne = v => {
     try {
@@ -289,23 +308,37 @@ function matchWith(value, match) {
   // Many variables: each stands for the same kind of value at once.
   if (vars.length > 3) {
     for (const stand of VAR_STANDS_FOR) {
-      let v = value;
-      for (const x of vars) v = v.replace(x, stand);
-      const ast = tryOne(v);
+      const ast = tryOne(standIn(vars.map(() => stand)));
       if (ast) return ast;
     }
     return null;
   }
-  /** @param {string} v @param {number} i @returns {any | null} */
-  const fill = (v, i) => {
-    if (i === vars.length) return tryOne(v);
+  /** @param {string[]} stands @returns {any | null} */
+  const fill = stands => {
+    if (stands.length === vars.length) return tryOne(standIn(stands));
     for (const stand of VAR_STANDS_FOR) {
-      const ast = fill(v.replace(vars[i], stand), i + 1);
+      const ast = fill([...stands, stand]);
       if (ast) return ast;
     }
     return null;
   };
-  return fill(value, 0);
+  return fill([]);
+}
+
+/**
+ * Each var() or env() reference in a value, with where it starts, as CSS
+ * reads one: a function token, so `var(` glued after a letter, a digit, a
+ * dot or a dash (`2var(--x)`, `8pxvar(--x)`) is no reference (CSS reads a
+ * dimension or a name there).
+ * @param {string} value
+ * @returns {Array<{at: number, text: string}>}
+ */
+export function varReferences(value) {
+  return [
+    ...String(value).matchAll(
+      /(?<![\w.-])(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi,
+    ),
+  ].map(m => ({at: /** @type {number} */ (m.index), text: m[0]}));
 }
 
 /**
