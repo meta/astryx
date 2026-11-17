@@ -222,11 +222,11 @@ export function useLayerKeyboardClearance(
       });
       return true;
     };
+    const readVisualViewportOffsetTop = () =>
+      Math.max(0, view.visualViewport?.offsetTop ?? 0);
     // Renders the layer with `next` and returns once that commit has laid it
     // out, so the measurement after it reads the new box. Runs outside
     // React's own work: keyboard reports, timers, frames and native events.
-    const readVisualViewportOffsetTop = () =>
-      Math.max(0, view.visualViewport?.offsetTop ?? 0);
     const commitCap = (
       next: number | null,
       nextInset = keyboardInsetRef.current,
@@ -255,6 +255,18 @@ export function useLayerKeyboardClearance(
       });
       sync();
     };
+    // A visual-viewport pan changes the room a layer owns without changing
+    // the layer's measured size. Publish that room separately so a pan does
+    // not make the layer go through the anchor fallback and a new cap.
+    const commitVisualViewportOffset = (next: number) => {
+      if (isDisposed || visualViewportOffsetTopRef.current === next) {
+        return;
+      }
+      visualViewportOffsetTopRef.current = next;
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the layer's placement reads this property in the same task
+      flushSync(() => setVisualViewportOffsetTop(next));
+      sync();
+    };
     // Measured at the layer's own size, as the fallback order places it:
     // returns whether the layer is capped.
     const capFor = (
@@ -267,29 +279,64 @@ export function useLayerKeyboardClearance(
       // then leaves a layer placed by it where it is.
       const reported = inset > 0 ? inset + LAYER_KEYBOARD_CLEARANCE_PX : 0;
       const held = Math.max(reported, keyboardInsetRef.current ?? 0);
+      const previousVisualViewportOffsetTop =
+        visualViewportOffsetTopRef.current;
+      const measurementVisualViewportOffsetTop =
+        nextVisualViewportOffsetTop === previousVisualViewportOffsetTop
+          ? nextVisualViewportOffsetTop
+          : previousVisualViewportOffsetTop;
       commitCap(
         null,
         held > 0 ? held : null,
         null,
-        nextVisualViewportOffsetTop,
+        measurementVisualViewportOffsetTop,
       );
       if (inset <= 0) {
+        commitCap(
+          null,
+          held > 0 ? held : null,
+          null,
+          nextVisualViewportOffsetTop,
+        );
         return false;
       }
       // In layout px, the box's and the keyboard's units: WebKit reports
       // `innerHeight` in the pinch-zoomed visual viewport's px.
       const viewport = layoutViewportHeight(win);
       const box = settledBox(layer);
+      // A layer that owns its placement can follow a pan by the same amount
+      // as the visual viewport. Use that projected box for the one cap
+      // calculation that accompanies a keyboard report; the steady-state pan
+      // path below only publishes the offset and never reads the box.
+      const pan = nextVisualViewportOffsetTop - previousVisualViewportOffsetTop;
+      const boxAtNextOffset =
+        pan === 0
+          ? box
+          : {
+              top: box.top + pan,
+              bottom: box.bottom + pan,
+            };
       const height = keyboardClearanceCap(
-        box,
+        boxAtNextOffset,
         viewport,
         inset,
         nextVisualViewportOffsetTop,
       );
       if (height == null) {
+        commitCap(
+          null,
+          held > 0 ? held : null,
+          null,
+          nextVisualViewportOffsetTop,
+        );
         return false;
       }
-      commitCap(height);
+      commitCap(
+        height,
+        held > 0 ? held : null,
+        null,
+        nextVisualViewportOffsetTop,
+      );
       // A layer too tall for the room on both sides of its trigger sits over
       // the trigger, where the viewport fit shifted it. Shorter, it fits below
       // the trigger, and the fallback order moves it down. Lift it back, so it
@@ -311,7 +358,12 @@ export function useLayerKeyboardClearance(
         // the trigger: cap it from where it starts there.
         const lifted = settledBox(layer);
         if (Math.abs(lifted.top - box.top) > 1) {
-          commitCap(height);
+          commitCap(
+            height,
+            keyboardInsetRef.current,
+            null,
+            nextVisualViewportOffsetTop,
+          );
           const again = keyboardClearanceCap(
             placed,
             viewport,
@@ -319,7 +371,12 @@ export function useLayerKeyboardClearance(
             nextVisualViewportOffsetTop,
           );
           if (again != null) {
-            commitCap(again);
+            commitCap(
+              again,
+              keyboardInsetRef.current,
+              null,
+              nextVisualViewportOffsetTop,
+            );
           }
         }
       }
@@ -331,9 +388,29 @@ export function useLayerKeyboardClearance(
         nextVisualViewportOffsetTop -
         inset -
         LAYER_KEYBOARD_CLEARANCE_PX;
-      if (settledBox(layer).bottom > limit + 1) {
-        commitCap(null);
-        return false;
+      const finalBox = settledBox(layer);
+      if (finalBox.bottom > limit + 1) {
+        // Publishing the pan can move a self-placed layer without changing
+        // its measured anchor. Re-cap that placed box once; do not stand down
+        // and let the anchor fallback choose a different side.
+        const adjusted = keyboardClearanceCap(
+          finalBox,
+          viewport,
+          inset,
+          nextVisualViewportOffsetTop,
+        );
+        if (adjusted != null) {
+          commitCap(
+            adjusted,
+            keyboardInsetRef.current,
+            liftRef.current,
+            nextVisualViewportOffsetTop,
+          );
+        }
+        if (settledBox(layer).bottom > limit + 1) {
+          commitCap(null);
+          return false;
+        }
       }
       return true;
     };
@@ -472,10 +549,8 @@ export function useLayerKeyboardClearance(
       }
       avoid(transition.to);
     });
-    // The keyboard-height module reports visual-viewport pans even when the
-    // keyboard's inset is unchanged. The layout guide intentionally filters
-    // those reports from its keyboard transitions, so the layer runtime reads
-    // the pan here and remeasures the cap once for that report. It is the one
+    // The guide drops a report that keeps the keyboard's height. A pan arrives
+    // as such a report, so the runtime reads the pan here. It is the one
     // shared keyboard listener; Selector and other layers do not listen to the
     // visual viewport themselves.
     let lastKeyboardReportHeight = getKeyboardHeight(view);
@@ -491,9 +566,10 @@ export function useLayerKeyboardClearance(
         return;
       }
       // A keyboard-height change is already handled by the guide above. A
-      // same-height report is the browser's pan, which needs a fresh cap.
+      // same-height report is the browser's pan: the existing cap remains
+      // valid, and the offset property carries the panned room to the layer.
       if (!heightChanged && keyboardInsetRef.current != null) {
-        avoid(event.height, nextVisualViewportOffsetTop);
+        commitVisualViewportOffset(nextVisualViewportOffsetTop);
       }
     });
     // Opened while a keyboard is up: capped in the task that opens it. So no

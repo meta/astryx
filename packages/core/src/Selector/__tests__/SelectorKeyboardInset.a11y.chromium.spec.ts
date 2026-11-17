@@ -40,6 +40,9 @@ const VIEWPORT = {width: 390, height: 844};
 // The keyboard and its bars cover the lower 300 px of the layout viewport.
 const COVER = 300;
 const LIMIT = VIEWPORT.height - COVER - LAYER_KEYBOARD_CLEARANCE_PX;
+const ISSUE_VIEWPORT = {width: 863, height: 304};
+const ISSUE_COVER = 196;
+const ISSUE_OFFSET_TOP = 101.7;
 
 /**
  * Replaces `window.visualViewport` before the page loads with one the test
@@ -158,9 +161,9 @@ function expectTopHeld(tops: number[], top: number, detail: string) {
  * Opens the story with its trigger moved down by `drop` px. The centered story
  * root grows with its content, so it adds twice that height above it.
  */
-async function openStory(page: Page, drop: number) {
+async function openStory(page: Page, drop: number, viewport = VIEWPORT) {
   await installKeyboard(page);
-  await page.setViewportSize(VIEWPORT);
+  await page.setViewportSize(viewport);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-selector--pre-selected&viewMode=story`,
     {waitUntil: 'load'},
@@ -223,12 +226,24 @@ function expectClearOfPannedKeyboard(
   facts: ListFacts,
   cover: number,
   offsetTop: number,
+  viewportHeight = VIEWPORT.height,
 ) {
   const limit =
-    VIEWPORT.height + offsetTop - cover - LAYER_KEYBOARD_CLEARANCE_PX;
+    viewportHeight + offsetTop - cover - LAYER_KEYBOARD_CLEARANCE_PX;
   const detail = JSON.stringify({...facts, limit});
+  expect(facts.top, detail).toBeGreaterThanOrEqual(0);
+  expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
   expect(facts.bottom, detail).toBeLessThanOrEqual(limit + 0.5);
   expect(facts.rowsAboveKeyboard, detail).toBe(facts.rows);
+}
+
+function expectPannedGeometry(facts: ListFacts, limit: number) {
+  const detail = JSON.stringify({...facts, limit});
+  expect(facts.rows, detail).toBe(OPTIONS);
+  expect(facts.rowsWithBox, detail).toBeGreaterThan(0);
+  expect(facts.top, detail).toBeGreaterThanOrEqual(0);
+  expect(facts.bottom - facts.top, detail).toBeGreaterThan(0);
+  expect(facts.bottom, detail).toBeLessThanOrEqual(limit + 0.5);
 }
 
 // Trigger 496–516 px: the cap alone leaves two rows above the keyboard.
@@ -420,6 +435,30 @@ test('a keyboard height change after a visual-viewport pan keeps the list clear'
       ),
       shorterCover,
       100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('a panned keyboard leaves a nonzero list in the issue-sized viewport', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190, ISSUE_VIEWPORT);
+  await raiseKeyboard(page, ISSUE_COVER, ISSUE_OFFSET_TOP);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectPannedGeometry(
+      await listFacts(
+        page,
+        ISSUE_VIEWPORT.height +
+          ISSUE_OFFSET_TOP -
+          ISSUE_COVER -
+          LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      ISSUE_VIEWPORT.height +
+        ISSUE_OFFSET_TOP -
+        ISSUE_COVER -
+        LAYER_KEYBOARD_CLEARANCE_PX,
     );
   }).toPass({timeout: 3_000});
 });

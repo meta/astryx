@@ -18,7 +18,8 @@
  *   cap is held through a press until its click. The window listeners are
  *   held only while a press is down. A layer element swapped in while open is
  *   measured again before it paints. The cap is read in layout px under a
- *   pinch zoom.
+ *   pinch zoom. A visual-viewport pan keeps the cap and publishes only its
+ *   offset.
  * @position Testing; real keyboards are proven by the Popover keyboard
  *   browser spec and on the iOS simulator
  */
@@ -712,7 +713,7 @@ describe('useLayerKeyboardClearance', () => {
     expect(guide.listeners.size).toBe(0);
   });
 
-  it('recomputes the cap from a visual-viewport pan without a new keyboard height', async () => {
+  it('publishes a visual-viewport pan without remeasuring the cap', async () => {
     const saved = Object.getOwnPropertyDescriptor(window, 'visualViewport');
     const viewport = Object.assign(new EventTarget(), {
       height: VIEWPORT - COVER,
@@ -731,21 +732,26 @@ describe('useLayerKeyboardClearance', () => {
         await Promise.resolve();
       });
       expect(capOf(container)).toBe(CAPPED);
+      const layer = screen.getByTestId('layer');
+      const getBoundingClientRect = layer.getBoundingClientRect;
+      let reads = 0;
+      layer.getBoundingClientRect = () => {
+        reads += 1;
+        return getBoundingClientRect.call(layer);
+      };
+      const readsBeforePan = reads;
 
       viewport.offsetTop = 100;
       act(() => {
         viewport.dispatchEvent(new Event('scroll'));
       });
 
-      expect(capOf(container)).toBe(
-        `${VIEWPORT + 100 - COVER - 10 - BOX.top}px`,
-      );
+      expect(capOf(container)).toBe(CAPPED);
+      expect(reads).toBe(readsBeforePan);
       expect(
-        screen
-          .getByTestId('layer')
-          .style.getPropertyValue(
-            LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
-          ),
+        layer.style.getPropertyValue(
+          LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
+        ),
       ).toBe('100px');
     } finally {
       if (saved == null) {
