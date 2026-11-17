@@ -34,6 +34,11 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {realDrawing} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read what a drawing returns: drawn for real, with the
+// sample page and the sheet still stood in for.)
+realDrawing(true);
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(

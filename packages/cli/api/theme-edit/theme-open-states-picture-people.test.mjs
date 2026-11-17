@@ -25,6 +25,14 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {keepStandIn, realDrawing} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read what a drawing returns: drawn for real, with the
+// sample page and the sheet still stood in for.)
+// (Its assertions count a known set of pages: the stand-in stays, even
+// where every page is drawn for real.)
+keepStandIn();
+realDrawing(true);
 
 // The renders are stood in for, and a picture is a few bytes where the
 // browser would write it: these tests are about which pictures are taken.

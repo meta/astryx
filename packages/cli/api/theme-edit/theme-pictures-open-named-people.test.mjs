@@ -20,6 +20,11 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {keepStandIn} from '../../test-utils/theme-render-stub.mjs';
+
+// (Its assertions count a known set of pages: the stand-in stays, even
+// where every page is drawn for real.)
+keepStandIn();
 
 // The renders are stood in for, and a picture is a few bytes where the
 // browser would write it: these tests are about what the result says.
