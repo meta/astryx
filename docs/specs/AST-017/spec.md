@@ -508,11 +508,14 @@ one removal merged ahead of the decision to allow it.
   experimental, and never runs it; it ends when the export exception ends.
   A further named exception: `astryx discover` may list experimental icon-set
   packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
-  text, the install line, and the opt-in command
-  (`astryx experimental icon use <set>`), and is marked `[experimental]` in
-  text and `experimental: true` in JSON (on a package entry,
-  `experimentalFields` names its icon-set field). The set's items and definitions, and
-  every other command, stay behind the icon feature gate. This exception ends when icon
+  text, the install line, the opt-in command
+  (`astryx experimental icon use <package>/<set>`), and, when the catalog lists
+  the set's definitions, how many of the CLI's icon definitions it maps
+  (`definitions: N/M`, in text only); it is marked `[experimental]` in text
+  and `experimental: true` in JSON (on a package entry, `experimentalFields`
+  names its icon-set field). The set's icons and definitions themselves, and
+  every other command, `astryx search` and its discover line included, stay
+  behind the icon feature gate. This exception ends when icon
   sets graduate or are removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset

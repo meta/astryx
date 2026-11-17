@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx discover` lists the icon sets a project could add before it
- * opts into icon sets, so an app can compare them before it picks one
+ * @file `astryx discover` lists the icon sets a project could add even where
+ * icon features are off, so an app can compare them before it picks one
  * (spec:AST-084 FR17): the Available list, a search, and the item page with
  * the descriptor's text, how many of the CLI's meanings the set maps (text
  * only), the install command, and the `experimental icon use` command that
@@ -173,7 +173,7 @@ describe('discover lists icon packs before a project opts in', () => {
       });
       const row = await run(cwd, ['discover', 'glyphs']);
       expect(row).toMatch(
-        /discover @acme\/glyph-pack\/glyphs {2}\(icon-set, experimental, not installed\)$/m,
+        /discover @acme\/glyph-pack\/glyphs {2}\(icon-set, not installed\) \[experimental\]$/m,
       );
       expect(await run(cwd, ['discover', '--available'])).toMatch(
         /^iconSets: +glyphs \[experimental\]$/m,
@@ -219,6 +219,8 @@ describe('discover lists icon packs before a project opts in', () => {
       expect(page.data).not.toHaveProperty('definitions');
 
       const text = await run(cwd, ['discover', '@acme/glyph-pack/glyphs']);
+      expect(text).toMatch(/^name: +glyphs \[experimental\]$/m);
+      expect(text).not.toMatch(/^experimental:/m);
       expect(text).toMatch(/^definitions: +2\/\d+$/m);
       expect(text).toMatch(/^Then use its icon set:$/m);
       expect(text).toMatch(/experimental icon use @acme\/glyph-pack\/glyphs$/m);
@@ -355,6 +357,24 @@ describe('discover lists icon packs before a project opts in', () => {
             r.name === 'glyphs' || /icon-set/u.test(JSON.stringify(r)),
         ),
       ).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "keeps search's discover line off icon sets while icon features are off",
+    async () => {
+      const HINT = 'More in packages you could add';
+      const off = project('hint-off', [PACK, CHARTS]);
+      expect((await runCli(['discover', '--json'], {cwd: off})).status).toBe(0);
+      // Only the pack's set matches "outline": search is a stable command, so
+      // its line does not point at it.
+      expect(await run(off, ['search', 'outline'])).not.toContain(HINT);
+      expect(await run(off, ['search', 'bar', 'chart'])).toContain(HINT);
+      // Where icon features are on, the set counts like any other item.
+      const on = project('hint-on', [PACK, CHARTS], true);
+      expect((await runCli(['discover', '--json'], {cwd: on})).status).toBe(0);
+      expect(await run(on, ['search', 'outline'])).toContain(HINT);
     },
     TIMEOUT,
   );

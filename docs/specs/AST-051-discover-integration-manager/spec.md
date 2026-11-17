@@ -241,7 +241,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   integrations it loads included, and the items of every package those
   copies list and of the official packages no source covers (FR11), kept to
   that kind when one is given, gives at least one match. Search applies no
-  rule of its own. When no saved copy exists, search prints the line. Search
+  rule of its own, except that an `icon-set` item counts only where icon
+  features are on (`spec:AST-017/FR27`: search is a stable command). When no
+  saved copy exists, search prints the line. Search
   MUST NOT call a discover source to decide; it reads only the saved copies
   and the official list. Its JSON output carries no such line.
 

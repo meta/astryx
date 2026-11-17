@@ -200,7 +200,7 @@ export async function wouldAnswer(query, {type} = {}) {
 /**
  * What discover searches over the saved copies: the packages the project
  * has, with the official packages declared in it, and every item those and
- * the copies list. `packages: null` when nothing is known: no copy reads
+ * the copies list, icon sets only where icon features are on. `packages: null` when nothing is known: no copy reads
  * back, or discover answers every query with the list (FR1).
  * @param {import('../../foundation/config/project.mjs').Project} project
  * @returns {Promise<SavedSearchInput>}
@@ -224,12 +224,16 @@ async function savedSearchInput(project) {
     official.packages,
   );
   const {searchItems} = await catalogView();
+  // Discover lists the icon sets a project could add in every project, but
+  // search is a stable command: where icon features are off, its discover
+  // line never answers from an icon set (spec:AST-017 FR27).
+  const iconSets = optedIntoIconSets(project);
   const items = searchItems(
     packages,
     catalog,
     declaredDependencies(project),
     declarations.any,
-  );
+  ).filter(item => iconSets || item.kind !== 'icon-set');
   // Only what the ranking reads is kept: the smaller the record, the less a
   // search spends reading it back.
   return {

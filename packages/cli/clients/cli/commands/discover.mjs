@@ -639,7 +639,17 @@ export function registerDiscover(program) {
             const d = result.data;
             emit(
               record(withIconSetCoverage(d, iconSetCoverageOf(result)), {
-                omit: ['install'],
+                omit: ['install', 'experimental'],
+                // An icon set is experimental (spec:AST-017 FR27): its name
+                // carries the mark, as in the list.
+                ...(d.experimental
+                  ? {
+                      format: {
+                        name: (/** @type {string} */ name) =>
+                          `${name} [experimental]`,
+                      },
+                    }
+                  : {}),
               }),
               // A doc that adds sections to another package's topic says how
               // to read each one.
@@ -685,10 +695,9 @@ export function registerDiscover(program) {
                       : `${m.package}/${m.component}`;
                   const tags = [
                     m.kind && m.kind !== 'component' ? m.kind : '',
-                    m.experimental ? 'experimental' : '',
                     m.installed === false ? 'not installed' : '',
                   ].filter(Boolean);
-                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}`;
+                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}${m.experimental ? ' [experimental]' : ''}`;
                 }),
               ),
             );

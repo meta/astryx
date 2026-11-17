@@ -920,7 +920,7 @@ adopts only its own package's docs, exactly as `spec:AST-046/FR2` says.
 Rejected: placing each set's definitions under its own package, which splits
 one vocabulary across as many namespaces as there are sets.
 
-### DEC-8 — `icon-set` is a seventh discover kind, behind the opt-in
+### DEC-8 — `icon-set` is a seventh discover kind, behind the icon feature gate
 
 **Reference:** `spec:AST-084/DEC-8`
 **Decider:** `josephfarina`, `2026-10-20`
