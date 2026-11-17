@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {LAYER_SIDE_CASES} from './__tests__/layerEntranceSide.fixture';
 import {
   LAYER_ENTER_GAP_PROPERTY,
@@ -9,6 +9,7 @@ import {
   LAYER_ENTER_Y_PROPERTY,
   layerEntranceSide,
   readLayerEntranceSide,
+  registerLayerEntranceProperties,
   writeLayerEntranceSide,
 } from './layerEntranceSide';
 
@@ -129,5 +130,49 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     }
     layer.remove();
     anchor.remove();
+  });
+});
+
+describe('registerLayerEntranceProperties', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('registers the four side properties as not inherited', () => {
+    const registerProperty = vi.fn<(definition: PropertyDefinition) => void>();
+    vi.stubGlobal('CSS', {registerProperty});
+    registerLayerEntranceProperties();
+    expect(
+      registerProperty.mock.calls.map(([definition]) => definition),
+    ).toEqual(
+      [
+        LAYER_ENTER_X_PROPERTY,
+        LAYER_ENTER_Y_PROPERTY,
+        LAYER_ENTER_ORIGIN_PROPERTY,
+        LAYER_ENTER_GAP_PROPERTY,
+      ].map(name => ({name, syntax: '*', inherits: false})),
+    );
+  });
+
+  it('does nothing without CSS or CSS.registerProperty (a server, an older browser)', () => {
+    vi.stubGlobal('CSS', undefined);
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    vi.stubGlobal('CSS', {});
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+  });
+
+  it('finds the properties registered by a second copy, and rethrows anything else', () => {
+    vi.stubGlobal('CSS', {
+      registerProperty: () => {
+        throw new DOMException('registered', 'InvalidModificationError');
+      },
+    });
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    vi.stubGlobal('CSS', {
+      registerProperty: () => {
+        throw new DOMException('bad syntax', 'SyntaxError');
+      },
+    });
+    expect(() => registerLayerEntranceProperties()).toThrow('bad syntax');
   });
 });

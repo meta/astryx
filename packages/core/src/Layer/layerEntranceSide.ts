@@ -137,6 +137,44 @@ export function readLayerEntranceSide(
   return layerEntranceSide(settledBox(layer), anchorBox);
 }
 
+/**
+ * Registers the side properties as not inherited, so a write restyles the
+ * layer alone and not every element inside it. Each element that runs the
+ * entrance inherits them from its parent explicitly (layerAnimations). It
+ * runs once, as this module loads, before any layer shows. Without
+ * `CSS.registerProperty` (a server, an older browser) the properties
+ * inherit, and the entrance is the same. A second copy of this module on the
+ * page finds them registered.
+ */
+export function registerLayerEntranceProperties(): void {
+  if (
+    typeof CSS === 'undefined' ||
+    typeof CSS.registerProperty !== 'function'
+  ) {
+    return;
+  }
+  for (const name of [
+    LAYER_ENTER_X_PROPERTY,
+    LAYER_ENTER_Y_PROPERTY,
+    LAYER_ENTER_ORIGIN_PROPERTY,
+    LAYER_ENTER_GAP_PROPERTY,
+  ]) {
+    try {
+      CSS.registerProperty({name, syntax: '*', inherits: false});
+    } catch (error) {
+      // A name registered before, by another copy or the page, throws this.
+      if (
+        !(error instanceof DOMException) ||
+        error.name !== 'InvalidModificationError'
+      ) {
+        throw error;
+      }
+    }
+  }
+}
+
+registerLayerEntranceProperties();
+
 const px = (value: number) => `${Math.round(value * 1000) / 1000}px`;
 
 /**

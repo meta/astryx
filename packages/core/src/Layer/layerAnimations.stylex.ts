@@ -126,6 +126,15 @@ const animationBase = {
   // The origin is a plain style, not a keyframe: a keyframe that animates it
   // would keep the entrance off the compositor.
   transformOrigin: `var(${ENTER_ORIGIN}, 50% 50%)`,
+  // The side properties do not inherit (layerEntranceSide.ts registers them),
+  // so a write restyles only the layer, not its content. The element that
+  // runs the entrance takes them from its parent: the layer itself, or a
+  // surface directly inside it (usePopover). On the layer, the runtime's
+  // inline value wins.
+  [ENTER_X]: 'inherit',
+  [ENTER_Y]: 'inherit',
+  [ENTER_ORIGIN]: 'inherit',
+  [ENTER_GAP]: 'inherit',
 };
 
 /**
