@@ -64,6 +64,14 @@ export interface MetadataListItemProps extends BaseProps<HTMLDivElement> {
 // Styles
 // =============================================================================
 
+// A value breaks a word only when the word is longer than its line, so a long
+// URL or ID wraps instead of overflowing. `overflow-wrap: break-word` keeps
+// each word's own width as the value's narrowest width, so a value in a row
+// (an amount beside its description) is never squeezed into breaking an
+// ordinary word or number. `word-break: break-word` would drop that narrowest
+// width to a single character.
+const VALUE_OVERFLOW_WRAP = 'break-word';
+
 const styles = stylex.create({
   // Label (dt) — inline (side-by-side with value)
   label: {
@@ -87,7 +95,7 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     minHeight: 24,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
   // Stacked layout wrapper (label on top)
   stackedWrapper: {
@@ -113,7 +121,7 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-body-leading'],
     margin: 0,
     padding: 0,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
   iconWrapper: {
     display: 'inline-flex',
