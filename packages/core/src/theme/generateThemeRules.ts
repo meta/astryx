@@ -1133,7 +1133,11 @@ function generateComponentRules(
           // row's fill then reaches pinned cells through --table-row-overlay.
           // A pseudo-element block (`::before`) is another box, which reads
           // none of the component's variables: it is written as authored.
-          const pseudoClass = pseudo.startsWith(':') && !pseudo.includes('::');
+          // (CSS2's one-colon pseudo-elements, `:before` and the rest, too.)
+          const pseudoClass =
+            pseudo.startsWith(':') &&
+            !pseudo.includes('::') &&
+            !/:(before|after|first-line|first-letter)(?![-\w])/i.test(pseudo);
           const pseudoEntries = pseudoClass
             ? expandComponentDeclarations(
                 component,

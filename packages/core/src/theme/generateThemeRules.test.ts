@@ -1280,6 +1280,7 @@ describe('derived var expansion', () => {
         components: {
           card: {base: {'::before': {padding: '4px'}}},
           icon: {base: {'::after': {width: '2px'}}},
+          section: {base: {':after': {padding: '6px'}}},
           button: {base: {':hover::after': {borderRadius: '3px'}}},
         },
       }),
@@ -1290,6 +1291,10 @@ describe('derived var expansion', () => {
     const after = ruleAt(css, '.astryx-icon::after');
     expect(after).toContain('width: 2px');
     expect(after).not.toContain('--_icon-width');
+    // (A CSS2 one-colon pseudo-element too.)
+    const oneColon = ruleAt(css, '.astryx-section:after');
+    expect(oneColon).toContain('padding: 6px');
+    expect(oneColon).not.toContain('--astryx-section-padding');
     expect(css).toMatch(/:hover[^{]*::after[^{]*\{[^}]*border-radius: 3px/);
     expect(css).not.toContain('--_button-radius: 3px');
   });
