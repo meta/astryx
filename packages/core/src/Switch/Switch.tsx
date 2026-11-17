@@ -39,6 +39,7 @@ import {
   typeScaleVars,
   focusVars,
   shadowVars,
+  borderVars,
 } from '../theme/tokens.stylex';
 import {FieldLabel} from '../Field/FieldLabel';
 import {FieldStatus} from '../FieldStatus/FieldStatus';
@@ -506,6 +507,10 @@ const styles = stylex.create({
         '@media (hover: hover) and (forced-colors: none)': `color-mix(in srgb, ${colorVars['--color-background-gray']}, ${colorVars['--color-tint-hover']} 5%)`,
       },
     },
+    // The off fill is a pale tint, so its gray palette edge is the cue to where
+    // the switch is. An inset ring draws it without changing the track's
+    // geometry. Forced colors drops box shadows; the system border stands.
+    boxShadow: `inset 0 0 0 ${borderVars['--border-width']} ${colorVars['--color-border-gray']}`,
   },
   trackOn: {
     backgroundColor: {

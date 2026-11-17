@@ -1380,6 +1380,7 @@ describe('Switch', () => {
       const h = getComputedStyle(thumb);
       return {
         fill: t.backgroundColor,
+        edge: t.boxShadow,
         padding: t.paddingTop,
         fade: [t.transitionProperty, t.transitionDuration],
         size: [h.width, h.height],
@@ -1396,6 +1397,8 @@ describe('Switch', () => {
       );
       const off = look(container);
       expect(off.fill).toContain('--color-background-gray');
+      // The pale off fill needs its gray edge to show where the switch is.
+      expect(off.edge).toContain('--color-border-gray');
       expect(off.padding).toBe('4px');
       expect(off.fade[0]).toBe('background-color');
       expect(off.fade[1]).not.toMatch(/^(0s)?$/);
@@ -1406,6 +1409,7 @@ describe('Switch', () => {
       rerender(<Switch label="Wi-Fi" value onChange={() => {}} />);
       const on = look(container);
       expect(on.fill).toContain('--color-accent');
+      expect(on.edge).not.toContain('--color-border-gray');
       expect(on.size).toEqual(['20px', '20px']);
       expect(on.travel).toBe('translateX(14px)');
     });
