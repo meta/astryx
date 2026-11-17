@@ -39,7 +39,12 @@ import {
   sameKindValues,
   unitsJoined,
 } from './_css.mjs';
-import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
+import {
+  calcVars,
+  coreFallback,
+  multipliedTokens,
+  INHERITED_TEXT,
+} from './_parts.mjs';
 import {
   AUTO_SPREAD,
   COMMON_STATES,
@@ -3485,12 +3490,7 @@ function mediaTextRefusal(ctx, slug, s, v) {
  * @returns {string | null}
  */
 export function inheritedReach(ctx, s, prop) {
-  if (
-    !/^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
-      prop,
-    )
-  )
-    return null;
+  if (!INHERITED_TEXT.test(prop)) return null;
   const reached = [
     ...new Set(
       partsOf(ctx, /** @type {any} */ (s)).flatMap(t =>
@@ -7731,6 +7731,30 @@ function checkOne(
                 `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${part}`,
             ),
           },
+        );
+      }
+    }
+    // A text property CSS inherits that an element inside the part sets
+    // itself, to a value the component's props choose (a code block's lines:
+    // white-space pre, or pre-wrap when wrapped), never reaches the text
+    // that element holds: the prop decides it, never the theme. Refused,
+    // naming the values there.
+    if (!unset && INHERITED_TEXT.test(prop)) {
+      const held = partsOf(ctx, s)
+        .map(t => /** @type {const} */ ([t, ctx.C.MAP[t]?.innerSets?.[prop]]))
+        .filter(
+          ([t, vals]) =>
+            Array.isArray(vals) &&
+            vals.length > 1 &&
+            !ctx.C.MAP[t]?.own?.[prop] &&
+            innerPropTokens(ctx.C, t, prop).length === 0,
+        );
+      if (held.length && held.length === partsOf(ctx, s).length) {
+        const [part, vals] = held[0];
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part}'s text is laid out by an element inside it that sets its own ${prop} (${/** @type {string[]} */ (vals).join(' or ')}, as the component's props choose), so ${prop} on ${part} never shows; the app chooses it with that prop, never the theme.`,
+          {run: [`${HOW} ${part}`]},
         );
       }
     }

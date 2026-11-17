@@ -25,6 +25,10 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
 import {removeEmptyFolder} from './_palette.mjs';
+
+/** Text properties CSS inherits, which a part passes to the text inside it. */
+export const INHERITED_TEXT =
+  /^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/;
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
@@ -1448,6 +1452,17 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       Boolean(selfClose) ||
       VOID.has(tag.toLowerCase()) ||
       html.startsWith(`</${tag}>`, (m.index ?? 0) + m[0].length);
+    // (An element that holds text a reader sees: never an empty one, an
+    // icon's box, or text hidden for screen readers alone.)
+    const after = html.slice((m.index ?? 0) + m[0].length);
+    const holdsText =
+      !empty &&
+      !/^\s*<svg\b/i.test(after) &&
+      !own.some(
+        d =>
+          (d.prop === 'clip' && d.value !== 'auto') ||
+          (d.prop === 'clip-path' && /inset\(\s*50%/.test(d.value)),
+      );
     const paints = (
       /** @type {{prop: string, value: string, cond: string}} */ d,
     ) =>
@@ -1523,6 +1538,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
               toks.has('--border-width')));
         if (!ownsTarget)
           for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
+        // (An element inside the part that sets an inherited text property
+        // to a value of its own, a code block's lines keeping white-space
+        // pre: that property set on the part never reaches its text.)
+        if (
+          !ownsTarget &&
+          !toks.size &&
+          INHERITED_TEXT.test(d.prop) &&
+          !/^(inherit|unset|initial|revert)$/.test(String(d.value).trim()) &&
+          holdsText
+        )
+          ((T.innerSets ??= {})[d.prop] ??= new Set()).add(
+            String(d.value).trim(),
+          );
         if (asOwn && (ownsTarget || lineProp)) {
           // (Drawn by the line inside the part, not the part's own element:
           // a setting on the part does not reach it.)
@@ -1701,6 +1729,13 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       inside: Object.fromEntries(
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),
+      ...(v.innerSets
+        ? {
+            innerSets: Object.fromEntries(
+              Object.entries(v.innerSets).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
       attrs: Object.fromEntries(
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
