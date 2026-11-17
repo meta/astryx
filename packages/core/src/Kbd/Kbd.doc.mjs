@@ -21,7 +21,7 @@ const bestPractices = [
   {
     guidance: true,
     description:
-      'Place shortcuts near the action they trigger: in a menu item or an inline instruction. In a Tooltip, write the shortcut in the tooltip\'s own text (for example "Search (/)"): Kbd keeps its light-surface colors on the tooltip\'s dark surface, where its keys are hard to read.',
+      'Place shortcuts near the action they trigger: in a menu item or an inline instruction. In a Tooltip, write the shortcut in the tooltip\'s own text (for example "Search (/)"): Kbd keeps its own surface colors on the tooltip\'s inverted surface, where its keys almost disappear.',
   },
   {
     guidance: true,
