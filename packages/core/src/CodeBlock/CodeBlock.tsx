@@ -37,6 +37,7 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
@@ -1170,7 +1171,11 @@ export function CodeBlock({
   // both axes, keeps focus where it is when overflow goes away, and owns the
   // overflow declarations. role="group" (not "region") so several code
   // blocks on a page don't create duplicate same-named landmarks.
-  const {getViewportProps, getContentProps} = useScrollableArea({
+  const {
+    getViewportProps,
+    getContentProps,
+    state: scrollState,
+  } = useScrollableArea({
     axis: 'both',
     // Nothing inside the code viewport sticks to an outer scroller, so the
     // viewport stays a scroll container while its code fits. A long line, or
@@ -1321,6 +1326,7 @@ export function CodeBlock({
           styles.viewport,
           styles.viewportFocusRingInset,
         ),
+        xstyle: scrollEdgeFadeStyles(scrollState.inline),
         style: scrollStyle,
         // Code scrolls and wraps left to right in every page direction.
         dir: 'ltr',
