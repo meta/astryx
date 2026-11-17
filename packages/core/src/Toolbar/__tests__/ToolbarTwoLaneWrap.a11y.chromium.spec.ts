@@ -51,6 +51,8 @@ async function readRow(page: Page, width: number) {
       startBottom: start.getBoundingClientRect().bottom,
       endTop: end.getBoundingClientRect().top,
       endRight: end.getBoundingClientRect().right,
+      lastControlRight:
+        end.lastElementChild?.getBoundingClientRect().right ?? 0,
       toolbarRight: element.getBoundingClientRect().right,
       headingLines: headingBox ? Math.round(headingBox.height / lineHeight) : 0,
       cut: [start, end].flatMap(lane =>
@@ -69,10 +71,13 @@ test('a two-lane row that does not fit wraps at 390px', async ({page}) => {
   expect(row.cut).toEqual([]);
   expect(row.endTop).toBeGreaterThanOrEqual(row.startBottom);
   expect(row.endRight).toBeLessThanOrEqual(row.toolbarRight + 1);
+  // The wrapped end lane keeps its controls at the inline end.
+  expect(Math.abs(row.lastControlRight - row.toolbarRight)).toBeLessThan(1);
 });
 
 test('a two-lane row that fits keeps one line at 1024px', async ({page}) => {
   const row = await readRow(page, 1024);
   expect(row.headingLines).toBe(1);
   expect(row.endTop).toBeLessThan(row.startBottom);
+  expect(Math.abs(row.lastControlRight - row.toolbarRight)).toBeLessThan(1);
 });

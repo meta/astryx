@@ -121,9 +121,10 @@ const styles = stylex.create({
     flexWrap: 'wrap',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
-  // The end lane stays at the inline end, also on a following line.
+  // The end lane fills the rest of its line, so its controls stay at the
+  // inline end, also on a following line.
   twoLaneEnd: {
-    marginInlineStart: 'auto',
+    flexGrow: 1,
   },
   // When only startContent is present, let it fill
   startOnly: {
