@@ -141,14 +141,19 @@ function optionSchema(manifestOption, entry, describe) {
 }
 
 /**
- * The root options a tool takes as inputs.
+ * The root options a tool takes as inputs; a docs-only tool leaves out the
+ * DOCS_ONLY_OMITTED_INPUTS among them. The tools and the instructions both
+ * read this list, so the instructions name exactly the root options a tool
+ * takes.
  * @param {import('./manifest').CLIManifest} manifest
+ * @param {boolean} docsOnly
  * @returns {import('./manifest').ManifestOption[]}
  */
-function toolRootOptions(manifest) {
-  return manifest.globalOptions.filter(
-    o => !RUN_OPTIONS.includes(new Option(o.flag).long ?? ''),
-  );
+function toolRootOptions(manifest, docsOnly) {
+  return manifest.globalOptions.filter(o => {
+    const long = new Option(o.flag).long ?? '';
+    return !RUN_OPTIONS.includes(long) && !(docsOnly && DOCS_ONLY_OMITTED_INPUTS.includes(long.slice(2)));
+  });
 }
 
 /**
@@ -219,7 +224,7 @@ function toolOf(command, rootOptions, docsOnly) {
  * @returns {McpTool[]}
  */
 export function mcpTools(manifest, {docsOnly = false} = {}) {
-  const rootOptions = toolRootOptions(manifest);
+  const rootOptions = toolRootOptions(manifest, docsOnly);
   return flatten(manifest.commands)
     .filter(command => command.json && command.outsideProject && command.available !== false)
     .filter(command => !docsOnly || DOCS_ONLY_COMMANDS.includes(command.name))
@@ -260,7 +265,7 @@ export async function projectAgentText(root) {
  * @returns {string}
  */
 export function mcpInstructions(manifest, {agentText = null, docsOnly = false} = {}) {
-  const rootLines = toolRootOptions(manifest).map(o => `  ${o.flag}  ${o.description}`);
+  const rootLines = toolRootOptions(manifest, docsOnly).map(o => `  ${o.flag}  ${o.description}`);
   const toolRule =
     "A tool name is the command's words joined by _ (theme build is theme_build), and its inputs are the command's arguments and options under their CLI names: a value option takes a string, and a list takes an array of strings.";
   return [

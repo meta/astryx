@@ -80,6 +80,8 @@ describe('the docs site MCP endpoint', () => {
     expect(reply.result?.instructions).toContain(
       'only the astryx commands that read the docs',
     );
+    // A docs-only tool takes no `base`, so the instructions do not offer it.
+    expect(reply.result?.instructions).not.toContain('--base');
   }, 60_000);
 
   it('lists the CLI commands that read the docs, with no folder input', async () => {

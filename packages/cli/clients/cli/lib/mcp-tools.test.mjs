@@ -200,6 +200,23 @@ describe('a docs-only server', () => {
     expect(text).not.toContain(`and ${CWD_INPUT},`);
     expect(mcpInstructions(manifest)).toContain(`and ${CWD_INPUT},`);
   });
+
+  it('names exactly the root options its tools take, in both modes', () => {
+    for (const docsOnly of [false, true]) {
+      const text = mcpInstructions(manifest, {docsOnly});
+      const inputs = new Set(
+        Object.keys(mcpTools(manifest, {docsOnly})[0].inputSchema.properties),
+      );
+      for (const option of manifest.globalOptions) {
+        const key = longOf(option.flag).slice(2);
+        expect(text.includes(`  ${option.flag}  `), `${option.flag} (docsOnly ${docsOnly})`).toBe(
+          inputs.has(key),
+        );
+      }
+    }
+    expect(mcpInstructions(manifest, {docsOnly: true})).not.toContain('--base');
+    expect(mcpInstructions(manifest)).toContain('  --base <package>  ');
+  });
 });
 
 describe('projectAgentText', () => {
