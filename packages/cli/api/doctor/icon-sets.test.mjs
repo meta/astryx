@@ -382,8 +382,14 @@ describe('icon-imports check', () => {
    * @param {Parameters<typeof writeIconSetProject>[1]} options
    * @param {Record<string, string>} files project files by relative path
    * @param {Record<string, string>} [extraDependencies]
+   * @param {Record<string, unknown>} [packageFields] more package.json fields
    */
-  async function importsCheckOf(options, files, extraDependencies = {}) {
+  async function importsCheckOf(
+    options,
+    files,
+    extraDependencies = {},
+    packageFields = {},
+  ) {
     const cwd = writeIconSetProject(tmp, options);
     const pkgFile = path.join(cwd, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
@@ -392,6 +398,7 @@ describe('icon-imports check', () => {
       '@astryxdesign/core': '*',
       ...extraDependencies,
     };
+    Object.assign(pkg, packageFields);
     fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
     for (const [rel, text] of Object.entries(files)) {
       fs.mkdirSync(path.dirname(path.join(cwd, rel)), {recursive: true});
@@ -578,7 +585,8 @@ describe('icon-imports check', () => {
           "import Thing from '@acme/default-only';",
           "import {CogIcon} from '@acme/declared';",
           "import type {BoltIcon} from '@acme/types-only';",
-          'export const A = () => <><TrashIcon /><PlusIcon /><CogIcon /></>;',
+          "import * as Glyphs from '@acme/namespace-only';",
+          'export const A = () => <><TrashIcon /><PlusIcon /><CogIcon /><Glyphs.StarIcon /></>;',
           '',
         ].join('\n'),
       },
@@ -610,7 +618,10 @@ describe('icon-imports check', () => {
           'export const A = () => <><BrandIcon /><LogoIcon /><HomeIcon /><MenuIcon /></>;',
           '',
         ].join('\n'),
+        'src/menu.tsx': 'export const MenuIcon = () => null;\n',
       },
+      {},
+      {imports: {'#icons': './src/menu.tsx'}},
     );
     expect(check).toMatchObject({status: 'pass'});
   });
