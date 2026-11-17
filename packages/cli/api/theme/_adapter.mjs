@@ -20,6 +20,7 @@ import {
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
+import {resolveLocalModule} from '../../foundation/discovery/module-exports.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
@@ -33,15 +34,18 @@ import {
 import {
   ThemeImportError,
   resolveThemeImports,
+  themePackageDir,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   findThemeProject,
   editorThemeRecord,
   isLocalThemeOwner,
+  isUneditedThemeModule,
   LOCAL_THEME_ROOT,
   ThemeStateError,
   planThemeAppWrite,
   readThemeState,
+  resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -71,6 +75,19 @@ export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
  */
 export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
+}
+
+/**
+ * Whether a theme's owner is installed, by the rule `theme add` applies
+ * (`themePackageDir`): a local theme is in the project, and a package
+ * theme's package (a bundled theme's own, such as
+ * `@astryxdesign/theme-neutral`) is installed. A local theme `theme add`
+ * still refuses until it is built.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} projectDir
+ */
+export function themeOwnerInstalled(theme, projectDir) {
+  return theme.source === 'local' || themePackageDir(theme, projectDir) != null;
 }
 
 /**
@@ -1415,7 +1432,8 @@ function recordedThemeSlug(state, slug) {
 }
 
 /**
- * Remove one non-default theme from the app record.
+ * Remove one added theme from the app record. The default is removed only
+ * when it is the only added theme: that deletes the generated module.
  * @param {string} slug
  * @param {{cwd?: string}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
@@ -1436,22 +1454,14 @@ async function removeThemeFromAppLocked(slug, cwd) {
     const others = Object.keys(state.themes).filter(
       other => other !== recordedSlug,
     );
+    if (others.length === 0) return await removeLastTheme(state, recordedSlug);
     const uses = others.slice(0, 3).map(other => ({
       name: formatCliCommand(`theme use ${other}`, state.projectDir),
       reason: `make ${other} the default`,
     }));
     throw new AstryxError(
-      uses.length > 0
-        ? `Theme "${recordedSlug}" is the default. Run \`${uses[0].name}\` before removing it.`
-        : `Theme "${recordedSlug}" is the default and the only added theme. Add another theme and make it the default before removing it.`,
-      uses.length > 0
-        ? uses
-        : [
-            {
-              name: formatCliCommand('theme list', state.projectDir),
-              reason: 'the themes you can add',
-            },
-          ],
+      `Theme "${recordedSlug}" is the default. Run \`${uses[0].name}\` before removing it.`,
+      uses,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1482,6 +1492,105 @@ async function removeThemeFromAppLocked(slug, cwd) {
     true,
     available,
   );
+}
+
+/**
+ * Remove the only added theme by deleting the generated module, which is the
+ * app's whole theme record. A module with changes the CLI did not write stays,
+ * and the error says how to finish by hand.
+ * @param {ReturnType<typeof readThemeState>} state
+ * @param {string} slug
+ * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
+ */
+async function removeLastTheme(state, slug) {
+  let module;
+  try {
+    // The project-root check every theme write runs: a `src` that is a
+    // symlink to a folder outside the project must not lose a file there.
+    module = resolveThemeModule(state.projectDir, {forWrite: true});
+  } catch (error) {
+    throw asThemeError(error);
+  }
+  const original = module.expectedOriginal;
+  const source = original?.toString('utf-8') ?? '';
+  if (original == null || !(await isUneditedModule(state, source))) {
+    // A module the CLI wrote whose imports differ from what it writes now (a
+    // theme package upgrade moves them) is rewritten by `theme use`.
+    const use = formatCliCommand(`theme use ${slug}`, state.projectDir);
+    const rewritable =
+      original != null && isUneditedThemeModule(source, module.typescript);
+    throw new AstryxError(
+      rewritable
+        ? `Theme "${slug}" is the only added theme, and ${module.path} differs from what the CLI writes for it now, as after a theme package upgrade, so the CLI leaves it. Run \`${use}\` to rewrite it, then remove the theme again.`
+        : `Theme "${slug}" is the only added theme, and ${module.path} has changes the CLI did not write, so the CLI leaves it. To stop using app themes, delete ${module.path} and remove its import and the Theme wrapper from the app root.`,
+      rewritable
+        ? [{name: use, reason: 'rewrite the module, then remove the theme'}]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  try {
+    if (fs.lstatSync(module.file).isSymbolicLink()) {
+      throw new Error(`${module.path} is a symlink`);
+    }
+    if (!fs.readFileSync(module.file).equals(original)) {
+      throw new Error(`${module.path} changed while the command ran`);
+    }
+    fs.unlinkSync(module.file);
+  } catch (error) {
+    throw new AstryxError(
+      `Failed to delete the generated theme module: ${fsErrorMessage(error, module.path) ?? (error instanceof Error ? error.message : String(error))}`,
+      undefined,
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  }
+  return {
+    type: 'theme.app',
+    data: {
+      themes: [],
+      default: '',
+      modulePath: module.path,
+      change: {
+        action: 'remove',
+        slug,
+        changed: true,
+        firstAdd: false,
+        moduleRemoved: true,
+        ...(/\bexport const themeModes\b/u.test(source)
+          ? {themeModes: true}
+          : {}),
+      },
+    },
+  };
+}
+
+/**
+ * Is the module exactly what the CLI writes for its record? While the recorded
+ * themes resolve, it must equal the module the CLI would write now. When one
+ * no longer resolves (its package is already uninstalled), the module is
+ * re-rendered from its own imports, which must still come from the recorded
+ * owners.
+ * @param {ReturnType<typeof readThemeState>} state
+ * @param {string} source
+ */
+async function isUneditedModule(state, source) {
+  let resolved;
+  try {
+    resolved = resolveRecordedThemes(
+      state,
+      await listAvailableThemes(state.projectDir),
+    );
+  } catch {
+    return isUneditedThemeModule(source, state.module.typescript);
+  }
+  try {
+    return (
+      planThemeAppWrite(state, state.themes, state.defaultSlug ?? '', resolved)
+        .moduleContents === source
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1535,3 +1644,31 @@ export function requireThemeCoreDir(cwd) {
 export function fetchCarriedThemeCoreDir(cwd) {
   return findCarriedCoreDir(cwd, {fetch: true});
 }
+
+/**
+ * How a theme build reads the theme's local modules to compile them into a
+ * self-contained built module (build/self-contained.mjs): each file's text,
+ * whether a file exists, a relative import's file as an app's bundler
+ * resolves it, and the Babel plugins that compile TypeScript and JSX.
+ * @type {import('./build/self-contained.mjs').LocalModuleFiles}
+ */
+export const localModuleFiles = {
+  read: file => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  },
+  exists: file => fs.existsSync(file),
+  resolve: (specifier, fromFile, extensions) =>
+    resolveLocalModule(specifier, fromFile, {bundler: true, extensions}),
+  // Resolved on first use: most builds compile nothing.
+  get plugins() {
+    const require = createRequire(import.meta.url);
+    return {
+      typescript: require.resolve('@babel/plugin-transform-typescript'),
+      jsx: require.resolve('@babel/plugin-transform-react-jsx'),
+    };
+  },
+};

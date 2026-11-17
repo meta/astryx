@@ -53,7 +53,7 @@
 
 import {
   HEAD_END,
-  SHELL_FAMILY,
+  isAppShell,
   terms,
   modifiersOf,
   pairsOf,
@@ -64,7 +64,9 @@ import {
   keywordUnits,
   keywordWordsFor,
   framesOf,
+  readNames,
 } from './words.mjs';
+import {namedOutright, tieReading} from './weights.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -135,14 +137,17 @@ const START_SCORE = 10;
 const START_TERMS = 2;
 
 /**
- * Rank page templates against an idea, best first. Ties go to the template
- * with the shorter id (the family's broader page), then by name.
+ * Rank page templates against an idea, best first. An exact tie goes to a
+ * family's base template ahead of a variant; templates still tied are ordered
+ * by how strongly each one's own descriptor answers the idea, then by how
+ * typical of its family it is, then by name (`settleTies`).
  *
- * @param {string} query
+ * @param {string} idea
  * @param {PageTemplate[]} pages
  * @returns {RankedPage[]}
  */
-export function rankPages(query, pages) {
+export function rankPages(idea, pages) {
+  const query = readNames(idea, pages);
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
     const keywords = page.keywords ?? [];
@@ -287,15 +292,61 @@ export function rankPages(query, pages) {
         family,
         base,
         matched,
+        hidden: page.hidden === true,
       };
     })
-    .sort(
-      (a, b) =>
-        b.score - a.score ||
-        a.name.split('-').length - b.name.split('-').length ||
-        compareText(a.name, b.name),
-    );
-  return baseFirst(ranked);
+    .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
+  return baseFirst(settleTies(ranked, query, pages));
+}
+
+/**
+ * Order each run of templates the ranker scores exactly the same (and that
+ * are all bases or all variants), whatever their families: first the one the
+ * idea names by its whole name (`namedOutright`), then by how strongly each
+ * one's own descriptor answers the idea (`tieReading`), then by how typical of
+ * its family it is, then by name. The catalog's order never decides, and
+ * neither does the host's locale.
+ * @param {RankedPage[]} ranked sorted by score, then base first
+ * @param {string} query
+ * @param {PageTemplate[]} pages
+ * @returns {RankedPage[]}
+ */
+function settleTies(ranked, query, pages) {
+  const out = [];
+  for (let i = 0; i < ranked.length;) {
+    let j = i + 1;
+    while (
+      j < ranked.length &&
+      ranked[j].score === ranked[i].score &&
+      ranked[j].base === ranked[i].base
+    )
+      j++;
+    const run = ranked.slice(i, j);
+    if (run.length > 1) {
+      const reading = tieReading(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const named = namedOutright(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const at = new Map(run.map((r, k) => [r, reading[k]]));
+      const outright = new Map(run.map((r, k) => [r, named[k]]));
+      run.sort(
+        (a, b) =>
+          Number(outright.get(b)) - Number(outright.get(a)) ||
+          Number(at.get(b)) - Number(at.get(a)) ||
+          b.typical - a.typical ||
+          compareText(a.name, b.name),
+      );
+    } else run.sort((a, b) => compareText(a.name, b.name));
+    out.push(...run);
+    i = j;
+  }
+  return out;
 }
 
 /**
@@ -357,19 +408,29 @@ export function pickAlternatives(ranked, startName, count = 2) {
  * a page the builder already has starts from the app shell (FR9). Either way,
  * the app shell is the shell template the idea describes when one leads.
  *
+ * A family's base is where a part goes only when the ranker leads with it. A
+ * family word that heads the idea and is also a component's name names the
+ * piece, not its place: "a sortable table" is a table to add, not a part for
+ * the table page.
+ *
  * @param {RankedPage[]} ranked
  * @param {IdeaKind} [kind]
+ * @param {Set<string>} [pieceWords] the last word of each component's name
  * @returns {RankedPage | null}
  */
-export function pickStart(ranked, kind = 'page') {
+export function pickStart(ranked, kind = 'page', pieceWords = new Set()) {
   if (kind !== 'page') {
-    const host = kind === 'part' && ranked.find(r => r.base && r.familyNamed);
-    if (host) return host;
+    const lead = ranked[0];
+    const namesPiece =
+      lead?.headNamed && terms(lead.family).some(t => pieceWords.has(t));
+    if (kind === 'part' && lead?.base && lead.familyNamed && !namesPiece) {
+      return lead;
+    }
     // Otherwise the app shell (FR2): the shell template the idea describes
     // when one leads ("a frame with sidebar navigation"), else none, for the
     // kit's neutral fallback.
-    const lead = pickStart(ranked);
-    return lead?.family === SHELL_FAMILY ? lead : null;
+    const shell = pickStart(ranked);
+    return isAppShell(shell) ? shell : null;
   }
   const top = ranked[0];
   if (!top || top.score < START_SCORE) return null;

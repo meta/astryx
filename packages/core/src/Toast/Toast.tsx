@@ -38,6 +38,9 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
+import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
+import {pickInvertedSide} from '../hooks/mediaSide';
+import {parseColor} from '../utils/color';
 import type {
   ToastType,
   ToastDismissReason,
@@ -419,11 +422,38 @@ export function ToastSurface({
     onDismiss('manual');
   }, [onDismiss]);
 
-  // The surface is *usually* dark in light mode and light in dark mode, but a
-  // theme can define --color-background-inverted as anything — so the mode is
-  // measured, not assumed. This is only the pre-measurement fallback.
-  const {mode} = useTheme();
-  const fallbackMediaMode = isError || mode === 'light' ? 'dark' : 'light';
+  // Before the measurement, take the side from the theme's resolved surface by
+  // the measurement's rule. If the surface is translucent, or parseColor cannot
+  // read it or an on-color, use the mode.
+  const {mode, tokens} = useTheme();
+  const surface = parseColor(
+    tokens[
+      isError
+        ? '--color-background-error-inverted'
+        : '--color-background-inverted'
+    ] ?? '',
+  );
+  const fromTokens =
+    surface !== null && surface.a >= 1
+      ? pickInvertedSide(
+          surface,
+          null,
+          parseColor(tokens['--color-on-dark'] ?? ''),
+          parseColor(tokens['--color-on-light'] ?? ''),
+        )
+      : null;
+  const fallbackMediaMode =
+    fromTokens === 'dark' || fromTokens === 'light'
+      ? fromTokens
+      : isError || mode === 'light'
+        ? 'dark'
+        : 'light';
+  // Once painted, the card's text takes the side that reads best on it.
+  const measuredMediaMode = useSurfaceMediaMode(
+    rootRef,
+    true,
+    pickInvertedSide,
+  );
 
   return (
     <div
@@ -446,7 +476,7 @@ export function ToastSurface({
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode="auto" fallback={fallbackMediaMode}>
+      <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
         {renderContent ? (
           renderContent({
             body,

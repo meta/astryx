@@ -4,8 +4,8 @@
  * @file ci-swizzle-proof.test.mjs
  * @input .github/workflows/ci.yml and the swizzle proof's slice files
  * @output Proof that the swizzle proof runs in its own required legs, one
- *   slice each, exactly when its scope proves a target, and never inside the
- *   Node legs
+ *   slice each under the Node legs' shard watchdog, exactly when its scope
+ *   proves a target, and never inside the Node legs
  * @position Beside the other ci.yml shape tests
  */
 
@@ -33,12 +33,45 @@ describe('the swizzle proof in CI', () => {
     const job = ci.jobs['swizzle-proof'];
     expect(job.strategy.matrix.slice).toEqual(sliceFiles.map((_, i) => i + 1));
     expect(job.strategy['fail-fast']).toBe(false);
-    const run = job.steps.find(
+    const step = job.steps.find(
       step => step.name === 'Run this slice of the swizzle proof',
-    ).run;
-    expect(run).toBe(
-      `pnpm test:node ${SLICES}/swizzle-proof.\${{ matrix.slice }}.test.mjs`,
     );
+    expect(step.run).toContain(
+      `pnpm test:node "\${WATCHDOG[@]}" ${SLICES}/swizzle-proof.\${{ matrix.slice }}.test.mjs`,
+    );
+    // Its own job runs the slice: never the setting that leaves it out.
+    expect(step.env?.VITEST_SWIZZLE_PROOF_OWN_JOB).toBeUndefined();
+  });
+
+  it('runs each slice under the shard watchdog, as the Node legs do, and checks its recorded time', () => {
+    const slice = ci.jobs['swizzle-proof'].steps.find(
+      step => step.name === 'Run this slice of the swizzle proof',
+    );
+    const node = ci.jobs['test-node'].steps.find(
+      step => step.name === 'Run this shard of the Node tests',
+    );
+    // The same limit, counted the same way, and the same reporters.
+    for (const line of node.run
+      .split('\n')
+      .filter(line =>
+        /^(started=|VITEST_SHARD_WATCHDOG_SECONDS=|export |WATCHDOG=)/.test(
+          line.trim(),
+        ),
+      ))
+      expect(slice.run).toContain(line.trim());
+    expect(ci.jobs['swizzle-proof']['timeout-minutes']).toBe(
+      ci.jobs['test-node']['timeout-minutes'],
+    );
+    expect(slice.env.VITEST_SHARD_TIMES_FILE).toBe(
+      node.env.VITEST_SHARD_TIMES_FILE,
+    );
+    const drift = ci.jobs['swizzle-proof'].steps.find(
+      step => step.name === 'Check the recorded time of this slice',
+    );
+    expect(drift.run).toBe(
+      'node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1',
+    );
+    expect(drift.if).toContain("steps.slice.outcome != 'skipped'");
   });
 
   it('starts the legs exactly when the scope proves a target', () => {

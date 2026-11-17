@@ -169,6 +169,37 @@ describe.skipIf(!posix || process.platform === 'darwin')('jiti cache', () => {
     ]);
   });
 
+  it('reads a grown folder again only once its oldest kept copy could go', async () => {
+    const {keepWithinLimit} = await load();
+    const dir = path.join(home, 'astryx', 'jiti');
+    fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+    // Every copy was used in the last day: none can go, whatever the size.
+    writeAged(dir, 'app-a.0000000a.cjs', 100, DAY);
+    writeAged(dir, 'app-b.0000000b.cjs', 100, DAY / 2);
+    keepWithinLimit(dir, 50);
+    // A copy a later run reads from: the folder grows, and is not read
+    // again before the oldest copy is RECENT_USE_MS old.
+    writeAged(dir, 'app-c.0000000c.cjs', 100, 3 * DAY);
+    touchFolder(dir);
+    keepWithinLimit(dir, 50);
+    expect(fs.readdirSync(dir).sort()).toEqual([
+      '.checked',
+      'app-a.0000000a.cjs',
+      'app-b.0000000b.cjs',
+      'app-c.0000000c.cjs',
+    ]);
+    vi.useFakeTimers({toFake: ['Date'], now: Date.now() + 2 * DAY * 1000});
+    try {
+      keepWithinLimit(dir, 150);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(fs.readdirSync(dir).sort()).toEqual([
+      '.checked',
+      'app-b.0000000b.cjs',
+    ]);
+  });
+
   it('removes only the copies jiti wrote: never another file, a link or a folder', async () => {
     const {keepWithinLimit} = await load();
     const dir = path.join(home, 'astryx', 'jiti');

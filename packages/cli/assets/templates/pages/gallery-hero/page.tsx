@@ -70,6 +70,7 @@ export default function GalleryHero() {
                 <Button
                   label="Get started"
                   variant="primary"
+                  href="#"
                   endContent={
                     <Icon
                       icon={ArrowRightIcon}
@@ -79,7 +80,7 @@ export default function GalleryHero() {
                     />
                   }
                 />
-                <Button label="Learn more" variant="secondary" />
+                <Button label="Learn more" variant="secondary" href="#" />
               </HStack>
             </VStack>
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>

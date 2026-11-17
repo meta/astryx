@@ -125,6 +125,16 @@ Normalization follows one precedence order:
 
 Explicit values win within their surface. Component maps merge by component,
 style key, and CSS property rather than replacing the entire inherited target.
+A component, style key, or value left `undefined` in a component block,
+pseudo-class block, color-mode block, surface, or adaptation rule is not set: in
+a style key or a color-mode block the inherited value stays, and a restated
+pseudo-class block replaces the inherited one whole. `null` keeps its existing
+meaning. Root `localTokens: undefined` is refused by name, as
+`extends: undefined` is: a root `localTokens` or `extends` left undefined is
+almost always a failed import. A local token left `undefined` declares nothing:
+an adaptation rule that writes a name no theme in the lineage declares still
+fails with its name, and a `var()` reference to such a name stays external
+(INV8).
 An explicit icon, indicator, or `componentIcons` entry replaces the inherited
 entry for the same key whole. An explicit `iconVariants` list replaces the
 inherited list; an omitted list is inherited. An inherited function entry keeps
