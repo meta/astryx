@@ -686,6 +686,14 @@ export default function Page() {
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
+    // A CommonJS module's exports are read by interop, as a bundler reads them.
+    put('src/lib-cjs.js', 'module.exports = {a: 1};\n');
+    put(
+      'src/from-cjs.tsx',
+      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\n",
+    );
+    await render('src/from-cjs.tsx', {cwd: dir, out: 'from-cjs.html'});
+    expect(fs.existsSync(path.join(dir, 'from-cjs.html'))).toBe(true);
     // In JavaScript a plain re-export names a value, so a missing one is refused.
     put(
       'src/lib-js.js',

@@ -1572,6 +1572,26 @@ function reach(name) {
   parentPort?.postMessage({stage: name});
 }
 
+/** Statements that make a module an ES module. */
+const MODULE_STATEMENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration']);
+
+/**
+ * Whether one of the page's modules is CommonJS: a `.cjs` or `.cts` file, or
+ * one with no `import` or `export` statement. A bundler reads a CommonJS
+ * module's exports by interop, so it does not refuse a named import from it.
+ * @param {string} file
+ */
+function isCommonJs(file) {
+  if (/\.c[jt]s$/.test(file)) return true;
+  try {
+    return !parseModule(fs.readFileSync(file, 'utf8'), file).program.body.some(
+      (/** @type {any} */ statement) => MODULE_STATEMENTS.has(statement.type),
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The first import in the page's own files of a name its module does not
  * export (a named import), where the page uses that name as a value: a
@@ -1599,6 +1619,7 @@ async function missingNamedExports() {
       const target = importedFile(spec, file);
       const local = Boolean(target && path.isAbsolute(target) && isLocal(target) && /\.[cm]?[jt]sx?$/.test(target));
       if (!local && !spec.startsWith('@astryxdesign/') && !/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
+      if (local && isCommonJs(/** @type {string} */ (target))) continue;
       // In TypeScript a plain re-export (`export {ButtonProps}`) may name a
       // type, which the module cannot tell from a value's, so it is no use.
       // In JavaScript it names a value, which a build refuses when missing.
