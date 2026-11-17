@@ -374,10 +374,18 @@ describe('tempFolderOf', () => {
     ['/tmp', fs.realpathSync('/tmp')].some(tmp =>
       [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
     );
+  // The test run's macOS home folder is in the system temp folder, which then
+  // takes no scratch copy either.
+  const tmpdirHoldsHome = [
+    path.resolve(os.tmpdir()),
+    fs.realpathSync(os.tmpdir()),
+  ].some(tmp =>
+    [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
+  );
 
   it('names the system temp folder that holds a path, and nothing for any other path', () => {
     expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
-      path.resolve(os.tmpdir()),
+      tmpdirHoldsHome ? null : path.resolve(os.tmpdir()),
     );
     expect(
       tempFolderOf(
