@@ -286,7 +286,7 @@ describe('only on a setting that is no group member', () => {
         s.find(x => x.thing === 'corners').only = true;
       });
       const r = await cli([...ED, 'show', 't']);
-      expect(r.error).toContain('has only, which is for one member of a group');
+      expect(r.error).toContain('has only, which is for one part, never a group');
       expect(r.suggestions[0].name).toMatch(/ editor undo t corners$/);
       expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings()).toEqual([]);

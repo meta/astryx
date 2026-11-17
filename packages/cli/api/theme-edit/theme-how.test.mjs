@@ -2675,8 +2675,8 @@ const QUESTIONS_H = [
   [
     'button gradient #2563eb 0% to #9333ea 100%',
     {
-      // (A gradient is a look: it goes on the button-like family.)
-      top: /^set q background 'linear-gradient\(#2563eb 0%, #9333ea 100%\)' --on button-like$/,
+      // (Set on the button, the gradient reaches its button-like family.)
+      top: /^set q background 'linear-gradient\(#2563eb 0%, #9333ea 100%\)' --on button$/,
     },
   ],
   // typed values without a colon

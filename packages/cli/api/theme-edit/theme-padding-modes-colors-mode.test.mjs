@@ -484,10 +484,13 @@ describe('a whole-part hover the own source sets itself', () => {
       "components: {button: {base: {':hover': {backgroundColor: 'red'}}}},",
     );
     await themeEditShow('h6o', {cwd});
+    // (Kept to the button: its family would take it where the source sets
+    // nothing.)
     const r = await themeEditSet('h6o', 'background-color', 'blue', {
       cwd,
       on: 'button',
       state: 'hover',
+      only: true,
     });
     expect(r.data.notes.join(' ')).toMatch(/so this does not show there/);
     expect(cssOf('h6o')).not.toMatch(/background-color: blue/);

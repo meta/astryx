@@ -1709,7 +1709,7 @@ export function settingsProblem(
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     if (s.only === true && !onlyFits(s))
-      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group styled alike (${AUTO_SPREAD.join(', ')})`;
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one part, never a group or the whole theme`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list. An entry with a twin is named
@@ -2392,25 +2392,34 @@ export function entryDamage(s) {
 }
 
 /**
- * Whether `only` fits a setting, as `set --only` takes it and the settings
- * reader keeps it: it names one member of a group styled alike (a text
- * input of inputs), or a bar's height or vertical padding.
+ * Whether `only` fits a setting: it names one part, never a group, as
+ * `set --only` takes it (a part in a family keeps the setting to itself;
+ * the census, which knows the families, is not read to load settings, and
+ * `only` on a part in none changes nothing).
  * @param {any} s
- * @param {Record<string, any> | null} [map] the part map, when there is one
  */
-export function onlyFits(s, map = null) {
-  const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  if (fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)))
-    return true;
-  // A height or vertical padding on a bar: --only keeps it off the row the
-  // bar holds (barReach). Read without the part map (a saved entry), any
-  // part may be such a bar; with it, only a part holding one row is.
+function onlyFits(s) {
+  return (
+    typeof s.on === 'string' &&
+    !FAMILIES[s.on] &&
+    !GROUP_ROLES.includes(/** @type {any} */ (s.on))
+  );
+}
+
+/**
+ * Whether --only on a setting keeps it off a bar's row: a height or
+ * vertical padding on a part that holds one bar row (see barReach). set
+ * keeps --only for it, as it does for a family member.
+ * @param {any} s
+ * @param {Record<string, any>} map the part map
+ */
+export function barKeepsOnly(s, map) {
   return (
     s.source === 'property' &&
     typeof s.thing === 'string' &&
     BAR_REACH_THINGS.test(s.thing) &&
     typeof s.on === 'string' &&
-    (map == null || barRows(map, s.on).length === 1)
+    barRows(map, s.on).length === 1
   );
 }
 
@@ -2470,7 +2479,7 @@ function damagedEntry(data, problem) {
             problem.startsWith(`${s.thing} is set on ""`))) ||
         (entryDamage(s) === 'only' &&
           (problem.startsWith(`${s.thing} has only `) ||
-            problem.includes(' has only, which is for one member'))),
+            problem.includes(' has only, which is for one part'))),
     ) ?? null
   );
 }
@@ -4451,6 +4460,112 @@ export const GROUP_ROLES = /** @type {const} */ ([
 ]);
 
 /**
+ * The family roles a setting on one of their members reaches by default,
+ * the most particular first: a look set on a button reaches every part
+ * drawn as a button, a menu row's every row a list highlights. accent-fills
+ * is a color source, not a look, so it spreads only when named.
+ */
+const REACH_ROLES = [
+  'button-like',
+  'option-rows',
+  'overlay-headers',
+  'status-surfaces',
+  'overlays',
+  'inset-fields',
+];
+
+/**
+ * The family a setting on one part reaches unless `--only`: the
+ * always-alike group the part is in (inputs, checks, menus), else, for a
+ * CSS property or a dial, the family role the census reads from its
+ * structure (a selected or active look: the selected items; any other: the
+ * first of its look roles). None for a group named itself, a role font, or
+ * a part in no family.
+ * @param {{project?: any, C?: any} | null | undefined} ctx
+ * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
+ * @returns {string | null}
+ */
+export function reachGroupOf(ctx, s) {
+  if (!s.on || s.thing === 'font') return null;
+  const groups = groupsOf(ctx);
+  if (groups[s.on]) return null;
+  const fam = familyOf(s.on);
+  if (fam && AUTO_SPREAD.includes(fam)) return fam;
+  // (A token set on a part is what that part reads inside: a family's
+  // members read their own, so no drawing tells which take it alike.)
+  if (String(s.thing ?? '').startsWith('--')) return null;
+  const roles = /^(?:selected|active)$/.test(String(s.state ?? ''))
+    ? ['selected-items']
+    : REACH_ROLES;
+  return roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+}
+
+/**
+ * Whether a setting on one member of the group reaches the group's other
+ * members by default (the always-alike groups and the family roles a part
+ * reaches), as `how` lists the groups.
+ * @param {string} name
+ */
+export function groupReachesByDefault(name) {
+  return (
+    AUTO_SPREAD.includes(name) ||
+    REACH_ROLES.includes(name) ||
+    name === 'selected-items'
+  );
+}
+
+/**
+ * Whether a setting reaches parts beyond the one it names: it names a
+ * group, or it is set on a member of a family without `--only`.
+ * @param {{project?: any, C?: any}} ctx
+ * @param {Pick<Setting, 'on' | 'thing' | 'only'> & {state?: string | null}} s
+ */
+export function spreads(ctx, s) {
+  return Boolean(
+    s.on && (groupsOf(ctx)[s.on] || (!s.only && reachGroupOf(ctx, s))),
+  );
+}
+
+/**
+ * The parts a setting writes: partsOf, less the members of its group or
+ * family that keep a setting of their own (ownSettingOf). The part it is
+ * set on is its own: there the later of the two wins.
+ * @param {{project: any, C?: any}} ctx
+ * @param {{settings: Setting[]}} data
+ * @param {Setting} s
+ * @returns {string[]}
+ */
+export function writtenPartsOf(ctx, data, s) {
+  const parts = partsOf(/** @type {any} */ (ctx), s);
+  return spreads(ctx, s)
+    ? parts.filter(t => t === s.on || !ownSettingOf(data, s, t))
+    : parts;
+}
+
+/**
+ * A part's own setting of the same thing, in the same variant, state and
+ * mode: it keeps its own against every group or family setting, whatever
+ * the order they were made in.
+ * @param {{settings: Setting[]}} data
+ * @param {Setting} s the spreading setting
+ * @param {string} part
+ * @returns {Setting | undefined}
+ */
+export function ownSettingOf(data, s, part) {
+  return data.settings.find(
+    x =>
+      x !== s &&
+      x.on === part &&
+      kebab(String(x.thing)) === kebab(String(s.thing)) &&
+      (x.when ?? '') === (s.when ?? '') &&
+      (x.state ?? '') === (s.state ?? '') &&
+      // (A part's setting with no mode is its setting in both modes: a
+      // one-mode look leaves it in that mode too.)
+      (!x.mode || x.mode === s.mode),
+  );
+}
+
+/**
  * A part name or a group's members.
  * @param {{project: any, C?: any}} ctx
  * @param {string} name
@@ -4460,8 +4575,9 @@ export function membersOf(ctx, name) {
 }
 
 /**
- * The parts a setting styles: the group when `--on` names one, the whole
- * group of an always-alike member unless `--only`, else the one part.
+ * The parts a setting styles: the group when `--on` names one; set on one
+ * member of a family (reachGroupOf), the members that draw it alike, unless
+ * `--only`; else the one part.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null}} s
  * @returns {string[]}
@@ -4480,7 +4596,7 @@ export function partsOf(ctx, s) {
         ? [...new Set(members.flatMap(t => fillParts(ctx, t)))]
         : members;
   if (groupsOf(ctx)[s.on]) return spread(groupsOf(ctx)[s.on].filter(has));
-  const fam = familyOf(s.on);
+  const fam = s.only ? null : reachGroupOf(ctx, s);
   // (Set on one member under a condition of its own, "--on selector
   // --when variant:secondary": only the members that have that value
   // take it; the others have no such variant to show it in.)
@@ -4494,7 +4610,7 @@ export function partsOf(ctx, s) {
         return Array.isArray(vals) && vals.map(String).includes(value);
       });
   };
-  if (fam && AUTO_SPREAD.includes(fam) && !s.only)
+  if (fam)
     return spread(
       (groupsOf(ctx)[fam] ?? [])
         .filter(has)
@@ -4505,30 +4621,101 @@ export function partsOf(ctx, s) {
 }
 
 /**
- * Whether a group member draws a property as the member named does, at
- * rest (the part data's values in each render, no state): a group styled
- * alike spreads a setting only where its members are alike in Core. A
- * radio is round where a checkbox has small corners, so a checkbox's
- * corners stay the checkbox's. Unknown either way counts as alike.
+ * Whether a member of the family a setting reaches draws its thing with the
+ * same values as the part named (as Core draws it, at rest or in the
+ * setting's state): a value that keeps the named part as it is keeps that
+ * member as it is too. Unknown either way counts as the same.
  * @param {Ctx} ctx
- * @param {Pick<Setting, 'on' | 'thing'>} s
+ * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @param {string} member
+ */
+export function drawnSame(ctx, s, member) {
+  return drawnAlike(ctx, s, member, true);
+}
+
+/**
+ * What a value draws, by kind: nothing (none, a clear color, a zero size,
+ * a CSS-wide keyword), a circle or pill (a corner radius of the full
+ * token, 50% or a huge length), or something.
+ * @param {string} prop the CSS property, kebab-case
+ * @param {string} value
+ * @returns {'none' | 'round' | 'drawn'}
+ */
+function drawnKind(prop, value) {
+  const v = value.trim().toLowerCase();
+  if (
+    !v ||
+    /^(?:none|transparent|0|0px|initial|unset|inherit|revert)$/.test(v) ||
+    /^rgba?\([^)]*[,/]\s*0\s*\)$/.test(v)
+  )
+    return 'none';
+  if (
+    /radius/.test(prop) &&
+    (/--radius-full\b|50%|calc\(infinity/.test(v) ||
+      (lengthPx(v) ?? 0) >= 999)
+  )
+    return 'round';
+  return 'drawn';
+}
+
+/**
+ * Whether a group member draws a property as the member named does, at
+ * rest (the part data's values in each render, no state; for a setting on
+ * a state, in that state), by kind (drawnKind): none, round or drawn. A
+ * family spreads a setting only where its members are alike in Core: a
+ * radio is round where a checkbox has small corners, so a checkbox's
+ * corners stay the checkbox's; a button and a toggle button both fill
+ * their box, so a fill set on one reaches the other. Unknown either way
+ * counts as alike.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
+ * @param {string} member
+ * @param {boolean} [exact] compare the values themselves, not their kind
  * @returns {boolean}
  */
-function drawnAlike(ctx, s, member) {
+function drawnAlike(ctx, s, member, exact = false) {
   if (member === s.on || !s.on) return true;
   const thing = String(s.thing ?? '');
   if (thing.startsWith('--')) return true;
   const prop = thing === 'corners' ? 'border-radius' : kebab(thing);
   /** @type {Record<string, any> | undefined} */
   const MAP = /** @type {any} */ (ctx).C?.MAP;
+  // (A condition is the part's own props and attributes, then what is
+  // drawn inside or around it: a press overlay, a pseudo-class. At rest:
+  // the part's own element with no state. Set for a state, "--state
+  // selected": as each draws it in that state, its attribute or its own
+  // pseudo-class.)
+  const st = /^[\w-]+$/.test(String(s.state ?? '')) ? String(s.state) : null;
+  /** @param {string} part @param {string} cond */
+  const drawnIn = (part, cond) => {
+    const [head, ...tail] = cond.split(' ');
+    const pairs = head.split(',').map(kv => kv.split('='));
+    if (!st) {
+      // (A state: one the docs name, an ARIA state, or a boolean attribute
+      // Core writes as its own name, selected="selected".)
+      const states = new Set(
+        (ctx.project?.target?.get(part)?.states ?? []).map(String),
+      );
+      return (
+        !tail.length &&
+        !/[:[]/.test(head) &&
+        !pairs.some(
+          ([k, v]) => k === v || states.has(k) || k.startsWith('aria-'),
+        )
+      );
+    }
+    return (
+      (!tail.length && pairs.some(([k]) => k === st || k === `aria-${st}`)) ||
+      (tail.length === 1 && tail[0] === `:${st}`)
+    );
+  };
   /** @param {string} part */
   const rest = part => {
     const at = MAP?.[part]?.at?.[prop];
     if (!at) return null;
     const vals = Object.entries(at)
-      .filter(([cond]) => !/:/.test(cond))
-      .map(([, v]) => String(v).trim());
+      .filter(([cond]) => drawnIn(part, cond))
+      .map(([, v]) => (exact ? String(v).trim() : drawnKind(prop, String(v))));
     return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
   };
   const a = rest(s.on);
@@ -6956,24 +7143,10 @@ export function compileTheme(ctx, data, base) {
     // A setting for the mode a one-mode theme does not show still applies
     // where Core draws that mode (a toast, a lightbox), as the theme's other
     // halves of its colors do.
-    // (A family role's look never overwrites a member the theme set the
-    // same thing on itself, before or after.)
-    const parts = GROUP_ROLES.includes(/** @type {any} */ (s.on))
-      ? partsOf(ctx, s).filter(
-          t =>
-            !data.settings.some(
-              x =>
-                x !== s &&
-                x.on === t &&
-                kebab(x.thing) === kebab(s.thing) &&
-                (x.when ?? '') === (s.when ?? '') &&
-                (x.state ?? '') === (s.state ?? '') &&
-                // (A member's setting with no mode is its setting in both
-                // modes: a one-mode look leaves it in that mode too.)
-                (!x.mode || x.mode === s.mode),
-            ),
-        )
-      : partsOf(ctx, s);
+    // (A group's or a family's setting never overwrites a part the theme
+    // set the same thing on itself, before or after: the part keeps its
+    // own.)
+    const parts = writtenPartsOf(ctx, data, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
         // Past 1000px a radius is fully round: the pill tokens apply.
@@ -8390,29 +8563,11 @@ export function maskedSettings(data, ctx = null) {
       .filter(x => x.thing === 'headings')
       .map(x => x.axis ?? 'weight'),
   );
-  // A part setting that a later setting on a group holding that part
-  // covers: the later one is written after it, so it wins.
-  data.settings.forEach((s, i) => {
-    if (s.source !== 'dial' || !s.on || groupsOf(ctx)[s.on]) return;
-    const later = data.settings
-      .slice(i + 1)
-      .find(
-        x =>
-          x.thing === s.thing &&
-          x.on &&
-          (groupsOf(ctx)[x.on] ?? []).includes(/** @type {string} */ (s.on)) &&
-          (x.when ?? '') === (s.when ?? '') &&
-          (x.state ?? '') === (s.state ?? ''),
-      );
-    if (later)
-      out.set(
-        s,
-        `${describe(later)} comes later and covers ${s.on}, so ${s.on} shows ${later.value}; set ${s.on} again to make it win`,
-      );
-  });
-  // With the parts known: a later setting of the same thing that reaches
-  // every part an earlier one styles (a member that spreads to its group,
-  // the same part without --only), dial or CSS property, covers it too.
+  // (A part's own setting is never covered by a later group or family
+  // setting: it keeps its own, whatever the order.)
+  // With the parts known: a later setting of the same thing that writes
+  // every part an earlier one styles (the same part set again, spreading
+  // or alone), dial or CSS property, covers it.
   if (ctx)
     data.settings.forEach((s, i) => {
       if (
@@ -8433,7 +8588,7 @@ export function maskedSettings(data, ctx = null) {
             (x.when ?? '') === (s.when ?? '') &&
             (x.state ?? '') === (s.state ?? '') &&
             (x.mode ?? '') === (s.mode ?? '') &&
-            mine.every(t => partsOf(ctx, x).includes(t)),
+            mine.every(t => writtenPartsOf(ctx, data, x).includes(t)),
         );
       if (later)
         out.set(
@@ -11710,6 +11865,21 @@ export async function contrastProblems(ctx, data, res) {
                 ].includes(name)
               )
                 return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+              // A setting that reaches the text's part from another member of
+              // its family role (a button's color on an avatar group's
+              // overflow): the fix is that part's own drill-in, so the rest of
+              // the family keeps what reads on it. (An always-alike group is
+              // fixed together.)
+              const family = drawn.on ? reachGroupOf(ctx, drawn) : null;
+              if (
+                family &&
+                !AUTO_SPREAD.includes(family) &&
+                !drawn.only &&
+                x.textPart &&
+                drawn.on !== x.textPart &&
+                onText
+              )
+                return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
               return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateOn(drawn.on)}${modeFlag(x.mode)}`;
             }
             // (Text on a toast's own surface takes a color on the toast: a

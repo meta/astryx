@@ -4,9 +4,9 @@
  * The family roles the census reads from the parts' own structure are
  * groups `--on` takes: each expands to its members, and a look set on one
  * never overwrites a member the theme set the same thing on itself. A look
- * said of one member (a gradient, a frame, a selected pill) reaches its
- * family; set on one member names the members without it, with the family
- * line. The looks are Bootstrap 1.4's. Against real bundled base themes.
+ * set on one member (a gradient, a frame, a selected pill) reaches the
+ * members of its family that draw it alike. The looks are Bootstrap 1.4's.
+ * Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -170,22 +170,15 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
       'b',
     );
     expect(lines).toEqual([
-      "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button-like",
+      "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button",
     ]);
-    // The answer names the widening: the family and every member it reaches.
-    const {data} = /** @type {any} */ (
-      await themeEditHow('buttons with a gradient from #ffffff to #e6e6e6', {
-        cwd,
-        theme: 'b',
-      })
+    const r = await themeEditSet(
+      'b',
+      'background',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {cwd, on: 'button'},
     );
-    expect(String(data.results[0].text)).toMatch(
-      /\(on button-like: every part of that family that draws alike, [^)]*\bbutton\b[^)]*\btoggle-button\b/,
-    );
-    await themeEditSet('b', 'background', 'linear-gradient(#ffffff, #e6e6e6)', {
-      cwd,
-      on: 'button-like',
-    });
+    expect(r.data.group?.name).toBe('button-like');
     expect(ruleOf(cssOf('b'), '.astryx-toggle-button')).toMatch(
       /linear-gradient\(#ffffff, #e6e6e6\)/,
     );
@@ -197,12 +190,15 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     expect(
       await first('menu rows with a gradient from #049cdb to #0064cd', 'o'),
     ).toEqual([
-      "set o background 'linear-gradient(#049cdb, #0064cd)' --on option-rows",
+      "set o background 'linear-gradient(#049cdb, #0064cd)' --on dropdown-menu-item",
     ]);
-    await themeEditSet('o', 'background', 'linear-gradient(#049cdb, #0064cd)', {
-      cwd,
-      on: 'option-rows',
-    });
+    const r = await themeEditSet(
+      'o',
+      'background',
+      'linear-gradient(#049cdb, #0064cd)',
+      {cwd, on: 'dropdown-menu-item'},
+    );
+    expect(r.data.group?.name).toBe('option-rows');
     for (const p of ['typeahead-option', 'selector-option-row'])
       expect(ruleOf(cssOf('o'), `.astryx-${p}`), p).toMatch(
         /linear-gradient\(#049cdb, #0064cd\)/,
@@ -217,41 +213,38 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
       'd',
     );
     expect(lines).toEqual([
-      "set d border '1px solid #4d4d4d' --on overlays",
-      "set d box-shadow '0 3px 7px #4d4d4d' --on overlays",
+      "set d border '1px solid #4d4d4d' --on dialog",
+      "set d box-shadow '0 3px 7px #4d4d4d' --on dialog",
     ]);
-    // (A shadow alone, or a removal, stays the dialog's.)
-    expect(await first('no shadow on dialogs', 'd')).not.toEqual(
-      expect.arrayContaining([expect.stringMatching(/--on overlays/)]),
+    const r = await themeEditSet('d', 'box-shadow', '0 3px 7px #4d4d4d', {
+      cwd,
+      on: 'dialog',
+    });
+    expect(r.data.group?.name).toBe('overlays');
+    expect(r.data.parts).toEqual(
+      expect.arrayContaining(['drawer', 'bottom-sheet', 'popover', 'hover-card']),
     );
   }, 240_000);
 
-  it('the selected pill, set on one item, names the family and its line', async ctx => {
+  it('the selected pill, set on one item, reaches every selected item drawn alike', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('p', {cwd, like: 'neutral'});
-    const r = await themeEditSet('p', 'border-radius', '4px', {
+    const r = await themeEditSet('p', 'background-color', '#0069d6', {
       cwd,
       on: 'side-nav-item',
       state: 'selected',
     });
-    const note = JSON.stringify(r.data?.leftOut ?? []);
-    expect(note).toMatch(/calendar-day/);
-    expect(note).toContain('--on selected-items --state selected');
-    for (const [thing, v] of [
-      ['border-radius', '4px'],
-      ['background-color', '#0069d6'],
-      ['color', '#ffffff'],
-    ])
-      await themeEditSet('p', thing, v, {
-        cwd,
-        on: 'selected-items',
-        state: 'selected',
-      });
+    expect(r.data.group?.name).toBe('selected-items');
+    expect(r.data.parts).toEqual(
+      expect.arrayContaining(['side-nav-item', 'calendar-day']),
+    );
+    expect(r.data.group?.only).toContain(
+      '--on side-nav-item --state selected --only',
+    );
     const day = ruleOf(
       cssOf('p'),
       '.astryx-calendar-day[data-selected="selected"]',
     );
-    expect(day).toMatch(/border-radius: 4px/);
     expect(day).toMatch(/background-color: #0069d6/);
   }, 240_000);
 });
@@ -263,14 +256,22 @@ describe('alerts and overlay headers (Bootstrap 1.4)', () => {
     expect(
       await first('banners with a gradient from #fceec1 to #eedc94', 'a'),
     ).toEqual([
-      "set a background 'linear-gradient(#fceec1, #eedc94)' --on status-surfaces",
+      "set a background 'linear-gradient(#fceec1, #eedc94)' --on banner",
     ]);
+    const g = await themeEditSet(
+      'a',
+      'background',
+      'linear-gradient(#fceec1, #eedc94)',
+      {cwd, on: 'banner'},
+    );
+    expect(g.data.parts).toEqual(expect.arrayContaining(['banner', 'toast']));
     const r = await themeEditSet('a', 'border-bottom', '1px solid #eeeeee', {
       cwd,
       on: 'dialog-header',
     });
-    const note = JSON.stringify(r.data?.leftOut ?? []);
-    expect(note).toMatch(/drawer-header/);
-    expect(note).toContain('--on overlay-headers');
+    expect(r.data.group?.name).toBe('overlay-headers');
+    expect(r.data.parts).toEqual(
+      expect.arrayContaining(['dialog-header', 'drawer-header']),
+    );
   }, 240_000);
 });

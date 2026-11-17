@@ -320,14 +320,18 @@ describe('review on #11303', () => {
     fs.rmSync(path.join(cwd, 'themes/kv'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a spacing step on a member covered by a later group setting starts from the group value', async () => {
+  it('a spacing step on a member with its own spacing starts from its own, whatever a later group setting has', async () => {
     await themeEditNew('sg', {cwd});
     await themeEditSet('sg', 'spacing', 'tight', {cwd, on: 'card'});
     await themeEditSet('sg', 'spacing', 'spacious', {cwd, on: 'containers'});
-    // A step from spacious (the group's value) goes down to roomy; up from
-    // the largest step is refused.
-    const r = await themeEditSet('sg', 'spacing', 'less', {cwd, on: 'card'});
-    expect(r.data.setting.value).toBe('roomy');
+    // The card keeps its own tight (a part's own setting wins over its
+    // group's): down from the smallest step is refused, up goes to compact.
+    const r = await refusal(() =>
+      themeEditSet('sg', 'spacing', 'less', {cwd, on: 'card'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    const up = await themeEditSet('sg', 'spacing', 'more', {cwd, on: 'card'});
+    expect(up.data.setting.value).toBe('compact');
     fs.rmSync(path.join(cwd, 'themes/sg'), {recursive: true, force: true});
   }, 240_000);
 

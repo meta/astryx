@@ -152,6 +152,10 @@ import {
   FOLLOWS,
   baseRedraws,
   groupsOf,
+  writtenPartsOf,
+  reachGroupOf,
+  ownSettingOf,
+  spreads,
 } from './_settings.mjs';
 import {
   borderFor,
@@ -2416,63 +2420,6 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
- * A look set on one member of a family role ("set … background-image …
- * --on toggle-button", "border-radius 4px --on side-nav-item --state
- * selected"): the family's other members that draw alike but do not share
- * it (the theme set nothing of that kind on them), named, with the one line
- * that gives it to the family. The set itself stays on the member asked.
- * @param {any} ctx @param {string} slug
- * @param {import('./_settings.mjs').ThemeData} data
- * @param {import('./_settings.mjs').Setting} s
- * @returns {Array<{note: string, run: string[]}>}
- */
-function familyLeftOut(ctx, slug, data, s) {
-  const thing = kebab(String(s.thing));
-  const selected = /^(?:selected|active)$/.test(String(s.state ?? ''));
-  const look = selected
-    ? /^(?:background(?:-color|-image)?|border-radius|corners)$/.test(thing)
-    : !s.state &&
-      !/^(?:none|0|0px|transparent|initial|unset)$/i.test(
-        String(s.value ?? '').trim(),
-      ) &&
-      (/^(?:background-image|box-shadow|border)$/.test(thing) ||
-        (thing === 'background' && /gradient\(/.test(String(s.value))));
-  const groups = groupsOf(ctx);
-  const rule =
-    !s.state &&
-    /^border-(?:bottom|top|block-end|block-start)$/.test(thing) &&
-    (groups['overlay-headers'] ?? []).includes(String(s.on));
-  if (!look && !rule) return [];
-  const role = rule
-    ? 'overlay-headers'
-    : (selected
-        ? ['selected-items']
-        : ['button-like', 'overlays', 'option-rows', 'status-surfaces']
-      ).find(r => (groups[r] ?? []).includes(String(s.on)));
-  if (!role) return [];
-  const others = (groups[role] ?? []).filter(
-    m =>
-      m !== s.on &&
-      ctx.project.target.has(m) &&
-      !data.settings.some(
-        x =>
-          x.on === m &&
-          kebab(String(x.thing)) === thing &&
-          (x.state ?? '') === (s.state ?? ''),
-      ),
-  );
-  if (!others.length) return [];
-  return [
-    {
-      note: `${others.join(', ')} ${others.length > 1 ? 'are' : 'is'} of ${s.on}'s family (${role}) but ${others.length > 1 ? 'do' : 'does'} not share this look; this gives it to the family (a member set on its own keeps its own):`,
-      run: [
-        `${P} set ${slug} ${s.thing} ${quoteCommandArgument(String(s.value))} --on ${role}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
-      ],
-    },
-  ];
-}
-
-/**
  * What a whole-theme change leaves out, by the census, each with the lines
  * that reach it, one per part: corners leave the parts the theme gives
  * corners of their own as they are; square corners leave the parts drawn as
@@ -2487,8 +2434,6 @@ function familyLeftOut(ctx, slug, data, s) {
  * @returns {Array<{note: string, run: string[]}>}
  */
 function leftOutParts(ctx, slug, data, sub, s) {
-  if (sub === 'set' && s.on && !s.when)
-    return familyLeftOut(ctx, slug, data, s);
   if (sub !== 'set' || s.on || s.when || s.state) return [];
   const C = ctx.C;
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
@@ -6592,19 +6537,6 @@ async function changeOnce(
   // They go, as the note says: Core writes each side to its own variable,
   // where a later shorthand would not win over them (undo brings them back).
   data.settings = data.settings.filter(x => !longhands.includes(x));
-  // A group setting covers part settings made before it for its members.
-  const covers =
-    sub === 'set' && s.source === 'dial' && s.on && groupsOf(ctx)[s.on]
-      ? data.settings.filter(
-          x =>
-            x !== s &&
-            x.thing === s.thing &&
-            x.on &&
-            groupsOf(ctx)[/** @type {string} */ (s.on)].includes(x.on) &&
-            (x.when ?? '') === (s.when ?? '') &&
-            (x.state ?? '') === (s.state ?? ''),
-        )
-      : [];
   /**
    * What Core writes for a part's property at rest, in every look the part
    * renders with no state, when they all agree: as written (a token
@@ -6695,8 +6627,7 @@ async function changeOnce(
     s.source !== 'token' &&
     !alsoReplaced.length &&
     !covered.length &&
-    !longhands.length &&
-    !covers.length
+    !longhands.length
   ) {
     const trial = compileTheme(ctx, data, base);
     const raw = styledChanges(compiledBefore, trial, base);
@@ -6736,7 +6667,10 @@ async function changeOnce(
     base,
     drawnAtRest,
   );
-  const parts = partsOf(ctx, s);
+  // The parts it writes, and the members of its group or family that keep
+  // their own setting of the same thing.
+  const parts = writtenPartsOf(ctx, data, s);
+  const keptOwn = partsOf(ctx, s).filter(t => !parts.includes(t));
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
   /** @type {import('./_settings.mjs').Setting[]} */
@@ -7054,9 +6988,12 @@ async function changeOnce(
       : []),
     ...(sub === 'set' && s.thing === 'spacing' ? sizeNotes : []),
     ...(sub === 'set' ? compileNotes : []),
-    ...(covers.length
+    // The members of the group or family this reaches that keep their own
+    // setting of the same thing: a part's own setting wins, whatever the
+    // order.
+    ...(sub === 'set' && keptOwn.length
       ? [
-          `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
+          `${keptOwn.join(', ')} ${keptOwn.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing} (set on ${keptOwn.length > 1 ? 'them' : 'it'}; a part's own setting wins over its group's or family's): \`${P} undo ${slug} ${undoArgs(ownSettingOf(data, s, keptOwn[0]) ?? s)}\` gives ${keptOwn[0]} this one`,
         ]
       : []),
     // Core writes a part's derived variables (a button's or card's radius
@@ -7215,14 +7152,26 @@ async function changeOnce(
       : []),
     ...r.notes,
   ];
+  // The group it styles: the one named, or the family a setting on one
+  // member reaches (unless --only), with every part written and the line
+  // that keeps it to the member alone.
+  const reach = s.on && !groupsOf(ctx)[s.on] && !s.only ? reachGroupOf(ctx, s) : null;
   const group = s.on
     ? groupsOf(ctx)[s.on]
       ? s.on
-      : parts.length > 1
-        ? familyOf(s.on)
+      : reach && parts.length + keptOwn.length > 1
+        ? reach
         : null
     : null;
+  const onlyLine =
+    group && group !== s.on && sub === 'set'
+      ? `${P} set ${slug} ${setArgs({...s, only: true}, String(s.value))}`
+      : null;
   if (s.note) notes.push(s.note);
+  if (onlyLine && parts.length > 1)
+    notes.push(
+      `reaches ${s.on}'s family (${group}), the parts drawn alike: ${parts.join(', ')}; for ${s.on} alone: \`${onlyLine}\``,
+    );
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -7753,7 +7702,9 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !groupsOf(ctx)[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            kept: keptOwn,
+            onlyHint: Boolean(onlyLine),
+            ...(onlyLine ? {only: onlyLine} : {}),
           }
         : null,
       changedTokens: lookCollapsed(
@@ -8377,7 +8328,49 @@ export async function themeEditShow(theme, options = {}) {
               if (exact)
                 masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
             }
-            return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+            // How far it reaches: the family a setting on one member spreads
+            // to (the parts it writes and the members keeping their own),
+            // or, kept to the member (--only), the family look it drills
+            // into.
+            const parts = writtenPartsOf(ctx, data, s);
+            const family =
+              s.on && !groupsOf(ctx)[s.on] ? reachGroupOf(ctx, s) : null;
+            const keptOwn = spreads(ctx, s)
+              ? partsOf(ctx, s).filter(t => !parts.includes(t))
+              : [];
+            const over =
+              family && s.only
+                ? [...data.settings]
+                    .reverse()
+                    .find(
+                      x =>
+                        x !== s &&
+                        x.thing === s.thing &&
+                        !!x.on &&
+                        x.on !== s.on &&
+                        (x.when ?? '') === (s.when ?? '') &&
+                        (x.state ?? '') === (s.state ?? '') &&
+                        (x.mode ?? '') === (s.mode ?? '') &&
+                        spreads(ctx, x) &&
+                        partsOf(ctx, x).includes(String(s.on)),
+                    )
+                : undefined;
+            const reach = !family
+              ? null
+              : s.only
+                ? {
+                    family,
+                    drillIn: true,
+                    over: over ? describe(over) : null,
+                  }
+                : {family, parts, kept: keptOwn};
+            return {
+              ...s,
+              parts,
+              ...(reach ? {reach} : {}),
+              ...(!family && keptOwn.length ? {kept: keptOwn} : {}),
+              ...(masked ? {masked} : {}),
+            };
           });
       })(),
       notes: [
@@ -8673,21 +8666,33 @@ function nowAppliesIn(ctx, data, removed, base) {
   // same thing set plainly on it, on its group, or for the whole theme; an
   // exact property on the part that this dial would have competed with.
   if (removed.on) {
-    const fam = familyOf(removed.on);
-    // The part's or its group's setting for the same variant and state
-    // first (a group's hover after the part's hover goes), then a plain one.
+    const part = removed.on;
+    // (Its group or family, where a dial set on it writes too.)
+    const fam = reachGroupOf(ctx, removed) ?? familyOf(part);
+    // The part's own setting (it keeps its own whatever the order), else
+    // the latest on its group or spread from a member of its family (the
+    // family's look a drill-in hid); for the same variant and state first
+    // (a group's hover after the part's hover goes), then a plain one.
     /** @param {(x: import('./_settings.mjs').Setting) => boolean} scoped */
-    const find = scoped =>
-      [...data.settings]
-        .reverse()
-        .find(
+    const find = scoped => {
+      const same = (/** @type {import('./_settings.mjs').Setting} */ x) =>
+        x.thing === removed.thing &&
+        x !== removed &&
+        (!x.mode || x.mode === removed.mode) &&
+        scoped(x);
+      const all = [...data.settings].reverse();
+      return (
+        all.find(x => same(x) && x.on === part) ??
+        all.find(
           x =>
-            x.thing === removed.thing &&
-            x !== removed &&
-            (!x.mode || x.mode === removed.mode) &&
-            (x.on === removed.on || (fam != null && x.on === fam)) &&
-            scoped(x),
-        );
+            same(x) &&
+            !!x.on &&
+            x.on !== part &&
+            spreads(ctx, x) &&
+            partsOf(ctx, x).includes(part),
+        )
+      );
+    };
     const reaches =
       (removed.when || removed.state
         ? find(
