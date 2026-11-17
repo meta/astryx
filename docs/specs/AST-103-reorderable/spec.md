@@ -407,7 +407,7 @@ more than one string; translation itself stays with the provider.
 
 Rejected: a translator-function option, and one flat option per string.
 
-### DEC-7 — The grip is the shared `drag` icon, through a stateful slot
+### DEC-7 — The grip is the shared `drag` icon, through a component icon slot
 
 **Reference:** `spec:AST-103/DEC-7`
 **Decider:** `cixzhang`, `2026-11-13`
@@ -415,47 +415,35 @@ Rejected: a translator-function option, and one flat option per string.
 The handle is its grip alone. The grip is a shared semantic icon, `drag`, so
 a theme draws it once, in its own style, for every surface that drags. A
 theme replaces it for the handle alone through the `list-reorder-handle`
-component icon slot, which falls back to `drag` at the `sm` size. The slot
-receives `pressed`, true while the row is in reorder mode, as the other
-stateful slots receive their state. So a theme can draw another grip in that
-mode. A complete `IconRegistry` may omit `drag` until the next minor release,
-which requires it (`DEP-0018`, `CLN-0030`).
+component icon slot, which falls back to `drag` at the `sm` size. The slot's
+size changes only the icon: the handle's box, target and ring stay the same
+(`architecture:icon-resolution-and-component-slots` INV8). A complete
+`IconRegistry` may omit `drag` until 0.8.0, which requires it (`DEP-0018`,
+`architecture:icon-resolution-and-component-slots` INV10 and `CLN-0030`).
 
 Rejected: three lines drawn as a pseudo-element, which no theme can replace.
-Rejected: a slot without state, because state added later changes what a
-theme's slot function receives.
 
 ## Deprecation and cleanup records
 
 ### DEP-0018 — Deprecate complete `IconRegistry` types that omit `drag`
 
-| Field            | Value                                                                                                       |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- |
-| id               | `DEP-0018`                                                                                                  |
-| cleanup          | `CLN-0030`                                                                                                  |
-| package          | `@astryxdesign/core`                                                                                        |
-| surface          | The public `IconRegistry` type accepting a complete registry that omits `drag`                              |
-| old contract     | A complete registry typed as `IconRegistry` may omit `drag`; the omitted entry resolves the default artwork |
-| replacement      | Add a `drag` entry in the registry's own style; `IconRegistry` already accepts it                           |
-| direct authority | FR5 and DEC-7. Owners: `spec:AST-103`: `cixzhang`                                                           |
-| warning          | Consumer docs and the release notes name `DEP-0018`. No runtime warning (`spec:AST-017` FR29)               |
-| migration        | Non-mechanical: draw `drag` artwork in the registry's style                                                 |
-| codemod          | None: icon artwork is bespoke to each theme and cannot be synthesized                                       |
-| downstream       | The default registry, every bundled theme, and every CLI theme template supply `drag`                       |
-| transition       | no prior transition                                                                                         |
-| state            | `deprecated`                                                                                                |
-| open decision    | None beyond listing `CLN-0030` in the minor plan                                                            |
-| target plan      | `CLN-0030` in the next minor release, as DEC-7 schedules                                                    |
-
-### CLN-0030 — `IconRegistry` requires `drag`
-
-| Field     | Value                                                                                 |
-| --------- | ------------------------------------------------------------------------------------- |
-| id        | `CLN-0030`                                                                            |
-| lifecycle | `DEP-0018`                                                                            |
-| delta     | `IconRegistry` requires `drag`: a complete registry that omits it fails to type-check |
-| rollback  | Restore the transitional optional `drag` from the final-patch baseline                |
-| state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                 |
+| Field            | Value                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0018`                                                                                                    |
+| cleanup          | `CLN-0030`                                                                                                    |
+| package          | `@astryxdesign/core`                                                                                          |
+| surface          | The public `IconRegistry` type accepting a complete registry that omits `drag`                                |
+| old contract     | A complete registry typed as `IconRegistry` may omit `drag`; the omitted entry resolves the default artwork   |
+| replacement      | Add a `drag` entry in the registry's own style; `IconRegistry` already accepts it                             |
+| direct authority | FR5, DEC-7, and `architecture:icon-resolution-and-component-slots` INV10. Owners: `cixzhang`, `imdreamrunner` |
+| warning          | Consumer docs and the release notes name `DEP-0018`. No runtime warning (`spec:AST-017` FR29)                 |
+| migration        | Non-mechanical: draw `drag` artwork in the registry's style                                                   |
+| codemod          | None: icon artwork is bespoke to each theme and cannot be synthesized                                         |
+| downstream       | The default registry, every bundled theme, and every CLI theme template supply `drag`                         |
+| transition       | no prior transition                                                                                           |
+| state            | `deprecated`                                                                                                  |
+| open decision    | None beyond listing `CLN-0030` in the minor plan                                                              |
+| target plan      | `CLN-0030` (`architecture:icon-resolution-and-component-slots`) in 0.8.0                                      |
 
 ## Open questions
 

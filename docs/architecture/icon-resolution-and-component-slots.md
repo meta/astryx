@@ -282,7 +282,9 @@ This record does not choose the migration design or timeline.
   inheritance; theme application owns active-theme selection.
 - **INV10 — Existing keys coexist.** Shipped slots and extension keys remain
   supported until a separate compatibility decision changes them. New Core slots
-  use `ComponentIconSlotMap` and `componentIcons`.
+  use `ComponentIconSlotMap` and `componentIcons`. A complete `IconRegistry`
+  may omit `drag`, the newest shared name, until 0.8.0, which requires it
+  (`spec:AST-103` DEP-0018, `CLN-0030`).
 - **INV11 — A selected function answers the request.** Once a function entry or slot
   function is selected, its result is final for that resolution. Public theme
   reads never call or return a slot function.
@@ -320,6 +322,18 @@ requirements. It does not copy the general resolution algorithm.
 Consumer icon props remain documented as component API. They are not listed as
 `componentIcons` slots unless the component also promises a separate stable
 theme-level role.
+
+## Deprecation and cleanup records
+
+### CLN-0030 — `IconRegistry` requires `drag`
+
+| Field     | Value                                                                                 |
+| --------- | ------------------------------------------------------------------------------------- |
+| id        | `CLN-0030`                                                                            |
+| lifecycle | `spec:AST-103` DEP-0018                                                               |
+| delta     | `IconRegistry` requires `drag`: a complete registry that omits it fails to type-check |
+| rollback  | Restore the transitional optional `drag` from the final-patch baseline                |
+| state     | `pending` — lands in 0.8.0, the next minor, with its `[breaking]` Changeset (INV10)   |
 
 ## Change coupling
 

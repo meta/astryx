@@ -60,13 +60,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
-import {Icon} from '../Icon/Icon';
-import type {IconVariant} from '../Icon/index';
-import {useComponentIcon} from '../Icon/useIcon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
-import {REORDER_GRIP_FALLBACK, reorderGripLength} from './ListReorderScope';
 import type {
   ListReorderHandleProps,
   ListReorderRowNameProps,
@@ -88,11 +85,14 @@ const TARGET_SIZE = 24;
 const TOUCH_TARGET_SIZE = 44;
 /** The target's least reach past the grip, px, so the ring clears it. */
 const TARGET_MIN_REACH = 4;
+/** The grip a handle draws when the theme maps nothing to its slot. */
+const REORDER_GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
 /**
- * The grip's length: the slot's icon size, which the handle publishes. Its
- * target, ring and distance from the row's edge derive from it.
+ * The grip's box: the default icon size. A theme's slot size changes only the
+ * icon, which stays centred on the box. The handle's box, target, ring and
+ * distance from the row's edge stay the same.
  */
-const GRIP = 'var(--_reorder-grip, 1rem)';
+const GRIP = '1rem';
 /** How far the target reaches past the grip on each side. */
 const TARGET_REACH = `max(${TARGET_MIN_REACH}px, (${TARGET_SIZE}px - ${GRIP}) / 2)`;
 /**
@@ -107,15 +107,15 @@ const TOUCH_EDGE_GUARD = `max(0px, calc((${TOUCH_TARGET_SIZE}px - ${GRIP}) / 2 -
 const styles = stylex.create({
   handle: {
     // Centred on its row: the grip alone, so a compact row stays compact.
-    // A theme's larger icon grows the handle with it.
+    // The box keeps its size; a larger icon overflows it evenly.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    minInlineSize: GRIP,
-    minBlockSize: GRIP,
+    inlineSize: GRIP,
+    blockSize: GRIP,
     marginInlineEnd: {
       default: EDGE_GUARD,
       '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
@@ -178,10 +178,6 @@ const styles = stylex.create({
       forcedColorAdjust: 'none',
     },
   },
-  // The grip's length, from the slot's icon size.
-  gripLength: (length: string) => ({
-    '--_reorder-grip': length,
-  }),
   // Presses on the grip land on the handle.
   grip: {
     pointerEvents: 'none',
@@ -322,12 +318,6 @@ export function ListReorderHandle({
     () => controller?.isInMode(ref.current) ?? false,
     () => false,
   );
-  // The theme's grip for the handle's state: reorder mode is `pressed`.
-  const grip = useComponentIcon(
-    'list-reorder-handle',
-    {pressed: isPressed},
-    REORDER_GRIP_FALLBACK,
-  );
   const isEnabled = controller != null && !isDisabled;
   // A finger's target: the shared touch hit area grows the handle's hit
   // layer where the primary pointer is coarse.
@@ -413,22 +403,18 @@ export function ListReorderHandle({
         styles.handle,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
-        styles.gripLength(reorderGripLength(grip.size)),
         isPressed && styles.pressed,
         rowAlign != null && styles.inRow,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>
-      {grip.icon == null ? null : (
-        <Icon
-          icon={grip.icon}
-          // Resolution keeps only a variant the active theme lists.
-          variant={grip.variant as IconVariant | undefined}
-          size={grip.size}
-          color="inherit"
-          xstyle={styles.grip}
-        />
-      )}
+      <ComponentIcon
+        slot="list-reorder-handle"
+        state={undefined}
+        fallback={REORDER_GRIP_FALLBACK}
+        color="inherit"
+        xstyle={styles.grip}
+      />
     </button>
   );
 }

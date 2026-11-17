@@ -8,9 +8,7 @@
  *   whose children are the rows
  * @output `useListReorderScope`, a reorder session over rows that are not
  *   ListItems. `ListReorderScope` gives those rows the session as a
- *   reorderable List gives its own: `ListReorderHandle` inside a row finds it.
- *   `useReorderGripLength` gives the handle's grip length, for a row or a
- *   track that keeps room for the handle
+ *   reorderable List gives its own: `ListReorderHandle` inside a row finds it
  * @position Internal to core; Lab's ListInput reaches it through
  *   `@astryxdesign/core/internal/reorder`. It runs the same engine a
  *   reorderable List runs, List/listReorderEngine.tsx, which ships with the
@@ -21,8 +19,6 @@
  */
 
 import {useMemo, type ReactNode} from 'react';
-import type {IconSize} from '../Icon/Icon';
-import {useComponentIcon} from '../Icon/useIcon';
 import type {Reorderable} from '../reorderable/createReorderable';
 import {ListContext, type ListContextValue} from './ListContext';
 import {
@@ -30,38 +26,6 @@ import {
   useReorderSession,
   type ListReorderContextValue,
 } from './listReorderContext';
-
-/** The grip a reorder handle draws when the theme maps nothing to its slot. */
-export const REORDER_GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
-
-/** Icon's size scale. SYNC: Icon/IconSize.stylex.ts. */
-const GRIP_LENGTHS: Readonly<Record<IconSize, string>> = {
-  xsm: '0.75rem',
-  sm: '1rem',
-  md: '1.25rem',
-  lg: '1.5rem',
-};
-
-/** The CSS length of a grip of `size`; `sm` when the slot gives none. */
-export function reorderGripLength(size: IconSize | undefined): string {
-  return GRIP_LENGTHS[size ?? REORDER_GRIP_FALLBACK.size];
-}
-
-/**
- * The length of the reorder handle's grip at rest: the size the theme's
- * `list-reorder-handle` slot gives, else `sm`. A row or a track that keeps
- * room for a handle derives that room from it. The handle derives its target
- * and its distance from the row's end from it too.
- */
-export function useReorderGripLength(): string {
-  return reorderGripLength(
-    useComponentIcon(
-      'list-reorder-handle',
-      {pressed: false},
-      REORDER_GRIP_FALLBACK,
-    ).size,
-  );
-}
 
 /**
  * The reorder session over the children of the element `getList` returns,

@@ -115,7 +115,7 @@ export type ExtendedIconName = IconName | (string & {});
  *
  * `drag` is the one name a complete registry may still omit. Requiring it
  * would break registries written before it existed, so it becomes required
- * in the next minor. An omitted `drag` resolves the default artwork, so
+ * in 0.8.0. An omitted `drag` resolves the default artwork, so
  * resolved registry snapshots are always complete.
  */
 export type IconRegistry = Record<Exclude<IconName, 'drag'>, ReactNode> &

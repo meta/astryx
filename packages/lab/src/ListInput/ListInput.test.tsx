@@ -1070,12 +1070,7 @@ describe('ListInput', () => {
         .split(',')
         .map(name => name.trim())
         .filter(name => name !== '');
-    // The grip length reads the theme's icon slot, not the reorder engine.
-    expect(names?.sort()).toEqual([
-      'ListReorderScope',
-      'useListReorderScope',
-      'useReorderGripLength',
-    ]);
+    expect(names?.sort()).toEqual(['ListReorderScope', 'useListReorderScope']);
     expect(source).not.toMatch(/ListReorderHandle/);
   });
 

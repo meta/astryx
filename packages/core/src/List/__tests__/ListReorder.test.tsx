@@ -38,14 +38,12 @@ import {
   renderHook,
   screen,
   waitFor,
-  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {INSERTION_LINE_THICKNESS} from '../ListReorderHandle';
-import {useReorderGripLength} from '../ListReorderScope';
 import {Icon} from '../../Icon/Icon';
 import {registerIcons, resetIcons} from '../../Icon/globalIconRegistry';
 import type {ComponentIconMap} from '../../Icon/index';
@@ -496,69 +494,36 @@ describe('List reorderable', () => {
     );
   });
 
-  it("gives the theme's slot the handle's state: pressed in reorder mode, so a theme can draw another grip there", async () => {
-    const user = userEvent.setup();
-    const states: boolean[] = [];
-    render(
-      <Theme
-        theme={defineTheme({
-          name: 'list-reorder-handle-pressed',
-          icons: {
-            menu: <svg data-testid="grip-at-rest" />,
-            check: <svg data-testid="grip-pressed" />,
-          },
-          componentIcons: {
-            'list-reorder-handle': ({pressed}) => {
-              states.push(pressed);
-              return {icon: pressed ? 'check' : 'menu'};
-            },
-          },
-        })}>
-        <List reorderable={createReorderable({onReorder: () => {}})}>
-          <ListItem itemKey="inbox" label="Inbox" />
-          <ListItem itemKey="sent" label="Sent" />
-        </List>
-      </Theme>,
-    );
-    const handle = handleOf('Inbox');
-    expect(within(handle).getByTestId('grip-at-rest')).toBeInTheDocument();
-    handle.focus();
-    await user.keyboard('{Enter}');
-    expect(handle).toHaveAttribute('aria-pressed', 'true');
-    expect(within(handle).getByTestId('grip-pressed')).toBeInTheDocument();
-    // The other row is not in reorder mode.
-    expect(
-      within(handleOf('Sent')).getByTestId('grip-at-rest'),
-    ).toBeInTheDocument();
-    expect(states).toContain(false);
-    expect(states).toContain(true);
-  });
-
-  it("gives the grip's length from the slot's size at rest, for a row that keeps the handle's room", () => {
-    let themes = 0;
-    const lengthWith = (componentIcons: ComponentIconMap<never>) =>
-      renderHook(() => useReorderGripLength(), {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <Theme
-            theme={defineTheme({
-              name: `list-reorder-grip-length-${themes++}`,
-              componentIcons,
-            })}>
-            {children}
-          </Theme>
-        ),
-      }).result.current;
-    expect(renderHook(() => useReorderGripLength()).result.current).toBe(
-      '1rem',
-    );
-    expect(lengthWith({'list-reorder-handle': {size: 'md'}})).toBe('1.25rem');
-    expect(lengthWith({'list-reorder-handle': 'menu'})).toBe('1rem');
-    // Reorder mode's own size does not move the room.
-    expect(
-      lengthWith({
-        'list-reorder-handle': ({pressed}) => (pressed ? {size: 'lg'} : {}),
-      }),
-    ).toBe('1rem');
+  it("changes only the icon for a theme's slot size: the handle keeps its box and its classes", () => {
+    const handleWith = (componentIcons?: ComponentIconMap<never>) => {
+      const {unmount} = render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-grip-${componentIcons == null ? 'default' : 'lg'}`,
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+      const handle = handleOf('Inbox');
+      const result = {
+        className: handle.getAttribute('class'),
+        style: handle.getAttribute('style'),
+        iconSize: handle
+          .querySelector('[data-size]')
+          ?.getAttribute('data-size'),
+      };
+      unmount();
+      return result;
+    };
+    const standard = handleWith();
+    const large = handleWith({'list-reorder-handle': {size: 'lg'}});
+    expect(standard.iconSize).toBe('sm');
+    expect(large.iconSize).toBe('lg');
+    expect(large.className).toBe(standard.className);
+    expect(large.style).toBe(standard.style);
   });
 
   it('keeps a row the object rejects in place: no handle, and nothing added to it', () => {
