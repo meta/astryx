@@ -51,7 +51,10 @@ export const doc = {
   ],
   outsideProject: 'refuse',
   exitCodes: [
-    {code: 0, when: 'the entry is written, removed, or already as asked'},
+    {
+      code: 0,
+      when: 'the entry is written, removed, or already as asked, or, typed alone, an icon matches its name: it answers that search (`icon.search`) and writes nothing',
+    },
     {
       code: 1,
       when: 'the definition is unknown, the set has no such icon, or no set is found',
