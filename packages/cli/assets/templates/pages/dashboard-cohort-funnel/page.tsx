@@ -434,6 +434,22 @@ function nf(n: number): string {
 
 // ============= KPI TILE =============
 
+// The KPI row: a 240px track floor, auto-fit, except on a phone. There the
+// floor leaves one tile per row and four short tiles fill the first screen,
+// so the row holds two columns. Up to the width where three 240px tracks
+// fit, auto-fit gives two columns on its own, so nothing changes above a
+// phone.
+const KPI_PHONE = '@media (max-width: 599.98px)';
+
+const kpiGridStyles = stylex.create({
+  grid: {
+    gridTemplateColumns: {
+      default: 'repeat(auto-fit, minmax(240px, 1fr))',
+      [KPI_PHONE]: 'repeat(2, minmax(0, 1fr))',
+    },
+  },
+});
+
 function KpiTile({kpi}: {kpi: Kpi}) {
   const favorable = kpi.higherIsBetter ? kpi.delta >= 0 : kpi.delta <= 0;
   return (
@@ -442,7 +458,7 @@ function KpiTile({kpi}: {kpi: Kpi}) {
         <Text type="label" color="secondary">
           {kpi.label}
         </Text>
-        <HStack gap={3}>
+        <HStack gap={3} wrap="wrap">
           <Heading level={1} accessibilityLevel={2}>
             {kpi.value}
           </Heading>
@@ -856,7 +872,7 @@ export default function FunnelCohortAnalyticsPage() {
           <VStack gap={10}>
             <VStack gap={4}>
               {/* KPI row */}
-              <Grid columns={{minWidth: 240, repeat: 'fit'}} gap={3}>
+              <Grid gap={3} xstyle={kpiGridStyles.grid}>
                 {kpis.map(kpi => (
                   <KpiTile key={kpi.key} kpi={kpi} />
                 ))}
