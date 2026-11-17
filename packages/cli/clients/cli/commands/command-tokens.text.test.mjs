@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+import {runWithCliDoor} from '../../../foundation/env/cli-command.mjs';
 
 vi.setConfig({testTimeout: 60_000, hookTimeout: 60_000});
 
@@ -105,6 +106,19 @@ describe('component docs', () => {
     const r = await runCli(['component', 'AcmeCard', '--props'], dir);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(`\`${RUN} docs tokens\``);
+  });
+
+  it("a bare command in a Core prop description shows with the host's command", async () => {
+    // A project with no integration that declares its own command, so the
+    // host's door names the command.
+    const plain = path.join(dir, 'plain');
+    fs.mkdirSync(plain, {recursive: true});
+    fs.writeFileSync(path.join(plain, 'package.json'), '{"name": "plain"}');
+    const r = await runWithCliDoor('host astryx', () =>
+      runCli(['component', 'CheckboxInput', '--props'], plain),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('See `host astryx docs icons`');
   });
 
   it('JSON keeps the bare command', async () => {
