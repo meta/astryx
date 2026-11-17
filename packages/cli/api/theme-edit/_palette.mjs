@@ -293,6 +293,7 @@ export function tempFor(file) {
  * @property {boolean} pass
  * @property {string} [note] - The whole sentence to report, when the check is not a plain stop move.
  * @property {string[]} [dials] - The color dials whose notes report it, when its token belongs to none of them.
+ * @property {{thing: string, value: string, mode?: Mode}} [fix] - The nearest setting that passes it, when one does: a darker exact color for a pale fill.
  */
 
 /**
@@ -1040,8 +1041,23 @@ function tools(
       on,
       r: contrast(on.color, fill),
     }));
-    const best = a.r >= TEXT || a.r >= b.r ? a : b;
+    let best = a.r >= TEXT || a.r >= b.r ? a : b;
     const other = best === a ? b : a;
+    // Neither reads: the end of the gray ramp on the better side (black
+    // past near-black, white past near-white) when it reads better, so the
+    // text picked is never one a darker or lighter gray would beat.
+    if (best.r < TEXT) {
+      const dark =
+        contrast(best.on.color, PALETTE_WHITE) > contrast(fill, PALETTE_WHITE);
+      /** @type {StopRef} */
+      const end = neutral
+        ? {...ref('neutral', m, at(dark ? 0 : 100)), family: 'neutral'}
+        : dark
+          ? {stop: 0, color: PALETTE_BLACK, family: 'black'}
+          : {stop: 100, color: PALETTE_WHITE, family: 'white'};
+      const r = contrast(end.color, fill);
+      if (r > best.r) best = {on: end, r};
+    }
     return {
       on: best.on,
       r: best.r,
@@ -2317,6 +2333,25 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           );
         }) ?? start;
       fill[m] = ref(f.id, m, found);
+      // The shade nearest your color that passes, offered as the theme's
+      // own dark fill when it is closer to your color than the one used.
+      const near = [...stops]
+        .filter(s => s > 0 && s < 100)
+        .sort((a, b) => Math.abs(a - S) - Math.abs(b - S) || b - a)
+        .find(s => {
+          const c = ref(f.id, m, s).color;
+          return (
+            t.page(c, m, f.id) >= NON_TEXT && t.onFor(f.id, m, c).r >= TEXT
+          );
+        });
+      const closer =
+        near != null && Math.abs(near - S) < Math.abs(found - S)
+          ? (() => {
+              const c = ref(f.id, m, near).color;
+              const o = t.onFor(f.id, m, c);
+              return `; for a fill closer to your color in dark: ${P} set ${slug} ${names.fill} ${quoteCommandArgument(c)} --mode dark (shade ${shade(near)}, the nearest that passes, with ${textName(o.on)} text at ${round(o.r)}:1)`;
+            })()
+          : '';
       if (reports(names.fill))
         checks.push({
           token: names.fill,
@@ -2327,7 +2362,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           ratio: plain.ratio,
           needs: TEXT,
           pass: true,
-          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}`,
+          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}${closer}`,
         });
     }
     put(names.fill, f.id, fill);
@@ -2372,6 +2407,18 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     if (modes.includes('light') && has(names.fill)) {
       const used = exactFill.light ?? /** @type {StopRef} */ (fill.light).color;
       const p = t.page(solid(used, 'light', f.id), 'light', f.id);
+      // The nearest darker color that stands out from the light page.
+      /** @type {string | null} */
+      let darker = null;
+      const from = parseColor(solid(used, 'light', f.id));
+      for (let i = 1; from && i <= 100 && !darker; i++) {
+        const c = hex(
+          /** @type {[number, number, number]} */ (
+            from.map(v => Math.round(v * (1 - i / 100)))
+          ),
+        );
+        if (t.page(c, 'light', f.id) >= NON_TEXT) darker = c;
+      }
       if (p < NON_TEXT)
         checks.push({
           token: names.fill,
@@ -2385,6 +2432,13 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           note: exactFill.light
             ? `in light, your exact ${names.fill} (${used}) stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so its buttons and badges may not show: give it a darker color`
             : `in light, your exact ${f.id} stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so ${names.fill} buttons and badges may not show: pick a darker ${f.id}`,
+          ...(darker
+            ? {
+                fix: exactFill.light
+                  ? {thing: names.fill, value: darker, mode: 'light'}
+                  : {thing: f.id, value: darker},
+              }
+            : {}),
         });
     }
 
@@ -2437,34 +2491,53 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     // nearest shade that reads, and the result says so.
     const text = each(m => {
       const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
-      const own = fill[m]?.exact ? ref(f.id, m, S) : null;
+      // The fill the theme really shows in this mode: an exact token
+      // setting of it, else the dial's own color at its shade. The text
+      // starts from that color's nearest shade.
+      const shown = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+      const start = shown
+        ? stops.reduce((x, y) =>
+            perceptualDelta(ref(f.id, m, y).color, shown) <
+            perceptualDelta(ref(f.id, m, x).color, shown)
+              ? y
+              : x,
+          )
+        : S;
+      const own = shown
+        ? {...ref(f.id, m, start), color: shown}
+        : fill[m]?.exact
+          ? ref(f.id, m, S)
+          : null;
       if (own) {
         const r = Math.min(...grounds.map(([, bg]) => contrast(own.color, bg)));
         if (r >= TEXT) {
-          if (reports(names.text))
-            checks.push({
-              token: names.text,
-              mode: m,
-              stop: S,
-              preferred: S,
-              against: grounds.map(([n]) => n).join(', '),
-              ratio: round(r),
-              needs: TEXT,
-              pass: true,
-            });
-          return own;
+          if (!shown) {
+            if (reports(names.text))
+              checks.push({
+                token: names.text,
+                mode: m,
+                stop: S,
+                preferred: S,
+                against: grounds.map(([n]) => n).join(', '),
+                ratio: round(r),
+                needs: TEXT,
+                pass: true,
+              });
+            return own;
+          }
         }
         const before = checks.length;
-        const moved = pick(names.text, f.id, m, S, grounds, TEXT);
+        const moved = pick(names.text, f.id, m, start, grounds, TEXT);
+        if (r >= TEXT) return moved;
         const last = checks.length > before ? checks[checks.length - 1] : null;
-        if (last && moved.stop !== S)
+        if (last && (moved.stop !== start || shown))
           last.note = `${names.text} ${m}: your exact color (${own.color}) reads at only ${grounds
             .map(([n, bg]) => [n, contrast(own.color, bg)])
             .filter(([, x]) => Number(x) < TEXT)
             .map(([n, x]) => `${round(Number(x))}:1 on ${n}`)
             .join(
               ', ',
-            )} (text needs ${TEXT}:1), so links and accent text use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text' : `${f.id} text and icons`} use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
         return moved;
       }
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
@@ -2516,7 +2589,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   // else a gray ramp the generator grows from the base theme's own
   // secondary text (written as colors, not shades of the palette). The
   // tint stays at its official stop. A mode where the theme sets
-  // secondary text exactly takes that value instead, as written.
+  // secondary text exactly takes that value where it reads there, else the
+  // gray nearest it that does: a secondary text set for the whole theme
+  // never makes those parts less readable.
   /** @type {Record<string, Partial<Record<Mode, StopRef>>> | null} */
   let lift = null;
   {
@@ -2609,14 +2684,23 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       const byMode = {};
       for (const m of modes) {
         const own = rawOf('--color-text-secondary', m);
-        if (own) {
-          byMode[m] = {stop: 0, color: own, family: 'literal'};
-          continue;
-        }
+        const literal = () => {
+          byMode[m] = {
+            stop: 0,
+            color: /** @type {string} */ (own),
+            family: 'literal',
+          };
+        };
         const fillColor = valueOf(m, ground);
         const g = grays(m);
         const text = startText(m);
-        if (!fillColor || !g || !text) break;
+        if (!fillColor || !g || !text) {
+          if (own) {
+            literal();
+            continue;
+          }
+          break;
+        }
         const seen = drawn(what, fillColor, surfaces(m, 'neutral'));
         const hover = valueOf(m, '--color-overlay-hover');
         const on = [
@@ -2634,7 +2718,20 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         const keys = Object.keys(g.ramp)
           .map(Number)
           .sort((a, b) => a - b);
-        const from = baseLift(m) ?? text;
+        if (
+          own &&
+          parseColor(own) &&
+          Math.min(...on.map(([, bg]) => contrast(own, bg))) >= TEXT
+        ) {
+          literal();
+          continue;
+        }
+        const from =
+          (own && parseColor(own)
+            ? hex(/** @type {number[]} */ (parseColor(own)))
+            : null) ??
+          baseLift(m) ??
+          text;
         const start = keys.reduce((x, y) =>
           perceptualDelta(g.ramp[y], from) < perceptualDelta(g.ramp[x], from)
             ? y
@@ -2840,7 +2937,11 @@ export function paletteFailures(pal, dial, modes = ['light', 'dark']) {
   if (!pal) return [];
   return dialChecks(pal, dial, modes)
     .filter(c => !c.pass)
-    .map(c => ({key: paletteCheckKey(c), text: checkNote(c, dial)}));
+    .map(c => ({
+      key: paletteCheckKey(c),
+      text: checkNote(c, dial),
+      ...(c.fix ? {fix: c.fix} : {}),
+    }));
 }
 
 /**
