@@ -25,7 +25,7 @@ export const doc = {
     {
       value: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted.',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted.',
     },
     {
       value: 'init.remove',
