@@ -4,25 +4,31 @@
 
 /**
  * @file useCollapsible.ts
- * @input Uses React useState/use, CollapsibleGroupContext
- * @output Exports useCollapsible hook, CollapsibleConfig (formerly CollapsibleConfig), UseCollapsibleOptions, UseCollapsibleReturn types
- * @position Reusable hook for collapsible behavior — used by Card, Section, etc.
+ * @input React state, ids and layout effects; CollapsibleGroupContext; the
+ *   Reduce Motion setting and the theme's reduced-motion mark
+ * @output useCollapsible and its option and return types
+ * @position Headless disclosure: the open-state machine (group, controlled,
+ *   uncontrolled) and the props a caller-rendered trigger and content need.
+ *   Collapsible and Banner use it.
  *
- * Encapsulates the full collapsible state machine:
- * - Parsing boolean | config into normalized config
- * - Checking for CollapsibleGroup context (group-controlled mode)
- * - Managing internal state for uncontrolled mode
- * - Providing a unified toggle handler
- *
- * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Collapsible/index.ts (exports)
- * - /packages/core/src/Collapsible/Collapsible.doc.mjs
- *
- * NOTE: Public hooks use the `useXDS` prefix per Astryx naming conventions.
+ * SYNC: When modified, update /packages/core/src/Collapsible/index.ts
+ * (exports) and /packages/core/src/Collapsible/useCollapsible.doc.mjs.
  */
 
-import {useState, use} from 'react';
+import {
+  use,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefCallback,
+} from 'react';
+import {flushSync} from 'react-dom';
 import {CollapsibleGroupContext} from './CollapsibleGroupContext';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 /**
  * Configuration for collapsible behavior.
@@ -49,6 +55,23 @@ export interface UseCollapsibleOptions {
    * When present and inside a group, defers state to the group.
    */
   value?: string;
+  /**
+   * Whether the element that gets `contentProps` plays its own CSS animation
+   * when it opens and closes. With it, `isEntering` and `isExiting` stay true
+   * while that animation plays, and `isPresent` stays true through the close
+   * animation. Under Reduce Motion, or when no animation plays, both end at
+   * once.
+   * @default false
+   */
+  hasContentAnimation?: boolean;
+  /**
+   * A CSS custom property for the content's natural height. At each open,
+   * and at each close the content animates, the hook measures the height
+   * once and writes it to this property on the content element, as a `px`
+   * value that `height` can take. The measurement ignores the content's CSS
+   * animation, so keyframes can grow from `0px` to `var(<property>)`.
+   */
+  contentHeightProperty?: `--${string}`;
 }
 
 export interface UseCollapsibleReturn {
@@ -58,10 +81,122 @@ export interface UseCollapsibleReturn {
   isOpen: boolean;
   /** Toggle the open/closed state. */
   toggle: () => void;
+  /**
+   * Whether to render the content's children: while open, and while the
+   * close animation plays (`hasContentAnimation`). Render nothing inside the
+   * content element otherwise.
+   */
+  isPresent: boolean;
+  /** Whether the content's open animation is playing (`hasContentAnimation`). */
+  isEntering: boolean;
+  /** Whether the content's close animation is playing (`hasContentAnimation`). */
+  isExiting: boolean;
+  /**
+   * Props to spread on the trigger: a `<button>`, or a component that renders
+   * one.
+   */
+  triggerProps: {
+    /** Activation toggles the content and never submits a form. */
+    type: 'button';
+    /** Whether the content is open. */
+    'aria-expanded': boolean;
+    /** The id of the content element, which stays rendered while closed. */
+    'aria-controls': string;
+    /** Toggles the open state. */
+    onClick: () => void;
+  };
+  /** Props to spread on the content element. */
+  contentProps: {
+    /** The id the trigger's `aria-controls` names. */
+    id: string;
+    /** Hidden when the content is closed and its close animation is over. */
+    hidden: boolean;
+    /** Inert while the close animation plays. */
+    inert: boolean;
+    /** The element the hook measures and watches for its animations. */
+    ref: RefCallback<HTMLElement>;
+  };
+}
+
+type ContentMotion = 'entering' | 'exiting' | null;
+
+const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function reducesMotion(node: HTMLElement): boolean {
+  return (
+    matchesMediaQuery(node.ownerDocument.defaultView, REDUCE_MOTION_QUERY) ||
+    themeReducesMotion(node)
+  );
 }
 
 /**
- * Hook that encapsulates collapsible state management.
+ * Whether a finite CSS animation is running on `node` itself. Transitions,
+ * endless animations, and animations of its descendants do not count. A DOM
+ * without the Web Animations API (a test DOM) runs none.
+ */
+function isAnimating(node: HTMLElement): boolean {
+  if (typeof node.getAnimations !== 'function') {
+    return false;
+  }
+  return node
+    .getAnimations()
+    .some(
+      animation =>
+        'animationName' in animation &&
+        animation.playState === 'running' &&
+        Number.isFinite(
+          animation.effect?.getComputedTiming().endTime ?? Infinity,
+        ),
+    );
+}
+
+/** Whether the content's motion phase must wait for a running animation. */
+function holdsMotion(node: HTMLElement): boolean {
+  return !reducesMotion(node) && isAnimating(node);
+}
+
+/**
+ * The height that `height` takes to fit the content. A transform scales the
+ * rendered box but not the layout box, so a scaled ancestor falls back to the
+ * whole-pixel layout height.
+ */
+function naturalHeight(node: HTMLElement): number {
+  const rendered = node.getBoundingClientRect().height;
+  const layout = node.offsetHeight;
+  const height = Math.abs(rendered - layout) < 1 ? rendered : layout;
+  const view = node.ownerDocument.defaultView;
+  const style = view?.getComputedStyle(node);
+  if (style == null || style.boxSizing !== 'content-box') {
+    return height;
+  }
+  const edges = [
+    style.paddingTop,
+    style.paddingBottom,
+    style.borderTopWidth,
+    style.borderBottomWidth,
+  ].reduce((sum, value) => sum + (Number.parseFloat(value) || 0), 0);
+  return Math.max(0, height - edges);
+}
+
+function writeNaturalHeight(node: HTMLElement, property: string): void {
+  const {style} = node;
+  const ownName = style.getPropertyValue('animation-name');
+  const ownPriority = style.getPropertyPriority('animation-name');
+  // The open keyframes start at 0 and the close keyframes at the measured
+  // height. A read with them applied gets the keyframe value, not the content.
+  style.setProperty('animation-name', 'none', 'important');
+  const height = naturalHeight(node);
+  if (ownName === '') {
+    style.removeProperty('animation-name');
+  } else {
+    style.setProperty('animation-name', ownName, ownPriority);
+  }
+  style.setProperty(property, `${height}px`);
+}
+
+/**
+ * Hook that encapsulates collapsible state management, and the props that
+ * wire a caller-rendered trigger to its content.
  *
  * Supports three modes:
  * 1. **Group-controlled**: When inside a CollapsibleGroup with a `value`, defers to group.
@@ -71,18 +206,27 @@ export interface UseCollapsibleReturn {
  *    `onOpenChange`, if supplied, is invoked in addition to the internal update —
  *    it is a notification callback, not a signal that the component is controlled.
  *
+ * `triggerProps` go on a `<button>`, and `contentProps` on the element that
+ * holds the content. That element stays rendered while closed, so
+ * `aria-controls` always names it; its children render only while
+ * `isPresent`.
+ *
  * @example
  * ```
- * const {isEnabled, isOpen, toggle} = useCollapsible({
- *   isCollapsible: true,
- *   value: 'section-1',
- * });
+ * const row = useCollapsible({isCollapsible: {defaultIsOpen: false}});
+ * <button {...row.triggerProps}>Details</button>
+ * <div {...row.contentProps}>{row.isPresent && <Details />}</div>
  * ```
  */
 export function useCollapsible(
   options: UseCollapsibleOptions,
 ): UseCollapsibleReturn {
-  const {isCollapsible, value} = options;
+  const {
+    isCollapsible,
+    value,
+    hasContentAnimation = false,
+    contentHeightProperty,
+  } = options;
 
   // Check for CollapsibleGroup context
   const group = use(CollapsibleGroupContext);
@@ -136,5 +280,100 @@ export function useCollapsible(
     config?.onOpenChange?.(next);
   };
 
-  return {isEnabled, isOpen, toggle};
+  const contentId = useId();
+
+  // Each open-state change while mounted starts a motion phase. A mount starts
+  // none, so content that mounts open does not replay its open animation. The
+  // hook derives the phase during render, so the commit that opens or closes
+  // carries it.
+  const [renderedIsOpen, setRenderedIsOpen] = useState(isOpen);
+  const [motionState, setMotionState] = useState<ContentMotion>(null);
+  if (renderedIsOpen !== isOpen) {
+    setRenderedIsOpen(isOpen);
+    setMotionState(
+      hasContentAnimation ? (isOpen ? 'entering' : 'exiting') : null,
+    );
+  }
+  const motion = hasContentAnimation ? motionState : null;
+  const isExiting = motion === 'exiting';
+  const isPresent = isOpen || isExiting;
+
+  const contentNodeRef = useRef<HTMLElement | null>(null);
+  const motionRef = useCommittedRef(motion);
+  const contentRef = useCallback(
+    (node: HTMLElement | null) => {
+      contentNodeRef.current = node;
+      if (node == null || !hasContentAnimation) {
+        return;
+      }
+      // An element that replaces the content during a phase ends the phase,
+      // unless an animation of its own holds it.
+      if (motionRef.current != null && !holdsMotion(node)) {
+        setMotionState(null);
+      }
+      // The content's own animation ends the phase. A descendant's animation
+      // events bubble here, and the target check skips them.
+      const onAnimationDone = (event: AnimationEvent) => {
+        if (event.target !== node || holdsMotion(node)) {
+          return;
+        }
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a closed panel must drop its children in the frame its close animation ends, or that frame paints them at full height
+        flushSync(() => {
+          setMotionState(null);
+        });
+      };
+      node.addEventListener('animationend', onAnimationDone);
+      node.addEventListener('animationcancel', onAnimationDone);
+      return () => {
+        node.removeEventListener('animationend', onAnimationDone);
+        node.removeEventListener('animationcancel', onAnimationDone);
+        if (contentNodeRef.current === node) {
+          contentNodeRef.current = null;
+        }
+      };
+    },
+    [hasContentAnimation, motionRef],
+  );
+
+  const wasOpenRef = useRef(isOpen);
+  // Syncs the content element's layout and CSS animations with an open-state
+  // change, before the frame paints. It writes the natural height for the
+  // keyframes. It ends a motion phase that no running animation holds.
+  useLayoutEffect(() => {
+    const isChange = wasOpenRef.current !== isOpen;
+    wasOpenRef.current = isOpen;
+    const node = contentNodeRef.current;
+    if (
+      node != null &&
+      isChange &&
+      isPresent &&
+      contentHeightProperty != null
+    ) {
+      writeNaturalHeight(node, contentHeightProperty);
+    }
+    if (motion != null && (node == null || !holdsMotion(node))) {
+      setMotionState(null);
+    }
+  }, [isOpen, isPresent, motion, contentHeightProperty]);
+
+  return {
+    isEnabled,
+    isOpen,
+    toggle,
+    isPresent,
+    isEntering: motion === 'entering',
+    isExiting,
+    triggerProps: {
+      type: 'button',
+      'aria-expanded': isOpen,
+      'aria-controls': contentId,
+      onClick: toggle,
+    },
+    contentProps: {
+      id: contentId,
+      hidden: !isPresent,
+      inert: isExiting,
+      ref: contentRef,
+    },
+  };
 }

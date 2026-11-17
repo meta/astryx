@@ -3,13 +3,22 @@
 import {useEffect, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
-import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
+import {
+  Collapsible,
+  CollapsibleGroup,
+  useCollapsible,
+} from '@astryxdesign/core/Collapsible';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
+import {Icon} from '@astryxdesign/core/Icon';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
   colorVars,
+  durationVars,
+  easeVars,
+  focusVars,
   spacingVars,
+  typeScaleVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 
@@ -408,4 +417,231 @@ function CloseFocusDemo() {
 export const CloseFocus: Story = {
   name: 'Close Focus',
   render: () => <CloseFocusDemo />,
+};
+
+// =============================================================================
+// Headless rows (useCollapsible)
+// =============================================================================
+
+// The keyframes read the height the hook measures at each open and close.
+const stepPanelOpen = stylex.keyframes({
+  from: {height: '0px', opacity: 0},
+  to: {height: 'var(--step-panel-height)', opacity: 1},
+});
+
+const stepPanelClose = stylex.keyframes({
+  from: {height: 'var(--step-panel-height)', opacity: 1},
+  to: {height: '0px', opacity: 0},
+});
+
+const stepStyles = stylex.create({
+  list: {
+    display: 'flex',
+    flexDirection: 'column',
+    maxWidth: 560,
+  },
+  trigger: {
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr auto',
+    alignItems: 'center',
+    columnGap: spacingVars['--spacing-2'],
+    width: '100%',
+    paddingBlock: spacingVars['--spacing-1'],
+    paddingInline: spacingVars['--spacing-2'],
+    borderWidth: 0,
+    backgroundColor: {
+      default: 'transparent',
+      ':active': colorVars['--color-overlay-pressed'],
+    },
+    color: colorVars['--color-text-primary'],
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
+    textAlign: 'start',
+    outlineStyle: {
+      default: 'none',
+      ':focus-visible': focusVars['--focus-outline-style'],
+    },
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: focusVars['--focus-outline-offset'],
+  },
+  marker: {
+    display: 'inline-flex',
+    transitionProperty: 'transform',
+    transitionDuration: durationVars['--duration-fast'],
+    transitionTimingFunction: easeVars['--ease-standard'],
+    transform: {
+      default: 'rotate(0deg)',
+      ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
+    },
+  },
+  markerOpen: {
+    transform: {
+      default: 'rotate(90deg)',
+      ':is([dir="rtl"] *)': 'scaleX(-1) rotate(90deg)',
+    },
+  },
+  clock: {
+    color: colorVars['--color-text-secondary'],
+    fontSize: typeScaleVars['--text-supporting-size'],
+    fontVariantNumeric: 'tabular-nums',
+  },
+  // flow-root keeps the children's margins inside the measured box.
+  panel: {
+    display: 'flow-root',
+  },
+  // The clip holds only while the height animates.
+  entering: {
+    overflow: 'hidden',
+    animationName: stepPanelOpen,
+    animationDuration: durationVars['--duration-medium'],
+    animationTimingFunction: easeVars['--ease-entrance'],
+  },
+  exiting: {
+    overflow: 'hidden',
+    animationName: stepPanelClose,
+    animationDuration: durationVars['--duration-exit'],
+    animationTimingFunction: easeVars['--ease-exit'],
+    animationFillMode: 'forwards',
+  },
+  output: {
+    marginBlock: 0,
+    paddingBlock: spacingVars['--spacing-2'],
+    paddingInlineStart: spacingVars['--spacing-7'],
+    paddingInlineEnd: spacingVars['--spacing-2'],
+    color: colorVars['--color-text-secondary'],
+    fontFamily: typographyVars['--font-family-code'],
+    fontSize: typeScaleVars['--text-code-size'],
+    whiteSpace: 'pre-wrap',
+  },
+});
+
+const STEPS = Array.from({length: 200}, (_, index) => ({
+  id: `step-${index + 1}`,
+  label: `Step ${index + 1}: ${['Install', 'Build', 'Test', 'Deploy'][index % 4]}`,
+  seconds: 3 + ((index * 7) % 40),
+  lines: 2 + (index % 5),
+}));
+
+function StepRow({step}: {step: (typeof STEPS)[number]}) {
+  const row = useCollapsible({
+    isCollapsible: {defaultIsOpen: false},
+    hasContentAnimation: true,
+    contentHeightProperty: '--step-panel-height',
+  });
+  return (
+    <div>
+      <button {...row.triggerProps} {...stylex.props(stepStyles.trigger)}>
+        <span
+          {...stylex.props(
+            stepStyles.marker,
+            row.isOpen && stepStyles.markerOpen,
+          )}>
+          <Icon icon="chevronRight" size="sm" color="secondary" />
+        </span>
+        <span>{step.label}</span>
+        <span {...stylex.props(stepStyles.clock)}>{step.seconds}s</span>
+      </button>
+      <div
+        {...row.contentProps}
+        {...stylex.props(
+          stepStyles.panel,
+          row.isEntering && stepStyles.entering,
+          row.isExiting && stepStyles.exiting,
+        )}>
+        {row.isPresent && (
+          <p {...stylex.props(stepStyles.output)}>
+            {Array.from(
+              {length: step.lines},
+              (_, line) => `${step.label}: output line ${line + 1}`,
+            ).join('\n')}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export const HeadlessRows: Story = {
+  name: 'Headless rows (useCollapsible)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Each row is one button built with `useCollapsible`: the label, the chevron and the clock are the trigger. A closed row renders one empty content element, so the 200 rows mount no output. A row grows and fades in to the height the hook measures, and shrinks and fades out the same way. Reduce Motion opens and closes a row at once.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(stepStyles.list)}>
+      {STEPS.map(step => (
+        <StepRow key={step.id} step={step} />
+      ))}
+    </div>
+  ),
+};
+
+// =============================================================================
+// Lazy mount
+// =============================================================================
+
+function MountedPanel({
+  onMountChange,
+}: {
+  onMountChange: (delta: number) => void;
+}) {
+  useEffect(() => {
+    onMountChange(1);
+    return () => onMountChange(-1);
+  }, [onMountChange]);
+  return (
+    <p {...stylex.props(styles.text)}>
+      This panel mounts when its Collapsible opens.
+    </p>
+  );
+}
+
+function LazyMountDemo() {
+  const [mounted, setMounted] = useState(0);
+  const [onMountChange] = useState(
+    () => (delta: number) => setMounted(count => count + delta),
+  );
+  return (
+    <div {...stylex.props(styles.dividedContainer)}>
+      <VStack gap={3}>
+        <p {...stylex.props(styles.textSecondary)}>
+          Mounted panels: {mounted} of 20
+        </p>
+        <CollapsibleGroup type="multiple" hasDividers>
+          {Array.from({length: 20}, (_, index) => (
+            <Collapsible
+              key={index}
+              trigger={`Section ${index + 1}`}
+              value={`section-${index + 1}`}
+              hasLazyMount>
+              <MountedPanel onMountChange={onMountChange} />
+            </Collapsible>
+          ))}
+        </CollapsibleGroup>
+      </VStack>
+    </div>
+  );
+}
+
+export const LazyMount: Story = {
+  name: 'Lazy mount',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `hasLazyMount`, a closed Collapsible keeps an empty content region, so its trigger still names it, and mounts its children only while it is open.',
+      },
+    },
+  },
+  render: () => <LazyMountDemo />,
 };

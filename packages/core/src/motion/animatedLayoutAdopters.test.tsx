@@ -463,6 +463,38 @@ describe("a close plays the content's exit (spec:AST-105 FR4)", () => {
     expect(content.style.getPropertyValue('margin-block-end')).toBe('');
   });
 
+  it("keeps a lazily mounted Collapsible's children through its exit, then unmounts them", async () => {
+    const user = userEvent.setup();
+    render(
+      <Area withHandle>
+        {layout => (
+          <Collapsible
+            trigger="Details"
+            defaultIsOpen
+            hasLazyMount
+            animatedLayout={layout}>
+            <p>Shown content</p>
+          </Collapsible>
+        )}
+      </Area>,
+    );
+    stubGeometry();
+    const trigger = screen.getByRole('button', {name: 'Details'});
+    const content = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    ) as HTMLElement;
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 40, 400, 40),
+    );
+    await user.click(trigger);
+    await flush();
+    expect(content).toHaveAttribute('inert');
+    expect(screen.getByText('Shown content')).toBeInTheDocument();
+    act(() => finishes.get(content)?.());
+    expect(screen.queryByText('Shown content')).toBeNull();
+    expect(content).toBeInTheDocument();
+  });
+
   it('moves focus inside a closing Collapsible to its trigger while the content plays its exit (component:Collapsible AR4)', async () => {
     const example = (isOpen: boolean) => (
       <Area withHandle>

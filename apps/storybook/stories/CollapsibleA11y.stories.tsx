@@ -87,6 +87,12 @@ export const ControlledClosedStartLtr: Story = {
   ),
 };
 
+export const LazyClosedEndLtr: Story = {
+  render: () => (
+    <Fixture label="Billing details" initialOpen={false} hasLazyMount />
+  ),
+};
+
 export const DisabledOpenEndLtr: Story = {
   render: () => <Fixture label="Archived details" initialOpen isDisabled />,
 };
