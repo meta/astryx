@@ -3929,13 +3929,10 @@ export class GestureHost {
   };
 
   /**
-   * End a mouse press whose release this document never heard. A button let
-   * go outside the document, such as over the page around an iframe, sends
-   * its `pointerup` to that page alone. The next pointer event here then
-   * reports the button up, or a new press. The contact ends there as a lift
-   * at its last place, at that event's time, so whatever it drove (a pan, a
-   * slider thumb) does not stay held. No click follows such a lift, so none
-   * is guarded or replayed. Returns whether a contact ended.
+   * In Chromium, a sandboxed frame can miss the `pointerup` of a button
+   * released outside the window. The next mouse event shows the button up,
+   * or a new press. The contact then ends at its last place. No click comes
+   * to this document, so no click guard is armed.
    */
   private endMissedMouseLift(event: PointerEvent): boolean {
     if (event.pointerType !== 'mouse') {
