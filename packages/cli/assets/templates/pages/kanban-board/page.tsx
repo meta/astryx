@@ -312,13 +312,21 @@ function BoardCardBody({
           label="Work item actions"
           size="sm"
           items={[
-            {label: 'Open', onClick: () => {}},
+            {
+              label: 'Open',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: ${item.ref} would open here`,
+                  uniqueID: `open-${item.ref}`,
+                }),
+            },
             {
               label: 'Assign to me',
               onClick: () =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: `${item.ref} assigned to you`,
+                  body: `Demo: ${item.ref} would be assigned to you here`,
                   uniqueID: `assign-${item.id}`,
                 }),
             },
@@ -429,6 +437,7 @@ function BoardColumn({
 // ============= MAIN =============
 
 export default function KanbanBoardTemplate() {
+  const showToast = useToast();
   const [items, setItems] = useState<WorkItem[]>(INITIAL_ITEMS);
   const [sprint, setSprint] = useState('003');
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -708,20 +717,48 @@ export default function KanbanBoardTemplate() {
                     <IconButton
                       icon={<Icon icon={ArrowsUpDownIcon} size="sm" />}
                       label="Sort"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: sort options would open here',
+                          uniqueID: 'sort',
+                        })
+                      }
                     />
                     <IconButton
                       icon={<Icon icon={FunnelIcon} size="sm" />}
                       label="Filter"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: filters would open here',
+                          uniqueID: 'filter',
+                        })
+                      }
                     />
                     <IconButton
                       icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
                       label="Search"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: search across the board would open here',
+                          uniqueID: 'search',
+                        })
+                      }
                     />
                   </HStack>
                   <Button
                     label="Add task"
                     variant="primary"
                     icon={<Icon icon={PlusIcon} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: a new task form would open here',
+                        uniqueID: 'add-task',
+                      })
+                    }
                   />
                 </HStack>
               }

@@ -520,7 +520,7 @@ test.describe('restricted preview capabilities', () => {
     expect(errors).toEqual([]);
   });
 
-  test('denies privileged clipboard and microphone operations while typed input works', async ({
+  test('denies the async clipboard and the microphone while typed input and copying on a click work', async ({
     page,
   }, testInfo) => {
     const errors: string[] = [];
@@ -536,6 +536,7 @@ test.describe('restricted preview capabilities', () => {
       export default function Example() {
         const {copy, isCopied} = useClipboard();
         const [copyResult, setCopyResult] = useState('Copy not attempted');
+        const [asyncCopy, setAsyncCopy] = useState('Async clipboard not attempted');
         const [mic, setMic] = useState('Microphone not attempted');
         const [speechError, setSpeechError] = useState('');
         const [dictationAttempts, setDictationAttempts] = useState(0);
@@ -549,6 +550,13 @@ test.describe('restricted preview capabilities', () => {
           <textarea aria-label="Typed message" defaultValue="Selectable text" />
           <button onClick={async () => setCopyResult(await copy('Selectable text') ? 'Copied' : 'Copy unavailable')}>Try copy</button>
           <p>{copyResult}</p><p>{isCopied ? 'Copied state' : 'Not copied'}</p>
+          <button onClick={async () => {
+            try {
+              await navigator.clipboard.writeText('Selectable text');
+              setAsyncCopy('Async clipboard allowed');
+            } catch (error) { setAsyncCopy('Async clipboard refused: ' + error.name); }
+          }}>Try async clipboard</button>
+          <p>{asyncCopy}</p>
           <button onClick={async () => {
             if (!navigator.mediaDevices?.getUserMedia) {
               setMic('Microphone unavailable');
@@ -599,11 +607,20 @@ test.describe('restricted preview capabilities', () => {
       microphoneAllowed: false,
       clipboardWriteAllowed: false,
     });
-    await frame.getByRole('button', {name: 'Try copy', exact: true}).click();
+    // The preview may not use the async Clipboard API.
+    await frame
+      .getByRole('button', {name: 'Try async clipboard', exact: true})
+      .click();
     await expect(
-      frame.getByText('Copy unavailable', {exact: true}),
+      frame.getByText('Async clipboard refused: NotAllowedError', {
+        exact: true,
+      }),
     ).toBeVisible();
-    await expect(frame.getByText('Not copied', {exact: true})).toBeVisible();
+    // On the reader's click, Core's copy uses the browser's copy command,
+    // which the sandbox allows.
+    await frame.getByRole('button', {name: 'Try copy', exact: true}).click();
+    await expect(frame.getByText('Copied', {exact: true})).toBeVisible();
+    await expect(frame.getByText('Copied state', {exact: true})).toBeVisible();
     await frame
       .getByRole('button', {name: 'Try microphone', exact: true})
       .click();

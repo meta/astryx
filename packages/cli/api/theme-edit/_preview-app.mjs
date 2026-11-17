@@ -90,6 +90,7 @@ import {
   analyzeTemplateNeeds,
   extractImportedPackages,
   parsedSpecifiers,
+  referencedPaths,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {
@@ -251,8 +252,8 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
 /**
  * The modules a file imports, from its import statements: a script's
  * through the shared reader of import statements (its syntax tree, so a
- * comment or a string says nothing), or the `@import` rules of a stylesheet
- * (comments left out).
+ * comment or a string says nothing) with the files its leading reference
+ * comments name, or the `@import` rules of a stylesheet (comments left out).
  * @param {string} file
  * @param {string} text
  * @returns {string[]}
@@ -264,7 +265,8 @@ function importSpecifiers(file, text) {
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g),
     ].map(m => m[1]);
-  return parsedSpecifiers(text);
+  // The new app's type check reads a referenced file as it reads an import.
+  return [...parsedSpecifiers(text), ...referencedPaths(text)];
 }
 
 /**
@@ -1658,6 +1660,15 @@ export default function Home() {
   );
 }
 `;
+
+/**
+ * The starter's home page once its theme preview is removed: the same page
+ * with no link to the preview.
+ */
+const STARTER_HOME_BARE = STARTER_HOME.replace(
+  "import {Link} from '@astryxdesign/core/Link';\n",
+  '',
+).replace(/\n\s*<Link href="\/theme-preview">[^<]*<\/Link>/, '');
 
 /**
  * The files a new starter app (Next.js app router, Core and the neutral
@@ -3565,7 +3576,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     : look
       ? `look without changing your app: ${look}`
       : // The pictures first: the one command that writes the two to open.
-        `look without changing your app: ${extra.pictureProblem ? pngNote : `${EDITOR} show ${slug} --png writes ${shown(cwd, f.previewPng)} (the sample page, with a tooltip, a menu and a list drawn open below it) and ${shown(cwd, path.join(f.dir, 'sheet-overlays.png'))} (every menu, tooltip, popover and list, drawn open) to open, with no dev server (it needs a Playwright or a Chrome)`}; or open ${shown(cwd, f.preview)} (one self-contained page, current after this change)`;
+        `look without changing your app: ${extra.pictureProblem ? pngNote : `${EDITOR} show ${slug} --png writes ${shown(cwd, f.previewPng)} (the sample page, with a tooltip, a menu and a list drawn open below it) and ${shown(cwd, path.join(f.dir, 'sheet-overlays.png'))} (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open) to open, with no dev server (it needs a Playwright or a Chrome)`}; or open ${shown(cwd, f.preview)} (one self-contained page, current after this change)`;
   const edited = handEdited.length
     ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ ${stale.some(f => /could not be written/.test(f)) && !stale.some(f => /changed by hand/.test(f)) ? 'could not be written' : 'was changed by hand'}, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
     : '';
@@ -5241,7 +5252,12 @@ async function previewApp(dir, options, held) {
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
         if (isOtherLanguageStylesheet(spec))
           otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
-        else if (isBundlerFile(spec) && !typedByNewApp(spec))
+        else if (
+          // TypeScript reads a query or a hash as part of the module's
+          // name, whatever the module is (`./x.ts?raw`).
+          (isBundlerFile(spec) || /^[^#][^?#]*[?#]/.test(spec)) &&
+          !typedByNewApp(spec)
+        )
           untyped.push(`${shown(cwd, file)} imports '${spec}'`);
       }
       // Each import at the file it loads, resolved as the theme build
@@ -5334,9 +5350,9 @@ async function previewApp(dir, options, held) {
     if (untyped.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (it reads .css files and pictures, by their plain lower-case name), so its build would stop there.`,
+        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (a query or a hash is part of the name it reads, and it reads .css files and pictures by their plain lower-case name), so its build would stop there.`,
         {
-          fix: `import the file by its plain name with a lower-case extension (a .css file, a picture), load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
+          fix: `import the file by its plain name, with no query or hash and a lower-case extension, load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
           run: [appCommand(dir, slug)],
         },
       );
@@ -6293,6 +6309,10 @@ async function removePreview(page, options, box) {
       Number(path.basename(a.file) === PREVIEW_DATA) -
       Number(path.basename(b.file) === PREVIEW_DATA),
   );
+  // Where the app serves the preview, and its routes folder, read while the
+  // preview is there.
+  const url = previewPath(cwd, at);
+  const routes = routesOf(cwd, at);
   /** @type {string[]} */
   const removed = [];
   for (const [i, p] of plan.entries())
@@ -6341,6 +6361,31 @@ async function removePreview(page, options, box) {
   } catch {
     // Not empty: something there is not the preview's.
   }
+  /** @type {string[]} */
+  const rewritten = [];
+  // The app's home page linked to the preview (a starter's does): a home
+  // page as the starter wrote it loses the link; any other is named.
+  if (url != null && routes && !fs.existsSync(at.dir))
+    for (const name of ['page.tsx', 'page.jsx', 'page.js']) {
+      const home = path.join(routes, name);
+      let text;
+      try {
+        text = readRegularFile(home, 'utf8');
+      } catch {
+        continue;
+      }
+      if (text === STARTER_HOME) {
+        writeWhole(home, STARTER_HOME_BARE);
+        rewritten.push(shown(cwd, home));
+        notes.push(
+          `${shown(cwd, home)} no longer links to ${url}: the starter's home page linked to the preview this removed`,
+        );
+      } else if (text.includes(`"${url}"`) || text.includes(`'${url}'`))
+        notes.push(
+          `${shown(cwd, home)} still links to ${url}, which no longer exists: take that link out`,
+        );
+      break;
+    }
   const worn = data.theme;
   if (worn)
     await themeLocked(options, worn, () =>
@@ -6348,6 +6393,6 @@ async function removePreview(page, options, box) {
     );
   return {
     type: 'themeEdit.previewRemove',
-    data: {folder, removed, kept, missing, rewritten: [], notes, pages: []},
+    data: {folder, removed, kept, missing, rewritten, notes, pages: []},
   };
 }

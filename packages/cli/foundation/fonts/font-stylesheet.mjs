@@ -22,6 +22,31 @@ export const fontKey = family =>
     .toLowerCase();
 
 /**
+ * The families a font service URL requests in its `family` parameters, as
+ * Google Fonts URLs do (`family=Figtree:wght@400;700`, or
+ * `family=Roboto:400|Lato` in the older form), as family keys.
+ * @param {string} url
+ * @returns {Set<string>}
+ */
+export function fontServiceFamilies(url) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const m of url.matchAll(/family=([^&'")]+)/g)) {
+    let value;
+    try {
+      value = decodeURIComponent(m[1].replace(/\+/g, ' '));
+    } catch {
+      continue;
+    }
+    for (const family of value.split('|')) {
+      const name = family.split(':')[0];
+      if (name.trim()) out.add(fontKey(name));
+    }
+  }
+  return out;
+}
+
+/**
  * The families a stylesheet `@import` specifier loads, read from `fromDir`:
  * an `@fontsource` package by its name, a font service URL by the
  * `family=` it requests, a local stylesheet by its `@font-face` rules and
@@ -42,8 +67,7 @@ export function importedFontFamilies(spec, fromDir, seen = new Set()) {
       fontKey(`${pkg[2].replace(/-/g, ' ')}${pkg[1] ? ' Variable' : ''}`),
     );
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec)) {
-    for (const m of spec.matchAll(/family=([^:&'")]+)/g))
-      out.add(fontKey(decodeURIComponent(m[1].replace(/\+/g, ' '))));
+    for (const family of fontServiceFamilies(spec)) out.add(family);
     return out;
   }
   /** @type {string | null} */

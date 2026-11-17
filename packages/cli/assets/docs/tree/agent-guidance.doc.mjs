@@ -134,7 +134,7 @@ export default {
         },
         {
           type: 'prose',
-          text: '`upgrade --apply` prints that line; `init` prints `[ok] AI agent docs installed -> AGENTS.md`. Without `--apply`, `upgrade` only reports `Agent docs differ from the installed Astryx and integration configuration.` It refreshes the block even when Core did not change. See {@link command:upgrade}.',
+          text: '`upgrade --apply` prints that line; `init` prints one line per file, such as `[ok] AI agent docs: AGENTS.md updated (Astryx 0.7.15 -> 0.7.16)` or `[ok] AI agent docs: AGENTS.md already current (Astryx 0.7.16), nothing changed`. Without `--apply`, `upgrade` only reports `Agent docs differ from the installed Astryx and integration configuration.` It refreshes the block even when Core did not change. See {@link command:upgrade}.',
         },
       ],
     },

@@ -30,7 +30,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   CalendarIcon,
   FlagIcon,
@@ -171,7 +171,10 @@ function PageHeader({
   const showToast = useToast();
   const restock = () =>
     // Demo only: replace this toast with the call that performs the action.
-    showToast({body: 'Restock requested for order #1001', uniqueID: 'restock'});
+    showToast({
+      body: 'Demo: a restock would be requested for order #1001 here',
+      uniqueID: 'restock',
+    });
   return (
     <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
       <VStack gap={3}>
@@ -237,7 +240,17 @@ function PageHeader({
           {!isNarrow && (
             <HStack gap={2}>
               <Button label="Restock" variant="secondary" onClick={restock} />
-              <Button label="Edit" variant="secondary" />
+              <Button
+                label="Edit"
+                variant="secondary"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the order editor would open here',
+                    uniqueID: 'edit',
+                  })
+                }
+              />
             </HStack>
           )}
         </HStack>
@@ -254,7 +267,17 @@ function PageHeader({
             </StackItem>
             <StackItem size="fill">
               <VStack hAlign="stretch">
-                <Button label="Edit" variant="secondary" />
+                <Button
+                  label="Edit"
+                  variant="secondary"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the order editor would open here',
+                      uniqueID: 'edit',
+                    })
+                  }
+                />
               </VStack>
             </StackItem>
           </HStack>
@@ -279,14 +302,16 @@ function PageHeader({
               />
             </TabList>
           </StackItem>
-          <Button
-            label={isPanelOpen ? 'Hide panel' : 'Show panel'}
-            variant="ghost"
-            size="md"
-            icon={<Icon icon={ViewColumnsIcon} size="sm" />}
-            isIconOnly
-            onClick={onTogglePanel}
-          />
+          {!isNarrow && (
+            <Button
+              label={isPanelOpen ? 'Hide panel' : 'Show panel'}
+              variant="ghost"
+              size="md"
+              icon={<Icon icon={ViewColumnsIcon} size="sm" />}
+              isIconOnly
+              onClick={onTogglePanel}
+            />
+          )}
         </HStack>
       </VStack>
     </LayoutHeader>
@@ -313,7 +338,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: `Fulfillment started for ${PRODUCTS.length} items`,
+                  body: `Demo: fulfillment would start for ${PRODUCTS.length} items here`,
                   uniqueID: 'fulfill',
                 })
               }
@@ -324,7 +349,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Shipping label created for order #1001',
+                  body: 'Demo: a shipping label would be created for order #1001 here',
                   uniqueID: 'label',
                 })
               }
@@ -346,7 +371,13 @@ function ItemsCard() {
                   ))}
                 </VStack>
               }
-              onClick={() => {}}
+              onClick={() =>
+                // Demo only: replace this toast with the link to the product.
+                showToast({
+                  body: `Demo: ${product.name} would open here`,
+                  uniqueID: `product-${i}`,
+                })
+              }
               startContent={
                 <Thumbnail
                   src={product.image}
@@ -375,6 +406,7 @@ function ItemsCard() {
 // ─── Invoice Card ───────────────────────────────────────────────────────────
 function InvoiceCard() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section>
       <VStack gap={4}>
@@ -390,10 +422,18 @@ function InvoiceCard() {
               label="Refund"
               variant="ghost"
               onClick={() =>
-                // Demo only: replace this toast with the call that performs the action.
-                showToast({
-                  body: 'Refund started for order #1001',
-                  uniqueID: 'refund',
+                confirm.show({
+                  title: 'Refund this order?',
+                  description: "This demo won't refund anything.",
+                  actionLabel: 'Refund',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the refund would be issued here',
+                      uniqueID: 'refund',
+                    });
+                  },
                 })
               }
             />
@@ -403,7 +443,7 @@ function InvoiceCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Invoice sent to janedoe@email.com',
+                  body: 'Demo: the invoice would be sent to janedoe@email.com here',
                   uniqueID: 'invoice',
                 })
               }
@@ -466,6 +506,7 @@ function InvoiceCard() {
             </HStack>
           </MetadataListItem>
         </MetadataList>
+        {confirm.element}
       </VStack>
     </Section>
   );
@@ -473,6 +514,7 @@ function InvoiceCard() {
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
 function TimelineSection() {
+  const showToast = useToast();
   return (
     <Section>
       <VStack gap={4}>
@@ -485,6 +527,13 @@ function TimelineSection() {
             variant="ghost"
             icon={<Icon icon={FunnelIcon} />}
             isIconOnly
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: timeline filters would open here',
+                uniqueID: 'timeline-filters',
+              })
+            }
           />
         </HStack>
 
@@ -614,66 +663,45 @@ function RightPanel() {
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function DetailPage2Template() {
   const [activeTab, setActiveTab] = useState('details');
-  const isNarrow = useMediaQuery('(max-width: 1024px)');
-  // Desktop: a fixed-width `end`-slot side panel that can be hidden.
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get the narrow layout, which reads well at every width. Once
+  // script runs, wide screens move the order details to the side panel.
+  const isNarrow = useMediaQuery('(max-width: 1024px)', true);
+  // Wide screens: a fixed-width `end`-slot side panel that can be hidden.
   const [showSidePanel, setShowSidePanel] = useState(true);
-  // Mobile: the panel opens as a full-screen dialog (the side slot would squish
-  // the main content), driven by the same toolbar button.
-  const [isPanelDialogOpen, setPanelDialogOpen] = useState(false);
-
-  const isPanelShown = isNarrow ? isPanelDialogOpen : showSidePanel;
-  const togglePanel = () =>
-    isNarrow
-      ? setPanelDialogOpen(prev => !prev)
-      : setShowSidePanel(prev => !prev);
 
   return (
-    <>
-      <Layout
-        height="fill"
-        contentWidth={1000}
-        defaultHasDividers
-        header={
-          <PageHeader
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            isPanelOpen={isPanelShown}
-            onTogglePanel={togglePanel}
-            isNarrow={isNarrow}
-          />
-        }
-        content={
-          <LayoutContent role="main">
-            <VStack gap={4}>
-              <ItemsCard />
-              <InvoiceCard />
-              <TimelineSection />
-            </VStack>
-          </LayoutContent>
-        }
-        end={!isNarrow && showSidePanel ? <RightPanel /> : undefined}
-      />
-      {/* Mobile: the side-panel content uses the full viewport so order details
-          are not squeezed beside narrow page chrome. Drawer remains available
-          for side-overlay flows that intentionally preserve page context. */}
-      <Dialog
-        variant="fullscreen"
-        isOpen={isNarrow && isPanelDialogOpen}
-        onOpenChange={setPanelDialogOpen}>
-        <Layout
-          header={
-            <DialogHeader
-              title="Order details"
-              onOpenChange={setPanelDialogOpen}
-            />
-          }
-          content={
-            <LayoutContent padding={4}>
-              <PanelContent />
-            </LayoutContent>
-          }
+    <Layout
+      height="fill"
+      contentWidth={1000}
+      defaultHasDividers
+      header={
+        <PageHeader
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isPanelOpen={showSidePanel}
+          onTogglePanel={() => setShowSidePanel(prev => !prev)}
+          isNarrow={isNarrow}
         />
-      </Dialog>
-    </>
+      }
+      content={
+        <LayoutContent role="main">
+          <VStack gap={4}>
+            <ItemsCard />
+            <InvoiceCard />
+            <TimelineSection />
+            {/* Narrow screens: the order details follow the main column
+                instead of squeezing beside it. */}
+            {isNarrow && (
+              <VStack gap={4}>
+                <Heading level={2}>Order details</Heading>
+                <PanelContent />
+              </VStack>
+            )}
+          </VStack>
+        </LayoutContent>
+      }
+      end={!isNarrow && showSidePanel ? <RightPanel /> : undefined}
+    />
   );
 }

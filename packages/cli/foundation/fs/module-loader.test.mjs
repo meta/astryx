@@ -5,7 +5,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import nodeModule from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {z} from 'zod';
 import {
@@ -16,13 +15,7 @@ import {
 } from './module-loader.mjs';
 import {importUrl} from './import-url.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
-
-// Node runs module hooks in the loading thread from 22.15. On an older Node
-// the CLI supports (its oldest is 22.13), a theme module load matches a
-// stylesheet import by its text, from the theme module's folder, as the
-// fallback case below shows.
-const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 let tmpDir;
 
@@ -455,9 +448,7 @@ describe('importThemeArtifact', () => {
     },
   );
 
-  it.skipIf(
-    typeof (/** @type {any} */ (nodeModule).registerHooks) !== 'function',
-  )(
+  it.skipIf(!hasModuleHooks)(
     'loads an asset a module imports (an icon’s .svg) as its URL, as a bundler gives it',
     async () => {
       write('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>\n');
@@ -560,7 +551,7 @@ describe('importThemeArtifact', () => {
         write(`${packageDir}/dist/Theme/brand.css`, 'body {}\n');
 
         await expect(importThemeArtifact('./built.js', tmpDir)).rejects.toThrow(
-          /Unknown file extension "\.css".*brand\.css/,
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later/,
         );
       },
     );
