@@ -102,9 +102,9 @@ function physicalKeyCode(key: string): string | null {
 }
 
 /**
- * Whether the event is an Option dead key on macOS (Option+E, for example).
- * Chrome and Safari report it with the IME key code 229, but it starts no
- * composition of its own, so an alt combo may still match it.
+ * A browser may report an Option dead key (Option+E on macOS) with the IME
+ * key code 229 although it starts no composition there, so an alt combo may
+ * still match it. A dead key that composes text in a field is not this case.
  */
 function isOptionDeadKey(event: KeyboardEvent): boolean {
   return event.key === 'Dead' && event.altKey && event.isComposing !== true;

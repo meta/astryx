@@ -283,11 +283,20 @@ describe('useHotkeys', () => {
         ),
       );
 
-      // Chrome and Safari report an Option dead key with key code 229.
+      // Reported with the IME key code 229 outside composition.
       for (const code of ['KeyN', 'KeyE', 'KeyU', 'KeyI', 'Backquote']) {
         press('Dead', {code, altKey: true, keyCode: 229});
       }
       expect(onPress).toHaveBeenCalledTimes(5);
+    });
+
+    it('fires alt+e on Option+E as Safari on macOS reports it on the page body', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+e', onPress}]));
+
+      press('Dead', {code: 'KeyE', keyCode: 69, altKey: true});
+      expect(onPress).toHaveBeenCalledTimes(1);
     });
 
     it('still ignores a key that composes text with an input method', () => {
