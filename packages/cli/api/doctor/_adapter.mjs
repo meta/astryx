@@ -43,6 +43,12 @@ import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs'
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
+import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
+import {
+  resolveIconModule,
+  splitSpecifier,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
@@ -297,6 +303,77 @@ export function findIconPlaceholders(projectDir) {
       local: uses[0].local,
       meanings: meanings.length > 0 ? meanings : null,
       uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => compareText(a.file, b.file));
+}
+
+/**
+ * Each file in the project's own source with icon imports that do not match
+ * the project's icon sets (see `iconImportFindings`): an icon from a set that
+ * is not in the list, or from a set later in the list than one that draws the
+ * same meaning, and an icon-named import of an npm package that does not
+ * resolve, that no path alias (`compilerOptions.paths` or `baseUrl`) maps, and
+ * that the project's package.json does not declare. A file reads only as
+ * a syntax tree. Read without executing app code.
+ * @param {string} projectDir
+ * @param {{sets: import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet[], choice: import('../../foundation/discovery/icon-set-discovery.mjs').IconSetChoice}} iconSets
+ * @returns {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>}
+ */
+export function findIconImports(projectDir, iconSets) {
+  const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
+  const declared = new Set(
+    [
+      'dependencies',
+      'devDependencies',
+      'peerDependencies',
+      'optionalDependencies',
+    ]
+      .flatMap(field => Object.keys(pkg[field] ?? {}))
+      .concat(typeof pkg.name === 'string' ? [pkg.name] : []),
+  );
+  // Only a file that names a set's module, a wrapped library, or an
+  // icon-named export is parsed.
+  const needles = [
+    ...new Set(
+      iconSets.sets.flatMap(set => [
+        set.data.module,
+        ...set.data.icons.flatMap(icon => (icon.module ? [icon.module] : [])),
+        ...(set.data.source ? [set.data.source.package] : []),
+      ]),
+    ),
+  ];
+  /** @type {Map<any, Map<string, string>>} */
+  const wrappedRead = new Map();
+  /** @type {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (
+      !/Icon\b/u.test(source) &&
+      !needles.some(each => source.includes(each))
+    ) {
+      continue;
+    }
+    const fromDir = path.dirname(file);
+    const imports = iconImportFindings(
+      source,
+      iconSets,
+      module =>
+        !declared.has(splitSpecifier(module).name) &&
+        resolveIconModule(module, fromDir) === null &&
+        !projectMapsImport(module, file),
+      wrappedRead,
+    );
+    if (!imports || imports.length === 0) continue;
+    found.push({
+      file: path.relative(projectDir, file).split(path.sep).join('/'),
+      imports,
     });
   }
   return found.sort((a, b) => compareText(a.file, b.file));
