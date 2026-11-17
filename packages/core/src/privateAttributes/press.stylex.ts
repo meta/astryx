@@ -25,6 +25,7 @@ import {
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {pressVars} from '../utils/interactionOverlay.stylex';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
+import {controlPressOwner} from './pressOwner.stylex';
 
 // The overlay's arm selectors (interactionOverlay.stylex.ts), restated here:
 // StyleX resolves a style's keys within its own file.
@@ -387,6 +388,45 @@ export const controlPressLayerStyles = stylex.create({
       default: null,
       [COARSE]: {default: null, [PRESSED_ANY]: 'transform'},
     },
+  },
+  /**
+   * The press layer of a control that paints on a child element (Tab's
+   * hover span), read off the owner's `controlPressOwner` marker. The owner
+   * carries `interactionOverlayStyles.pressedAlpha`, so the layer paints the
+   * touch press at the owner's strength. A fine pointer paints the hover,
+   * then the pressed overlay at `:active`; under a coarse pointer the colour
+   * stays transparent and the controller's press paints as an image. The
+   * pressed arm repeats inside the hover branch so it outranks the hover
+   * rule there (a media-nested rule carries extra generated priority).
+   */
+  ownerLayer: {
+    backgroundColor: {
+      default: 'transparent',
+      [stylex.when.ancestor(':hover', controlPressOwner)]: {
+        [HOVER_HOVER]: colorVars['--color-overlay-hover'],
+      },
+      [stylex.when.ancestor(':active', controlPressOwner)]: {
+        default: colorVars['--color-overlay-pressed'],
+        [HOVER_HOVER]: colorVars['--color-overlay-pressed'],
+        [COARSE]: 'transparent',
+      },
+    },
+    // An image change is discrete, so the colour transition cannot fade the
+    // onset in; the owner's strength is what moves over the release.
+    backgroundImage: {
+      default: null,
+      [stylex.when.ancestor(PRESSED_ON, controlPressOwner)]: {
+        default: null,
+        [COARSE]: pressedOverlayImage,
+      },
+      [stylex.when.ancestor(PRESSED_FADING, controlPressOwner)]: {
+        default: null,
+        [COARSE]: pressedOverlayImage,
+      },
+    },
+    transitionProperty: 'background-color',
+    transitionDuration: durationVars['--duration-fast'],
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
 });
 
