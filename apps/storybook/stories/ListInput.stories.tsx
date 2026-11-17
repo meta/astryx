@@ -20,7 +20,10 @@ import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {Selector} from '@astryxdesign/core/Selector';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {pixel, proportional} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -202,7 +205,10 @@ function createTagColumns(
  */
 function useRecordReorder<T extends {id: string}>(
   setRecords: Dispatch<SetStateAction<T[]>>,
+  handle?: ReorderHandle,
 ) {
+  const revealBehavior = handle?.revealBehavior;
+  const placement = handle?.placement;
   return useMemo(
     () =>
       createReorderable({
@@ -215,14 +221,21 @@ function useRecordReorder<T extends {id: string}>(
             const rest = current.filter(record => record !== moved);
             return [...rest.slice(0, to), moved, ...rest.slice(to)];
           }),
+        handle: {revealBehavior, placement},
       }),
-    [setRecords],
+    [setRecords, revealBehavior, placement],
   );
 }
 
-function TagOptionsExample({isReorderable}: {isReorderable?: boolean}) {
+function TagOptionsExample({
+  isReorderable,
+  handle,
+}: {
+  isReorderable?: boolean;
+  handle?: ReorderHandle;
+}) {
   const [tags, setTags] = useState(INITIAL_TAGS);
-  const reorderable = useRecordReorder(setTags);
+  const reorderable = useRecordReorder(setTags, handle);
   const {isFieldTouched, markFieldTouched} = useTouchedFields();
   const columns = useMemo(
     () => createTagColumns(markFieldTouched),
@@ -283,6 +296,23 @@ export const TagOptions: Story = {
       },
     },
   },
+};
+
+type ReorderHandleArgs = {
+  revealBehavior: 'always' | 'adaptive';
+  placement: 'start' | 'end';
+};
+
+/** The reorderable's `handle` option: the handle's edge and how it reveals itself. */
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {revealBehavior: 'adaptive', placement: 'end'},
+  argTypes: {
+    revealBehavior: {control: 'inline-radio', options: ['always', 'adaptive']},
+    placement: {control: 'inline-radio', options: ['start', 'end']},
+  },
+  render: ({revealBehavior, placement}) => (
+    <TagOptionsExample isReorderable handle={{revealBehavior, placement}} />
+  ),
 };
 
 /** Editable tag options using the default fixed insertion order. */

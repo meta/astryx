@@ -22,6 +22,7 @@ verified_by:
     packages/core/src/List/__tests__/ListReorder.test.tsx,
     packages/core/src/List/__tests__/ListReorderLayout.test.tsx,
     packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/ListReorderHandleOptions.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListReorderMode.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/reorderModel.test.ts,
@@ -242,11 +243,34 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Additive theme surface: a theme may map the reorder handle's grip through
   `componentIcons['list-reorder-handle']`; with no entry, the grip is the
   `drag` icon.
-- `spec:AST-103` owns reordering. List is its first adopter: it
+- `spec:AST-103` owns reordering. List adopts it: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one control reordering adds to a row, at its trailing edge,
-  with its grip icon inside it (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one control reordering adds to a row, with its grip icon
+  inside it (`spec:AST-103` FR5),
+  at the row edge its reorderable's `handle.placement` names: its trailing
+  edge by default, or its leading edge, before the row's start content.
+  The handle always shows and takes its place in the row, unless
+  `handle.revealBehavior` is `'adaptive'`. At the trailing edge, a row with end
+  content keeps the handle in its end slot, after that content, and the
+  handle reaches into the row's inline inset, as an end slot's last control
+  does. At the leading edge, a row that stays put keeps the handles' room, so
+  its label lines up with theirs.
+  Then, where the primary pointer is fine, the handle shows while its row is
+  hovered or holds the focus. It then hangs outside the row's content
+  and takes no width, so the content keeps its place. A reorderable list
+  pads that room on that edge and reaches into its host's padding by as much
+  of it as the padding holds, so the FR9 clip and a clipping host keep the
+  handles. The rows move in only by the room the host's padding lacks. Under
+  a coarse pointer the handle always shows and takes its place in the row.
+  It also takes its place in the row after a list marker at the leading
+  edge, and under `outset` and `bleed`, whose rows reach the host's padding
+  edge. Hidden, it keeps its tab stop. In a disabled row the handle dims with
+  the row's content, once, to the row's disabled opacity. The handle's room styles, for the
+  list and for a row that stays put, come with the reorderable object's
+  session, so a List without `reorderable` loads none of them
+  (`architecture:component-import-boundaries` INV7). The reorder
+  controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 

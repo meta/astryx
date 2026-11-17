@@ -349,8 +349,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
   // List's edge="flush" zeroes the inline inset of the Item each ListItem
-  // renders; Item owns, documents and reads it.
-  List: ['--_item-inset-inline'],
+  // renders, and a reorderable row that stays put sets the room after its
+  // marker; Item owns, documents and reads both.
+  List: ['--_item-inset-inline', '--_item-marker-room'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],
@@ -385,6 +386,11 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // border. It is the layer's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
   '--_hit-border-bottom',
+  // The room a row keeps after its list marker for its neighbours' reorder
+  // handles: a reorderable List row that stays put sets it, and Item pads the
+  // content after the marker by it. It is reorder layout, not a property a
+  // theme author sets.
+  '--_item-marker-room',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared

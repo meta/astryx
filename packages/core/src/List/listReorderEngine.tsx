@@ -134,7 +134,9 @@ import {
   ListReorderHandle,
   ListReorderRowName,
   UNREAD_HANDLE_NAME,
+  reorderGutterStyle,
   reorderListStyle,
+  reorderRoomStyle,
   reorderRowStyle,
 } from './ListReorderHandle';
 import {attachTouchHold, touchMotion} from './ListReorderTouch';
@@ -706,6 +708,8 @@ export class ListReorderController implements ListReorderSession {
   readonly RowName = ListReorderRowName;
   readonly rowStyle = reorderRowStyle;
   readonly listStyle = reorderListStyle;
+  readonly gutterStyle = reorderGutterStyle;
+  readonly roomStyle = reorderRoomStyle;
   options: ListReorderOptions | null = null;
   announce: AnnounceFn = () => {};
   messages: ReorderMessages | null = null;

@@ -638,6 +638,26 @@ describe('TransferList', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    it("puts the handle before Remove when the owner's object places handles at the start", () => {
+      render(
+        <TransferList
+          label="Columns"
+          options={OPTIONS}
+          value={['name', 'status']}
+          onChange={() => {}}
+          reorderable={createReorderable<string>({
+            onReorder: () => {},
+            handle: {placement: 'start'},
+          })}
+        />,
+      );
+      const row = screen.getByText('Name').closest('li') as HTMLElement;
+      const buttons = within(row).getAllByRole('button');
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0]).toHaveAccessibleName('Reorder Name');
+      expect(buttons[1]).toHaveAccessibleName('Remove Name');
+    });
+
     it("applies an owner object's moves the way it reports them, a value without an option keeping its place among the hidden", async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();
@@ -745,6 +765,25 @@ describe('TransferList', () => {
       expect(screen.queryByRole('button', {name: 'Reorder Name'})).toBeNull();
       await user.clear(screen.getByRole('searchbox'));
       expect(screen.getByRole('button', {name: 'Reorder Name'})).toBeVisible();
+    });
+
+    it("keeps the selected panel's heading in place while a search pauses reordering", async () => {
+      const user = userEvent.setup();
+      render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          hasSearch
+        />,
+      );
+      // The panel's heading: the label element with an id, which names the
+      // panel.
+      const heading = () =>
+        screen
+          .getAllByText('Selected columns')
+          .find(element => element.id !== '')?.parentElement;
+      const before = heading()?.className;
+      await user.type(screen.getByRole('searchbox'), 'n');
+      expect(heading()?.className).toBe(before);
     });
 
     it('reports each move so the owner keeps the shown rows in the order the list shows, around a value without an option', async () => {

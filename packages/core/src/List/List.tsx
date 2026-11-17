@@ -92,10 +92,18 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle at its end. One the
-   * object's `isReorderable` rejects keeps its place. Each committed move
-   * calls its `onReorder` once with the row's key and its index after the
-   * move. Apply it by rendering the rows in their new order. A drop on the
+   * Each ListItem with an `itemKey` gets a reorder handle, at its end
+   * unless the object's `handle.placement` is `'start'`. It always shows, in a
+   * place of its own in the row: after end content, in the end slot. At the
+   * start, a row that stays put keeps that room, so labels line up. With `handle.revealBehavior` `'adaptive'`, it
+   * shows while the row is hovered or holds the focus. It then hangs 30px
+   * outside the row's text, so the text keeps its place. The list takes that
+   * room from its container's padding. Where the padding is narrower, its
+   * rows move in by the difference. Under a coarse pointer, under `edge`
+   * `'outset'` or `'bleed'`, and after a list marker, it then sits inside
+   * the row. One the object's `isReorderable` rejects keeps its place. Each
+   * committed move calls its `onReorder` once with the row's key and its
+   * index after the move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes
    * nothing.
    *
@@ -383,6 +391,11 @@ export function List({
   const edge: ListEdge =
     edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
+  // Handles that show only on hover or focus hang outside their rows, and
+  // the list keeps their room. The session decides it, so a list without one
+  // loads none of the handles' placement logic or styles.
+  const reorderGutter =
+    reorderSession?.gutterStyle(reorderOptions?.handle, edge, density) ?? null;
 
   const contextValue = useMemo(
     () => ({
@@ -439,6 +452,7 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          reorderGutter,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
