@@ -27,8 +27,10 @@ import {
  */
 let TEMP_ROOT = '';
 beforeAll(() => {
-  TEMP_ROOT = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'astryx-read-record-test-'),
+  // The real path: on macOS the temporary folder is behind a symlink
+  // (/var to /private/var), and a realpath answer names the real path.
+  TEMP_ROOT = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-read-record-test-')),
   );
 });
 afterAll(() => {
