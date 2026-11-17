@@ -24,11 +24,8 @@
  * leaves the browser everything but double-tap zoom (`manipulation`). That
  * `touch-action` applies only where the primary pointer is coarse. Elsewhere
  * a finger gets the browser's defaults until the hold claims it. The handle
- * is the one element the reorder adds to a row. Its grip is the theme's
- * `list-reorder-handle` icon, by default the `drag` icon. It is hidden from
- * assistive technology. The handle listens to
- * nothing itself. The session's listeners take its drags. Its keys go
- * through React's.
+ * listens to nothing itself. The session's listeners take its drags. Its keys
+ * go through React's.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
