@@ -1251,7 +1251,7 @@ jobs:
       # (its `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
       # As many legs as the recorded Node times need for each leg to finish
-      # inside the job limit, at most eight (room's Node leg plan,
+      # inside the job limit, at most twelve (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
       # before any setup.
