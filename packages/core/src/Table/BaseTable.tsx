@@ -1108,9 +1108,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
                       const rowIdentity = identity[rowIndex];
                       // The row's stripe comes from its display index: the
                       // index skips expansion panels and stays right when
-                      // the table is windowed or re-sorted. Placed outside
-                      // the memoized row, so a re-sort that keeps a row's
-                      // cells still updates its stripe.
+                      // the table is windowed or re-sorted. The provider
+                      // sits outside the memoized row. A re-sort that keeps
+                      // a row's cells still updates its stripe.
                       rows.push(
                         <TableRowPlacementContext
                           key={rowIdentity.reactKey}

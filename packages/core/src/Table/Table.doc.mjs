@@ -219,7 +219,7 @@ export const docs = {
       name: 'isStriped',
       type: 'boolean',
       description:
-        'Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body rows. A theme restyles either stripe through the `table-row` target: its `parity` (odd or even) and its `striped` state.',
+        "Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body rows. A theme restyles either stripe of a data-driven table through the `table-row` target's `parity` (odd or even); every striped table's body rows carry the `striped` state. A pinned column (`useTableStickyColumns`) keeps Core's own stripe.",
       default: 'false',
     },
     {

@@ -17,6 +17,8 @@ import {TableFooter} from './TableFooter';
 import {TableRow} from './TableRow';
 import {useTableRowsVirtualization} from './plugins/virtualization/useTableRowsVirtualization';
 import {useTableRowExpansion} from './plugins/rowExpansion/useTableRowExpansion';
+import {useTableStickyColumns} from './plugins/stickyColumns/useTableStickyColumns';
+import {pixel} from './columnUtils';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 
@@ -141,6 +143,48 @@ describe('table-row parity in a data-driven table', () => {
       'even',
       'odd',
     ]);
+  });
+
+  it("keeps Core's stripe in a pinned column: a pinned cell replays only the row's --table-row-overlay", () => {
+    function Pinned() {
+      const sticky = useTableStickyColumns<Person>({startKeys: ['name']});
+      return (
+        <Table
+          data={people}
+          columns={[
+            {key: 'name', header: 'Name', width: pixel(160)},
+            {key: 'id', header: 'Id', width: pixel(160)},
+          ]}
+          idKey="id"
+          isStriped
+          plugins={{stickyColumns: sticky}}
+        />
+      );
+    }
+    const {container} = render(<Pinned />);
+    const rows = bodyRows(container);
+    // Every row still says its stripe, pinned cells included in it.
+    expect(parities(rows)).toEqual(['odd', 'even', 'odd', 'even', 'odd']);
+    // A theme's parity rule sets the row's own background and nothing a
+    // pinned cell reads: the cell paints an opaque base plus the row's
+    // --table-row-overlay, which only Core's stripe and hover set.
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'zebra',
+        components: {
+          'table-row': {'parity:odd+striped': {backgroundColor: '#f9f9f9'}},
+        },
+      }),
+    ).component;
+    const rule = /\.astryx-table-row\[data-parity="odd"\][^{]*\{([^}]*)\}/.exec(
+      css,
+    )?.[1];
+    expect(rule).toMatch(/background-color:\s*#f9f9f9/);
+    expect(rule).not.toMatch(/--table-row-overlay/);
+    for (const tr of rows) {
+      const pinned = tr.querySelector<HTMLElement>('td');
+      expect(pinned?.style.insetInlineStart).toBe('0px');
+    }
   });
 
   it('reads parity from the logical row in a windowed table', () => {

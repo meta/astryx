@@ -230,9 +230,9 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
-  // A body row says which stripe it is and whether its table is striped, so
-  // a theme can style either stripe (`parity:odd`) and only striped tables
-  // (`striped`). The stripe Core paints itself is `parity:even`.
+  // A body row reports its stripe and whether its table is striped. A theme
+  // can then style one stripe (`parity:odd`) or only striped tables
+  // (`striped`). Core paints `parity:even` itself.
   const isBodyRow = placement.isBodyRow && !isHeaderRow;
   return (
     <tr
