@@ -78,7 +78,9 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     verticalAlign: 'baseline',
-    height: spacingVars['--spacing-5'],
+    // Its spacing size at the default text size, where one line is shorter;
+    // it grows with its label when the text grows past it.
+    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: typeScaleVars['--text-supporting-weight'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
@@ -139,7 +141,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],
-    height: spacingVars['--spacing-5'],
+    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
     paddingInline: spacingVars['--spacing-1'],
     textDecoration: 'none',
     transitionProperty: 'background-color',

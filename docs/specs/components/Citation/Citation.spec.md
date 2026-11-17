@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, theming, accessibility, visual]
 verified_by:
   [
     packages/core/src/Citation/Citation.test.tsx,
+    packages/core/src/Citation/__tests__/CitationTextSize.interaction.browser.spec.ts,
     packages/core/src/utils/safeUrl.test.ts,
     apps/storybook/stories/Citation.stories.tsx,
     apps/storybook/rtl-audit/verified-not-applicable.json,
@@ -31,7 +32,7 @@ architecture:
     architecture:interaction-modality,
   ]
 contributing: []
-system_specs: [spec:AST-005]
+system_specs: [spec:AST-005, spec:AST-102]
 ---
 
 # Citation component contract
