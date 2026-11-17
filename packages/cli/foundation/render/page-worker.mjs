@@ -83,6 +83,15 @@ for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error', 'debu
 
 const requireFromCli = createRequire(import.meta.url);
 const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'));
+/**
+ * The class-name prefix of the page's own compiled styles. Core's built sheet
+ * uses StyleX's default, `x`. A page rule with the same declaration as a Core
+ * rule would otherwise get the same class, unlayered, and override Core's
+ * layered rules on Core's own elements. With its own prefix the page's rules
+ * apply to the page's elements only, as in an app that @astryxdesign/build
+ * compiles with one prefix for Astryx and another for product files.
+ */
+const PAGE_CLASS_PREFIX = 'p';
 
 /** StyleX rules collected from every local module the page loads. */
 /** @type {unknown[]} */
@@ -1093,6 +1102,7 @@ function compilePageModule(source, filename, browser = false) {
                   dev: false,
                   runtimeInjection: false,
                   treeshakeCompensation: true,
+                  classNamePrefix: PAGE_CLASS_PREFIX,
                   unstable_moduleResolution: {type: 'commonJS', rootDir: root},
                   ...(themeFiles ? {aliases: themeFiles} : {}),
                 },
