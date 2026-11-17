@@ -114,8 +114,9 @@ const missingCallbacks = new Map<string, (...args: unknown[]) => never>();
 /**
  * Make a stand-in for a required callback prop that a caller left out. The
  * stand-in throws {@link devPropError} when the component calls it, instead of
- * a TypeError such as "onOpenChange is not a function". Each component and prop
- * gets the same function on every render, so Effect dependencies stay stable.
+ * a TypeError such as "onOpenChange is not a function". Each component, prop
+ * and message gets the same function on every render, so Effect dependencies
+ * stay stable.
  *
  * Use it only inside an inline `process.env.NODE_ENV !== 'production'` check,
  * as for `devPropError`.
