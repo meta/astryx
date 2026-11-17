@@ -1059,24 +1059,34 @@ describe("npm's own noproxy setting", () => {
     ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
   });
 
-  it('reaches npm through the guard it runs under', () => {
-    const result = runNpm(['view'], {
-      timeoutMs: 30_000,
-      env: npmEnvironment(
-        {...process.env, NO_PROXY: '.example.net', no_proxy: '.example.net'},
-        'localhost',
-      ),
-      npm: {
-        command: process.execPath,
-        prefix: [
-          '-e',
-          'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
-        ],
-        shell: false,
-      },
-    });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe('localhost|localhost');
+  it('reaches the npm runNpm starts, through the guard it runs under', () => {
+    const shell = {
+      NO_PROXY: process.env.NO_PROXY,
+      no_proxy: process.env.no_proxy,
+    };
+    process.env.NO_PROXY = '.example.net';
+    process.env.no_proxy = '.example.net';
+    try {
+      const result = runNpm(['view'], {
+        timeoutMs: 30_000,
+        noProxy: 'localhost',
+        npm: {
+          command: process.execPath,
+          prefix: [
+            '-e',
+            'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+          ],
+          shell: false,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('localhost|localhost');
+    } finally {
+      for (const [name, value] of Object.entries(shell)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });
 

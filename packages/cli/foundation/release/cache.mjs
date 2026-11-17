@@ -421,26 +421,25 @@ let configuredNoProxy;
  * outlives the run that started it.
  *
  * @param {string[]} args
- * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}, env?: NodeJS.ProcessEnv}} [options]
+ * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}, noProxy?: string | null}} [options]
  *   `pidFile` receives npm's process id while it runs (the release lock's
- *   record); `npm` replaces how npm is started and `env` the environment it
- *   runs in (tests). npm runs with its own `noproxy` setting
- *   ({@link npmEnvironment}).
+ *   record); `npm` replaces how npm is started, and `noProxy` the `noproxy`
+ *   setting read from it (tests). npm runs with its own `noproxy` setting
+ *   ({@link npmEnvironment}), read from npm once per run.
  * @returns {NpmResult}
  */
 export function runNpm(args, options = {}) {
   const npm = options.npm ?? npmCommand();
   const {command, prefix} = npm;
-  const env =
-    options.env ??
-    (options.npm
-      ? process.env
-      : npmEnvironment(
-          process.env,
-          configuredNoProxy === undefined
-            ? (configuredNoProxy = readNpmNoProxy(npm))
-            : configuredNoProxy,
-        ));
+  const noProxy =
+    options.noProxy !== undefined
+      ? options.noProxy
+      : options.npm
+        ? null
+        : configuredNoProxy === undefined
+          ? (configuredNoProxy = readNpmNoProxy(npm))
+          : configuredNoProxy;
+  const env = npmEnvironment(process.env, noProxy);
   const timeoutMs = options.timeoutMs ?? 300_000;
   const direct = process.platform === 'win32';
   const result = direct
