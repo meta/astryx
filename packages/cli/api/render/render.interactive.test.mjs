@@ -288,6 +288,46 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
+  it('reads each image the page imports from the embedded source, so the script holds no copy of it', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    put('src/shot.png', png);
+    put(
+      'src/shots.tsx',
+      `import shot from './shot.png';
+export default function Page() {
+  return (
+    <main>
+      <img src={shot} alt="One" />
+      <img src={shot} alt="Two" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
+    const file = read('shots.html');
+    const script = file.slice(file.lastIndexOf('<script>'));
+    const data = png.toString('base64');
+    // Once in the markup per image shown and once in the embedded source.
+    expect(script).not.toContain(data);
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const shown = [
+      ...dom.window.document.querySelectorAll(`#${ROOT_ID} img`),
+    ].map(img => img.getAttribute('src'));
+    expect(shown).toEqual([
+      `data:image/png;base64,${data}`,
+      `data:image/png;base64,${data}`,
+    ]);
+    dom.window.close();
+  }, 120_000);
+
   it('keeps showing an image the page names by a string path once the script draws the page', async () => {
     // A 1x1 PNG beside the page, named by a string, not imported.
     put(

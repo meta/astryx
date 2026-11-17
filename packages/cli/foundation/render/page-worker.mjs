@@ -46,10 +46,11 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
+import {createHash} from 'node:crypto';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
-import {BundleError, bundleForBrowser} from './client-bundle.mjs';
+import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
@@ -666,6 +667,27 @@ function aliasPlugin() {
  * @param {string} filename
  * @param {boolean} [browser]
  */
+/**
+ * The name a browser module calls `carried` by, imported once at its top.
+ * @param {any} p an import declaration's path
+ * @param {any} t Babel's types
+ */
+function carriedName(p, t) {
+  const program = p.scope.getProgramParent();
+  const name = '__astryxCarried';
+  if (!program.hasBinding(name)) {
+    program.path.unshiftContainer(
+      'body',
+      t.importDeclaration(
+        [t.importSpecifier(t.identifier(name), t.identifier('carried'))],
+        t.stringLiteral(CARRIED_MODULE),
+      ),
+    );
+    program.crawl();
+  }
+  return t.identifier(name);
+}
+
 function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
   return (/** @type {any} */ {types: t}) => ({
@@ -788,9 +810,20 @@ function pagePlugin(filename, browser = false) {
             p.remove();
             return;
           }
+          // In the browser the image comes from the embedded source, which
+          // carries it; a data: URI that is not base64 (an SVG as text) stays.
+          const base64 = browser ? /^(data:[^,]*;base64),/.exec(uri) : null;
           p.replaceWith(
             t.variableDeclaration('const', [
-              t.variableDeclarator(t.identifier(local.local.name), t.stringLiteral(uri)),
+              t.variableDeclarator(
+                t.identifier(local.local.name),
+                base64
+                  ? t.callExpression(carriedName(p, t), [
+                      t.stringLiteral(createHash('sha256').update(fs.readFileSync(file)).digest('hex')),
+                      t.stringLiteral(base64[1]),
+                    ])
+                  : t.stringLiteral(uri),
+              ),
             ]),
           );
         }
