@@ -231,11 +231,9 @@ const TEMPLATE_KINDS = /** @type {Record<string, string>} */ ({
  * Other options and their values are left out.
  * @param {CommandLike} cmd
  * @param {string[]} words
- * @param {{allWords?: boolean}} [how] `allWords` keeps every other word, for
- *   a command that joins them into one argument
  * @returns {string[]}
  */
-function fitWords(cmd, words, {allWords = false} = {}) {
+function fitWords(cmd, words) {
   /** @type {string[]} */
   const options = [];
   /** @type {string[]} */
@@ -273,10 +271,9 @@ function fitWords(cmd, words, {allWords = false} = {}) {
     if (nextIsValue) i += 1;
   }
   const given = [...args, ...paths];
-  const kept =
-    allWords || declared.some(a => a.variadic)
-      ? given
-      : given.slice(0, declared.length);
+  const kept = declared.some(a => a.variadic)
+    ? given
+    : given.slice(0, declared.length);
   return [...kept, ...options];
 }
 
@@ -487,11 +484,11 @@ async function pointed({word, before, after: rest}, program, findEntry) {
     return [
       run([...parts, ...rest], 'the words of one command, passed as one word'),
     ];
-  const borrowed = await otherCliWords(
-    {word, before, after: rest},
-    program,
-    findEntry,
-  );
+  // A borrowed run that does not parse leaves the word to the rules below
+  // (`info theme` names a group alone, so it is `component Theme`).
+  const borrowed = (
+    await otherCliWords({word, before, after: rest}, program, findEntry)
+  ).filter(r => runParses(program, r.words));
   if (borrowed.length > 0) return borrowed;
   const named = top.find(c => spellings(word).includes(c.name()));
   const [next, ...more] = rest;

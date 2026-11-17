@@ -74,6 +74,7 @@ const entries = async name =>
     button: {command: 'component', name: 'Button'},
     Card: {command: 'component', name: 'Card'},
     Stepper: {command: 'component', name: 'Stepper'},
+    theme: {command: 'component', name: 'Theme'},
     settings: {command: 'template', name: 'settings'},
     DialogFormDialog: {command: 'template', name: 'DialogFormDialog'},
     tokens: {command: 'docs', name: 'tokens'},
@@ -243,6 +244,13 @@ describe('words from another command line', () => {
     ]);
   });
 
+  it('leaves a read word before a group alone to the name lookup', async () => {
+    for (const verb of ['info', 'show', 'view', 'describe'])
+      expect(await names([verb, 'theme'])).toEqual([
+        'astryx component Theme',
+      ]);
+  });
+
   it('names no experimental command from a verb before the group', async () => {
     for (const words of [
       ['render', 'experimental'],
@@ -326,6 +334,9 @@ describe('the CLI', () => {
 
     const meant = await runCli(['--json', 'component', 'Button']);
     expect(meant.status).toBe(0);
+
+    const group = JSON.parse((await runCli(['--json', 'info', 'theme'])).stdout);
+    expect(group.suggestions[0].name).toBe('astryx --json component Theme');
   });
 
   it('names the command for words from another command line', async () => {
