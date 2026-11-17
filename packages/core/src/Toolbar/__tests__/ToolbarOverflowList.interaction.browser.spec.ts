@@ -405,3 +405,80 @@ test.describe('a list outside a toolbar', () => {
     expect(sizes.oneItem.width).toBeCloseTo(sizes.oneItem.span, 1);
   });
 });
+
+test.describe('a single row’s minimum width', () => {
+  /** A list's computed min-width, width, and whether it clips its last child. */
+  async function boxOf(page: Page, testId: string, parentWidth: number | null) {
+    return page.evaluate(
+      async ([id, width]) => {
+        const row = document.querySelector<HTMLElement>(
+          `[data-testid="${id}"]`,
+        );
+        const list = row?.querySelector<HTMLElement>('.astryx-overflow-list');
+        if (row == null || list == null) {
+          throw new Error(`No list in ${id}`);
+        }
+        if (width != null) {
+          row.style.width = `${width}px`;
+          row.style.display = 'flex';
+        }
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        });
+        const children = [...list.children] as HTMLElement[];
+        const last = children[children.length - 1].getBoundingClientRect();
+        const first = children[0].getBoundingClientRect();
+        return {
+          minWidth: parseFloat(getComputedStyle(list).minWidth) || 0,
+          width: list.getBoundingClientRect().width,
+          span: last.right - first.left,
+          labels: children.map(child => child.innerText.trim()),
+          clips: last.right > list.getBoundingClientRect().right + 0.5,
+        };
+      },
+      [testId, parentWidth] as const,
+    );
+  }
+
+  test.beforeEach(async ({page}) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--content-sized-parent&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="content-sized"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+  });
+
+  test('in a parent narrower than its folded width, keeps the indicator whole', async ({
+    page,
+  }) => {
+    const box = await boxOf(page, 'content-sized', 30);
+    test.info().annotations.push({
+      type: 'narrow-parent',
+      description: JSON.stringify(box),
+    });
+    expect(box.labels.at(-1)).toMatch(/^\+\d+$/);
+    expect(box.clips).toBe(false);
+    // The floor is the folded width: the indicator alone.
+    expect(box.minWidth).toBeCloseTo(Math.ceil(box.span), 0);
+    expect(box.width).toBeGreaterThan(30);
+  });
+
+  test('with room, the floor is no wider than the unfolded items', async ({
+    page,
+  }) => {
+    const box = await boxOf(page, 'one-item', null);
+    test.info().annotations.push({
+      type: 'one-item-floor',
+      description: JSON.stringify(box),
+    });
+    expect(box.labels).toEqual(['Go']);
+    expect(box.minWidth).toBeLessThanOrEqual(box.span + 0.05);
+    expect(box.width).toBeCloseTo(box.span, 1);
+  });
+});
