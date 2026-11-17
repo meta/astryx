@@ -8,7 +8,7 @@
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
  *   module once text is truncated and tracks the first hover, tap or focus on
  *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
- * @position Shared by Text, Heading, Button's cut label and Lab's LineClamp (through Core's internal
+ * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
  *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
  *   answers that interaction as it would once mounted.
@@ -27,8 +27,8 @@ import {
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -67,12 +67,6 @@ export interface TruncationTooltipInterest {
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
-  /**
-   * For an element that measures its text only when a hover or focus reaches
-   * it (Button's label): returns whether the text is cut at that moment.
-   * While it returns false, the interaction mounts nothing.
-   */
-  isCutOnInterest?: () => boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
@@ -106,21 +100,14 @@ export function useTruncationTooltipInterest(
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (isCutOnInterest != null) {
-        // Measured on each interaction: text that fits mounts nothing, and
-        // text cut again (after a resize) arms the remounted tooltip anew.
-        if (!isCutOnInterest()) {
-          return;
-        }
-        state.isRead = false;
-      } else if (!isEnabled || state.isRead) {
+      if (!isEnabled || state.isRead) {
         return;
       }
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled, isCutOnInterest],
+    [isEnabled],
   );
   const forget = useCallback((interest: 'hover' | 'focus') => {
     const state = interestRef.current;
@@ -139,16 +126,6 @@ export function useTruncationTooltipInterest(
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (isCutOnInterest != null) {
-        // Measured on interaction: a tap presses the element and opens
-        // nothing, and a mouse press drops a hover not yet shown, as a
-        // mounted tooltip does.
-        tapRecognizer.forget();
-        if (event.pointerType === 'mouse') {
-          forget('hover');
-        }
-        return;
-      }
       if (!isEnabled || interestRef.current.isRead) {
         tapRecognizer.forget();
         return;
@@ -164,7 +141,7 @@ export function useTruncationTooltipInterest(
         forget('hover');
       }
     },
-    [isEnabled, isCutOnInterest, tapRecognizer, want, forget],
+    [isEnabled, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {
@@ -221,7 +198,7 @@ export function TruncationTooltip({
 
 /**
  * Attaches a tooltip to its anchor without a description, for a tooltip whose
- * content is the anchor's own name (a cut Button label or table heading), so
+ * content is the anchor's own name (a cut Button label), so
  * a screen reader does not hear the name twice. `attach` is the tooltip hook's
  * trigger ref.
  */

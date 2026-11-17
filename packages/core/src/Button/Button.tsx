@@ -32,11 +32,8 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
-import {
-  useTruncationTooltipInterest,
-  useUndescribedTrigger,
-} from '../Text/TruncationTooltip';
+import {useUndescribedTrigger} from '../Text/TruncationTooltip';
+import {isElement} from '../utils/nodeType';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -833,15 +830,20 @@ function visibleLabelText(label: HTMLElement): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** The tooltip for a cut label: the label in full, with no description. */
+/**
+ * The tooltip for a cut label: the label in full, with no description. It is
+ * open while it is mounted; `onHide` closes it (Escape).
+ */
 function CutLabelTooltip({
   anchorRef,
   label,
+  onHide,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   label: string;
+  onHide: () => void;
 }): ReactNode {
-  const tooltip = useTooltip({placement: 'above'});
+  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
   useUndescribedTrigger(tooltip.ref, anchorRef);
   return tooltip.renderTooltip(label);
 }
@@ -995,29 +997,31 @@ export function Button({
     isEnabled: tooltip != null,
   });
 
-  // A label cut short by its row shows in full in a tooltip, as truncated
-  // Text does. The label is measured when a hover or keyboard focus reaches
-  // the Button, never at rest, and a caller's own tooltip replaces it.
+  // A label cut short by its row shows in full in a tooltip when keyboard
+  // focus reaches the Button. The label is measured then, never at rest, and
+  // a caller's own tooltip replaces it. A hover shows nothing.
   const buttonRef = useRef<HTMLElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const [cutLabel, setCutLabel] = useState<string | null>(null);
   const canShowCutLabel = !isIconOnly && tooltip == null;
-  const measureLabel = (): boolean => {
+  const showCutLabel = (event: React.FocusEvent<HTMLElement>) => {
     const labelEl = labelRef.current;
     const buttonEl = buttonRef.current;
-    const text = labelEl == null ? '' : visibleLabelText(labelEl);
+    if (
+      !canShowCutLabel ||
+      labelEl == null ||
+      buttonEl == null ||
+      !isElement(event.target) ||
+      !event.target.matches(':focus-visible')
+    ) {
+      return;
+    }
+    const text = visibleLabelText(labelEl);
     const isCut =
-      labelEl != null &&
-      text !== '' &&
-      !(buttonEl != null && hasCallerTooltip(buttonEl)) &&
-      isLabelCut(labelEl);
+      text !== '' && !hasCallerTooltip(buttonEl) && isLabelCut(labelEl);
     setCutLabel(isCut ? text : null);
-    return isCut;
   };
-  const cutLabelInterest = useTruncationTooltipInterest(
-    false,
-    canShowCutLabel ? measureLabel : undefined,
-  );
+  const hideCutLabel = () => setCutLabel(null);
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
@@ -1251,20 +1255,8 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
-        onPointerEnter={composeEventHandlers(
-          props.onPointerEnter,
-          cutLabelInterest.onPointerEnter,
-        )}
-        onPointerLeave={composeEventHandlers(
-          props.onPointerLeave,
-          cutLabelInterest.onPointerLeave,
-        )}
-        onPointerDown={composeEventHandlers(
-          props.onPointerDown,
-          cutLabelInterest.onPointerDown,
-        )}
-        onFocus={composeEventHandlers(props.onFocus, cutLabelInterest.onFocus)}
-        onBlur={composeEventHandlers(props.onBlur, cutLabelInterest.onBlur)}
+        onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
+        onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1290,20 +1282,8 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
-        onPointerEnter={composeEventHandlers(
-          props.onPointerEnter,
-          cutLabelInterest.onPointerEnter,
-        )}
-        onPointerLeave={composeEventHandlers(
-          props.onPointerLeave,
-          cutLabelInterest.onPointerLeave,
-        )}
-        onPointerDown={composeEventHandlers(
-          props.onPointerDown,
-          cutLabelInterest.onPointerDown,
-        )}
-        onFocus={composeEventHandlers(props.onFocus, cutLabelInterest.onFocus)}
-        onBlur={composeEventHandlers(props.onBlur, cutLabelInterest.onBlur)}
+        onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
+        onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1317,10 +1297,12 @@ export function Button({
     <>
       {element}
       {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
-      {canShowCutLabel && cutLabelInterest.isWanted && cutLabel != null ? (
-        <TooltipPresentInterestContext value={cutLabelInterest.interestRef}>
-          <CutLabelTooltip anchorRef={buttonRef} label={cutLabel} />
-        </TooltipPresentInterestContext>
+      {canShowCutLabel && cutLabel != null ? (
+        <CutLabelTooltip
+          anchorRef={buttonRef}
+          label={cutLabel}
+          onHide={hideCutLabel}
+        />
       ) : null}
     </>
   );

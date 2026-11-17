@@ -91,16 +91,18 @@ describe('Button label truncation tooltip', () => {
     );
   });
 
-  it('shows the full label on hover from a mouse', async () => {
+  it('shows nothing on a mouse hover', async () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} />);
     const button = screen.getByRole('button', {name: LABEL});
-    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
-    await waitFor(() => {
-      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-        LABEL,
-      );
+    act(() => {
+      fireEvent.pointerOver(button, {pointerType: 'mouse'});
+      fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+      fireEvent.mouseOver(button);
+      fireEvent.mouseEnter(button);
     });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
   it('measures nothing at rest', () => {
@@ -125,37 +127,17 @@ describe('Button label truncation tooltip', () => {
     }
   });
 
-  it('closes when the pointer leaves, so crossing two cut buttons leaves none open', async () => {
+  it('closes when focus leaves', async () => {
     restore = withOverflow(true);
-    const openLayers = new Set<HTMLElement>();
-    const proto = HTMLElement.prototype;
-    vi.spyOn(proto, 'showPopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.add(this);
+    render(<Button label={LABEL} />);
+    const button = screen.getByRole('button', {name: LABEL});
+    await showByFocus(button);
+    act(() => {
+      button.blur();
     });
-    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.delete(this);
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
     });
-    render(
-      <>
-        <Button label={LABEL} />
-        <Button label="Another label that is cut short too" />
-      </>,
-    );
-    const [first, second] = screen.getAllByRole('button');
-    fireEvent.pointerEnter(first, {pointerType: 'mouse'});
-    fireEvent.mouseEnter(first);
-    fireEvent.pointerLeave(first, {pointerType: 'mouse'});
-    fireEvent.mouseLeave(first);
-    fireEvent.pointerEnter(second, {pointerType: 'mouse'});
-    fireEvent.mouseEnter(second);
-    fireEvent.pointerLeave(second, {pointerType: 'mouse'});
-    fireEvent.mouseLeave(second);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    expect(openLayers.size).toBe(0);
   });
 
   it('adds no description that repeats the name', async () => {
@@ -197,14 +179,24 @@ describe('Button label truncation tooltip', () => {
 
   it("lets a caller's Tooltip take precedence, so one tooltip shows", async () => {
     restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
     render(
       <Tooltip content="Saves your draft">
         <Button label={LABEL} />
       </Tooltip>,
     );
     const button = screen.getByRole('button');
-    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
-    fireEvent.mouseEnter(button);
+    act(() => {
+      button.focus();
+    });
     await waitFor(() => {
       expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
         'Saves your draft',
@@ -222,36 +214,23 @@ describe('Button label truncation tooltip', () => {
     restore = withOverflow(() => isCut);
     render(<Button label={LABEL} />);
     const button = screen.getByRole('button');
-    // A browser dispatches these in one task, before React renders again.
-    const hover = () => {
-      act(() => {
-        fireEvent.pointerOver(button, {pointerType: 'mouse'});
-        fireEvent.pointerEnter(button, {pointerType: 'mouse'});
-        fireEvent.mouseOver(button);
-        fireEvent.mouseEnter(button);
-      });
-    };
-    const leave = () => {
-      fireEvent.pointerOut(button, {pointerType: 'mouse'});
-      fireEvent.pointerLeave(button, {pointerType: 'mouse'});
-      fireEvent.mouseOut(button);
-      fireEvent.mouseLeave(button);
-    };
-    hover();
-    await waitFor(() => {
-      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-        LABEL,
-      );
+    await showByFocus(button);
+    act(() => {
+      button.blur();
     });
-    leave();
     isCut = false;
-    hover();
-    await waitFor(() => {
-      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    act(() => {
+      button.focus();
     });
-    leave();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    act(() => {
+      button.blur();
+    });
     isCut = true;
-    hover();
+    act(() => {
+      button.focus();
+    });
     await waitFor(() => {
       expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
         LABEL,
@@ -263,6 +242,15 @@ describe('Button label truncation tooltip', () => {
     restore = withOverflow(
       element => element.closest('[aria-hidden="true"]') != null,
     );
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
     render(
       <ToggleButton
         label="Bold"
@@ -270,90 +258,46 @@ describe('Button label truncation tooltip', () => {
         onPressedChange={() => {}}
       />,
     );
-    const button = screen.getByRole('button');
-    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
-    fireEvent.mouseEnter(button);
+    act(() => {
+      screen.getByRole('button').focus();
+    });
     await new Promise(resolve => setTimeout(resolve, 300));
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
   it('keeps working after the Button renders a new element', async () => {
     restore = withOverflow(true);
-    const openLayers = new Set<HTMLElement>();
-    const proto = HTMLElement.prototype;
-    vi.spyOn(proto, 'showPopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.add(this);
-    });
-    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.delete(this);
-    });
-    const hover = (element: HTMLElement) => {
-      act(() => {
-        fireEvent.pointerOver(element, {pointerType: 'mouse'});
-        fireEvent.pointerEnter(element, {pointerType: 'mouse'});
-        fireEvent.mouseOver(element);
-        fireEvent.mouseEnter(element);
-      });
-    };
-    const leave = (element: HTMLElement) => {
-      act(() => {
-        fireEvent.pointerLeave(element, {pointerType: 'mouse'});
-        fireEvent.mouseLeave(element);
-      });
-    };
     const {rerender} = render(<Button label={LABEL} href="/next" />);
-    const link = screen.getByRole('link');
-    hover(link);
-    await waitFor(() => {
-      expect(openLayers.size).toBe(1);
+    await showByFocus(screen.getByRole('link'));
+    act(() => {
+      screen.getByRole('link').blur();
     });
-    leave(link);
     await waitFor(() => {
-      expect(openLayers.size).toBe(0);
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
     });
     // A disabled link Button renders a <button> in place of the <a>.
     rerender(<Button label={LABEL} href="/next" isDisabled />);
-    const button = screen.getByRole('button');
-    hover(button);
-    await waitFor(() => {
-      expect(openLayers.size).toBe(1);
+    act(() => {
+      screen.getByRole('button').focus();
     });
-    expect([...openLayers][0]).toHaveTextContent(LABEL);
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        LABEL,
+      );
+    });
   });
 
-  it('drops a hover when a mouse press arrives with it', async () => {
+  it('shows nothing when focus comes from a mouse press', async () => {
     restore = withOverflow(true);
-    const openLayers = new Set<HTMLElement>();
-    const proto = HTMLElement.prototype;
-    vi.spyOn(proto, 'showPopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.add(this);
-    });
-    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      openLayers.delete(this);
-    });
     render(<Button label={LABEL} />);
     const button = screen.getByRole('button');
-    // A scripted click: the pointer arrives and presses in one task.
+    // jsdom reports :focus-visible as false, as a browser does for a click.
     act(() => {
-      fireEvent.pointerOver(button, {pointerType: 'mouse'});
-      fireEvent.pointerEnter(button, {pointerType: 'mouse'});
-      fireEvent.mouseOver(button);
-      fireEvent.mouseEnter(button);
       fireEvent.pointerDown(button, {pointerType: 'mouse'});
-      fireEvent.mouseDown(button);
-      fireEvent.pointerUp(button, {pointerType: 'mouse'});
-      fireEvent.mouseUp(button);
+      button.focus();
       fireEvent.click(button);
     });
-    await new Promise(resolve => setTimeout(resolve, 600));
-    expect(openLayers.size).toBe(0);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 });
