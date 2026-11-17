@@ -306,6 +306,19 @@ async function recordLift(page: Page): Promise<void> {
   });
 }
 
+/** Adds up rendering counts from several windows. */
+function sumCounts(
+  windows: ReadonlyArray<Record<string, number>>,
+): Record<string, number> {
+  const total: Record<string, number> = {};
+  for (const counts of windows) {
+    for (const [name, count] of Object.entries(counts)) {
+      total[name] = (total[name] ?? 0) + count;
+    }
+  }
+  return total;
+}
+
 /** When the finger lifted: its first lift event and its last. */
 const liftsOf = async (page: Page): Promise<{first: number; last: number}> =>
   page.evaluate(
@@ -1795,6 +1808,19 @@ test('the drag and the settle do no Layout or Paint per frame', async ({
   const {driver, row, start} = await openRow(page);
   await recordFrames(row);
   await recordLift(page);
+  // When the row's press paint goes, epoch ms.
+  await row.evaluate(node => {
+    const cleared: number[] = [];
+    Object.assign(window, {__pressCleared: cleared});
+    new MutationObserver(() => {
+      if (!node.hasAttribute('data-astryx-press')) {
+        cleared.push(performance.timeOrigin + performance.now());
+      }
+    }).observe(node, {
+      attributes: true,
+      attributeFilter: ['data-astryx-press'],
+    });
+  });
   let dragWindow = {from: 0, to: 0};
   const trace = await traceRendering(page, async () => {
     const begun = Date.now();
@@ -1811,10 +1837,22 @@ test('the drag and the settle do no Layout or Paint per frame', async ({
   // The steady part of the drag (after the claim) and of the settle. Their
   // first and last frames may commit, and the row lands (one render) when the
   // settle ends.
-  const during = countBetween(
-    trace,
-    origin + settle[0].t + 50,
-    origin + (settle.at(-1)?.t ?? 0) - 50,
+  const from = origin + settle[0].t + 50;
+  const to = origin + (settle.at(-1)?.t ?? 0) - 50;
+  // The swipe kept the row's press through the drag. Its release fade ends
+  // once inside the settle, and that one frame restyles and paints the row.
+  // The settle itself does no Layout or Paint per frame.
+  const cleared = await page.evaluate(
+    () => (window as unknown as {__pressCleared: number[]}).__pressCleared,
+  );
+  const clear = cleared.find(at => at >= from && at <= to);
+  const during = sumCounts(
+    clear == null
+      ? [countBetween(trace, from, to)]
+      : [
+          countBetween(trace, from, clear - 1),
+          countBetween(trace, clear + 20, to),
+        ],
   );
   expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
   expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
@@ -1918,6 +1956,146 @@ test(
     expect(xs.at(-1)).toBeCloseTo(0, 0);
   },
 );
+
+/** Logs `row`'s press paint and its swipe travel at every frame from now on. */
+async function recordPressFrames(row: Locator): Promise<void> {
+  await row.evaluate(node => {
+    const frames: {at: number; press: string | null; travel: number}[] = [];
+    Object.assign(window, {__pressFrames: frames});
+    const tick = () => {
+      frames.push({
+        at: performance.now(),
+        press: node.getAttribute('data-astryx-press'),
+        travel:
+          Number.parseFloat(
+            getComputedStyle(node).getPropertyValue('--_item-swipe-travel'),
+          ) || 0,
+      });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+const pressFramesOf = async (page: Page) =>
+  page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __pressFrames: {at: number; press: string | null; travel: number}[];
+        }
+      ).__pressFrames,
+  );
+
+test("a swipe keeps the row's press through its drag: painted at every frame from the claim to the lift, and none on the row resting open (spec:AST-057 FR4, design:user-states DR1)", async ({
+  page,
+}) => {
+  const {driver, row, start} = await openRow(page);
+  await recordPressFrames(row);
+  await recordLift(page);
+  // Held past the press's onset, then dragged at a finger's pace. At 60 Hz
+  // the move that passes the swipe's 8 px claim also passes the press's
+  // 10 px travel.
+  await driver.play(
+    drag(
+      start,
+      {x: start.x - 140, y: start.y},
+      {holdMs: 250, durationMs: 400, hz: 60, restMs: 300},
+    ),
+  );
+  const lift = await liftOf(page);
+  await waitForRest(row);
+  const frames = await pressFramesOf(page);
+  const swiping = frames.filter(frame => frame.travel !== 0 && frame.at < lift);
+  expect(swiping.length).toBeGreaterThan(10);
+  expect(swiping.filter(frame => frame.press !== 'on')).toEqual([]);
+  // The row rests open and paints no press.
+  expect(Math.abs(frames[frames.length - 1].travel)).toBeGreaterThan(0);
+  await expect(row).not.toHaveAttribute('data-astryx-press');
+});
+
+test("a flick the swipe claims before the row's press paints shows no press through its drag (spec:AST-057 FR4)", async ({
+  page,
+}) => {
+  const {driver, row, start} = await openRow(page);
+  // Scrolling page content puts the row inside a scroll view, where its press
+  // waits for its onset before it paints.
+  await page.evaluate(() => {
+    const spacer = document.createElement('div');
+    spacer.style.height = '3000px';
+    document.body.append(spacer);
+  });
+  await recordPressFrames(row);
+  await recordLift(page);
+  // No hold: the swipe claims the touch long before the onset, and the drag
+  // runs on past it.
+  await driver.play(
+    drag(
+      start,
+      {x: start.x - 140, y: start.y},
+      {durationMs: 400, hz: 60, restMs: 300},
+    ),
+  );
+  const lift = await liftOf(page);
+  await waitForRest(row);
+  const frames = await pressFramesOf(page);
+  const swiping = frames.filter(frame => frame.travel !== 0 && frame.at < lift);
+  expect(swiping.length).toBeGreaterThan(10);
+  expect(frames.filter(frame => frame.press != null)).toEqual([]);
+});
+
+test("a drag no swipe claims still ends the row's press at its travel (spec:AST-094 FR11)", async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-item--swipe-commit');
+  const driver = await touchDriver(page);
+  const row = page.locator('.astryx-item').first();
+  // The swipe arrives with its layer. This row swipes toward the start only,
+  // so a drag toward the end is nobody's.
+  await expect(row.locator('[data-swipe-panel="trailing"]')).toBeAttached();
+  const rest = await row.boundingBox();
+  if (rest == null) {
+    throw new Error('no row');
+  }
+  const start = {x: rest.x + 40, y: rest.y + rest.height / 2};
+  await recordPressFrames(row);
+  await page.evaluate(() => {
+    const moves: {at: number; x: number}[] = [];
+    addEventListener(
+      'pointermove',
+      event => {
+        moves.push({at: performance.now(), x: event.clientX});
+      },
+      {capture: true, passive: true},
+    );
+    Object.assign(window, {__pressMoves: moves});
+  });
+  await driver.play(
+    drag(
+      start,
+      {x: start.x + 60, y: start.y},
+      {holdMs: 250, durationMs: 300, hz: 60, restMs: 200},
+    ),
+  );
+  const frames = await pressFramesOf(page);
+  const moves = await page.evaluate(
+    () =>
+      (window as unknown as {__pressMoves: {at: number; x: number}[]})
+        .__pressMoves,
+  );
+  const travelled = moves.find(move => move.x - start.x > 10);
+  if (travelled == null) {
+    throw new Error('the finger never travelled 10 px');
+  }
+  expect(
+    frames.some(frame => frame.at < travelled.at && frame.press === 'on'),
+  ).toBe(true);
+  // Gone by the second frame after that move, and the row never moved.
+  const after = frames.filter(frame => frame.at > travelled.at);
+  expect(after.length).toBeGreaterThan(2);
+  expect(after.slice(1).filter(frame => frame.press === 'on')).toEqual([]);
+  expect(frames.filter(frame => frame.travel !== 0)).toEqual([]);
+});
 
 test(
   'storyboard: a flick opens the row and a finger catches it mid-settle',
