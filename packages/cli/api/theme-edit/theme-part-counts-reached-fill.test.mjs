@@ -49,8 +49,10 @@ describe('unreached', () => {
   it("lists a part whose fill stays the base's, most visible first", async () => {
     const r = /** @type {any} */ (await themeEditShow('t', {cwd})).data;
     const list = /** @type {string[]} */ (r.unreached);
-    for (const part of ['toast', 'tooltip', 'banner'])
-      expect(list).toContain(part);
+    for (const part of ['toast', 'tooltip']) expect(list).toContain(part);
+    // The banner's info grows from the look with the accent, so it is
+    // reached.
+    expect(list).not.toContain('banner');
     // Overlays come first: in the ten the text names.
     for (const part of ['toast', 'tooltip'])
       expect(list.indexOf(part)).toBeLessThan(10);

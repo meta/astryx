@@ -45,9 +45,11 @@ const notesOf = async (slug, accent, settings = {}) => {
 };
 
 describe('an info hue the palette does not share', () => {
-  it('a pink accent says info keeps the base blue, with an info between the two', async () => {
-    expect(await notesOf('pink', '#f4a7c0')).toMatch(
-      /info \(banners, info badges\) keeps the base theme's #0074e2, a hue your accent #f4a7c0 does not share; .* set pink info '#[0-9a-f]{6}'/,
+  it('a pink accent grows info with the look, so no clash is said', async () => {
+    const notes = await notesOf('pink', '#f4a7c0');
+    expect(notes).not.toMatch(/info \(banners/);
+    expect(notes).toMatch(
+      /^info, success, warning, danger grow from the base theme's hues/m,
     );
   }, 120_000);
 
