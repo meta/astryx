@@ -65,6 +65,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -492,6 +493,10 @@ function DefaultMegaMenu({
     // from light dismiss.
     popoverId: popover.id,
   });
+  // Items read the shared modality at a pick to tell a keyboard pick from a
+  // mouse one; this one call keeps that tracking on while the panel lives.
+  const modality = useInteractionModalityTracking();
+  const panelRef = useMergedRefs(menuRef, modality.ref);
 
   return (
     <>
@@ -533,12 +538,13 @@ function DefaultMegaMenu({
           // role="group" — a mega menu is a browsing grid of links, not an
           // ARIA menu of menuitems (per the WAI-ARIA APG, the menu role is
           // for action menus; link mega menus are the documented anti-case).
-          ref={menuRef}
+          ref={panelRef}
           role="group"
           aria-label={label}
           {...contentProps}
           {...stylex.props(styles.panelContainer)}>
-          {/* Items close the panel on a pick, as TopNavMenu items do. */}
+          {/* Items close the panel on a keyboard, finger or pen pick, as
+              TopNavMenu items do. */}
           <TopNavMegaMenuCloseContext value={close}>
             <div {...stylex.props(styles.panelContent)}>
               {/* Menu items section */}

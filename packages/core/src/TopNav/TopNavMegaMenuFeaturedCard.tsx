@@ -29,7 +29,7 @@ import {
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {TopNavMegaMenuCloseContext, usePickCloses} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, pickCloses} from './TopNavContext';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -152,7 +152,6 @@ export function TopNavMegaMenuFeaturedCard({
 }: TopNavMegaMenuFeaturedCardProps) {
   const LinkComponent = useLinkComponent();
   const closePanel = use(TopNavMegaMenuCloseContext);
-  const pick = usePickCloses();
   return (
     <div
       ref={ref}
@@ -185,10 +184,8 @@ export function TopNavMegaMenuFeaturedCard({
             href={linkHref}
             // Following the card's link with the keyboard, a finger or a pen
             // ends the panel, as an item pick does.
-            onPointerDownCapture={pick.onPointerDownCapture}
-            onKeyDownCapture={pick.onKeyDownCapture}
-            onClick={() => {
-              if (pick.closes()) {
+            onClick={(event: React.MouseEvent<HTMLElement>) => {
+              if (pickCloses(event.currentTarget)) {
                 closePanel?.();
               }
             }}

@@ -6,13 +6,14 @@
  * @file TopNavContext.ts
  * @input Layer-scoped React context
  * @output TopNavSlotContext, useTopNavSlot, TopNavMegaMenuCloseContext, and
- *   usePickCloses
+ *   pickCloses
  * @position Navigation slot presentation defaults
  */
 
-import {use, useRef} from 'react';
-import type {PointerEvent} from 'react';
+import {use} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {getInteractionModality} from '../utils/interactionModality';
+import {getLastPointerType} from '../utils/inputStream';
 
 export type TopNavSlot = 'start' | 'center' | 'end';
 
@@ -37,30 +38,16 @@ export const TopNavMegaMenuCloseContext = createLayerScopedContext<
 TopNavMegaMenuCloseContext.displayName = 'TopNavMegaMenuCloseContext';
 
 /**
- * Whether a pick on a TopNav menu item closes the menu. A keyboard pick and a
- * finger or pen press close it; a mouse or trackpad pick leaves the menu
- * open. The press, not the click, says which: a menu's press model acts on
- * release with a dispatched click that looks like a keyboard's. Spread
- * `onPointerDownCapture` and `onKeyDownCapture` on the item and call
- * `closes()` in its click.
+ * Whether the pick that just activated `node` closes its TopNav menu: a
+ * keyboard pick and a finger or pen press do; a mouse or trackpad pick, or a
+ * pointer pick whose type the shared input stream did not hear, does not.
+ * It reads the shared modality and input-stream state at the click.
  */
-export function usePickCloses(): {
-  onPointerDownCapture: (event: PointerEvent) => void;
-  onKeyDownCapture: () => void;
-  closes: () => boolean;
-} {
-  const pressTypeRef = useRef<string | null>(null);
-  return {
-    onPointerDownCapture: event => {
-      pressTypeRef.current = event.pointerType;
-    },
-    onKeyDownCapture: () => {
-      pressTypeRef.current = null;
-    },
-    closes: () => {
-      const type = pressTypeRef.current;
-      pressTypeRef.current = null;
-      return type == null || type === 'touch' || type === 'pen';
-    },
-  };
+export function pickCloses(node: Element | null): boolean {
+  if (getInteractionModality(node) === 'keyboard') {
+    return true;
+  }
+  const view = node?.ownerDocument.defaultView;
+  const type = view == null ? null : getLastPointerType(view);
+  return type === 'touch' || type === 'pen';
 }

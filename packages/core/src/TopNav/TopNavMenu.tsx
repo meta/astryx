@@ -37,7 +37,7 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot, usePickCloses} from './TopNavContext';
+import {pickCloses, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -391,7 +391,6 @@ export function TopNavMenu({
     role: 'none',
   });
 
-  const pick = usePickCloses();
   const {triggerProps, contentProps, menuRef, setTriggerEl, close} =
     useMenuHover<HTMLDivElement>({
       show: popover.show,
@@ -647,13 +646,14 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                // A keyboard, finger or pen pick ends the menu, as in
-                // DropdownMenu; a mouse pick leaves it open.
-                onPointerDownCapture={pick.onPointerDownCapture}
-                onKeyDownCapture={pick.onKeyDownCapture}
-                onClick={() => {
+                // A keyboard, finger or pen pick ends the menu; a mouse pick
+                // leaves it open.
+                onClick={event => {
                   item.onClick?.();
-                  if (item.hasCloseOnSelect !== false && pick.closes()) {
+                  if (
+                    item.hasCloseOnSelect !== false &&
+                    pickCloses(event.currentTarget)
+                  ) {
                     close();
                   }
                 }}

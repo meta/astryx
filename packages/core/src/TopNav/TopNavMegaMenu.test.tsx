@@ -652,6 +652,47 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('keeps the panel open after a mouse click on a custom link component that forwards only onClick', async () => {
+    const user = userEvent.setup();
+    const OnlyClick = ({
+      href,
+      onClick,
+      children,
+    }: {
+      href?: string;
+      onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+      children?: ReactNode;
+    }) => (
+      <a
+        href={href}
+        onClick={event => {
+          event.preventDefault();
+          onClick?.(event);
+        }}>
+        {children}
+      </a>
+    );
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Analytics"
+            href="/analytics"
+            as={OnlyClick}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    await user.click(
+      screen.getByRole('link', {name: /Analytics/, hidden: true}),
+    );
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('keeps the panel open after a mouse click on a panel action', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
