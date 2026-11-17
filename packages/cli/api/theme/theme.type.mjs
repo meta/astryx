@@ -127,6 +127,9 @@
  * `change.wireModes` is present when the module lists a theme's one color
  * mode (`themeModes`) for the first time after the app was wired: the app's
  * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
+ * `change.notImported` is present on an add after the first, or a use, when
+ * no source file of the app imports the module at `modulePath`: the default
+ * it records is not what the app shows until the app root is wired.
  * `change.moduleRemoved` is present when `theme remove` removed the only
  * added theme and deleted the module at `modulePath`: `themes` is empty,
  * `default` is `''`, and the app root must drop the module's wiring.
@@ -172,7 +175,7 @@
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true, notImported?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**
@@ -266,11 +269,13 @@
 
 /**
  * @typedef {object} TonalPaletteGenerationInput
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe to
  * run: astryx-oklch-v1 when none is named, so a request or config made
  * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
- * follow the vibrancy and the seed's own chroma. New palettes name v2 (the
- * theme editor records it); a config pins its recipe by naming it.
+ * follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with
+ * a dusty seed's pale tints kept at or below its own chroma. New palettes
+ * name the newest, v3 (the theme editor records it); a config pins its
+ * recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).
@@ -292,7 +297,7 @@
  * @typedef {object} TonalPaletteCandidate
  * @property {1} schemaVersion
  * @property {'candidate'} status
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {'#000000'} black Exact solid black for theme authoring outside a tonal family.
  * @property {'#ffffff'} white Exact solid white for theme authoring outside a tonal family.
  * @property {number[]} stops Canonical order for iterating the palette's stop lookup maps.
@@ -334,7 +339,7 @@
 /**
  * The request as the generator resolved it, with every default filled in.
  * @typedef {object} TonalPaletteNormalizedRequest
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
@@ -351,7 +356,7 @@
  * its request without rerunning generation.
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe Recipe that produced the candidate.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe Recipe that produced the candidate.
  * @property {'palette-generator-v1'} generatorVersion Generator
  * implementation that ran the recipe.
  * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
@@ -370,7 +375,7 @@
  * astryx --json theme palette generate <config>
  * @typedef {object} ThemePaletteGenerateResponse
  * @property {'theme.palette.generate'} type
- * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
+ * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
  */
 
 // Make this a module so the @typedefs above are importable as types via

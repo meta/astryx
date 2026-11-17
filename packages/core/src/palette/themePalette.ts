@@ -134,6 +134,7 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
     base: defaultBase(),
     has: token => Object.hasOwn(tokenDefaults, token),
     reader: coreReader,
+    tokenDefaults,
   };
   const plan = planPaletteRequest(dials, {recipe, vibrancy}, context);
   if (!plan) {

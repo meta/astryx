@@ -37,7 +37,7 @@
 
 /**
  * @typedef {object} TonalPaletteGenerationInput
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma. New palettes name v2 (the theme editor records it); a config pins its recipe by naming it.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with a dusty seed's pale tints kept at or below its own chroma. New palettes name the newest, v3 (the theme editor records it); a config pins its recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50 (default) to 100 (most vivid).
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} [neutralProfile] Hue treatment for `neutral` families: `neutral-v1` is fully achromatic, `warm-v1` and `cool-v1` add a slight tint, and `custom` derives the hue from the family's own seed. Defaults to `neutral-v1`.
@@ -52,7 +52,7 @@
  * @typedef {object} TonalPaletteCandidate
  * @property {1} schemaVersion
  * @property {'candidate'} status
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {'#000000'} black Exact solid black for theme authoring outside a tonal family.
  * @property {'#ffffff'} white Exact solid white for theme authoring outside a tonal family.
  * @property {number[]} stops Canonical order for iterating the palette's stop lookup maps.
@@ -68,7 +68,7 @@
  * @property {number} maximumHueDrift Largest hue distance, in degrees, between a stop and the family's reference hue.
  * @property {'blue-to-purple' | 'yellow-to-brown' | null} hueIdentityRisk Named drift the ramp is at risk of, or `null`.
  * @property {number[]} gamutMappedStops Stops whose ideal color fell outside sRGB and was mapped back into it.
- * @property {(TonalPaletteAnchor & {generatedColor: string; deltaE: number})[]} anchors Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target.
+ * @property {Array<TonalPaletteAnchor & {generatedColor: string; deltaE: number}>} anchors Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target.
  */
 
 /**
@@ -86,13 +86,13 @@
 /**
  * The request as the generator resolved it, with every default filled in.
  * @typedef {object} TonalPaletteNormalizedRequest
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
  * @property {Required<TonalPaletteDarkChromaTaper>} [darkChromaTaper] The requested taper, with `familyMultipliers` filled in; present only when the request has a taper.
  * @property {number[]} stops
- * @property {{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }[]} families
+ * @property {Array<{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }>} families
  */
 
 /**
@@ -105,14 +105,14 @@
  * @property {string} [danger] The danger status color (the error tokens).
  * @property {string} [info] The info status color.
  * @property {number} [vibrancy] Chroma from 0 (most muted) through 50 (default) to 100 (most vivid).
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade.
  */
 
 /**
  * A theme's colors made by `themePalette()`, for `defineTheme({palette})`.
  * @typedef {object} ThemePalette
  * @property {'theme-palette'} kind
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {Readonly<Record<string, readonly [string, string]>>} tokens Each color token's `[light, dark]` value.
  * @property {Readonly< Record<string, Record<string, Record<string, readonly [string, string]>>> >} components Part styles that lift secondary text on the accent tint and the neutral track, as the official themes do.
  */

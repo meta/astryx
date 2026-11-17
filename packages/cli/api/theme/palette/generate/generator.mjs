@@ -1,4 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// Generated from packages/core/src/palette/generator.ts by
+// scripts/generate-cli-palette-engine.mjs. Do not edit: change the Core
+// source and run `pnpm generate:cli-palette-engine`.
+/**
+ * @file generator.ts
+ * @input A tonal palette request: families with seeds, anchors, vibrancy,
+ *   neutral profile, mode strategy, stops, recipe
+ * @output Deterministic candidate palettes with per-ramp and cross-family
+ *   diagnostics
+ * @position The one tonal palette engine. `defineTheme({palette})` and the
+ *   CLI palette command both run it; the CLI holds a generated copy
+ */
 import {
   hexToOklch,
   luminance,
@@ -10,21 +22,35 @@ import {
   toneToOklabLightness,
 } from './color.mjs';
 
-/** @typedef {import('../../theme.type.mjs').TonalPaletteAnchor} TonalPaletteAnchor */
-/** @typedef {import('../../theme.type.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
-/** @typedef {import('../../theme.type.mjs').TonalPaletteRampDiagnostics} TonalPaletteRampDiagnostics */
-/** @typedef {import('../../theme.type.mjs').TonalPaletteCoordinationDiagnostics} TonalPaletteCoordinationDiagnostics */
-/** @typedef {import('../../theme.type.mjs').TonalPaletteNormalizedRequest} NormalizedRequest */
-/** @typedef {[number, number, number]} ColorTriple */
-/** @typedef {'light' | 'dark'} PaletteMode */
-/** @typedef {{lightness: number, chroma: number, hue: number}} PolarColor */
-/** @typedef {TonalPaletteAnchor & {color: string, generatedColor: string, deltaE: number}} AnchorResult */
-/** @typedef {{colors: Record<number, string>, diagnostics: TonalPaletteRampDiagnostics}} GeneratedRamp */
-/** @typedef {{id: string, name: string, seed: string, kind: 'chromatic' | 'neutral', anchors: TonalPaletteAnchor[]}} NormalizedFamily */
-/** @typedef {{id: string, name: string, seed: string, light?: GeneratedRamp, dark?: GeneratedRamp}} GeneratedFamily */
-/** @typedef {{recipe: PaletteRecipe, status: 'candidate', request: NormalizedRequest, families: GeneratedFamily[], coordination: TonalPaletteCoordinationDiagnostics[], errors: {familyId: string, message: string}[]}} PaletteGenerationResult */
+/** @typedef {import('./types.mjs').TonalPaletteAnchor} TonalPaletteAnchor */
 
-/** @typedef {'astryx-oklch-v1' | 'astryx-oklch-v2'} PaletteRecipe */
+/** @typedef {import('./types.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
+
+/** @typedef {import('./types.mjs').TonalPaletteCoordinationDiagnostics} TonalPaletteCoordinationDiagnostics */
+
+/** @typedef {import('./types.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
+
+/** @typedef {import('./types.mjs').TonalPaletteNormalizedRequest} NormalizedRequest */
+
+/** @typedef {import('./types.mjs').TonalPaletteRampDiagnostics} TonalPaletteRampDiagnostics */
+
+/** @typedef {[number, number, number]} ColorTriple */
+
+/** @typedef {'light' | 'dark'} PaletteMode */
+
+/** @typedef {{lightness: number; chroma: number; hue: number}} PolarColor */
+
+/** @typedef {TonalPaletteAnchor & { color: string; generatedColor: string; deltaE: number; }} AnchorResult */
+
+/** @typedef {{ colors: Record<number, string>; diagnostics: TonalPaletteRampDiagnostics; }} GeneratedRamp */
+
+/** @typedef {{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }} NormalizedFamily */
+
+/** @typedef {{ id: string; name: string; seed: string; light?: GeneratedRamp; dark?: GeneratedRamp; }} GeneratedFamily */
+
+/** @typedef {{ recipe: PaletteRecipe; status: 'candidate'; request: NormalizedRequest; families: GeneratedFamily[]; coordination: TonalPaletteCoordinationDiagnostics[]; errors: {familyId: string; message: string}[]; }} PaletteGenerationResult */
+
+/** @typedef {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} PaletteRecipe */
 
 /** The recipe a request that names none runs: the first one. */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
@@ -35,11 +61,28 @@ export const PALETTE_RECIPE = 'astryx-oklch-v1';
  * chroma. A request runs it by naming it.
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
+/**
+ * v2, and a dusty seed's pale tints stay at or below its own chroma even
+ * where the gamut is wide, so a muted olive gives an earthy tint, not
+ * chartreuse. The newest recipe: new palettes name it.
+ */
+export const PALETTE_RECIPE_V3 = 'astryx-oklch-v3';
+/** The recipe new palettes name. */
+export const PALETTE_RECIPE_NEWEST = PALETTE_RECIPE_V3;
 /** Every recipe the generator runs. */
 export const PALETTE_RECIPES = Object.freeze([
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPE_V3,
 ]);
+/**
+ * Whether a recipe shares the pale side of the gamut and fades a gray's
+ * pale stops (v2, and v3 after it).
+ * @param {string} recipe
+ */
+function sharesGamut(recipe) {
+  return recipe === PALETTE_RECIPE_V2 || recipe === PALETTE_RECIPE_V3;
+}
 /**
  * Identity of this generator implementation. `PALETTE_RECIPE` names the
  * normative algorithm; this names the code that ran it, so a receipt can tell
@@ -55,39 +98,51 @@ export const DEFAULT_21_STOPS = Object.freeze([
 export const COMPACT_11_STOPS = Object.freeze([
   0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
 ]);
-
 const DARK_CHROMA_FACTOR = 0.85;
 const RESERVED_FAMILY_IDS = new Set(['black', 'white']);
 const NEUTRAL_PROFILES = ['neutral-v1', 'warm-v1', 'cool-v1', 'custom'];
-
-/** @param {number} value @param {number} minimum @param {number} maximum */
+/**
+ * @param {number} value
+ * @param {number} minimum
+ * @param {number} maximum
+ */
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
-
-/** @param {number} hue */
+/**
+ * @param {number} hue
+ */
 function normalizeHue(hue) {
   return ((hue % 360) + 360) % 360;
 }
-
-/** @param {number} a @param {number} b */
+/**
+ * @param {number} a
+ * @param {number} b
+ */
 function hueDistance(a, b) {
   const difference = Math.abs(normalizeHue(a) - normalizeHue(b));
   return Math.min(difference, 360 - difference);
 }
-
-/** @param {number} from @param {number} to */
+/**
+ * @param {number} from
+ * @param {number} to
+ */
 function signedHueDelta(from, to) {
   return ((normalizeHue(to) - normalizeHue(from) + 540) % 360) - 180;
 }
-
-/** @param {number} a @param {number} b @param {number} amount */
+/**
+ * @param {number} a
+ * @param {number} b
+ * @param {number} amount
+ */
 function interpolateHue(a, b, amount) {
   const delta = ((b - a + 540) % 360) - 180;
   return normalizeHue(a + delta * amount);
 }
-
-/** @param {readonly number[]} stops @returns {number[]} */
+/**
+ * @param {readonly number[]} stops
+ * @returns {number[]}
+ */
 export function validateStops(stops) {
   if (!Array.isArray(stops) || stops.length === 0) {
     throw new Error('A palette requires at least one stop.');
@@ -106,8 +161,10 @@ export function validateStops(stops) {
   }
   return [...stops];
 }
-
-/** @param {unknown} input @returns {number[]} */
+/**
+ * @param {unknown} input
+ * @returns {number[]}
+ */
 export function parseStopList(input) {
   const values = String(input)
     .split(',')
@@ -117,7 +174,6 @@ export function parseStopList(input) {
   }
   return validateStops(values.map(Number));
 }
-
 /**
  * The fields the generator reads from a request, a family and an anchor
  * (see TonalPaletteGenerationInput); any other field changes nothing.
@@ -151,7 +207,6 @@ export const ANCHOR_INPUT_KEYS = Object.freeze([
   'policy',
   'maxDeltaE',
 ]);
-
 /**
  * The modes a mode strategy generates.
  * @param {string} strategy
@@ -163,8 +218,9 @@ export function modesForStrategy(strategy) {
   if (strategy === 'light-and-dark') return ['light', 'dark'];
   throw new Error(`Unknown mode strategy: ${String(strategy)}`);
 }
-
-/** @param {number} hue */
+/**
+ * @param {number} hue
+ */
 function hueBalanceFactor(hue) {
   const normalized = normalizeHue(hue);
   if (normalized >= 70 && normalized < 115) return 0.94;
@@ -173,8 +229,10 @@ function hueBalanceFactor(hue) {
   if (normalized >= 285 && normalized < 340) return 0.9;
   return 1;
 }
-
-/** @param {number} hue @param {number} tone */
+/**
+ * @param {number} hue
+ * @param {number} tone
+ */
 function highToneChromaFactor(hue, tone) {
   if (tone <= 60) return 1;
   const taper = smoothstep((tone - 60) / 35);
@@ -183,22 +241,26 @@ function highToneChromaFactor(hue, tone) {
   if (normalized >= 175 && normalized < 200) return 1 - 0.4 * taper;
   return 1;
 }
-
-/** @param {number} hue @param {number} tone */
+/**
+ * @param {number} hue
+ * @param {number} tone
+ */
 function toneAdjustedHue(hue, tone) {
   const normalized = normalizeHue(hue);
   if (normalized < 40 || normalized >= 70 || tone >= 50) return normalized;
   const darkening = clamp((50 - tone) / 40, 0, 1);
   return normalizeHue(normalized - 8 * Math.sqrt(darkening));
 }
-
-/** @param {number} tone */
+/**
+ * @param {number} tone
+ */
 function toneChromaEnvelope(tone) {
   const normalized = clamp(tone / 100, 0, 1);
   return 0.18 + 0.82 * Math.sqrt(Math.max(0, Math.sin(Math.PI * normalized)));
 }
-
-/** @param {number} vibrancy */
+/**
+ * @param {number} vibrancy
+ */
 function vibrancyMultiplier(vibrancy) {
   if (!Number.isFinite(vibrancy) || vibrancy < 0 || vibrancy > 100) {
     throw new Error('Vibrancy must be a number from 0 to 100.');
@@ -207,18 +269,17 @@ function vibrancyMultiplier(vibrancy) {
   if (vibrancy <= 50) return 0.72 + ((vibrancy - 25) / 25) * 0.28;
   return 1 + (vibrancy - 50) * 0.0096;
 }
-
 /**
  * A family's chroma drawn toward the shared one, so its families sit
  * together. As v2 shares a narrow stop's gamut it is never raised above the
  * seed's own, so a dusty seed stays dusty in its pale stops.
- * @param {number} sourceChroma @param {PaletteRecipe} [recipe]
+ * @param {number} sourceChroma
+ * @param {PaletteRecipe} [recipe=PALETTE_RECIPE]
  */
 function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
   const drawn = sourceChroma * 0.35 + 0.18 * 0.65;
-  return recipe === PALETTE_RECIPE_V2 ? Math.min(sourceChroma, drawn) : drawn;
+  return sharesGamut(recipe) ? Math.min(sourceChroma, drawn) : drawn;
 }
-
 /**
  * How narrow a stop's gamut is for v2 to share it: the most vivid seed at
  * the default vibrancy asks this many times what the stop holds. From the
@@ -226,16 +287,23 @@ function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
  * it shares it wholly.
  */
 const V2_SHARED_FROM = 1.3;
+/**
+ * From this tone v3 starts to draw a tint at the seed's own chroma; by
+ * V3_PALE_FROM + V3_PALE_SPAN it draws it wholly. The middle of a ramp, up
+ * to tone 70, stays as v1 draws it.
+ */
+const V3_PALE_FROM = 70;
+const V3_PALE_SPAN = 15;
 /** v2 shares only stops lighter than this tone: the pale side of a ramp. */
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
-
 /**
  * The share of its chroma a v2 gray family keeps at a lightness: all of it
  * up to GRAY_FADE_FROM, then less, linearly, to GRAY_FADE_LEAST at
  * GRAY_FADE_TO and above, as gray scales fade their tint toward white (a
  * slate's palest grays keep about a sixth of its color).
- * @param {number} lightness OKLab lightness
+ * @param lightness OKLab lightness
+ * @param {number} lightness
  */
 function grayFade(lightness) {
   const t = clamp(
@@ -248,17 +316,21 @@ function grayFade(lightness) {
 const GRAY_FADE_FROM = 0.7;
 const GRAY_FADE_TO = 0.97;
 const GRAY_FADE_LEAST = 0.28;
-
 /** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
 const MOST_VIVID_CHROMA = coordinatedChroma(0.32, PALETTE_RECIPE_V2);
-
-/** @param {string} color @returns {PolarColor} */
+/**
+ * @param {string} color
+ * @returns {PolarColor}
+ */
 function colorToPolar(color) {
   const value = hexToOklch(color);
   return {lightness: value.L, chroma: value.C, hue: value.H};
 }
-
-/** @param {string} profile @param {string} seed @returns {PolarColor} */
+/**
+ * @param {string} profile
+ * @param {string} seed
+ * @returns {PolarColor}
+ */
 function neutralPolar(profile, seed) {
   if (profile === 'custom') return colorToPolar(seed);
   const hue = profile === 'warm-v1' ? 75 : profile === 'cool-v1' ? 250 : 0;
@@ -271,8 +343,12 @@ function neutralPolar(profile, seed) {
     hue,
   };
 }
-
-/** @param {PolarColor} seed @param {TonalPaletteAnchor[]} anchors @param {number} stop @returns {PolarColor} */
+/**
+ * @param {PolarColor} seed
+ * @param {TonalPaletteAnchor[]} anchors
+ * @param {number} stop
+ * @returns {PolarColor}
+ */
 function anchorPolarAtStop(seed, anchors, stop) {
   if (anchors.length === 0) return seed;
   const sorted = [...anchors].sort((a, b) => a.stop - b.stop);
@@ -290,16 +366,16 @@ function anchorPolarAtStop(seed, anchors, stop) {
     hue: interpolateHue(start.hue, end.hue, amount),
   };
 }
-
 /**
+ * @param [chromaMultiplier] Share of its in-gamut chroma the stop
+ * keeps (see darkChromaMultiplier).
  * @param {PolarColor} source
  * @param {number} tone
  * @param {PaletteMode} mode
  * @param {number} vibrancy
  * @param {boolean} coordinateWithOtherFamilies
- * @param {number} [chromaMultiplier] Share of its in-gamut chroma the stop
- * keeps (see darkChromaMultiplier).
- * @param {PaletteRecipe} [recipe]
+ * @param {number} [chromaMultiplier=1]
+ * @param {PaletteRecipe} [recipe=PALETTE_RECIPE]
  */
 function generateCandidate(
   source,
@@ -313,9 +389,16 @@ function generateCandidate(
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
   // Every recipe starts from v1's chroma, so a stop v2 does not share is
-  // drawn exactly as v1 draws it.
+  // drawn exactly as v1 draws it, the middle of a ramp included. In v3 a
+  // pale tint (above V3_PALE_FROM) moves to the seed's own chroma, which
+  // coordination never raises: a dusty seed's tints stay dusty.
+  const pale =
+    recipe === PALETTE_RECIPE_V3
+      ? smoothstep((adjustedTone - V3_PALE_FROM) / V3_PALE_SPAN)
+      : 0;
   const baseChroma = coordinateWithOtherFamilies
-    ? coordinatedChroma(source.chroma)
+    ? (1 - pale) * coordinatedChroma(source.chroma) +
+      pale * coordinatedChroma(source.chroma, recipe)
     : source.chroma;
   let chroma =
     baseChroma *
@@ -329,7 +412,7 @@ function generateCandidate(
   // v2: a gray family's color fades toward white the way a gray scale's
   // does, so its pale stops (a page, a card on it) carry only a faint tint
   // of its hue; its darker stops keep their color.
-  if (recipe === PALETTE_RECIPE_V2 && !coordinateWithOtherFamilies)
+  if (sharesGamut(recipe) && !coordinateWithOtherFamilies)
     chroma *= grayFade(lightness);
   // v2, on the pale side of a ramp (above its middle): the narrower a
   // stop's gamut is for the most vivid seed at the default vibrancy (a pale
@@ -342,7 +425,7 @@ function generateCandidate(
   // strength): those stops are drawn exactly as v1 draws them, for every
   // seed at every vibrancy.
   if (
-    recipe === PALETTE_RECIPE_V2 &&
+    sharesGamut(recipe) &&
     coordinateWithOtherFamilies &&
     adjustedTone > V2_SHARED_ABOVE
   ) {
@@ -378,8 +461,10 @@ function generateCandidate(
     gamutMapped: chroma > maxChroma + 0.000001,
   };
 }
-
-/** @param {string} colorA @param {string} colorB */
+/**
+ * @param {string} colorA
+ * @param {string} colorB
+ */
 export function perceptualDelta(colorA, colorB) {
   const [lightnessA, aA, bA] = oklabCoordinates(colorA);
   const [lightnessB, aB, bB] = oklabCoordinates(colorB);
@@ -389,8 +474,11 @@ export function perceptualDelta(colorA, colorB) {
     ) * 100
   );
 }
-
-/** @param {string} colorA @param {string} colorB @param {number} amount */
+/**
+ * @param {string} colorA
+ * @param {string} colorB
+ * @param {number} amount
+ */
 function interpolateColor(colorA, colorB, amount) {
   const start = hexToOklch(colorA);
   const end = hexToOklch(colorB);
@@ -400,8 +488,11 @@ function interpolateColor(colorA, colorB, amount) {
     interpolateHue(start.H, end.H, amount),
   );
 }
-
-/** @param {string} candidate @param {TonalPaletteAnchor} anchor @returns {AnchorResult} */
+/**
+ * @param {string} candidate
+ * @param {TonalPaletteAnchor} anchor
+ * @returns {AnchorResult}
+ */
 function applyAnchor(candidate, anchor) {
   const target = normalizeColor(anchor.color);
   let generatedColor = candidate;
@@ -437,14 +528,19 @@ function applyAnchor(candidate, anchor) {
     deltaE: perceptualDelta(generatedColor, target),
   };
 }
-
-/** @param {number} amount */
+/**
+ * @param {number} amount
+ */
 function smoothstep(amount) {
   const value = clamp(amount, 0, 1);
   return value * value * (3 - 2 * value);
 }
-
-/** @param {ColorTriple} start @param {ColorTriple} end @param {number} amount @returns {ColorTriple} */
+/**
+ * @param {ColorTriple} start
+ * @param {ColorTriple} end
+ * @param {number} amount
+ * @returns {ColorTriple}
+ */
 function interpolateDelta(start, end, amount) {
   return [
     start[0] + (end[0] - start[0]) * amount,
@@ -452,10 +548,15 @@ function interpolateDelta(start, end, amount) {
     start[2] + (end[2] - start[2]) * amount,
   ];
 }
-
-/** @param {{stop: number, delta: ColorTriple}[]} corrections @param {number} stop @returns {ColorTriple} */
+/**
+ * @param {{stop: number; delta: ColorTriple}[]} corrections
+ * @param {number} stop
+ * @returns {ColorTriple}
+ */
 function correctionAtStop(corrections, stop) {
-  /** @type {ColorTriple} */
+  /**
+   * @type {ColorTriple}
+   */
   const zero = [0, 0, 0];
   if (corrections.length === 0) return zero;
   const first = corrections[0];
@@ -487,8 +588,11 @@ function correctionAtStop(corrections, stop) {
     smoothstep((stop - lower.stop) / (upper.stop - lower.stop)),
   );
 }
-
-/** @param {Record<number, string>} colors @param {number[]} stops @param {TonalPaletteAnchor[]} anchors */
+/**
+ * @param {Record<number, string>} colors
+ * @param {number[]} stops
+ * @param {TonalPaletteAnchor[]} anchors
+ */
 function applyAnchorCorrections(colors, stops, anchors) {
   if (anchors.length === 0) return {colors, anchors: []};
   const corrections = anchors
@@ -497,7 +601,9 @@ function applyAnchorCorrections(colors, stops, anchors) {
       const result = applyAnchor(candidate, anchor);
       const base = oklabCoordinates(candidate);
       const target = oklabCoordinates(result.generatedColor);
-      /** @type {ColorTriple} */
+      /**
+       * @type {ColorTriple}
+       */
       const delta = [
         target[0] - base[0],
         target[1] - base[1],
@@ -510,7 +616,9 @@ function applyAnchorCorrections(colors, stops, anchors) {
       };
     })
     .sort((a, b) => a.stop - b.stop);
-  /** @type {Record<number, string>} */
+  /**
+   * @type {Record<number, string>}
+   */
   const corrected = {};
   for (const stop of stops) {
     const base = oklabCoordinates(colors[stop]);
@@ -529,8 +637,10 @@ function applyAnchorCorrections(colors, stops, anchors) {
     anchors: corrections.map(correction => correction.result),
   };
 }
-
-/** @param {TonalPaletteAnchor[]} anchors @param {number[]} stops */
+/**
+ * @param {TonalPaletteAnchor[]} anchors
+ * @param {number[]} stops
+ */
 function assertAnchorSet(anchors, stops) {
   const seen = new Set();
   for (const anchor of anchors) {
@@ -560,14 +670,21 @@ function assertAnchorSet(anchors, stops) {
     seen.add(key);
   }
 }
-
-/** @param {Record<number, string>} colors @param {number[]} stops @param {number} sourceHue @param {number[]} gamutMappedStops @param {AnchorResult[]} anchors */
+/**
+ * @param {Record<number, string>} colors
+ * @param {number[]} stops
+ * @param {number} sourceHue
+ * @param {number[]} gamutMappedStops
+ * @param {AnchorResult[]} anchors
+ */
 function buildDiagnostics(colors, stops, sourceHue, gamutMappedStops, anchors) {
   let monotonic = true;
   let minimumAdjacentDeltaE = Number.POSITIVE_INFINITY;
   let maximumAdjacentDeltaE = 0;
   let maximumHueDrift = 0;
-  /** @type {TonalPaletteRampDiagnostics['hueIdentityRisk']} */
+  /**
+   * @type {TonalPaletteRampDiagnostics['hueIdentityRisk']}
+   */
   let hueIdentityRisk = null;
   for (let index = 0; index < stops.length; index++) {
     const stop = stops[index];
@@ -606,7 +723,6 @@ function buildDiagnostics(colors, stops, sourceHue, gamutMappedStops, anchors) {
     anchors,
   };
 }
-
 /**
  * The share of its chroma a stop keeps under the request's
  * `darkChromaTaper`: the edge multiplier through `throughStop`, a smoothstep
@@ -631,8 +747,12 @@ function darkChromaMultiplier(taper, family, mode, stop) {
   );
   return edge + (1 - edge) * recovery;
 }
-
-/** @param {NormalizedRequest} request @param {NormalizedFamily} family @param {PaletteMode} mode @returns {GeneratedRamp} */
+/**
+ * @param {NormalizedRequest} request
+ * @param {NormalizedFamily} family
+ * @param {PaletteMode} mode
+ * @returns {GeneratedRamp}
+ */
 function generateRamp(request, family, mode) {
   const seedHex = normalizeColor(family.seed);
   const anchors = (family.anchors ?? []).filter(anchor => anchor.mode === mode);
@@ -641,7 +761,9 @@ function generateRamp(request, family, mode) {
     family.kind === 'neutral'
       ? neutralPolar(request.neutralProfile, seedHex)
       : colorToPolar(seedHex);
-  /** @type {Record<number, string>} */
+  /**
+   * @type {Record<number, string>}
+   */
   const colors = {};
   const gamutMappedStops = [];
   const diagnosticReference = generateCandidate(
@@ -682,15 +804,19 @@ function generateRamp(request, family, mode) {
   }
   return {colors: corrected.colors, diagnostics};
 }
-
-/** @param {number[]} stops @param {number} target */
+/**
+ * @param {number[]} stops
+ * @param {number} target
+ */
 function nearestStop(stops, target) {
   return stops.reduce((best, stop) =>
     Math.abs(stop - target) < Math.abs(best - target) ? stop : best,
   );
 }
-
-/** @param {NormalizedRequest} request @param {GeneratedFamily[]} families */
+/**
+ * @param {NormalizedRequest} request
+ * @param {GeneratedFamily[]} families
+ */
 function buildCoordinationDiagnostics(request, families) {
   const stop = nearestStop(request.stops, 50);
   const chromaticIds = new Set(
@@ -712,7 +838,9 @@ function buildCoordinationDiagnostics(request, families) {
           chroma: hexToOklch(color).C,
         };
       });
-    /** @type {[string, string] | null} */
+    /**
+     * @type {[string, string] | null}
+     */
     let closestFamilies = null;
     let minimumFamilyDeltaE = Number.POSITIVE_INFINITY;
     for (let index = 0; index < samples.length; index++) {
@@ -747,8 +875,10 @@ function buildCoordinationDiagnostics(request, families) {
     };
   });
 }
-
-/** @param {unknown} value @param {string} label */
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
 function assertMultiplier(value, label) {
   if (
     typeof value !== 'number' ||
@@ -760,7 +890,6 @@ function assertMultiplier(value, label) {
   }
   return value;
 }
-
 /**
  * The request's dark chroma taper, checked against its stops and families,
  * or undefined when the request has none. The receipt records the taper, so
@@ -810,7 +939,9 @@ function normalizeDarkChromaTaper(taper, stops, families) {
   ) {
     throw new Error('darkChromaTaper.familyMultipliers must be an object.');
   }
-  /** @type {Record<string, number>} */
+  /**
+   * @type {Record<string, number>}
+   */
   const multipliers = {};
   for (const [id, value] of Object.entries(familyMultipliers ?? {})) {
     const family = families.find(candidate => candidate.id === id);
@@ -836,8 +967,10 @@ function normalizeDarkChromaTaper(taper, stops, families) {
     familyMultipliers: multipliers,
   };
 }
-
-/** @param {TonalPaletteGenerationInput} input @returns {NormalizedRequest} */
+/**
+ * @param {TonalPaletteGenerationInput} input
+ * @returns {NormalizedRequest}
+ */
 export function normalizeGenerationRequest(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Palette generation config must be an object.');
@@ -848,7 +981,7 @@ export function normalizeGenerationRequest(input) {
   }
   // A request that names no recipe runs the first one, so a config written
   // before v2 regenerates the same colors.
-  const recipe = /** @type {PaletteRecipe} */ (input.recipe ?? PALETTE_RECIPE);
+  const recipe = input.recipe ?? /** @type {PaletteRecipe} */ (PALETTE_RECIPE);
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
       `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
@@ -956,7 +1089,9 @@ export function normalizeGenerationRequest(input) {
     stops,
     normalizedFamilies,
   );
-  /** @type {NormalizedRequest} */
+  /**
+   * @type {NormalizedRequest}
+   */
   const request = {
     recipe,
     vibrancy: input.vibrancy ?? 50,
@@ -969,17 +1104,25 @@ export function normalizeGenerationRequest(input) {
   vibrancyMultiplier(request.vibrancy);
   return request;
 }
-
-/** @param {TonalPaletteGenerationInput} input @returns {PaletteGenerationResult} */
+/**
+ * @param {TonalPaletteGenerationInput} input
+ * @returns {PaletteGenerationResult}
+ */
 export function generatePaletteSet(input) {
   const request = normalizeGenerationRequest(input);
-  /** @type {GeneratedFamily[]} */
+  /**
+   * @type {GeneratedFamily[]}
+   */
   const families = [];
-  /** @type {{familyId: string, message: string}[]} */
+  /**
+   * @type {{familyId: string; message: string}[]}
+   */
   const errors = [];
   for (const family of request.families) {
     try {
-      /** @type {GeneratedFamily} */
+      /**
+       * @type {GeneratedFamily}
+       */
       const generated = {
         id: family.id,
         name: family.name,
@@ -1005,12 +1148,10 @@ export function generatePaletteSet(input) {
     errors,
   };
 }
-
 /**
  * Generate candidate palette data without reading or writing files.
- *
- * @param {import('../../theme.type.mjs').TonalPaletteGenerationInput} input
- * @returns {import('../../theme.type.mjs').TonalPaletteCandidate}
+ * @param {TonalPaletteGenerationInput} input
+ * @returns {TonalPaletteCandidate}
  */
 export function generateTonalPalette(input) {
   const result = generatePaletteSet(input);
@@ -1040,8 +1181,9 @@ export function generateTonalPalette(input) {
     ),
   };
 }
-
-/** @param {unknown} result */
+/**
+ * @param {unknown} result
+ */
 export function serializeGenerationResult(result) {
   return `${JSON.stringify(result, null, 2)}\n`;
 }

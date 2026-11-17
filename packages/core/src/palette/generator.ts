@@ -63,7 +63,7 @@ type PaletteGenerationResult = {
   errors: {familyId: string; message: string}[];
 };
 
-type PaletteRecipe = 'astryx-oklch-v1' | 'astryx-oklch-v2';
+type PaletteRecipe = 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
 
 /** The recipe a request that names none runs: the first one. */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
@@ -74,11 +74,28 @@ export const PALETTE_RECIPE = 'astryx-oklch-v1';
  * chroma. A request runs it by naming it.
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
+/**
+ * v2, and a dusty seed's pale tints stay at or below its own chroma even
+ * where the gamut is wide, so a muted olive gives an earthy tint, not
+ * chartreuse. The newest recipe: new palettes name it.
+ */
+export const PALETTE_RECIPE_V3 = 'astryx-oklch-v3';
+/** The recipe new palettes name. */
+export const PALETTE_RECIPE_NEWEST = PALETTE_RECIPE_V3;
 /** Every recipe the generator runs. */
 export const PALETTE_RECIPES = Object.freeze([
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPE_V3,
 ]);
+
+/**
+ * Whether a recipe shares the pale side of the gamut and fades a gray's
+ * pale stops (v2, and v3 after it).
+ */
+function sharesGamut(recipe: string) {
+  return recipe === PALETTE_RECIPE_V2 || recipe === PALETTE_RECIPE_V3;
+}
 /**
  * Identity of this generator implementation. `PALETTE_RECIPE` names the
  * normative algorithm; this names the code that ran it, so a receipt can tell
@@ -121,7 +138,7 @@ function interpolateHue(a: number, b: number, amount: number) {
   return normalizeHue(a + delta * amount);
 }
 
-export function validateStops(stops: ReadonlyArray<number>): number[] {
+export function validateStops(stops: readonly number[]): number[] {
   if (!Array.isArray(stops) || stops.length === 0) {
     throw new Error('A palette requires at least one stop.');
   }
@@ -188,55 +205,33 @@ export const ANCHOR_INPUT_KEYS = Object.freeze([
  * The modes a mode strategy generates.
  */
 export function modesForStrategy(strategy: string): PaletteMode[] {
-  if (strategy === 'light-only') {
-    return ['light'];
-  }
-  if (strategy === 'dark-only') {
-    return ['dark'];
-  }
-  if (strategy === 'light-and-dark') {
-    return ['light', 'dark'];
-  }
+  if (strategy === 'light-only') return ['light'];
+  if (strategy === 'dark-only') return ['dark'];
+  if (strategy === 'light-and-dark') return ['light', 'dark'];
   throw new Error(`Unknown mode strategy: ${String(strategy)}`);
 }
 
 function hueBalanceFactor(hue: number) {
   const normalized = normalizeHue(hue);
-  if (normalized >= 70 && normalized < 115) {
-    return 0.94;
-  }
-  if (normalized >= 115 && normalized < 175) {
-    return 0.78;
-  }
-  if (normalized >= 175 && normalized < 230) {
-    return 0.82;
-  }
-  if (normalized >= 285 && normalized < 340) {
-    return 0.9;
-  }
+  if (normalized >= 70 && normalized < 115) return 0.94;
+  if (normalized >= 115 && normalized < 175) return 0.78;
+  if (normalized >= 175 && normalized < 230) return 0.82;
+  if (normalized >= 285 && normalized < 340) return 0.9;
   return 1;
 }
 
 function highToneChromaFactor(hue: number, tone: number) {
-  if (tone <= 60) {
-    return 1;
-  }
+  if (tone <= 60) return 1;
   const taper = smoothstep((tone - 60) / 35);
   const normalized = normalizeHue(hue);
-  if (normalized >= 115 && normalized < 175) {
-    return 1 - 0.28 * taper;
-  }
-  if (normalized >= 175 && normalized < 200) {
-    return 1 - 0.4 * taper;
-  }
+  if (normalized >= 115 && normalized < 175) return 1 - 0.28 * taper;
+  if (normalized >= 175 && normalized < 200) return 1 - 0.4 * taper;
   return 1;
 }
 
 function toneAdjustedHue(hue: number, tone: number) {
   const normalized = normalizeHue(hue);
-  if (normalized < 40 || normalized >= 70 || tone >= 50) {
-    return normalized;
-  }
+  if (normalized < 40 || normalized >= 70 || tone >= 50) return normalized;
   const darkening = clamp((50 - tone) / 40, 0, 1);
   return normalizeHue(normalized - 8 * Math.sqrt(darkening));
 }
@@ -250,12 +245,8 @@ function vibrancyMultiplier(vibrancy: number) {
   if (!Number.isFinite(vibrancy) || vibrancy < 0 || vibrancy > 100) {
     throw new Error('Vibrancy must be a number from 0 to 100.');
   }
-  if (vibrancy <= 25) {
-    return (vibrancy / 25) * 0.72;
-  }
-  if (vibrancy <= 50) {
-    return 0.72 + ((vibrancy - 25) / 25) * 0.28;
-  }
+  if (vibrancy <= 25) return (vibrancy / 25) * 0.72;
+  if (vibrancy <= 50) return 0.72 + ((vibrancy - 25) / 25) * 0.28;
   return 1 + (vibrancy - 50) * 0.0096;
 }
 
@@ -263,13 +254,13 @@ function vibrancyMultiplier(vibrancy: number) {
  * A family's chroma drawn toward the shared one, so its families sit
  * together. As v2 shares a narrow stop's gamut it is never raised above the
  * seed's own, so a dusty seed stays dusty in its pale stops.
- */
+ * */
 function coordinatedChroma(
   sourceChroma: number,
   recipe: PaletteRecipe = PALETTE_RECIPE,
 ) {
   const drawn = sourceChroma * 0.35 + 0.18 * 0.65;
-  return recipe === PALETTE_RECIPE_V2 ? Math.min(sourceChroma, drawn) : drawn;
+  return sharesGamut(recipe) ? Math.min(sourceChroma, drawn) : drawn;
 }
 
 /**
@@ -279,9 +270,35 @@ function coordinatedChroma(
  * it shares it wholly.
  */
 const V2_SHARED_FROM = 1.3;
+/**
+ * From this tone v3 starts to draw a tint at the seed's own chroma; by
+ * V3_PALE_FROM + V3_PALE_SPAN it draws it wholly. The middle of a ramp, up
+ * to tone 70, stays as v1 draws it.
+ */
+const V3_PALE_FROM = 70;
+const V3_PALE_SPAN = 15;
 /** v2 shares only stops lighter than this tone: the pale side of a ramp. */
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
+
+/**
+ * The share of its chroma a v2 gray family keeps at a lightness: all of it
+ * up to GRAY_FADE_FROM, then less, linearly, to GRAY_FADE_LEAST at
+ * GRAY_FADE_TO and above, as gray scales fade their tint toward white (a
+ * slate's palest grays keep about a sixth of its color).
+ * @param lightness OKLab lightness
+ */
+function grayFade(lightness: number) {
+  const t = clamp(
+    (lightness - GRAY_FADE_FROM) / (GRAY_FADE_TO - GRAY_FADE_FROM),
+    0,
+    1,
+  );
+  return 1 - (1 - GRAY_FADE_LEAST) * t;
+}
+const GRAY_FADE_FROM = 0.7;
+const GRAY_FADE_TO = 0.97;
+const GRAY_FADE_LEAST = 0.28;
 
 /** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
 const MOST_VIVID_CHROMA = coordinatedChroma(0.32, PALETTE_RECIPE_V2);
@@ -292,9 +309,7 @@ function colorToPolar(color: string): PolarColor {
 }
 
 function neutralPolar(profile: string, seed: string): PolarColor {
-  if (profile === 'custom') {
-    return colorToPolar(seed);
-  }
+  if (profile === 'custom') return colorToPolar(seed);
   const hue = profile === 'warm-v1' ? 75 : profile === 'cool-v1' ? 250 : 0;
   if (!['neutral-v1', 'warm-v1', 'cool-v1'].includes(profile)) {
     throw new Error(`Unknown neutral profile: ${String(profile)}`);
@@ -311,9 +326,7 @@ function anchorPolarAtStop(
   anchors: TonalPaletteAnchor[],
   stop: number,
 ): PolarColor {
-  if (anchors.length === 0) {
-    return seed;
-  }
+  if (anchors.length === 0) return seed;
   const sorted = [...anchors].sort((a, b) => a.stop - b.stop);
   const lower = [...sorted].reverse().find(anchor => anchor.stop <= stop);
   const upper = sorted.find(anchor => anchor.stop >= stop);
@@ -346,9 +359,16 @@ function generateCandidate(
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
   // Every recipe starts from v1's chroma, so a stop v2 does not share is
-  // drawn exactly as v1 draws it.
+  // drawn exactly as v1 draws it, the middle of a ramp included. In v3 a
+  // pale tint (above V3_PALE_FROM) moves to the seed's own chroma, which
+  // coordination never raises: a dusty seed's tints stay dusty.
+  const pale =
+    recipe === PALETTE_RECIPE_V3
+      ? smoothstep((adjustedTone - V3_PALE_FROM) / V3_PALE_SPAN)
+      : 0;
   const baseChroma = coordinateWithOtherFamilies
-    ? coordinatedChroma(source.chroma)
+    ? (1 - pale) * coordinatedChroma(source.chroma) +
+      pale * coordinatedChroma(source.chroma, recipe)
     : source.chroma;
   let chroma =
     baseChroma *
@@ -359,6 +379,11 @@ function generateCandidate(
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
   const maxChroma = maxOklchChroma(adjustedHue, lightness);
+  // v2: a gray family's color fades toward white the way a gray scale's
+  // does, so its pale stops (a page, a card on it) carry only a faint tint
+  // of its hue; its darker stops keep their color.
+  if (sharesGamut(recipe) && !coordinateWithOtherFamilies)
+    chroma *= grayFade(lightness);
   // v2, on the pale side of a ramp (above its middle): the narrower a
   // stop's gamut is for the most vivid seed at the default vibrancy (a pale
   // tint), the more every request shares that gamut in proportion (the most
@@ -370,7 +395,7 @@ function generateCandidate(
   // strength): those stops are drawn exactly as v1 draws them, for every
   // seed at every vibrancy.
   if (
-    recipe === PALETTE_RECIPE_V2 &&
+    sharesGamut(recipe) &&
     coordinateWithOtherFamilies &&
     adjustedTone > V2_SHARED_ABOVE
   ) {
@@ -448,11 +473,8 @@ function applyAnchor(
       for (let index = 0; index < 18; index++) {
         const amount = (low + high) / 2;
         const mixed = interpolateColor(target, candidate, amount);
-        if (perceptualDelta(mixed, target) <= tolerance) {
-          low = amount;
-        } else {
-          high = amount;
-        }
+        if (perceptualDelta(mixed, target) <= tolerance) low = amount;
+        else high = amount;
       }
       generatedColor = interpolateColor(target, candidate, low);
     }
@@ -491,15 +513,11 @@ function correctionAtStop(
   stop: number,
 ): ColorTriple {
   const zero: ColorTriple = [0, 0, 0];
-  if (corrections.length === 0) {
-    return zero;
-  }
+  if (corrections.length === 0) return zero;
   const first = corrections[0];
   if (stop <= first.stop) {
     const boundary = Math.max(0, first.stop - 25);
-    if (stop <= boundary && boundary !== first.stop) {
-      return zero;
-    }
+    if (stop <= boundary && boundary !== first.stop) return zero;
     const amount =
       boundary === first.stop
         ? 1
@@ -509,9 +527,7 @@ function correctionAtStop(
   const last = corrections[corrections.length - 1];
   if (stop >= last.stop) {
     const boundary = Math.min(100, last.stop + 25);
-    if (stop >= boundary && boundary !== last.stop) {
-      return zero;
-    }
+    if (stop >= boundary && boundary !== last.stop) return zero;
     const amount =
       boundary === last.stop
         ? 1
@@ -533,9 +549,7 @@ function applyAnchorCorrections(
   stops: number[],
   anchors: TonalPaletteAnchor[],
 ) {
-  if (anchors.length === 0) {
-    return {colors, anchors: []};
-  }
+  if (anchors.length === 0) return {colors, anchors: []};
   const corrections = anchors
     .map(anchor => {
       const candidate = colors[anchor.stop];
@@ -632,13 +646,9 @@ function buildDiagnostics(
         hueIdentityRisk = 'yellow-to-brown';
       }
     }
-    if (index === 0) {
-      continue;
-    }
+    if (index === 0) continue;
     const previous = colors[stops[index - 1]];
-    if (luminance(color) + 0.000001 < luminance(previous)) {
-      monotonic = false;
-    }
+    if (luminance(color) + 0.000001 < luminance(previous)) monotonic = false;
     const adjacentDelta = perceptualDelta(previous, color);
     minimumAdjacentDeltaE = Math.min(minimumAdjacentDeltaE, adjacentDelta);
     maximumAdjacentDeltaE = Math.max(maximumAdjacentDeltaE, adjacentDelta);
@@ -669,20 +679,14 @@ function darkChromaMultiplier(
   mode: PaletteMode,
   stop: number,
 ) {
-  if (!taper || mode !== 'dark' || family.kind === 'neutral') {
-    return 1;
-  }
-  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) {
-    return 1;
-  }
+  if (!taper || mode !== 'dark' || family.kind === 'neutral') return 1;
+  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) return 1;
   // Read own keys only. A family id such as `constructor` must not get a
   // multiplier from the object prototype.
   const edge = Object.hasOwn(taper.familyMultipliers, family.id)
     ? taper.familyMultipliers[family.id]
     : taper.edgeMultiplier;
-  if (stop <= taper.throughStop) {
-    return edge;
-  }
+  if (stop <= taper.throughStop) return edge;
   const recovery = smoothstep(
     (stop - taper.throughStop) / (taper.recoverAtStop - taper.throughStop),
   );
@@ -724,9 +728,7 @@ function generateRamp(
       request.recipe,
     );
     colors[stop] = generated.hex;
-    if (generated.gamutMapped) {
-      gamutMappedStops.push(stop);
-    }
+    if (generated.gamutMapped) gamutMappedStops.push(stop);
   }
   const corrected = applyAnchorCorrections(colors, request.stops, anchors);
   const diagnostics = buildDiagnostics(
@@ -765,9 +767,7 @@ function buildCoordinationDiagnostics(
       .filter(family => chromaticIds.has(family.id) && family[mode])
       .map(family => {
         const ramp = family[mode];
-        if (!ramp) {
-          throw new Error(`Missing ${mode} ramp for ${family.id}.`);
-        }
+        if (!ramp) throw new Error(`Missing ${mode} ramp for ${family.id}.`);
         const color = ramp.colors[stop];
         return {
           id: family.id,
@@ -833,9 +833,7 @@ function normalizeDarkChromaTaper(
   stops: number[],
   families: NormalizedFamily[],
 ): NormalizedRequest['darkChromaTaper'] {
-  if (taper == null) {
-    return undefined;
-  }
+  if (taper == null) return undefined;
   if (typeof taper !== 'object' || Array.isArray(taper)) {
     throw new Error('darkChromaTaper must be an object.');
   }
@@ -912,7 +910,7 @@ export function normalizeGenerationRequest(
   }
   // A request that names no recipe runs the first one, so a config written
   // before v2 regenerates the same colors.
-  const recipe = input.recipe ?? PALETTE_RECIPE;
+  const recipe = input.recipe ?? (PALETTE_RECIPE as PaletteRecipe);
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
       `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
@@ -937,9 +935,7 @@ export function normalizeGenerationRequest(
         `Family id ${id} is reserved for the standalone ${id} palette value.`,
       );
     }
-    if (ids.has(id)) {
-      throw new Error(`Duplicate family id: ${id}.`);
-    }
+    if (ids.has(id)) throw new Error(`Duplicate family id: ${id}.`);
     ids.add(id);
     const kind = family.kind ?? 'chromatic';
     if (!['chromatic', 'neutral'].includes(kind)) {
@@ -1071,7 +1067,6 @@ export function generatePaletteSet(
 
 /**
  * Generate candidate palette data without reading or writing files.
- *
  */
 export function generateTonalPalette(
   input: TonalPaletteGenerationInput,

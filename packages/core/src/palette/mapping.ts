@@ -12,6 +12,15 @@
 
 import {hexToOklch, luminance, normalizeColor} from './color';
 import {
+  CATEGORY_HUES,
+  cvdClashes,
+  deriveCodeColors,
+  deriveLookColors,
+  deriveStatusColors,
+  lookSeeds,
+  statusSeeds,
+} from './derive-look';
+import {
   PALETTE_BLACK,
   PALETTE_WHITE,
   generateTonalPalette,
@@ -52,6 +61,8 @@ export interface ContrastCheck {
   note?: string;
   /** The color settings whose notes report it, when its token belongs to none of them. */
   dials?: string[];
+  /** The nearest setting that passes it, when one does: a darker exact color for a pale fill. */
+  fix?: {thing: string; value: string; mode?: PaletteMode};
 }
 
 /** How the stop of an accent or status color's exact fill was settled. */
@@ -88,12 +99,20 @@ export interface PaletteMappingContext {
   colorIn?: (value: unknown, mode: PaletteMode) => string | null;
   /** Whether a token is set exactly in any mode. */
   setExactly?: (token: string) => boolean;
+  /** Core's own value of each token: a token the official theme leaves to Core follows the family at Core's lightness. */
+  tokenDefaults?: Record<string, unknown>;
+  /** The line that sets a value, for a note that offers one; without it, the note offers none. */
+  setLine?: (thing: string, value: string, mode?: PaletteMode) => string;
 }
 
 /** One color setting: a palette family of the same id. */
 export interface PaletteDial {
   id: string;
   seed: string;
+  /** A dark value of its own, which anchors the dark shades. */
+  dark?: string;
+  /** Set for one mode only: the palette moves that mode only. */
+  only?: PaletteMode;
 }
 
 /** A family of a palette config: the generator's family input, and any key of the author's. */
@@ -150,6 +169,30 @@ export interface PaletteMapping {
   unread: Record<string, string>;
   /** Lifted secondary text per background token of LIFT_PARTS, per mode; null without one. */
   lift: Record<string, Partial<Record<PaletteMode, StopRef>>> | null;
+  /** Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike. */
+  categories: {
+    badges: 'derived' | 'merged' | 'unreadable' | 'none';
+    chart: 'derived' | 'merged' | 'unreadable' | 'none';
+    merged: string[];
+    unreadable: string[];
+  };
+  /** The status roles left unset, each derived from the look or kept at the base theme's, and why. */
+  statuses: {
+    roles: Record<string, 'derived' | 'unreadable' | 'alike'>;
+    why: string[];
+  };
+  /** The code colors that keep the base theme's: none of their family's stops reads on the code background and the page. */
+  code: string[];
+  /** Status fills someone red-weak or green-weak may not tell apart. */
+  cvd: Array<{
+    a: string;
+    b: string;
+    vision: 'red-weak' | 'green-weak';
+    mode: PaletteMode;
+    colors: [string, string];
+  }>;
+  /** The look's colors kept at the base theme's in a mode: a text/fill pair the base theme draws with them would not read. */
+  kept: Array<{token: string; mode: PaletteMode; pair: string; ratio: number}>;
 }
 
 /** The color settings. Each one is a palette family of the same id. */
@@ -297,6 +340,8 @@ export const NEUTRAL_STOPS: Record<string, [number, number]> = ownTable({
 });
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
 const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
+/** Neutral tokens a tinted gray draws inside its ramp too: primary ink. */
+const TINTED_INK = new Set(['--color-text-primary', '--color-icon-primary']);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
 export const NEUTRAL_TINTS: Record<
   string,
@@ -417,8 +462,8 @@ export function compositeOver(
   return over.map((c, i) => c * alpha + under[i] * (1 - alpha)) as ColorTriple;
 }
 
-/** @param r a ratio, to two decimals */
-export const round = (r: number): number => Math.round(r * 100) / 100;
+/** A ratio cut down to two decimals, never rounded up past a need. */
+export const round = (r: number): number => Math.floor(r * 100 + 1e-9) / 100;
 
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade = (s: number): string => String(round(s));
@@ -496,6 +541,242 @@ export function grownGrays(
   }
 }
 
+/** The stop of a ramp whose color is nearest a color in lightness. */
+export function nearestByLightness(
+  ramp: Record<string, string> | undefined,
+  color: string,
+): number | null {
+  if (!ramp) {
+    return null;
+  }
+  const L = hexToOklch(color).L;
+  let best: number | null = null;
+  let gap = Infinity;
+  for (const [stop, c] of Object.entries(ramp)) {
+    const d = Math.abs(hexToOklch(c).L - L);
+    if (d < gap) {
+      [best, gap] = [Number(stop), d];
+    }
+  }
+  return best;
+}
+
+/**
+ * The text set exactly that sits on the accent tint and is not lifted there
+ * (secondary text is, see `lift`): links and accent text on a selected
+ * preset or row.
+ */
+const TINT_READERS = ['--color-text-accent'];
+/** The stops the accent tint may take, by mode: it stays a tint. */
+const ACCENT_TINT_WINDOW: Record<PaletteMode, [number, number]> = ownTable({
+  light: [75, 95],
+  dark: [10, 40],
+});
+/** The text a card tint carries, as the look gives it. */
+const LOOK_TEXT = [
+  '--color-text-primary',
+  '--color-text-secondary',
+  '--color-text-accent',
+];
+/** The grounds the look's colors are read on, as the look gives them. */
+const LOOK_GROUNDS = [
+  '--color-background-body',
+  '--color-background-surface',
+  '--color-background-card',
+];
+
+/** Whether a token is one the look derives: a category color, a chart color, a code color or the overlay. */
+export const isLookToken = (token: string): boolean =>
+  /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+|syntax-(?:keyword|string|comment|number|function|type|variable|operator|constant|tag|attribute|property|punctuation|background)|overlay)$/.test(
+    token,
+  );
+
+/** A category or status token: the colors the look derives. */
+const isLookOrStatus = (k: string): boolean =>
+  isLookToken(k) ||
+  /^--color-(?:(?:on|text|icon|border)-)?(?:info|success|warning|error)(?:-muted)?$/.test(
+    k,
+  );
+
+/** The parts whose `variant:<hue>` and `color:<hue>` rules paint a category fill. */
+const HUE_FILL_PARTS = ['card', 'clickable-card', 'selectable-card', 'token'];
+
+/** The text roles a rule block can set for what it draws. */
+const TEXT_PROPS = [
+  'color',
+  '--color-text-primary',
+  '--color-text-secondary',
+  '--color-text-accent',
+];
+
+/** A pair's name as a person reads it: "the blue card's primary text". */
+const pairLabel = (part: string, key: string, prop: string): string => {
+  const which =
+    /^(?:variant|color):(.+)$/.exec(key)?.[1] ?? key.replace(':', ' ');
+  const role =
+    prop === 'color' ? 'text' : `${prop.replace(/^--color-text-/, '')} text`;
+  return `the ${which === 'base' ? '' : `${which} `}${part.replace(/-/g, ' ')}'s ${role}`;
+};
+
+/**
+ * The text/fill pairs a base theme draws: Core's own (each category's text
+ * on its fill; each status's text on its fill and on its tint) and those of
+ * the base theme's rules (a coloured card's text on its fill, a part's text
+ * color on its background), as `[label, text, fill]` values a mode resolves.
+ */
+function basePairs(
+  base: PaletteBase | undefined,
+): Array<[string, string, string]> {
+  const out: Array<[string, string, string]> = [];
+  for (const hue of CATEGORY_HUES) {
+    out.push([
+      `${hue} category text`,
+      `var(--color-text-${hue})`,
+      `var(--color-background-${hue})`,
+    ]);
+  }
+  for (const role of ['info', 'success', 'warning', 'error']) {
+    out.push([
+      `text on ${role}`,
+      `var(--color-on-${role})`,
+      `var(--color-${role})`,
+    ]);
+    out.push([
+      `text on the ${role} tint`,
+      `var(--color-on-${role}-muted)`,
+      `var(--color-${role}-muted)`,
+    ]);
+  }
+  for (const [part, rules] of Object.entries(base?.components ?? {})) {
+    for (const [key, block] of Object.entries(
+      (rules ?? {}) as Record<string, unknown>,
+    )) {
+      if (!block || typeof block !== 'object') {
+        continue;
+      }
+      const style = block as Record<string, unknown>;
+      const hue = /^(?:variant|color):([a-z]+)$/.exec(key)?.[1];
+      const fill =
+        style.backgroundColor ??
+        (hue &&
+        HUE_FILL_PARTS.includes(part) &&
+        (CATEGORY_HUES as readonly string[]).includes(hue)
+          ? `var(--color-background-${hue})`
+          : null);
+      if (typeof fill !== 'string') {
+        continue;
+      }
+      for (const prop of TEXT_PROPS) {
+        const text = style[prop];
+        if (typeof text === 'string') {
+          out.push([pairLabel(part, key, prop), text, fill]);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Keeps the base theme's value, in a mode, for each look color (category
+ * or status) that would leave a text/fill pair the base theme draws below
+ * 4.5:1 where the base's own values read better. Pairs are checked again
+ * until none changes, so a fill kept at the base's sends its text back too.
+ */
+function keepWhereBaseReads(
+  tokens: PaletteMapping['tokens'],
+  base: PaletteBase | undefined,
+  modes: PaletteMode[],
+  isLook: (k: string) => boolean,
+  reader: PaletteColorReader,
+): PaletteMapping['kept'] {
+  const kept: PaletteMapping['kept'] = [];
+  const pairs = basePairs(base);
+  /** A value's color in a mode, with the tokens it reads. */
+  const colorOf = (
+    v: string,
+    m: PaletteMode,
+    now: boolean,
+    depth = 0,
+  ): ColorTriple | null => {
+    if (depth > 6) {
+      return null;
+    }
+    let x = String(v).trim();
+    const pair = /^light-dark\((.*)\)$/is.exec(x);
+    if (pair) {
+      const halves = splitTopComma(pair[1]);
+      if (halves.length === 2) {
+        x = halves[m === 'light' ? 0 : 1].trim();
+      }
+    }
+    const ref = /^var\((--[\w-]+)\)$/.exec(x)?.[1];
+    if (ref) {
+      const own = now ? tokens[ref]?.[m]?.color : null;
+      return colorOf(own ?? base?.[m]?.[ref] ?? '', m, now, depth + 1);
+    }
+    const rgb = reader.rgb(x);
+    if (!rgb) {
+      return null;
+    }
+    const page = reader.rgb(
+      String(
+        (now ? tokens['--color-background-body']?.[m]?.color : null) ??
+          base?.[m]?.['--color-background-body'] ??
+          (m === 'light' ? '#ffffff' : '#000000'),
+      ),
+    );
+    const a = reader.alpha(x);
+    return a < 1 && page ? compositeOver(rgb, a, page) : rgb;
+  };
+  /** The look tokens a value reads. */
+  const reads = (v: string): string[] =>
+    [...String(v).matchAll(/var\((--[\w-]+)\)/g)]
+      .map(x => x[1])
+      .filter(k => isLook(k) && k in tokens);
+  for (let pass = 0; pass < 6; pass++) {
+    let changed = false;
+    for (const m of modes) {
+      for (const [label, text, fill] of pairs) {
+        const involved = [...reads(text), ...reads(fill)].filter(
+          k => tokens[k]?.[m]?.family !== 'literal',
+        );
+        if (!involved.length) {
+          continue;
+        }
+        const [ft, bt] = [colorOf(text, m, true), colorOf(fill, m, true)];
+        const [fb, bb] = [colorOf(text, m, false), colorOf(fill, m, false)];
+        if (!ft || !bt) {
+          continue;
+        }
+        const now = ratio(ft, bt);
+        const was = fb && bb ? ratio(fb, bb) : 0;
+        if (now >= TEXT || now >= was - 0.01) {
+          continue;
+        }
+        for (const k of involved) {
+          const value = base?.[m]?.[k];
+          if (value == null) {
+            continue;
+          }
+          tokens[k] = {
+            ...tokens[k],
+            [m]: {stop: 0, color: String(value), family: 'literal'},
+          };
+          kept.push({token: k, mode: m, pair: label, ratio: round2(now)});
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+  return kept;
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
 /** A text shade, named for a sentence. */
 const textName = (r: StopRef): string =>
   r.family === 'white' || (r.family === 'neutral' && r.stop >= 95)
@@ -545,8 +826,17 @@ export function paletteTools(
   /** The value a token is set to exactly in a mode, as written, or undefined. */
   const settingOf = (token: string, m: PaletteMode): unknown =>
     context.settingOf?.(token, m);
-  const colorIn = (value: unknown, m: PaletteMode): string | null =>
-    value == null || !context.colorIn ? null : context.colorIn(value, m);
+  const colorIn = (value: unknown, m: PaletteMode): string | null => {
+    if (value == null) {
+      return null;
+    }
+    if (context.colorIn) {
+      return context.colorIn(value, m);
+    }
+    // (Without a reader of its own, a value is a color when it is one.)
+    const v = String(value).trim();
+    return parseColor(v) ? v : null;
+  };
   /** The exact opaque color a token is set to in a mode, or null. */
   const exactOf = (token: string, m: PaletteMode): string | null => {
     const v = colorIn(settingOf(token, m), m);
@@ -618,8 +908,24 @@ export function paletteTools(
       on,
       r: contrast(on.color, fill),
     }));
-    const best = a.r >= TEXT || a.r >= b.r ? a : b;
+    let best = a.r >= TEXT || a.r >= b.r ? a : b;
     const other = best === a ? b : a;
+    // Neither reads: the end of the gray ramp on the better side (black
+    // past near-black, white past near-white) when it reads better, so the
+    // text picked is never one a darker or lighter gray would beat.
+    if (best.r < TEXT) {
+      const dark =
+        contrast(best.on.color, PALETTE_WHITE) > contrast(fill, PALETTE_WHITE);
+      const end: StopRef = neutral
+        ? {...ref('neutral', m, at(dark ? 0 : 100)), family: 'neutral'}
+        : dark
+          ? {stop: 0, color: PALETTE_BLACK, family: 'black'}
+          : {stop: 100, color: PALETTE_WHITE, family: 'white'};
+      const r = contrast(end.color, fill);
+      if (r > best.r) {
+        best = {on: end, r};
+      }
+    }
     return {
       on: best.on,
       r: best.r,
@@ -662,6 +968,7 @@ export function paletteTools(
     at,
     atInside,
     ref,
+    colorIn,
     exactOf,
     settingOf,
     rawOf,
@@ -669,6 +976,7 @@ export function paletteTools(
     solid,
     surfaces,
     onFor,
+    onChoices,
     page,
     neutral,
     contrast,
@@ -774,11 +1082,22 @@ export function anchorDarkFills(
   context: PaletteMappingContext,
   replaced: (id: string, stop: number) => void = () => {},
 ): ConfigFamily[] {
-  const t = paletteTools(generateTonalPalette(asRequest(config)), context);
+  const generated = generateTonalPalette(asRequest(config));
+  const t = paletteTools(generated, context);
   const add: string[] = [];
+  /** The color a family's dark shades hold: its own dark value, else its seed. */
+  const darkColor = (id: string): string => {
+    const f = dials.find(x => x.id === id);
+    return (f?.dark ?? f?.seed) as string;
+  };
   for (const [id, fill] of Object.entries(fills)) {
-    const seed = dials.find(f => f.id === id)?.seed as string;
-    const check = darkExact(t, id, seed);
+    const own = dials.find(f => f.id === id)?.dark;
+    // A dark value of its own sits at the dark shade nearest its lightness.
+    if (own) {
+      fill.stop =
+        nearestByLightness(generated.palette[id]?.dark, own) ?? fill.stop;
+    }
+    const check = darkExact(t, id, darkColor(id));
     Object.assign(fill, {why: check.why, ratio: check.ratio});
     if (check.ok) {
       add.push(id);
@@ -793,7 +1112,7 @@ export function anchorDarkFills(
       const anchor = {
         mode: 'dark',
         stop: fills[id].stop,
-        color: f.seed,
+        color: darkColor(id),
         policy: 'exact',
       };
       const own: Array<{mode: string; stop: number}> = f.anchors ?? [];
@@ -864,6 +1183,34 @@ export function planPaletteRequest(
       fills[dial.id] = {stop, dark: false, why: '', ratio: 0};
     }
     config.families.push(family);
+  }
+  const has = (id: string): boolean => config.families.some(f => f.id === id);
+  // The category and chart hues grow with the look, after the theme's own
+  // colors.
+  const accent = dials.find(f => f.id === 'accent')?.seed;
+  const derived = lookSeeds(accent, dials.find(f => f.id === 'neutral')?.seed);
+  for (const [id, seed] of Object.entries(derived)) {
+    if (!has(id)) {
+      config.families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+    }
+  }
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each.
+  const baseColors: Record<string, string> = {};
+  for (const d of Object.keys(STATUS_TOKEN)) {
+    if (dials.some(f => f.id === d)) {
+      continue;
+    }
+    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+    const rgb = v ? context.reader.rgb(v) : null;
+    if (rgb && context.reader.alpha(String(v)) >= 1) {
+      baseColors[d] = hex(rgb);
+    }
+  }
+  for (const [id, seed] of Object.entries(statusSeeds(baseColors, accent))) {
+    if (!has(id)) {
+      config.families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+    }
   }
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
@@ -970,8 +1317,37 @@ export function mapPalette(
     return ref(id, m, b.stop);
   };
 
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   */
+  const nearCore = (token: string, id: string) => {
+    const core = String(context.tokenDefaults?.[token] ?? '').trim();
+    const halves = /^light-dark\((.*)\)$/i.exec(core);
+    const parts = halves ? splitTopComma(halves[1]) : [core];
+    return each(m => {
+      const target = parseColor(
+        String(parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+      );
+      const best = target
+        ? stops.reduce((x, y) =>
+            perceptualDelta(ref(id, m, y).color, hex(target)) <
+            perceptualDelta(ref(id, m, x).color, hex(target))
+              ? y
+              : x,
+          )
+        : stops[Math.floor(stops.length / 2)];
+      return ref(id, m, best);
+    });
+  };
+
   const neutral = dials.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -979,7 +1355,13 @@ export function mapPalette(
       ) {
         continue;
       }
-      const shadeAt = NEUTRAL_INSIDE.has(token) ? atInside : at;
+      // Primary text and icons of a tinted gray carry its tint: the shade
+      // inside the ramp's black and white ends, which always reads.
+      const shadeAt =
+        NEUTRAL_INSIDE.has(token) ||
+        (TINTED_INK.has(token) && !isGray(neutral.seed))
+          ? atInside
+          : at;
       put(
         token,
         'neutral',
@@ -1097,6 +1479,27 @@ export function mapPalette(
           );
         }) ?? start;
       fill[m] = ref(f.id, m, found);
+      // The shade nearest your color that passes, offered as the theme's
+      // own dark fill when it is closer to your color than the one used.
+      const near = [...stops]
+        .filter(s => s > 0 && s < 100)
+        .sort((a, b) => Math.abs(a - S) - Math.abs(b - S) || b - a)
+        .find(s => {
+          const c = ref(f.id, m, s).color;
+          return (
+            t.page(c, m, f.id) >= NON_TEXT && t.onFor(f.id, m, c).r >= TEXT
+          );
+        });
+      const closer =
+        near != null &&
+        Math.abs(near - S) < Math.abs(found - S) &&
+        context.setLine
+          ? (() => {
+              const c = ref(f.id, m, near).color;
+              const o = t.onFor(f.id, m, c);
+              return `; for a fill closer to your color in dark: ${context.setLine(names.fill, c, 'dark')} (shade ${shade(near)}, the nearest that passes, with ${textName(o.on)} text at ${round(o.r)}:1)`;
+            })()
+          : '';
       if (reports(names.fill)) {
         checks.push({
           token: names.fill,
@@ -1107,7 +1510,7 @@ export function mapPalette(
           ratio: plain.ratio,
           needs: TEXT,
           pass: true,
-          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}`,
+          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}${closer}`,
         });
       }
     }
@@ -1154,6 +1557,15 @@ export function mapPalette(
     if (modes.includes('light') && has(names.fill)) {
       const used = exactFill.light ?? (fill.light as StopRef).color;
       const p = t.page(solid(used, 'light', f.id), 'light', f.id);
+      // The nearest darker color that stands out from the light page.
+      let darker: string | null = null;
+      const from = parseColor(solid(used, 'light', f.id));
+      for (let i = 1; from && i <= 100 && !darker; i++) {
+        const c = hex(from.map(v => Math.round(v * (1 - i / 100))));
+        if (t.page(c, 'light', f.id) >= NON_TEXT) {
+          darker = c;
+        }
+      }
       if (p < NON_TEXT) {
         checks.push({
           token: names.fill,
@@ -1167,6 +1579,13 @@ export function mapPalette(
           note: exactFill.light
             ? `in light, your exact ${names.fill} (${used}) stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so its buttons and badges may not show: give it a darker color`
             : `in light, your exact ${f.id} stands out from the page at only ${round(p)}:1, and a fill needs ${NON_TEXT}:1, so ${names.fill} buttons and badges may not show: pick a darker ${f.id}`,
+          ...(darker
+            ? {
+                fix: exactFill.light
+                  ? {thing: names.fill, value: darker, mode: 'light' as const}
+                  : {thing: f.id, value: darker},
+              }
+            : {}),
         });
       }
     }
@@ -1186,6 +1605,28 @@ export function mapPalette(
           (Math.sign(b - a) === usual ? 1 : -1),
       );
       const away = order.filter(x => x !== fill[m]?.stop);
+      // Accent text set exactly that sits on the accent tint (a selected
+      // preset's) keeps reading: the tint takes the nearest stop, still a
+      // tint, under which it reads.
+      const readers = word
+        ? []
+        : TINT_READERS.map(k => exactOf(k, m)).filter(
+            (v): v is string =>
+              v != null && parseColor(v) != null && alphaOf(v) >= 1,
+          );
+      if (readers.length) {
+        const [lo, hi] = ACCENT_TINT_WINDOW[m];
+        const reads = away
+          .filter(x => x >= lo && x <= hi)
+          .find(x =>
+            over(names.muted, ref(f.id, m, x, alpha), surfaces(m, f.id)).every(
+              ([, bg]) => readers.every(c => contrast(c, bg) >= TEXT),
+            ),
+          );
+        if (reads != null) {
+          return ref(f.id, m, reads, alpha);
+        }
+      }
       return ref(f.id, m, away[0] ?? order[0], alpha);
     });
     put(names.muted, f.id, muted);
@@ -1212,10 +1653,26 @@ export function mapPalette(
     // shade that reads, and the check says so.
     const text = each(m => {
       const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
-      const own = fill[m]?.exact ? ref(f.id, m, S) : null;
+      // The fill the theme really shows in this mode: an exact token
+      // setting of it, else the setting's own color at its shade. The text
+      // starts from that color's nearest shade.
+      const shown = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+      const start = shown
+        ? stops.reduce((x, y) =>
+            perceptualDelta(ref(f.id, m, y).color, shown) <
+            perceptualDelta(ref(f.id, m, x).color, shown)
+              ? y
+              : x,
+          )
+        : S;
+      const own = shown
+        ? {...ref(f.id, m, start), color: shown}
+        : fill[m]?.exact
+          ? ref(f.id, m, S)
+          : null;
       if (own) {
         const r = Math.min(...grounds.map(([, bg]) => contrast(own.color, bg)));
-        if (r >= TEXT) {
+        if (r >= TEXT && !shown) {
           if (reports(names.text)) {
             checks.push({
               token: names.text,
@@ -1231,23 +1688,55 @@ export function mapPalette(
           return own;
         }
         const before = checks.length;
-        const moved = pick(names.text, f.id, m, S, grounds, TEXT);
+        const moved = pick(names.text, f.id, m, start, grounds, TEXT);
+        if (r >= TEXT) {
+          return moved;
+        }
         const last = checks.length > before ? checks[checks.length - 1] : null;
-        if (last && moved.stop !== S) {
+        if (last && (moved.stop !== start || shown)) {
           last.note = `${names.text} ${m}: your exact color (${own.color}) reads at only ${grounds
             .map(([n, bg]): [string, number] => [n, contrast(own.color, bg)])
             .filter(([, x]) => x < TEXT)
             .map(([n, x]) => `${round(x)}:1 on ${n}`)
             .join(
               ', ',
-            )} (text needs ${TEXT}:1), so links and accent text use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text' : `${f.id} text and icons`} use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
         }
         return moved;
       }
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      each(m => {
+        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+        const from = fill[m] as StopRef;
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+        if (
+          own &&
+          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
+        ) {
+          return {...from, color: own};
+        }
+        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+      }),
+    );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it.
+    if (word === 'error') {
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
+    }
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
@@ -1363,14 +1852,17 @@ export function mapPalette(
       const byMode: Partial<Record<PaletteMode, StopRef>> = {};
       for (const m of modes) {
         const own = rawOf('--color-text-secondary', m);
-        if (own) {
-          byMode[m] = {stop: 0, color: own, family: 'literal'};
-          continue;
-        }
+        const literal = (): void => {
+          byMode[m] = {stop: 0, color: own as string, family: 'literal'};
+        };
         const fillColor = valueOf(m, ground);
         const g = grays(m);
         const textColor = startText(m);
         if (!fillColor || !g || !textColor) {
+          if (own) {
+            literal();
+            continue;
+          }
           break;
         }
         const seen = drawn(what, fillColor, surfaces(m, 'neutral'));
@@ -1387,7 +1879,16 @@ export function mapPalette(
         const keys = Object.keys(g.ramp)
           .map(Number)
           .sort((a, b) => a - b);
-        const from = baseLift(m) ?? textColor;
+        if (
+          own &&
+          parseColor(own) &&
+          Math.min(...on.map(([, bg]) => contrast(own, bg))) >= TEXT
+        ) {
+          literal();
+          continue;
+        }
+        const ownRgb = own ? parseColor(own) : null;
+        const from = (ownRgb ? hex(ownRgb) : null) ?? baseLift(m) ?? textColor;
         const start = keys.reduce((x, y) =>
           perceptualDelta(g.ramp[y], from) < perceptualDelta(g.ramp[x], from)
             ? y
@@ -1437,12 +1938,161 @@ export function mapPalette(
     }
   }
 
+  /**
+   * The look's own colors for tokens in a mode: what the palette gives them,
+   * else the base theme's. A color set exactly (a page fill, a link color)
+   * is not the look's: the colors the look grows never follow it.
+   */
+  const lookColors = (ks: string[], m: PaletteMode): string[] =>
+    ks
+      .map(k => tokens[k]?.[m]?.color ?? t.colorIn(base?.[m]?.[k], m))
+      .filter(
+        (v): v is string =>
+          v != null && parseColor(v) != null && alphaOf(v) >= 1,
+      );
+  const wanted = (k: string): boolean => has(k) && !setExactly(k);
+  const palette = candidate.palette as Record<
+    string,
+    {light: Record<string, string>; dark: Record<string, string>}
+  >;
+  // The category colors (Badge, Token and Card tints) and the chart colors
+  // the palette derives. A token the theme sets by hand keeps its value; a
+  // set the palette cannot draw readable and apart keeps the base theme's.
+  const look = deriveLookColors({
+    palette,
+    stops,
+    modes,
+    // Card text, secondary text and links all sit on a card tint.
+    text: m => lookColors(LOOK_TEXT, m),
+    grounds: m => lookColors(LOOK_GROUNDS, m),
+    wanted,
+    accent: dials.find(f => f.id === 'accent')?.seed ?? null,
+  });
+  for (const [k, v] of Object.entries(look.tokens)) {
+    tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+  }
+  const categories: PaletteMapping['categories'] = {
+    badges: look.badges,
+    chart: look.chart,
+    merged: look.merged,
+    unreadable: look.unreadable.map(
+      u =>
+        `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
+    ),
+  };
+  // The status roles the theme leaves unset, from the palette's families of
+  // them; a role that cannot be drawn readable and apart from the accent
+  // keeps the base theme's.
+  const statuses: PaletteMapping['statuses'] = (() => {
+    const roles = Object.keys(STATUS_TOKEN).filter(
+      d => !dials.some(f => f.id === d) && palette[d],
+    );
+    if (!roles.length) {
+      return {roles: {}, why: []};
+    }
+    const derived = deriveStatusColors({
+      palette,
+      stops,
+      modes,
+      roles,
+      grounds: m => lookColors(LOOK_GROUNDS, m),
+      inks: (m, id) =>
+        t.onChoices(id, m).map(r => ({
+          stop: r.stop,
+          color: r.color,
+          family: String(r.family ?? 'neutral'),
+        })),
+      accent: m => tokens['--color-accent']?.[m]?.color ?? null,
+      wanted,
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {roles: derived.roles, why: derived.why};
+  })();
+  // The code colors and the overlay scrim; a token set by hand keeps its
+  // value.
+  const code = (() => {
+    const derived = deriveCodeColors({
+      palette,
+      stops,
+      modes,
+      grounds: m => lookColors(LOOK_GROUNDS, m),
+      wanted,
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return derived.unreadable;
+  })();
+  // The status fills, as the theme shows them, that someone red-weak or
+  // green-weak may not tell apart, in each mode, where the theme changed at
+  // least one of the two (a base theme's own pair is the base's).
+  const cvd: PaletteMapping['cvd'] = [];
+  for (const m of modes) {
+    const shown: Record<string, string> = {};
+    for (const w of ['info', 'success', 'warning', 'error']) {
+      const k = `--color-${w}`;
+      const v =
+        exactOf(k, m) ?? tokens[k]?.[m]?.color ?? t.colorIn(base?.[m]?.[k], m);
+      const rgb = v ? parseColor(v) : null;
+      if (v && rgb && alphaOf(v) >= 1) {
+        shown[w] = hex(rgb);
+      }
+    }
+    const changed = (w: string): boolean =>
+      `--color-${w}` in tokens || exactOf(`--color-${w}`, m) != null;
+    for (const c of cvdClashes(shown)) {
+      if (changed(c.a) || changed(c.b)) {
+        cvd.push({...c, mode: m, colors: [shown[c.a], shown[c.b]]});
+      }
+    }
+  }
+
+  const kept = keepWhereBaseReads(
+    tokens,
+    base,
+    modes,
+    isLookOrStatus,
+    context.reader,
+  );
+
+  // An accent set for one mode moves that mode only: every value the
+  // palette gives keeps the base theme's in the other.
+  const only = dials.find(f => f.id === 'accent')?.only;
+  if (only) {
+    const other: PaletteMode = only === 'light' ? 'dark' : 'light';
+    // Nothing the palette draws shows in that mode, so nothing is checked
+    // there.
+    for (let i = checks.length - 1; i >= 0; i--) {
+      if (checks[i].mode === other) {
+        checks.splice(i, 1);
+      }
+    }
+    for (const [k, v] of Object.entries(tokens)) {
+      const value = base?.[other]?.[k];
+      if (value == null) {
+        delete tokens[k];
+        continue;
+      }
+      tokens[k] = {
+        ...v,
+        [other]: {stop: 0, color: String(value), family: 'literal'},
+      };
+    }
+  }
+
   return {
     tokens,
     contrast: checks.filter(c => c.note !== ''),
     exact,
     unread,
     lift,
+    categories,
+    statuses,
+    code,
+    cvd,
+    kept,
   };
 }
 

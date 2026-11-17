@@ -17,7 +17,8 @@ import {PALETTE_RECIPE, PALETTE_RECIPE_V2} from './generator';
 import {themePalette} from './themePalette';
 import type {ThemePaletteInput} from './types';
 
-const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
+// (A color the palette keeps at Core's own is written as Core writes it.)
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 function seeded(seed: number) {
   let state = seed;
@@ -51,8 +52,8 @@ function expectTokensApplied(input: ThemePaletteInput, name: string) {
     expect(Object.hasOwn(tokenDefaults, token), token).toBe(true);
     expect(l, token).toMatch(HEX);
     expect(d, token).toMatch(HEX);
-    expect(light[token]?.toLowerCase(), `${token} light`).toBe(l);
-    expect(dark[token]?.toLowerCase(), `${token} dark`).toBe(d);
+    expect(light[token]?.toLowerCase(), `${token} light`).toBe(l.toLowerCase());
+    expect(dark[token]?.toLowerCase(), `${token} dark`).toBe(d.toLowerCase());
   }
   return palette;
 }

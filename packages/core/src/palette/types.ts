@@ -58,8 +58,8 @@ export interface TonalPaletteDarkChromaTaper {
 }
 
 export interface TonalPaletteGenerationInput {
-  /** The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma. New palettes name v2 (the theme editor records it); a config pins its recipe by naming it. */
-  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  /** The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with a dusty seed's pale tints kept at or below its own chroma. New palettes name the newest, v3 (the theme editor records it); a config pins its recipe by naming it. */
+  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
   families: TonalPaletteFamilyInput[];
   /** Chroma control from 0 (most muted) through 50 (default) to 100 (most vivid). */
   vibrancy?: number;
@@ -79,7 +79,7 @@ export interface TonalPaletteGenerationInput {
 export interface TonalPaletteCandidate {
   schemaVersion: 1;
   status: 'candidate';
-  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
   /** Exact solid black for theme authoring outside a tonal family. */
   black: '#000000';
   /** Exact solid white for theme authoring outside a tonal family. */
@@ -113,7 +113,7 @@ export interface TonalPaletteRampDiagnostics {
   /** Stops whose ideal color fell outside sRGB and was mapped back into it. */
   gamutMappedStops: number[];
   /** Each anchor with the color the stop received after its policy was applied and the perceptual distance that color still has from the requested target. */
-  anchors: (TonalPaletteAnchor & {generatedColor: string; deltaE: number})[];
+  anchors: Array<TonalPaletteAnchor & {generatedColor: string; deltaE: number}>;
 }
 
 /**
@@ -140,20 +140,20 @@ export interface TonalPaletteCoordinationDiagnostics {
  * The request as the generator resolved it, with every default filled in.
  */
 export interface TonalPaletteNormalizedRequest {
-  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
   vibrancy: number;
   neutralProfile: 'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom';
   modeStrategy: 'light-only' | 'dark-only' | 'light-and-dark';
   /** The requested taper, with `familyMultipliers` filled in; present only when the request has a taper. */
   darkChromaTaper?: Required<TonalPaletteDarkChromaTaper>;
   stops: number[];
-  families: {
+  families: Array<{
     id: string;
     name: string;
     seed: string;
     kind: 'chromatic' | 'neutral';
     anchors: TonalPaletteAnchor[];
-  }[];
+  }>;
 }
 
 /** The seeds `themePalette()` grows a theme's colors from. */
@@ -173,13 +173,13 @@ export interface ThemePaletteInput {
   /** Chroma from 0 (most muted) through 50 (default) to 100 (most vivid). */
   vibrancy?: number;
   /** The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade. */
-  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
 }
 
 /** A theme's colors made by `themePalette()`, for `defineTheme({palette})`. */
 export interface ThemePalette {
   readonly kind: 'theme-palette';
-  readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
   /** Each color token's `[light, dark]` value. */
   readonly tokens: Readonly<Record<string, readonly [string, string]>>;
   /** Part styles that lift secondary text on the accent tint and the neutral track, as the official themes do. */
