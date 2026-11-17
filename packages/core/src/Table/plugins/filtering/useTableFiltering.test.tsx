@@ -482,4 +482,28 @@ describe('header with a filter button in a narrow column', () => {
     );
     expect(cssDeclarationsOf(sortIcon)).toContain('flex-shrink: 0');
   });
+
+  it('gives a Table nested in a last-column cell its own end room, not the outer cell end room', () => {
+    render(
+      <Table
+        data={[{id: 'outer', label: 'Outer'}]}
+        columns={[
+          {key: 'label', header: 'Label'},
+          {
+            key: 'nested',
+            header: 'Nested',
+            renderCell: () => <SortFilterTable />,
+          },
+        ]}
+        idKey="id"
+      />,
+    );
+    const innerCell = screen
+      .getByRole('button', {name: /filter name/i})
+      .closest('th')!;
+    // Every cell resets the edge inset; only a last-column cell sets it.
+    expect(cssDeclarationsOf(innerCell)).toContain(
+      '--_table-edge-inline-end: initial',
+    );
+  });
 });
