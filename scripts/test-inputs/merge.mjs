@@ -224,10 +224,23 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
 export function* readLines(dir) {
   for (const name of fs.readdirSync(dir)) {
     if (!name.endsWith('.jsonl')) continue;
-    for (const line of fs
-      .readFileSync(path.join(dir, name), 'utf8')
-      .split('\n')) {
-      if (line) yield JSON.parse(line);
+    const lines = fs.readFileSync(path.join(dir, name), 'utf8').split('\n');
+    // Every whole line ends with a newline, so the last part is empty unless
+    // a process was killed while it wrote that line.
+    const cut = lines.pop();
+    for (const line of lines) if (line) yield JSON.parse(line);
+    if (cut) {
+      // Each line starts with its owner; the rest of it is lost, so the
+      // owner cannot see what it read.
+      const owner = /^\{"for":("(?:[^"\\]|\\.)*")/.exec(cut)?.[1];
+      yield {
+        for: owner == null ? `unreadable line in ${name}` : JSON.parse(owner),
+        reads: [],
+        probes: [],
+        lists: [],
+        writes: [],
+        unseen: ['was stopped while it wrote its record'],
+      };
     }
   }
 }

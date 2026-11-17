@@ -7,8 +7,7 @@
  *   tests). Nothing is recorded while either is unset.
  * @output One JSON line per owner and process (one with empty lists too, so
  *   a test file that touches nothing still has its line) in
- *   `$ASTRYX_TEST_INPUTS_DIR/<pid>.<n>.jsonl`, one file per line, renamed
- *   into place whole: the paths read or probed, the folders listed, the paths
+ *   `$ASTRYX_TEST_INPUTS_DIR/<pid>.<thread>.jsonl`: the paths read or probed, the folders listed, the paths
  *   written, and whether the process did something whose reads it cannot see
  *   (a process that is not Node, a shell command, a worker thread, a Node
  *   child stopped by a signal before it wrote its own lines).
@@ -42,29 +41,31 @@ if (OUT && !globalThis.__astryxTestInputs) {
   // A process or worker that a recorded one started inherits its owner;
   // Vitest's own workers start with none and take one per test file.
   const started = Boolean(owner());
-  // Each line is its own file, written whole and then renamed into place, so
-  // a process killed while writing leaves no cut-short line. These are the
-  // functions before the wrappers below, so writing a line records nothing.
-  const {writeFileSync, renameSync} = fs;
-  let lineCount = 0;
+  // Each process and thread appends its lines to one file of its own. A
+  // process killed while it writes leaves its last line cut short; the merge
+  // reads such a line as one it cannot see (merge.mjs readLines). Node's own
+  // appendFileSync calls the exported fs functions, which the wrappers below
+  // watch, so what writing a line touches is not recorded.
+  const {appendFileSync} = fs;
+  let writingLine = false;
   const writeLine = (who, entry) => {
-    const file = path.join(
-      OUT,
-      `${process.pid}.${workerThreads.threadId}.${lineCount++}.jsonl`,
-    );
-    writeFileSync(
-      `${file}.part`,
-      `${JSON.stringify({
-        for: who,
-        reads: [],
-        probes: [],
-        lists: [],
-        writes: [],
-        unseen: [],
-        ...entry,
-      })}\n`,
-    );
-    renameSync(`${file}.part`, file);
+    writingLine = true;
+    try {
+      appendFileSync(
+        path.join(OUT, `${process.pid}.${workerThreads.threadId}.jsonl`),
+        `${JSON.stringify({
+          for: who,
+          reads: [],
+          probes: [],
+          lists: [],
+          writes: [],
+          unseen: [],
+          ...entry,
+        })}\n`,
+      );
+    } finally {
+      writingLine = false;
+    }
   };
   const preload = `--import=${SELF}`;
   // A worker thread loads the recorder only from the preload this process
@@ -91,7 +92,7 @@ if (OUT && !globalThis.__astryxTestInputs) {
     return path.join(real, path.basename(absolute));
   };
   const note = (set, target) => {
-    if (!owner()) return;
+    if (!owner() || writingLine) return;
     // A started process (a child or a worker) tells its starter what it found
     // only by what it writes or sends, so its lines so far are written first:
     // stopped later, it loses only what it never passed on.
@@ -439,6 +440,23 @@ if (OUT && !globalThis.__astryxTestInputs) {
       flush();
       if (next) process.env.ASTRYX_TEST_INPUTS_FOR = next;
       else delete process.env.ASTRYX_TEST_INPUTS_FOR;
+    },
+    /**
+     * Records `run` for `name` (a step a test runs for the rest, such as a
+     * shared build), then goes back to the owner before it.
+     * @template T
+     * @param {string} name
+     * @param {() => Promise<T>} run
+     * @returns {Promise<T>}
+     */
+    async as(name, run) {
+      const before = owner();
+      this.switchTo(name);
+      try {
+        return await run();
+      } finally {
+        this.switchTo(before);
+      }
     },
   };
 }

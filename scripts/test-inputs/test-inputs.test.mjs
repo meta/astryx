@@ -68,6 +68,10 @@ describe('the recorder', () => {
       fs.readdirSync(${JSON.stringify(path.join(work, 'dir'))});
       fs.writeFileSync(${JSON.stringify(path.join(work, 'out.txt'))}, 'x');
       fs.mkdtempSync(${JSON.stringify(path.join(work, 'tmp-'))});
+      // A shared build a test runs for the rest records as a step of its own.
+      await globalThis.__astryxTestInputs.as('step:shared-build', async () => {
+        fs.readFileSync(${JSON.stringify(path.join(work, 'fork-read.txt'))});
+      });
       fs.cpSync(${JSON.stringify(path.join(work, 'tree'))}, ${JSON.stringify(path.join(work, 'copy'))}, {recursive: true});
       execFileSync(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(child)}]);
       execFileSync('true');
@@ -103,8 +107,13 @@ describe('the recorder', () => {
     const lines = [...readLines(out)];
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(new Set(lines.map(line => line.for))).toEqual(
-      new Set(['some.test.mjs']),
+      new Set(['some.test.mjs', 'step:shared-build']),
     );
+    expect(
+      lines
+        .filter(line => line.for === 'step:shared-build')
+        .flatMap(line => line.reads),
+    ).toEqual([path.join(work, 'fork-read.txt')]);
     const all = key => lines.flatMap(line => line[key]);
     expect(all('reads')).toContain(path.join(work, 'a.txt'));
     expect(all('probes')).toContain(path.join(work, 'missing.lock'));
@@ -528,6 +537,34 @@ describe('selection by recorded inputs', () => {
     expect(
       changeThatRunsEveryTest(['packages/core/src/Button/Button.tsx']),
     ).toBeNull();
+  });
+});
+
+describe('reading the lines', () => {
+  it('reads a line cut short by a killed process as one its owner cannot see', () => {
+    const dir = tempDir('inputs-lines-');
+    fs.writeFileSync(
+      path.join(dir, '1.0.jsonl'),
+      `${JSON.stringify({for: 'a.test.mjs', reads: ['/repo/x'], probes: [], lists: [], writes: [], unseen: []})}\n{"for":"b.test.mjs","reads":["/re`,
+    );
+    expect([...readLines(dir)]).toEqual([
+      {
+        for: 'a.test.mjs',
+        reads: ['/repo/x'],
+        probes: [],
+        lists: [],
+        writes: [],
+        unseen: [],
+      },
+      {
+        for: 'b.test.mjs',
+        reads: [],
+        probes: [],
+        lists: [],
+        writes: [],
+        unseen: ['was stopped while it wrote its record'],
+      },
+    ]);
   });
 });
 

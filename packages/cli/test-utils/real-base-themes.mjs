@@ -124,7 +124,13 @@ async function sharedBuild(own, like) {
     return fs.existsSync(done) ? dest : null;
   }
   try {
-    await buildTheme(own, like, dest);
+    // In a recording run, the build is a step of its own, so a test that
+    // links it depends on what the build read, not on all its builder did.
+    const recording = globalThis.__astryxTestInputs;
+    const build = () => buildTheme(own, like, dest);
+    await (recording
+      ? recording.as(`step:base-theme-${like}`, build)
+      : build());
     fs.writeFileSync(done, '');
     return dest;
   } finally {
