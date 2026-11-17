@@ -692,13 +692,22 @@ function DisabledMessageTooltip({
   inputRef,
   onDescribing,
 }: DisabledMessageTooltipProps): ReactNode {
+  // Once the tooltip's surface is in the document, its text describes the
+  // input in place of the parent's visually hidden copy.
+  const onSurfaceMount = useCallback(
+    (surface: HTMLElement | null) => {
+      onDescribing(surface?.closest('[role="tooltip"]')?.id ?? '');
+    },
+    [onDescribing],
+  );
   const tooltip = useTooltip({
     placement: 'above',
     // The container row is not naturally focusable; focusin bubbles up from the
     // native checkbox, so always attach focus listeners.
     focusTrigger: 'always',
+    onSurfaceMount,
   });
-  const {interactionRef, positionRef, describedBy} = tooltip;
+  const {interactionRef, positionRef} = tooltip;
   // Attaches the tooltip to the row and the checkbox, which the parent
   // renders.
   useIsomorphicLayoutEffect(() => {
@@ -709,37 +718,6 @@ function DisabledMessageTooltip({
       positionRef(null);
     };
   }, [interactionRef, positionRef, rowRef, inputRef]);
-  // Hands the description to the tooltip once its text is in the document.
-  // The layer can mount its text a commit after this one, so the effect
-  // watches the document until the text arrives.
-  useIsomorphicLayoutEffect(() => {
-    const doc = inputRef.current?.ownerDocument;
-    if (!describedBy || doc == null) {
-      return;
-    }
-    const isInDocument = () => doc.getElementById(describedBy) != null;
-    if (isInDocument()) {
-      onDescribing(describedBy);
-      return () => {
-        onDescribing('');
-      };
-    }
-    const view = doc.defaultView;
-    if (view == null) {
-      return;
-    }
-    const observer = new view.MutationObserver(() => {
-      if (isInDocument()) {
-        observer.disconnect();
-        onDescribing(describedBy);
-      }
-    });
-    observer.observe(doc.body, {childList: true, subtree: true});
-    return () => {
-      observer.disconnect();
-      onDescribing('');
-    };
-  }, [describedBy, inputRef, onDescribing]);
   return tooltip.renderTooltip(message);
 }
 

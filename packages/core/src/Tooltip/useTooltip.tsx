@@ -180,6 +180,12 @@ export interface TooltipOptions {
    * Wrap in useCallback for stable identity.
    */
   onHide?: () => void;
+
+  /**
+   * @internal Called with the tooltip's surface when it mounts, and with null
+   * when it unmounts. Wrap in useCallback for stable identity.
+   */
+  onSurfaceMount?: (surface: HTMLElement | null) => void;
 }
 
 export interface TooltipReturn {
@@ -289,6 +295,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isDefaultOpen = false,
     onShow,
     onHide,
+    onSurfaceMount,
   } = options;
 
   // A tooltip stays open while its trigger is hovered, so it must never settle
@@ -470,6 +477,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const contentRefs = useMergedRefs<HTMLDivElement>(
     contentRef,
     registerLayerSurface,
+    onSurfaceMount,
   );
 
   // Schedule show with delay (suppressed when isOpen is false)
