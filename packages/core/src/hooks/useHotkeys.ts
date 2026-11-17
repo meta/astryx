@@ -27,9 +27,11 @@ export interface Hotkey {
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
-   * by a final key compared case-insensitively against event.key. An 'alt'
-   * combo also matches on macOS, where Option changes the typed character:
-   * there the final key's physical key (event.code) is compared.
+   * by a final key compared case-insensitively against event.key. On macOS,
+   * where Option changes the typed character, an 'alt' combo also matches
+   * the final key's US key position (event.code), whatever the layout. For
+   * punctuation that shift changes, name it there: 'alt+shift+/', not
+   * 'alt+?'.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
    * Use 'plus' for a literal '+' key.
@@ -154,14 +156,16 @@ function matchesCombo(
     return true;
   }
   // On macOS, Option changes the character a key types: Option+A types "å",
-  // Option+1 types "¡", and some keys are dead keys. So an alt combo also
-  // matches the key's physical position, when Option rewrote the character.
-  // A key that typed a plain character keeps layout-following matching
-  // (AZERTY and other layouts).
+  // Option+1 types "¡", and some keys are dead keys. So there an alt combo
+  // also matches the key's US position, when Option rewrote the character.
+  // A key that typed a plain character keeps layout-following matching.
+  // Elsewhere Alt changes no character, and AltGr (Ctrl+Alt) types letters
+  // that must not fire shortcuts, so no other platform uses the position.
   const isRewrittenByOption =
     event.key === 'Dead' ||
     (event.key.length === 1 && event.key.charCodeAt(0) > 0x7e);
   return (
+    isApple &&
     wantsAlt &&
     isRewrittenByOption &&
     event.code !== '' &&

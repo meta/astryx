@@ -309,8 +309,8 @@ describe('useHotkeys', () => {
       expect(onPress).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps layout-following matching for a key that types a plain character (AZERTY)', () => {
-      stubOtherPlatform();
+    it('keeps layout-following matching for a key that types a plain character', () => {
+      stubApplePlatform();
       const onA = vi.fn();
       const onQ = vi.fn();
       renderHook(() =>
@@ -320,10 +320,50 @@ describe('useHotkeys', () => {
         ]),
       );
 
-      // On AZERTY the key labeled A sits where QWERTY has Q.
+      // A key whose Option character is plain ASCII matches by that character.
       press('a', {code: 'KeyQ', altKey: true});
       expect(onA).toHaveBeenCalledTimes(1);
       expect(onQ).not.toHaveBeenCalled();
+    });
+
+    it('follows the US key position on an AZERTY Mac when Option rewrote the character', () => {
+      stubApplePlatform();
+      const onA = vi.fn();
+      const onQ = vi.fn();
+      renderHook(() =>
+        useHotkeys([
+          {keys: 'alt+a', onPress: onA},
+          {keys: 'alt+q', onPress: onQ},
+        ]),
+      );
+
+      // AZERTY: the key labeled A is at the US Q position (KeyQ); Option
+      // makes it type "æ".
+      press('æ', {code: 'KeyQ', altKey: true});
+      expect(onQ).toHaveBeenCalledTimes(1);
+      expect(onA).not.toHaveBeenCalled();
+    });
+
+    it('fires shifted punctuation named with shift: alt+shift+/ on Option+Shift+/, which types "¿"', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+shift+/', onPress}]));
+
+      press('¿', {code: 'Slash', altKey: true, shiftKey: true});
+      expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not use the key position on other platforms, so an AltGr letter fires no shortcut', () => {
+      stubOtherPlatform();
+      const onPress = vi.fn();
+      renderHook(() =>
+        useHotkeys([{keys: 'ctrl+alt+a', onPress, allowInInputs: true}]),
+      );
+
+      // Polish layout: AltGr+A (reported as Ctrl+Alt) types "ą".
+      const event = press('ą', {code: 'KeyA', ctrlKey: true, altKey: true});
+      expect(onPress).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
     });
 
     it('stays silent in a text field, as before', () => {

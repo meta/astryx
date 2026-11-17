@@ -21,7 +21,7 @@ export const docs = {
       name: 'hotkeys',
       type: 'Hotkey[]',
       description:
-        'Shortcut registrations. Each entry: `{ keys, onPress, allowInInputs?, isDisabled? }`. `keys` is a "+"-separated combo like "mod+k", "?", "escape"; "mod" is ⌘ on macOS and Ctrl elsewhere. Register a punctuation key that shift changes as the character it produces: "?", not "shift+/", because the final key is compared against `event.key`. An "alt" combo also fires on macOS, where Option changes the typed character (Option+A types "å"): there the physical key of the final key is compared. `onPress` receives the KeyboardEvent after preventDefault(). `allowInInputs` (default false) lets the hotkey fire while typing in inputs/textareas/selects/contenteditable. `isDisabled` temporarily disables the entry.',
+        'Shortcut registrations. Each entry: `{ keys, onPress, allowInInputs?, isDisabled? }`. `keys` is a "+"-separated combo like "mod+k", "?", "escape"; "mod" is ⌘ on macOS and Ctrl elsewhere. Register a punctuation key that shift changes as the character it produces: "?", not "shift+/", because the final key is compared against `event.key`. On macOS, where Option changes the typed character (Option+A types "å"), an "alt" combo also matches the US key position of its final key, on every layout; name shifted punctuation there as "alt+shift+/", not "alt+?". `onPress` receives the KeyboardEvent after preventDefault(). `allowInInputs` (default false) lets the hotkey fire while typing in inputs/textareas/selects/contenteditable. `isDisabled` temporarily disables the entry.',
       required: true,
     },
   ],
@@ -64,7 +64,7 @@ export const docsDense = {
     'Global keyboard shortcuts w/ one window keydown listener per hook instance. Handlers kept in ref; re-renders never re-subscribe. Skips typing targets (input/textarea/select/contenteditable) unless allowInInputs, skips defaultPrevented and IME key events (even with allowInInputs), preventDefault() on match. "mod" = ⌘ on macOS, Ctrl elsewhere. SSR-safe.',
   paramDescriptions: {
     hotkeys:
-      'array of { keys, onPress, allowInInputs?, isDisabled? }. keys = "+"-separated combo ("mod+k", "?", "escape"). Shifted punctuation = produced char ("?", not "shift+/"); final key compared vs event.key; an alt combo also matches the physical key (event.code) when Option rewrote the character on macOS.',
+      'array of { keys, onPress, allowInInputs?, isDisabled? }. keys = "+"-separated combo ("mod+k", "?", "escape"). Shifted punctuation = produced char ("?", not "shift+/"); final key compared vs event.key; on macOS an alt combo also matches the US key position (event.code) when Option rewrote the character; shifted punctuation as alt+shift+/.',
   },
   usage: {
     description:
