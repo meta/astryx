@@ -12,6 +12,60 @@
  *   lays out as the picture shows it.
  */
 
+/**
+ * The script run on a page before its picture: each animation that ends (an
+ * overlay's fade-in) is run to its end, so the picture shows the part as it
+ * looks once it has played; each that loops (a skeleton's shimmer, a pulsing
+ * dot, a spinner) is held at the middle of its first round, a frame a person
+ * sees as it plays, never its first frame, where a part can be faint or gone.
+ */
+export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
+  const t = a.effect?.getComputedTiming();
+  if (!t) continue;
+  if (t.iterations !== Infinity) { a.finish(); continue; }
+  a.pause();
+  a.currentTime = (Number(a.effect.getTiming().delay) || 0) + (typeof t.duration === 'number' ? t.duration : 0) / 2;
+}`;
+
+/**
+ * How a picture script hands back a batch: each line it prints for a job
+ * starts with the job's place in the batch and a tab; a job's picture is
+ * whole once it prints this word.
+ */
+export const PICTURE_TAKEN = 'taken';
+
+/** How many pages of a batch a picture script draws at once. */
+export const PICTURE_PAGES_AT_ONCE = 3;
+
+/**
+ * Run each job of a list in order, a few at a time. Once one fails, no
+ * other starts; the ones running finish, then the first failure is thrown,
+ * so every job before it has had its turn.
+ * @template T
+ * @param {T[]} jobs
+ * @param {number} atOnce
+ * @param {(job: T, i: number) => Promise<void>} run
+ */
+export async function eachAtOnce(jobs, atOnce, run) {
+  let next = 0;
+  /** @type {{error: unknown} | null} */
+  let failed = null;
+  await Promise.all(
+    Array.from({length: Math.min(atOnce, jobs.length)}, async () => {
+      while (!failed && next < jobs.length) {
+        const i = next++;
+        try {
+          await run(jobs[i], i);
+        } catch (error) {
+          failed ??= {error};
+        }
+      }
+    }),
+  );
+  const first = /** @type {{error: unknown} | null} */ (failed);
+  if (first) throw first.error;
+}
+
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 
 /** The pointer of the window a picture is taken in. */

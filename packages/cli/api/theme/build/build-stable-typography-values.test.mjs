@@ -312,4 +312,24 @@ describe('stable build typography values', () => {
       /500 is a number: a type mismatch/,
     );
   });
+
+  it('warns a radius scale with no base or multiplier, or one that is no number', async () => {
+    for (const [radius, why] of [
+      [
+        '{base: 8}',
+        /radius \(line 4\): the radius scale is given no multiplier.*NaNpx/,
+      ],
+      ['{multiplier: 2}', /given no base/],
+      ["{base: 'x', multiplier: 1}", /radius\.base .*is a number/],
+    ]) {
+      const r = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({\n  name: 'p',\n  radius: ${radius},\n});\n`,
+      );
+      expect(r.lines.join('\n'), String(radius)).toMatch(why);
+    }
+    const whole = await buildSource(
+      "import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', radius: {base: 8, multiplier: 1}});\n",
+    );
+    expect(whole.lines.join('\n')).not.toMatch(/radius/);
+  });
 });

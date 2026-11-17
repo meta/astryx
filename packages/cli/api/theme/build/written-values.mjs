@@ -53,7 +53,7 @@ const isPlainBlock = value =>
  * Core writes a token's value as text, which unboxes it.
  * @param {unknown} value
  */
-const boxed = value =>
+export const boxed = value =>
   isBlock(value) &&
   /^\[object (?:String|Number|Boolean)\]$/.test(
     Object.prototype.toString.call(value),
@@ -69,6 +69,19 @@ export const bigIntAsText = (_key, value) =>
   typeof value === 'bigint' ? String(value) : value;
 
 /**
+ * One value as the build hands it to Core: a BigInt as its digits, a boxed
+ * primitive (`new Number(16)`) as its primitive, any other value as it is.
+ * The step `writtenPrimitives` takes at each value it meets.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export function writtenPrimitive(value) {
+  if (typeof value === 'bigint') return String(value);
+  if (boxed(value)) return /** @type {any} */ (value).valueOf();
+  return value;
+}
+
+/**
  * A value as the build hands it to Core: each BigInt in it, in plain
  * objects and arrays at any depth, replaced by its digits, and each boxed
  * primitive (`new String('4px')`) by its primitive. The same object where
@@ -81,8 +94,8 @@ export const bigIntAsText = (_key, value) =>
  * @returns {T}
  */
 export function writtenPrimitives(value, done = new Map()) {
-  if (typeof value === 'bigint') return /** @type {any} */ (String(value));
-  if (boxed(value)) return /** @type {any} */ (value).valueOf();
+  const written = writtenPrimitive(value);
+  if (written !== value) return /** @type {any} */ (written);
   if (!Array.isArray(value) && !isPlainBlock(value)) return value;
   if (done.has(value)) return done.get(value);
   done.set(value, value);
@@ -150,6 +163,22 @@ function nonText(key, value) {
 }
 
 /**
+ * Why a theme field holding a collection that is no plain object (a Map, a
+ * Set) builds nothing from it: defineTheme reads an object's own keys.
+ * Shared with the source reader, which names one it sees written.
+ * @param {string} field
+ * @param {unknown} value the collection, or its kind's name (`Map`)
+ * @returns {string}
+ */
+export function entriesNotRead(field, value) {
+  const kind =
+    typeof value === 'string'
+      ? value
+      : Object.prototype.toString.call(value).slice(8, -1);
+  return `${field} holds a ${kind}, whose entries the build does not read (it reads an object's own keys), so it builds nothing from it: give it an object, such as {'--color-accent': 'red'}`;
+}
+
+/**
  * Why a token value is written as no value a browser reads, or null.
  * @param {string} key
  * @param {unknown} value
@@ -180,9 +209,9 @@ function tokenValueProblem(key, value, reads) {
     const number = halves.findIndex(h => typeof h === 'number');
     if (number !== -1)
       return `${key} gives the number ${halves[number]} as its ${number === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
-    const length = halves.findIndex(h => isLength(String(h)));
-    if (length !== -1)
-      return `${key} gives a [light, dark] pair of sizes (${halves[length]}), so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give it one value for both modes`;
+    const other = halves.findIndex(h => isOtherThanColor(String(h)));
+    if (other !== -1)
+      return `${key} gives a ${other === 0 ? 'light' : 'dark'} half that is no color (${halves[other]}), so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
     // Each half is read as the text it is written in.
     for (const [i, h] of halves.entries()) {
       const why = unsetVarRead(key, String(h), reads);
@@ -218,14 +247,18 @@ function unsetVarRead(key, value, reads) {
 }
 
 /**
- * Whether a value is a size (a length or a percentage), which a [light,
- * dark] pair cannot hold: light-dark() takes colors only.
+ * Whether a value is something other than a color, which a [light, dark]
+ * pair cannot hold: light-dark() takes colors only. Only a value with no
+ * function in it is judged (a size, a duration, a number, a word that is
+ * no color name): a function may be a color syntax newer than the CSS data
+ * this CLI ships.
  * @param {string} value
  */
-function isLength(value) {
+function isOtherThanColor(value) {
+  if (value.includes('(')) return false;
   try {
     const ast = cssTree().parse(value, {context: 'value'});
-    return !cssTree().lexer.matchType('length-percentage', ast).error;
+    return Boolean(cssTree().lexer.matchType('color', ast).error);
   } catch {
     return false;
   }
@@ -432,6 +465,10 @@ function valueProblems(
     };
     for (const map of ['tokens', 'localTokens']) {
       const values = valuesOf(map);
+      if (isBlock(values) && !isPlainBlock(values)) {
+        out.push({path: [...at, map], why: entriesNotRead(map, values)});
+        continue;
+      }
       if (isBlock(values))
         for (const [k, v] of Object.entries(values)) {
           if (
@@ -440,15 +477,21 @@ function valueProblems(
             defaults[k] === v
           )
             continue;
-          // Core writes a token's value as text: a symbol has none, and an
-          // object that holds itself cannot be read for one.
-          if (
-            typeof v === 'symbol' ||
-            (isBlock(v) && !boxed(v) && partJsonText(v) == null)
-          ) {
+          // Core writes a token's value as text: a symbol has none, an
+          // object that holds itself cannot be read for one, and one made
+          // with no prototype (Object.create(null)) has no text form.
+          const textless =
+            typeof v === 'symbol'
+              ? 'a symbol'
+              : isBlock(v) && !boxed(v) && partJsonText(v) == null
+                ? 'an object that holds itself'
+                : isBlock(v) && !boxed(v) && writtenAs(v) == null
+                  ? 'an object with no text form (one made with no prototype)'
+                  : null;
+          if (textless) {
             out.push({
               path: [...at, map, k],
-              why: `${k} holds ${typeof v === 'symbol' ? 'a symbol' : 'an object that holds itself'}, which has no text the build can write: give it a CSS value in quotes`,
+              why: `${k} holds ${textless}, which has no text the build can write: give it a CSS value in quotes`,
               unbuildable: true,
             });
             continue;

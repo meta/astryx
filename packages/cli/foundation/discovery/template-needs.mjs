@@ -96,6 +96,31 @@ function moduleSpecifiers(source) {
 }
 
 /**
+ * The files a source names with `/// <reference path="…" />` before its
+ * first statement, the only place TypeScript reads one. They bring in types
+ * for the type check, not code a build runs, so they are not imports.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function referencedPaths(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return [];
+  }
+  const first = file.program.body[0]?.start ?? Infinity;
+  /** @type {string[]} */
+  const out = [];
+  for (const c of file.comments ?? []) {
+    if (c.type !== 'CommentLine' || c.start >= first) continue;
+    const ref = /^\/\s*<reference\s+path\s*=\s*(["'])(.+?)\1/.exec(c.value);
+    if (ref) out.push(ref[2]);
+  }
+  return out;
+}
+
+/**
  * moduleSpecifiers, read from the source's syntax tree.
  * @param {string} source
  * @returns {string[]}
@@ -134,6 +159,12 @@ export function parsedSpecifiers(source) {
       add(node.arguments?.[0]);
     } else if (node.type === 'ImportExpression') {
       add(node.source);
+    } else if (
+      node.type === 'TSImportEqualsDeclaration' &&
+      node.moduleReference?.type === 'TSExternalModuleReference'
+    ) {
+      // `import s = require('../shared')`
+      add(node.moduleReference.expression);
     } else if (node.type === 'TSImportType') {
       // `type O = import('chart-lib').Options`
       add(

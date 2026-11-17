@@ -96,10 +96,13 @@ export const SAMPLE_PAGE = h(
       'VStack',
       {gap: 1},
       h('Heading', {level: 1, type: 'display-2'}, 'Plan the week ahead'),
+      // A link in running text, as an app writes one: its color is read on
+      // the page.
       h(
         'Text',
         {type: 'supporting'},
-        'Everything your team is working on, in one place.',
+        'Everything your team is working on, in one place. ',
+        h('Link', {href: '#'}, 'See the plan'),
       ),
     ),
     h('Heading', {level: 2}, 'My tasks'),
@@ -131,6 +134,13 @@ export const SAMPLE_PAGE = h(
             h('Heading', {level: 3}, 'New task'),
             h('Badge', {variant: 'info', label: 'Draft'}),
             h('Badge', {variant: 'neutral', label: 'Personal'}),
+          ),
+          // A link in a card's text: its color is read on the card.
+          h(
+            'Text',
+            {type: 'body'},
+            'Shared with your team. ',
+            h('Link', {href: '#'}, 'Change who sees it'),
           ),
           h('TextInput', {label: 'Title', value: 'Prepare launch notes'}),
           h('Switch', {label: 'Notify my team', value: true}),
@@ -540,12 +550,15 @@ export default function Page() {
   // a layer's marker and no such control (a context menu's area, which a
   // right click opens), is shown open too, with the overlays, so a look's
   // menus and lists show in the pictures.
+  // On one family's own page its parts drawn open follow the family, named
+  // for it; on the whole sheet they join the overlays.
+  const OPEN_GROUP = SECTION && SECTION !== 'overlays' ? SECTION + ', open' : 'overlays';
   const opensPopup = html => html.includes('<template></template>') || (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
   for (const it of rendered) {
     const m = it.markup;
     if (!it.openable || !opensPopup(m.one ?? m.light)) continue;
     const open = modes(it.openTree ?? it.tree, 'ifOpen');
-    if (open) done.push({...it, group: 'overlays', label: it.label || 'open', markup: open, opened: true});
+    if (open) done.push({...it, group: OPEN_GROUP, label: it.label || 'open', markup: open, opened: true});
   }
   // A control of the sample page drawn in each state a person puts it in:
   // the render's stylesheet applies a state's rules to what is marked with
@@ -594,7 +607,7 @@ export default function Page() {
     // triggers (a tooltip, a menu, a list) come first; a panel over the
     // whole page (a dialog, a drawer) after them.
     const small = it => it.opened || (it.open && it.anchored);
-    const ordered = [...drawn.filter(small), ...drawn.filter(it => !small(it))];
+    const ordered = OPEN_GROUP === 'overlays' ? [...drawn.filter(small), ...drawn.filter(it => !small(it))] : [...drawn.filter(it => !it.opened), ...drawn.filter(it => it.opened)];
     for (const it of ordered) {
       let g = groups.find(x => x.name === (it.group ?? ''));
       if (!g) { g = {name: it.group ?? '', cells: []}; groups.push(g); }
@@ -602,7 +615,7 @@ export default function Page() {
       if (!c) { c = {name: it.name, list: []}; g.cells.push(c); }
       if (!c.list.some(x => x.label === it.label)) c.list.push(it);
     }
-    body = groups.map(g => h('section', {key: g.name, className: (g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group') + ' cs-family-' + g.name},
+    body = groups.map(g => h('section', {key: g.name, className: (g.name === OPEN_GROUP ? 'cs-group cs-open-group' : 'cs-group') + ' cs-family-' + g.name.replace(/[^a-z0-9]+/g, '-')},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
       h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell', style: {'--cs-examples': c.list.length}},
         h('div', {className: 'cs-name'}, c.name),
@@ -641,7 +654,9 @@ export const SHEET_CSS = [
   '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
   // A cell is as tall as what it holds, so every variant is drawn whole.
-  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:hidden}',
+  // A focus ring drawn outside a part at the cell's edge shows whole: the
+  // cell clips only past a ring's reach.
+  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:clip;overflow-clip-margin:8px}',
   '.cs-pages .cs-cell{max-height:none}',
   // A panel that fills the window (a drawer, a bottom sheet, a lightbox)
   // takes an equal share of that height for each of its examples, so every
@@ -656,10 +671,15 @@ export const SHEET_CSS = [
   // A part that needs a row's width (a table, code, an app shell) takes the
   // whole row of the grid, so its text is never cut or wrapped mid-word.
   '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
-  // A picture is one moment: a part that loops an animation (a skeleton's
-  // shimmer, a pulsing dot) is drawn at rest, never at a frame where it is
-  // faint or gone.
-  '.cs-page *,.cs-page *::before,.cs-page *::after{animation:none!important}',
+  // A part that needs a row's width draws each variant on a row of its own,
+  // and an app shell at a height that shows its frame, not a window's.
+  '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell)>.cs-row>.cs-item{flex-basis:100%}',
+  '.cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
+  // A frame that draws nothing of its own (an aspect ratio) shows its box.
+  '.cs-item .astryx-aspect-ratio{outline:1px dashed #8888}',
+  // A part as tall as its container (a vertical divider) is drawn at a
+  // height, never at none.
+  '.cs-item:has([role="separator"][aria-orientation="vertical"]) [data-astryx-theme]{display:flex;height:64px}',
   // Overlays shown open in place: a layer the page would open with script
   // (its root alone: a hidden helper popover inside it stays hidden), and a
   // panel over the page (a drawer, a bottom sheet, a lightbox) at the size
@@ -682,7 +702,7 @@ export const SHEET_CSS = [
   // The states section: one row per control, one column per state.
   '.cs-states-grid{display:grid;gap:10px;padding:14px}',
   '.cs-states-row{display:grid;grid-template-columns:160px repeat(4,minmax(0,1fr));gap:14px;align-items:center}',
-  '.cs-states-cell{min-width:0;overflow:hidden;padding:4px}',
+  '.cs-states-cell{min-width:0;overflow:clip;overflow-clip-margin:8px;padding:6px}',
   // A panel wider than its cell (a narrow screen's navigation drawer) is
   // drawn from its start, never cut at the start.
   '.cs-cell dialog > *{max-width:100%!important}',

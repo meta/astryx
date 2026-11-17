@@ -223,7 +223,8 @@ describe('words of a flag value typed unquoted on new', () => {
       const cases = [
         [['--font', 'Open', 'Sans'], / editor new n2 --font 'Open Sans'$/],
         [['--accent', 'dark', 'blue'], / editor new n2 --accent darkblue$/],
-        [['--text-size', '16', 'px'], / editor new n2 --text-size 16$/],
+        // A size with its unit is the size text-size takes (16 px is 16).
+        [['--text-size', '16', 'px'], / editor new n2 --text-size '16 px'$/],
       ];
       for (const [flags, want] of cases) {
         const r = await cli([

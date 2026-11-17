@@ -189,15 +189,15 @@ describe('pills and corners', () => {
       const small = /** @type {any} */ (
         await themeEditSet('m', 'corners', 'small', {cwd})
       ).data;
-      const show = /** @type {any} */ (await themeEditShow('m', looked())).data;
+      const show = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (show.missed ?? []).filter((/** @type {any} */ x) =>
           /full pill/.test(x.why),
         ),
       ).toEqual([]);
       expect(small.missed ?? 0).toBeLessThan(16);
-      await themeEditSet('m', 'corners', 'square', {cwd});
-      const sq = /** @type {any} */ (await themeEditShow('m', looked())).data;
+      await themeEditSet('p', 'corners', 'square', {cwd});
+      const sq = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (sq.missed ?? []).some((/** @type {any} */ x) =>
           /full pill/.test(x.why),

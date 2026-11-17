@@ -22,6 +22,19 @@ import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
+ * An English noun's plural, as a part's name is said in the plural
+ * ("switch" → "switches", "body" → "bodies", "card" → "cards").
+ * @param {string} word
+ * @returns {string}
+ */
+export function pluralOf(word) {
+  const w = String(word);
+  if (/(?:s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
+  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
+  return `${w}s`;
+}
+
+/**
  * A value as CSS reads it, for every value type: every Unicode space
  * (no-break, thin, ideographic…) a plain space and zero-width and format
  * characters dropped, and quotes that delimit a value (curly ones, «», ‹›,
@@ -236,6 +249,31 @@ export function normalizeEntry(thing, value) {
   else if (t.startsWith('{') && typeof v === 'string' && /\}\s*$/.test(v)) {
     t = t.slice(1).trim();
     v = v.replace(/\s*\}\s*$/, '');
+  }
+  // The editor's own result line pasted with its head (`[ok] t: corners =
+  // pill (whole theme)`, `t: corners pill -> round`): the head (the status
+  // and the theme's name) is no part of the setting.
+  // (Typed as one argument, the status may come apart from the rest.)
+  const whole =
+    v == null || v.trim() === ''
+      ? t
+      : /^\[ok\]$/i.test(t)
+        ? `${t} ${v.trim()}`
+        : null;
+  if (whole != null) {
+    const head =
+      /^(?:\[ok\]\s*)?[a-z][a-z0-9-]*:\s+(\S+\s*(?:=|\S.*?(?:->|\u2192)).*)$/i.exec(
+        whole,
+      );
+    const status = /^\[ok\]\s+(\S.*)$/i.exec(whole);
+    if (head || status) v = undefined;
+    if (head) {
+      t = head[1].trim();
+      pasted = true;
+    } else if (status) {
+      t = status[1].trim();
+      pasted = true;
+    }
   }
   /** The scope the editor's own printed line names after its value. @type {EntryScope | undefined} */
   let scope;
@@ -1372,11 +1410,54 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * typo (typoOf); (6) the typed value with each color written as one mode's
  * half of `light-dark()` (a shadow's color for one mode, which no color
  * longhand holds), the other half anything. Several values of one kind typed for a setting that takes
- * one (`1.5 2`) may be read as the first.
- * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
+ * one (`1.5 2`) may be read as the first. (8) The words of the typed value
+ * that name the line's own part or state (`scope`: `card 8px`, `red on
+ * button`, `button:hover: red`) are carried by its --on and --state, so the
+ * rest is the value read.
+ * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string, scope?: {on?: string, state?: string}}} line
  * @returns {true | number[] | {oneOf: number[]} | false}
  */
-export function readsTyped({
+export function readsTyped(line) {
+  const read = readsTypedValue(line);
+  if (read === true || !line.scope?.on) return read;
+  const rest = withoutScopeWords(String(line.typed), line.scope);
+  return rest != null && rest !== String(line.typed).trim()
+    ? readsTypedValue({...line, typed: rest}) === true || read
+    : read;
+}
+
+/**
+ * The typed value without the words that name a part (or one of its
+ * plurals) and its state, as a label (`card: 8px`, `button = red`,
+ * `button:hover: red`), after `on` (`red on button`), or as the first or
+ * last word (`card 8px`, `8px card`); null when it names neither.
+ * @param {string} typed
+ * @param {{on?: string, state?: string}} scope
+ * @returns {string | null}
+ */
+function withoutScopeWords(typed, scope) {
+  const on = String(scope.on ?? '').toLowerCase();
+  if (!on) return null;
+  const esc = (/** @type {string} */ x) =>
+    x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const words = on.split('-').map(esc).join('[\\s-]+');
+  const part = `(?:${words})(?:e?s)?`;
+  const state = scope.state ? `(?::+\\s*${esc(scope.state)})?` : '';
+  const t = typed.trim();
+  for (const re of [
+    new RegExp(`^${part}${state}\\s*[:=]\\s*(\\S.*)$`, 'i'),
+    new RegExp(`^(\\S.*?)\\s+on\\s+(?:the\\s+)?${part}$`, 'i'),
+    new RegExp(`^${part}\\s+(\\S.*)$`, 'i'),
+    new RegExp(`^(\\S.*?)\\s+${part}$`, 'i'),
+  ]) {
+    const m = re.exec(t);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+/** @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line */
+function readsTypedValue({
   offered,
   typed,
   thing = '',
