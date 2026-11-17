@@ -57,6 +57,7 @@ import {
   resolveThemeImports,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
+  BUILT_BY_LINE,
   themeBuildWithHandOff,
   withoutBuildCommandLine,
 } from '../theme/build/build.mjs';
@@ -100,10 +101,6 @@ const GENERATED_HEADER_LINE =
 const SOURCE_LINE = /^( \* Source: )(\S(?:.*\S)?)(\s*)$/u;
 const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
-// The built module's own doc comment names the command that built it, which
-// depends on the package manager and host that ran the build.
-const BUILT_BY_LINE =
-  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
 
 /**
  * Compare generated theme outputs without making their build directory,
@@ -113,8 +110,8 @@ const BUILT_BY_LINE =
  * and, in a built module, the one `built by` line that names the command
  * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
  * malformed, reordered, or any other bytes stay significant. `theme build
- * --check` stays strict about the Source and Core lines and the built-by
- * line; only the CLI line counts for neither.
+ * --check` stays strict about the Source and Core lines; the CLI line and the
+ * command in the built-by line count for neither.
  * @param {string} content
  */
 export function normalizeThemeVerifyForCompare(content) {

@@ -230,9 +230,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   `code: ERR_THEME_STALE`. `--check` names every output the build writes as
   checked. `--check` compares each output with what the build writes from the
   theme's inputs now, the header's `Core:` line included. An output's header
-  also names the CLI release that built it. That line alone never makes an
-  output stale: an output that another CLI release built checks clean when
-  everything else matches. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
+  also names the CLI release that built it, and a built module's comment names
+  the command that built it. Those two lines alone never make an output stale:
+  an output that another CLI release or another command built checks clean
+  when everything else matches. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
   check warns once in text mode, naming the missing stubs, and its exit code
   and result stay as the other outputs decide; `--json` stays silent. Any other
   missing output, the module's `.d.ts` and `.variants.d.ts` included, is

@@ -847,21 +847,39 @@ function headerText(line) {
 }
 
 /**
+ * The line of a built module's doc comment that names the command that built
+ * it (`<name> theme — built by \`<command> theme build\``). The command
+ * depends on how the CLI was started: the package manager, or a tool that
+ * runs the CLI for its users.
+ */
+export const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
+
+/**
  * Normalize generated file content for staleness comparison: without the
  * header's `Command:` line ({@link withoutBuildCommandLine}) and its `CLI:`
- * line, which names the CLI release that built the file. Which release
- * answers depends on how the CLI was started (a global install, a tool that
- * runs it, or the project's own copy) and changes with each update, so the
- * same outputs built by another release are not stale. Everything else, the
- * `Core:` line and all real content included, is compared verbatim. Used only
- * by `--check`: any real content drift reports a file as stale.
+ * line, which names the CLI release that built the file, and with the command
+ * in a built module's one {@link BUILT_BY_LINE} left out. Which release
+ * answers, and the command that starts it, depend on how the CLI was started
+ * (a global install, a tool that runs it, or the project's own copy) and
+ * change with each update, so the same outputs built another way are not
+ * stale. Everything else, the `Core:` line and all real content included, is
+ * compared verbatim. Used only by `--check`: any real content drift reports a
+ * file as stale.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  return withoutBuildCommandLine(content)
+  const lines = withoutBuildCommandLine(content)
     .split('\n')
-    .filter(line => !headerText(line).startsWith('CLI: @astryxdesign/cli@'))
+    .filter(line => !headerText(line).startsWith('CLI: @astryxdesign/cli@'));
+  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
+  return lines
+    .map(line =>
+      builtBy === 1 && BUILT_BY_LINE.test(line)
+        ? line.replace(BUILT_BY_LINE, '$1<command>$3$4')
+        : line,
+    )
     .join('\n');
 }
 

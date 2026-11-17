@@ -617,7 +617,7 @@ describe('themeBuild() — check mode', () => {
     expect(result?.data.stale).toEqual([]);
   });
 
-  it('is up to date when another CLI release built the same outputs, and stale when the content or the Core differs', async () => {
+  it('is up to date when another CLI release or command built the same outputs, and stale when the content or the Core differs', async () => {
     const themeFile = path.join(tmpDir, 'release.mjs');
     fs.writeFileSync(
       themeFile,
@@ -650,6 +650,23 @@ describe('themeBuild() — check mode', () => {
     );
     expect(otherCli?.data.upToDate).toBe(true);
     expect(otherCli?.data.stale).toEqual([]);
+
+    // The built module names the command that built it; a tool that runs the
+    // CLI for its users writes its own command there.
+    const js = path.join(tmpDir, 'release.js');
+    const module = fs.readFileSync(js, 'utf8');
+    const byTool = module.replace(
+      /built by `[^`]*theme build`/,
+      'built by `acme astryx theme build`',
+    );
+    expect(byTool).not.toBe(module);
+    fs.writeFileSync(js, byTool);
+    const otherCommand = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCommand?.data.upToDate).toBe(true);
 
     // Content drift still counts beside another release's header.
     const css = path.join(tmpDir, 'release.css');

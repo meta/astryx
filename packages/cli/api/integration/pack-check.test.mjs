@@ -77,6 +77,15 @@ describe('verify-only built-by command normalization', () => {
 export const ${slug}Theme = {name: '${slug}'};`,
     });
 
+  it('build --check leaves out the command in the built-by line, and not the theme it names', () => {
+    expect(normalizeThemeBuildForCompare(builtModule('yarn astryx'))).toBe(
+      normalizeThemeBuildForCompare(builtModule('acme tool astryx')),
+    );
+    expect(normalizeThemeBuildForCompare(builtModule('yarn astryx'))).not.toBe(
+      normalizeThemeBuildForCompare(builtModule('yarn astryx', 'other')),
+    );
+  });
+
   // Two published theme packages, "terminal" and "xtra-professional", were
   // built with yarn; verify under pnpm rebuilt each byte for byte except this
   // line and reported theme_module_stale.
@@ -93,7 +102,7 @@ export const ${slug}Theme = {name: '${slug}'};`,
       ).toBe(normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)));
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
-      ).not.toBe(
+      ).toBe(
         normalizeThemeBuildForCompare(builtModule('pnpm exec astryx', slug)),
       );
     },
