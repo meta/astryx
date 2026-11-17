@@ -224,11 +224,6 @@ Platform-specific details stay inside that compiler.
     them unless the theme sets them too.
   - `--color-on-<status>-muted` is the fill's hue at the lightness that reaches
     4.5:1 on the theme's pale status fill over the default surface.
-  - `--color-neutral-on-<fill>`, for `accent` and each status, is the theme's
-    light- or dark-mode `--color-neutral`, whichever contrasts more with the
-    fill's content (`--color-on-<fill>`, set or derived) over the fill; when
-    that misses 4.5:1, it is transparent. It is derived again when the theme
-    sets the fill, its content, or `--color-neutral`.
 
   Fills are never derived: a `--color-<status>` or `--color-<status>-muted` the
   theme does not set is Core's. A role is derived again when the theme sets a

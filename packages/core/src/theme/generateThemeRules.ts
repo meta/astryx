@@ -555,7 +555,7 @@ const SCOPED_REFERENCE_SOURCES = new Map(SCOPED_REFERENCE_DEFAULTS);
 
 /** Colours INV17's derivation measures; a scope that sets one re-derives. */
 const STATUS_MEASURED =
-  /^--color-(?:accent|neutral|info|success|warning|error|on-|background-surface|background-card)/;
+  /^--color-(?:info|success|warning|error|on-|background-surface|background-card)/;
 
 const STATUS_ROLE_ORDER = new Map(
   SCOPED_REFERENCE_DEFAULTS.map(([role], index) => [role, index]),

@@ -260,42 +260,35 @@ describe('Button', () => {
     ['primary', 'accent'],
     ['destructive', 'error'],
   ] as const)(
-    'scopes the text and neutral roles to the %s fill pair for its content',
+    'gives a neutral Badge in a %s Button its fill pair inverted',
     (variant, fill) => {
       render(
         <Button
           label="Checkout"
           variant={variant}
-          tooltip="Opens checkout"
-          endContent={<Badge label={3} />}
+          endContent={<Badge data-testid="count" label={3} />}
         />,
       );
-      const button = screen.getByRole('button', {name: 'Checkout 3'});
-      const style = getComputedStyle(button);
-      expect(style.getPropertyValue('--color-text-primary')).toBe(
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe(
+        `var(--color-${fill})`,
+      );
+      expect(button.getPropertyValue('--_button-on-fill')).toBe(
         `var(--color-on-${fill})`,
       );
-      expect(style.getPropertyValue('--color-neutral')).toBe(
-        `var(--color-neutral-on-${fill})`,
-      );
-      // The tooltip renders beside the Button and keeps the page roles.
-      const tooltip = document.getElementById(
-        button.getAttribute('aria-describedby')!,
-      );
-      expect(tooltip).not.toBeNull();
-      expect(
-        getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
-      ).not.toBe(`var(--color-on-${fill})`);
+      const badge = getComputedStyle(screen.getByTestId('count'));
+      expect(badge.backgroundColor).toContain('--_button-on-fill');
+      expect(badge.color).toContain('--_button-fill');
     },
   );
 
   it.each(['secondary', 'ghost'] as const)(
-    'keeps the page text and neutral roles in a %s Button',
+    'leaves a neutral Badge in a %s Button on its page colours',
     variant => {
       render(<Button label="Inbox" variant={variant} />);
-      const style = getComputedStyle(screen.getByRole('button'));
-      expect(style.getPropertyValue('--color-text-primary')).toBe('');
-      expect(style.getPropertyValue('--color-neutral')).toBe('');
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe('');
+      expect(button.getPropertyValue('--_button-on-fill')).toBe('');
     },
   );
 

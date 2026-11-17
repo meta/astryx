@@ -16,9 +16,6 @@
  * - `--color-text-<status>`: the fill's hue at 4.5:1 on surface and card;
  * - `--color-on-<status>-muted`: the fill's hue at 4.5:1 on the pale fill over
  *   the surface.
- * - `--color-neutral-on-<fill>` for the accent and each status: the theme's
- *   light- or dark-mode `--color-neutral`, whichever contrasts more with the
- *   fill's content, or transparent when that misses 4.5:1.
  * Fills are never derived: a fill a theme does not set is Core's. Icon and
  * border roles alias the text role through the scoped status-role aliases in
  * generateThemeRules, so they are not computed here.
@@ -37,10 +34,6 @@ import type {RGBA} from '../utils/color';
 
 export const STATUS_NAMES = ['info', 'success', 'warning', 'error'] as const;
 export type StatusName = (typeof STATUS_NAMES)[number];
-
-/** The strong fills that carry a neutral tint role under their content. */
-export const TINTED_FILL_NAMES = ['accent', ...STATUS_NAMES] as const;
-export type TintedFillName = (typeof TINTED_FILL_NAMES)[number];
 
 type ResolvedThemeMode = 'light' | 'dark';
 
@@ -292,90 +285,5 @@ export function deriveStatusRoleTokens(
       entries.push([token, `light-dark(${toHex(light)}, ${toHex(dark)})`]);
     }
   }
-  const neutralSet = authored.has('--color-neutral');
-  const derivedContent = new Map(entries);
-  for (const fill of TINTED_FILL_NAMES) {
-    const token = neutralOnFillToken(fill);
-    const contentToken = `--color-on-${fill}`;
-    const affected =
-      neutralSet ||
-      authored.has(`--color-${fill}`) ||
-      authored.has(contentToken) ||
-      derivedContent.has(contentToken);
-    if (!affected || authored.has(token)) {
-      continue;
-    }
-    const content = derivedContent.get(contentToken);
-    const value = neutralOnFillValue(
-      fill,
-      content === undefined
-        ? resolved
-        : resolveModes({...localTokens, ...tokens, [contentToken]: content}),
-    );
-    if (value !== null) {
-      entries.push([token, value]);
-    }
-  }
   return entries;
-}
-
-/** The neutral tint laid over a strong fill, under that fill's content. */
-export function neutralOnFillToken(fill: TintedFillName): string {
-  return `--color-neutral-on-${fill}`;
-}
-
-/** Both colour modes of a theme's tokens, resolved through Core's defaults. */
-export function resolveThemeModes(
-  tokens: Record<string, unknown>,
-): Record<ResolvedThemeMode, Record<string, string>> {
-  return resolveModes(tokens);
-}
-
-/**
- * The `light-dark()` value of `--color-neutral-on-<fill>` for resolved tokens.
- * The theme's `--color-neutral` tints toward the page text of its own mode, so
- * one of its two mode values moves a fill away from light content and the
- * other away from dark content. The tint takes the one that contrasts more
- * with the fill's content. When even that one misses 4.5:1, the tint is
- * transparent, so the content keeps the contrast of its own fill pair.
- */
-export function neutralOnFillValue(
-  fill: TintedFillName,
-  resolved: Record<ResolvedThemeMode, Record<string, string>>,
-): string | null {
-  const tints = MODES.map(mode =>
-    parseConcreteColor(resolved[mode]['--color-neutral']),
-  );
-  const values: string[] = [];
-  for (const mode of MODES) {
-    const surface = parseConcreteColor(
-      resolved[mode]['--color-background-surface'],
-    );
-    const source = parseConcreteColor(resolved[mode][`--color-${fill}`]);
-    const contentColor = parseConcreteColor(
-      resolved[mode][`--color-on-${fill}`],
-    );
-    if (
-      surface === null ||
-      source === null ||
-      contentColor === null ||
-      tints.some(tint => tint === null)
-    ) {
-      return null;
-    }
-    const opaqueSurface = opaqueOver(surface, {r: 255, g: 255, b: 255, a: 1});
-    const base = opaqueOver(source, opaqueSurface);
-    const content = opaqueOver(contentColor, base);
-    const ranked = (tints as RGBA[])
-      .map(tint => ({
-        tint,
-        ratio: contrastRatio(content, composite(tint, base)),
-      }))
-      .sort((a, b) => b.ratio - a.ratio);
-    const best = ranked[0];
-    values.push(
-      best.ratio >= TEXT_RATIO ? toHex(best.tint) : toHex({...best.tint, a: 0}),
-    );
-  }
-  return `light-dark(${values[0]}, ${values[1]})`;
 }
