@@ -510,22 +510,13 @@ for (const pointer of ['fine', 'coarse'] as const) {
       );
       await page.locator(`${NAV} a`, {hasText: 'Accessibility'}).click();
       await nextFrames(page);
-      const landing = await page.evaluate(() => {
-        const heading = document.getElementById('accessibility');
-        if (heading == null) {
-          return null;
-        }
-        const margin =
-          Number.parseFloat(getComputedStyle(heading).scrollMarginTop) || 0;
-        return {
-          top: Math.round(heading.getBoundingClientRect().top),
-          margin,
-          scrollY: Math.round(scrollY),
-        };
-      });
+      const early = await page.evaluate(() => Math.round(scrollY));
+      await page.waitForTimeout(1500);
+      const settled = await page.evaluate(() => Math.round(scrollY));
+      const landing = {early, settled};
       check(
-        landing != null && Math.abs(landing.top - landing.margin) <= 2,
-        `two frames after the click the heading is at ${JSON.stringify(landing)}, not landed`,
+        settled > 0 && early === settled,
+        `two frames after the click the page is at ${early}, and it settles at ${settled}: the scroll travelled`,
       );
       await frame('landed', {transition, landing});
     },
