@@ -327,13 +327,13 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
-  it("keeps the first paint when the page's script throws, as in a frame that blocks storage", async () => {
+  it("keeps the first paint when the page's script throws", async () => {
     put(
-      'src/saves.tsx',
+      'src/throws.tsx',
       `import {useEffect} from 'react';
 export default function Page() {
   useEffect(() => {
-    window.localStorage.setItem('seen', '1');
+    throw new Error('the page broke after its first paint');
   }, []);
   return (
     <main>
@@ -344,18 +344,194 @@ export default function Page() {
 }
 `,
     );
-    await render('src/saves.tsx', {cwd: dir, out: 'saves.html'});
-    // An opaque origin, as in a frame without allow-same-origin: storage throws.
-    const dom = new JSDOM(read('saves.html'), {
+    await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
+    const dom = new JSDOM(read('throws.html'), {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       virtualConsole: new VirtualConsole(),
     });
     await new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    expect(() => dom.window.localStorage).toThrow();
     const root = dom.window.document.getElementById(ROOT_ID);
     expect(root?.textContent).toContain('Saved notes');
     expect(root?.textContent).toContain('Kept on screen');
+  }, 120_000);
+
+  it('copies through the copy command in a frame without the Clipboard API, so the page\u2019s own success and error paths run', async () => {
+    put(
+      'src/copy.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [status, setStatus] = useState('idle');
+  const [read, setRead] = useState('');
+  return (
+    <main>
+      <button type="button" onClick={() => navigator.clipboard.writeText('a,b\\n1,2').then(() => setStatus('copied'), e => setStatus(e.name))}>Copy CSV</button>
+      <button type="button" onClick={() => navigator.clipboard.readText().then(setRead, e => setRead(e.name))}>Paste</button>
+      <p id="status">{status}</p>
+      <p id="read">{read}</p>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
+    const settle = (/** @type {any} */ dom) =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    /**
+     * @param {boolean} works
+     * @param {(window: any) => void} [frame] what the frame gives the page
+     */
+    const open = (works, frame) => {
+      /** @type {string[]} */
+      const copied = [];
+      const dom = new JSDOM(read('copy.html'), {
+        runScripts: 'dangerously',
+        pretendToBeVisual: true,
+        beforeParse(window) {
+          frame?.(window);
+          // JSDOM has no copy command: this one fires the copy event, as a browser does.
+          window.document.execCommand = () => {
+            const event = new window.Event('copy', {cancelable: true});
+            Object.defineProperty(event, 'clipboardData', {
+              value: {
+                setData: (
+                  /** @type {string} */ _type,
+                  /** @type {string} */ text,
+                ) => copied.push(text),
+              },
+            });
+            window.dispatchEvent(event);
+            return works;
+          };
+        },
+      });
+      return {dom, copied};
+    };
+    const working = open(true);
+    await settle(working.dom);
+    const [copyButton, pasteButton] =
+      working.dom.window.document.querySelectorAll('button');
+    copyButton.click();
+    pasteButton.click();
+    await settle(working.dom);
+    expect(working.copied).toEqual(['a,b\n1,2']);
+    expect(
+      working.dom.window.document.getElementById('status')?.textContent,
+    ).toBe('copied');
+    expect(
+      working.dom.window.document.getElementById('read')?.textContent,
+    ).toBe('NotAllowedError');
+    working.dom.window.close();
+    const refused = open(false);
+    await settle(refused.dom);
+    refused.dom.window.document.querySelector('button')?.click();
+    await settle(refused.dom);
+    expect(
+      refused.dom.window.document.getElementById('status')?.textContent,
+    ).toBe('NotAllowedError');
+    refused.dom.window.close();
+    // Where the Clipboard API is there but refuses the write, or the frame's
+    // policy refuses clipboard-write, the copy command copies, as Core's hook does.
+    /** @type {string[]} */
+    const asked = [];
+    for (const frame of [
+      (/** @type {any} */ window) => {
+        Object.defineProperty(window.navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (/** @type {string} */ text) => {
+              asked.push(text);
+              return Promise.reject(
+                new window.DOMException('Write refused.', 'NotAllowedError'),
+              );
+            },
+          },
+        });
+      },
+      (/** @type {any} */ window) => {
+        Object.defineProperty(window.navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (/** @type {string} */ text) =>
+              asked.push(`policy ${text}`),
+          },
+        });
+        window.document.permissionsPolicy = {
+          allowsFeature: (/** @type {string} */ f) => f !== 'clipboard-write',
+        };
+      },
+    ]) {
+      const page = open(true, frame);
+      await settle(page.dom);
+      page.dom.window.document.querySelector('button')?.click();
+      await settle(page.dom);
+      expect(page.copied).toEqual(['a,b\n1,2']);
+      expect(
+        page.dom.window.document.getElementById('status')?.textContent,
+      ).toBe('copied');
+      page.dom.window.close();
+    }
+    expect(asked).toEqual(['a,b\n1,2']);
+  }, 120_000);
+
+  it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
+    put(
+      'src/filter.tsx',
+      `import {useEffect, useState} from 'react';
+const inBrowser = typeof window !== 'undefined';
+export default function Page() {
+  const [filter, setFilter] = useState(() => (inBrowser ? window.localStorage.getItem('filter') : null) ?? 'all');
+  useEffect(() => {
+    window.localStorage.setItem('filter', filter);
+    window.sessionStorage.setItem('seen', '1');
+  }, [filter]);
+  return (
+    <main>
+      <p id="filter">{filter}</p>
+      <button type="button" onClick={() => setFilter('open')}>Open only</button>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
+    const settle = (/** @type {any} */ dom) =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    // An opaque origin, as in a frame without allow-same-origin: storage throws.
+    const blocked = new JSDOM(read('filter.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await settle(blocked);
+    const doc = blocked.window.document;
+    expect(doc.getElementById('filter')?.textContent).toBe('all');
+    /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
+    await settle(blocked);
+    expect(doc.getElementById('filter')?.textContent).toBe('open');
+    expect(blocked.window.localStorage.getItem('filter')).toBe('open');
+    expect(blocked.window.sessionStorage.getItem('seen')).toBe('1');
+    // Items read, write, list and delete as properties, as in the browser's storage.
+    const stored = /** @type {any} */ (blocked.window.localStorage);
+    stored.theme = 'dark';
+    expect(stored.getItem('theme')).toBe('dark');
+    expect(stored.filter).toBe('open');
+    expect(Object.keys(stored).sort()).toEqual(['filter', 'theme']);
+    expect('theme' in stored).toBe(true);
+    delete stored.theme;
+    expect(stored.getItem('theme')).toBeNull();
+    expect(stored.length).toBe(1);
+    blocked.window.close();
+    // A real origin keeps the browser's own storage.
+    const open = new JSDOM(read('filter.html'), {
+      url: 'https://example.test/',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const real = open.window.localStorage;
+    await settle(open);
+    expect(open.window.localStorage).toBe(real);
+    expect(real.getItem('filter')).toBe('all');
+    open.window.close();
   }, 120_000);
 
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {

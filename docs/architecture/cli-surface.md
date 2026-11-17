@@ -672,8 +672,14 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
     the root that serves the run, in addition to what `spec:AST-081` FR12 finds
     there, and loads with FR12's validation, peer-range check, and provider
     identity rules. An approved name that root does not hold is left out.
+  - Outside a project, a page that `render` renders also takes from the root
+    that serves the run each package that root's `package.json` lists in
+    `dependencies` or `optionalDependencies`, such as an icon library its host
+    installed for pages, and `template`, `build` and `theme eject` do not name
+    those packages as missing (`spec:AST-081` FR3).
   - Enumeration through a root reads only the packages INV14 or `spec:AST-081`
-    FR12 name, and a root's own config is never read.
+    FR12 name, and the packages its `package.json` lists for the bullet above;
+    a root's own config is never read.
   - Every run a package set serves records, for each package it resolves, its
     name, version, and whether it comes from the project or the package set, and
     the host entry returns that record with the run's result (`spec:AST-081`
@@ -773,6 +779,7 @@ non-interactive guarantee.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
+- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental render` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
