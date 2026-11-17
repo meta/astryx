@@ -2153,7 +2153,7 @@ export async function screenshot(
 }
 
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
 /** The time a batch adds to its browser's bound for each page after the first. */
@@ -2367,7 +2367,7 @@ export function pictureFontNotes(stdout) {
  * The text a picture script measured cut short, from the line it prints
  * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
  * @param {string} stdout what the picture script printed
- * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}}
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>}}
  */
 function measuredCutShort(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
@@ -2388,6 +2388,7 @@ function measuredCutShort(stdout) {
         text: x.text,
         whole: x.whole === true,
         ...(x.broken === true ? {broken: true} : {}),
+        ...(x.overlaps === true ? {overlaps: true} : {}),
       })),
   };
 }
