@@ -7,7 +7,7 @@
  * @output Proof that useCutTextOnKeyboardFocus stays internal: no entry point
  *   and no package export reaches it
  * @position Export lock for useCutTextOnKeyboardFocus in
- *   /packages/core/src/Text/cutTextOnKeyboardFocus.ts
+ *   /packages/core/src/Text/cutTextOnKeyboardFocus.tsx
  */
 
 import {readFileSync} from 'node:fs';

@@ -60,11 +60,27 @@ test('keyboard focus on a cut label shows it in full, undescribed, and Escape cl
 test('a keyboard focus that arrives as the page loads shows the tooltip once its module loads', async ({
   page,
 }) => {
-  await page.goto(story(), {waitUntil: 'commit'});
+  // Holds the request for the tooltip's module, so focus arrives while it is
+  // still loading.
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  let isRequested = false;
+  await page.route(/cutText[^/]*\.js(\?.*)?$/, async route => {
+    isRequested = true;
+    await held;
+    await route.continue();
+  });
+  await page.goto(story());
   const button = page.getByRole('button', {name: LONG});
   await button.waitFor();
+  await expect.poll(() => isRequested).toBe(true);
   await page.keyboard.press('Tab');
   await expect(button).toBeFocused();
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  release();
   await expect(page.getByRole('tooltip')).toHaveText(LONG);
 });
 

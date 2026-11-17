@@ -262,6 +262,30 @@ describe('TableHeaderCell truncation tooltip with row selection', () => {
 });
 
 describe('TableHeaderCell truncation tooltip with a field in the header', () => {
+  it('shows on keyboard focus after a press on the header outside its sort control', async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(<SortableTable />);
+    const header = screen.getByRole('columnheader');
+    const sortButton = screen.getByRole('button', {name: HEADING});
+    act(() => {
+      fireEvent.pointerDown(header, {pointerType: 'mouse'});
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      sortButton.focus();
+    });
+    await waitFor(() => {
+      expect(tooltip()).toHaveTextContent(HEADING);
+    });
+  });
+
   it('shows nothing when a pointer focuses a field in a cut header', async () => {
     restore = withOverflow(true);
     const realMatches = Element.prototype.matches;

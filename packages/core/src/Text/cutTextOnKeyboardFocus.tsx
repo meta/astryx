@@ -23,6 +23,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {createModuleLoader} from '../utils/moduleLoader';
 import {isElement} from '../utils/nodeType';
 
@@ -56,7 +57,6 @@ export interface CutTextOnKeyboardFocus {
 /**
  * Shows a component's cut text in an undescribed tooltip on keyboard focus:
  * a Button's cut label, a table header cell's cut heading. When keyboard focus
- * (`:focus-visible`, with no press inside the anchor since focus entered it)
  * reaches the anchor or an element inside it, the loaded
  * module measures `measureRef`'s text; if a box cuts it short, it shows until
  * focus leaves the anchor, Escape, or a press. A caller's own tooltip on the
@@ -79,9 +79,7 @@ export function useCutTextOnKeyboardFocus({
   const [loaded, setLoaded] = useState(() => cutTextModule.loaded());
   // A keyboard focus that arrived before the module loaded.
   const pendingRef = useRef<Element | null>(null);
-  // A press inside the anchor since focus entered it. A text field a pointer
-  // focused still matches `:focus-visible`, so the press rules it out.
-  const isPressedRef = useRef(false);
+  const readModality = useInteractionModalityTrackingFor(anchorRef, isEnabled);
   // Syncs with the module loader: the module loads after the page's first
   // paint, and a focus that arrived before it shows then.
   useEffect(() => {
@@ -110,11 +108,13 @@ export function useCutTextOnKeyboardFocus({
   const hide = useCallback(() => setCutText(null), []);
   const onFocus = (event: FocusEvent<HTMLElement>) => {
     const target = event.target;
+    // `:focus-visible` also matches a text field a pointer focused, so the
+    // modality reader decides: only keyboard focus counts.
     if (
       !isEnabled ||
-      isPressedRef.current ||
       !isElement(target) ||
-      !target.matches(':focus-visible')
+      !target.matches(':focus-visible') ||
+      readModality() !== 'keyboard'
     ) {
       return;
     }
@@ -128,7 +128,6 @@ export function useCutTextOnKeyboardFocus({
     const next = event.relatedTarget;
     if (!(isElement(next) && anchorRef.current?.contains(next))) {
       pendingRef.current = null;
-      isPressedRef.current = false;
       setCutText(null);
     }
   };
@@ -143,9 +142,6 @@ export function useCutTextOnKeyboardFocus({
       ) : null,
     onFocus,
     onBlur,
-    onPointerDown: () => {
-      isPressedRef.current = true;
-      hide();
-    },
+    onPointerDown: hide,
   };
 }

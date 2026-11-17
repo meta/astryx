@@ -3,7 +3,7 @@
 'use client';
 
 /**
- * @file CutTextTooltip.tsx
+ * @file cutText.tsx
  * @input The anchor keyboard focus reached, the element whose text a box may
  *   cut short, and the focused element
  * @output Exports `cutTextFor`, which measures that text, and
