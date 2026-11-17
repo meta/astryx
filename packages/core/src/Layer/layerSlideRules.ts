@@ -8,15 +8,18 @@
  *   anchor
  * @position Layer runtime geometry; the slide of spec:AST-059 FR4
  *
- * The slide is a position option whose area spans the whole alignment axis,
+ * Every option places the layer with `anchor()` insets, not a position area.
+ * A position area grows to include an anchor that runs past the viewport, so
+ * an option can fit there while the layer leaves the screen. Insets resolve
+ * against the viewport itself.
+ *
+ * The slide is a position option whose insets span the whole alignment axis,
  * so a layer wider than the room beside its trigger on both sides still
- * reaches the side of the trigger that has room on the placement axis. A
- * plain `<position-area>` fallback would keep the base margins and insets,
- * which belong to an edge-aligned layer: the alignment-axis gutter on one
- * edge only, and the clearance/gutter pair of the base side on the placement
- * axis. Each slide option therefore carries its own declarations — the
- * gutter on both alignment-axis edges, and the clearance facing the anchor
- * with the gutter on the far edge of the side it lands on.
+ * reaches the side of the trigger that has room on the placement axis. Each
+ * slide option carries its own declarations: the gutter on both
+ * alignment-axis edges with the layer centred on its anchor, and the
+ * clearance facing the anchor with the gutter on the far edge of the side it
+ * lands on.
  *
  * An above or below layer that must never settle over its anchor
  * (spec:AST-059 FR4, Tooltip) uses one combined fallback list from the start,
@@ -31,9 +34,7 @@
  * room on both sides is sized to a room. No option is sized to whatever room
  * is left: a browser keeps a layer on the option it last used for as long as
  * that option still fits, so such an option would hold an open layer on a side
- * shrunk to a sliver after its anchor moved. Chromium applies a position
- * option's width and height properties but not their min/max forms, so the
- * sizes are `inline-size` and `block-size`. Inside a scrolling panel, Chromium
+ * shrunk to a sliver after its anchor moved. Inside a scrolling panel, Chromium
  * does not choose an option again while the panel scrolls, and it shifts a box
  * that runs out of room back into the room, onto the anchor. So the layer and
  * every option align `unsafe` toward the anchor on the placement axis: a box
@@ -48,23 +49,27 @@
  * inside a role-bearing layer would name it to assistive technology.
  */
 
-import type {LayerAlignment, LayerPlacement} from './useLayer';
+import type {LayerPlacement} from './useLayer';
 import {layerViewportInset} from './layerViewportInset.stylex';
 
 /** The custom property a layer writes its anchor clearance to. */
 export const LAYER_CLEARANCE_PROPERTY = '--_astryx-layer-clearance';
 
+/**
+ * The custom property a layer writes its software-keyboard lift to.
+ * `layerViewportInset.lift` reads it in every block inset, so the lift moves
+ * the layer toward the block-start in every option.
+ */
+export const LAYER_LIFT_PROPERTY = '--_astryx-layer-lift';
+
 type Side = 'same' | 'opposite';
 
-export function slideRuleName(
-  placement: LayerPlacement,
-  alignment: LayerAlignment,
-  side: Side,
-): string {
-  return `--astryx-layer-slide-${placement}-${alignment}-${side}`;
+export function slideRuleName(placement: LayerPlacement, side: Side): string {
+  return `--astryx-layer-slide-${placement}-${side}`;
 }
 
 const CLEARANCE = `var(${LAYER_CLEARANCE_PROPERTY}, 0px)`;
+const LIFT = layerViewportInset.lift;
 
 /** Two declarations: the `env()`-less fallback first, then the full value. */
 function pair(property: string, fallback: string, value: string): string {
@@ -94,47 +99,62 @@ const OPPOSITE: Record<LayerPlacement, LayerPlacement> = {
   end: 'start',
 };
 
-function areaFor(placement: LayerPlacement): string {
+/**
+ * The placement axis of a layer resting on `placement`'s side: the inset on
+ * the anchor side meets the anchor's far edge, the other inset meets the
+ * viewport edge, and the box aligns toward the anchor. The anchor clearance
+ * is the margin on the anchor side and the gutter the margin on the far side.
+ */
+function placementGeometry(placement: LayerPlacement): string {
   switch (placement) {
     case 'above':
-      return 'self-block-start span-all';
+      return `inset-block-end:calc(anchor(outside) + ${LIFT});inset-block-start:calc(0px - ${LIFT});align-self:self-end;margin-block-end:${CLEARANCE};${blockGutter('margin-block-start')}`;
     case 'below':
-      return 'self-block-end span-all';
+      return `inset-block-start:calc(anchor(outside) - ${LIFT});inset-block-end:${LIFT};align-self:self-start;margin-block-start:${CLEARANCE};${blockGutter('margin-block-end')}`;
     case 'start':
-      return 'self-inline-start span-all';
+      return `inset-inline-end:anchor(outside);inset-inline-start:0;justify-self:self-end;margin-inline-end:${CLEARANCE};${inlineGutter('margin-inline-start')}`;
     case 'end':
-      return 'self-inline-end span-all';
+      return `inset-inline-start:anchor(outside);inset-inline-end:0;justify-self:self-start;margin-inline-start:${CLEARANCE};${inlineGutter('margin-inline-end')}`;
   }
 }
 
-/** The placement-axis margins for a layer resting on `placement`'s side. */
-function placementMargins(placement: LayerPlacement): string {
-  switch (placement) {
-    case 'above':
-      return `margin-block-end:${CLEARANCE};${blockGutter('margin-block-start')}`;
-    case 'below':
-      return `margin-block-start:${CLEARANCE};${blockGutter('margin-block-end')}`;
-    case 'start':
-      return `margin-inline-end:${CLEARANCE};${inlineGutter('margin-inline-start')}`;
-    case 'end':
-      return `margin-inline-start:${CLEARANCE};${inlineGutter('margin-inline-end')}`;
-  }
-}
-
-/** The alignment-axis gutter on both edges, with the base inset reset. */
-function alignmentMargins(placement: LayerPlacement): string {
+/**
+ * The alignment axis spanning the whole viewport: both insets meet the
+ * viewport edges, the gutter is the margin on both edges, and the box centres
+ * on the anchor. `anchor-center` shifts the box the least distance that keeps
+ * its margin box inside the viewport.
+ */
+function spanGeometry(placement: LayerPlacement): string {
   return placement === 'above' || placement === 'below'
-    ? `${inlineGutter('margin-inline-start')}${inlineGutter('margin-inline-end')}inset-inline-start:0;inset-inline-end:0;`
-    : `${blockGutter('margin-block-start')}${blockGutter('margin-block-end')}inset-block-start:0;inset-block-end:0;`;
+    ? `inset-inline-start:0;inset-inline-end:0;justify-self:anchor-center;${inlineGutter('margin-inline-start')}${inlineGutter('margin-inline-end')}`
+    : `inset-block-start:calc(0px - ${LIFT});inset-block-end:${LIFT};align-self:anchor-center;${blockGutter('margin-block-start')}${blockGutter('margin-block-end')}`;
 }
 
-function rule(
-  placement: LayerPlacement,
-  alignment: LayerAlignment,
-  side: Side,
-): string {
+/** The name of the last-resort option for content taller than either side. */
+export function coverRuleName(placement: LayerPlacement): string {
+  return `--astryx-layer-cover-${placement}`;
+}
+
+/**
+ * `cover`: the last resort, for content that fits on neither side of the
+ * trigger. The placement axis spans the viewport between both gutters, and
+ * the box rests on the far edge of its preferred side, so it moves the least
+ * distance from its preferred position that brings it inside the viewport.
+ * It may cover its trigger. The alignment axis keeps the layer's own
+ * geometry. The browser's overflow shift would instead keep the box inside
+ * the page's scrollable area, which can run past the viewport.
+ */
+function coverRule(placement: LayerPlacement): string {
+  const geometry =
+    placement === 'above' || placement === 'below'
+      ? `inset-block-start:calc(0px - ${LIFT});inset-block-end:${LIFT};${blockGutter('margin-block-start')}${blockGutter('margin-block-end')}align-self:${placement === 'below' ? 'self-end' : 'self-start'};`
+      : `inset-inline-start:0;inset-inline-end:0;${inlineGutter('margin-inline-start')}${inlineGutter('margin-inline-end')}justify-self:${placement === 'end' ? 'self-end' : 'self-start'};`;
+  return `@position-try ${coverRuleName(placement)}{${geometry}}`;
+}
+
+function rule(placement: LayerPlacement, side: Side): string {
   const landing = side === 'same' ? placement : OPPOSITE[placement];
-  return `@position-try ${slideRuleName(placement, alignment, side)}{position-area:${areaFor(landing)};${placementMargins(landing)}${alignmentMargins(landing)}}`;
+  return `@position-try ${slideRuleName(placement, side)}{${placementGeometry(landing)}${spanGeometry(landing)}}`;
 }
 
 const PLACEMENTS: ReadonlyArray<LayerPlacement> = [
@@ -143,7 +163,6 @@ const PLACEMENTS: ReadonlyArray<LayerPlacement> = [
   'start',
   'end',
 ];
-const ALIGNMENTS: ReadonlyArray<LayerAlignment> = ['start', 'center', 'end'];
 
 /**
  * The placement-axis alignment of a layer that keeps its anchor clear, on
@@ -174,17 +193,11 @@ export function fitRuleName(side: 'above' | 'below'): string {
 /**
  * `beside`: the slide's geometry on an inline side, at the content's own
  * inline size. A content-sized layer would otherwise wrap to whatever sliver
- * of room the trigger leaves and always fit. On the block axis it drops the
- * layer's own alignment toward its anchor, so it centres on the trigger and
- * slides into view.
+ * of room the trigger leaves and always fit. On the block axis it centres on
+ * the trigger and slides into view.
  */
 function besideRule(side: 'start' | 'end'): string {
-  return `@position-try ${besideRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}inline-size:max-content;align-self:normal;justify-self:${anchorClearAlignment(side)};}`;
-}
-
-/** The block size of the room on one block side: the area minus its margins. */
-function roomCap(gutter: string): string {
-  return `calc(100% - ${CLEARANCE} - ${gutter})`;
+  return `@position-try ${besideRuleName(side)}{${placementGeometry(side)}${spanGeometry(side)}inline-size:max-content;justify-self:${anchorClearAlignment(side)};}`;
 }
 
 /**
@@ -198,20 +211,18 @@ function halfRoom(viewport: string, gutter: string): string {
 }
 
 /**
- * `fit`: the slide's geometry on a block side, sized to the room on that
- * side; the layer scrolls what does not fit (FR3). It is at least half of the
+ * `fit`: the slide's geometry on a block side, stretched to the room on that
+ * side; the layer scrolls what does not fit (FR3). Its minimum is half of the
  * room the trigger leaves, so it overflows, and does not fit, on the side
  * with less room.
  */
 function fitRule(side: 'above' | 'below'): string {
-  const size = (viewport: string, gutter: string) =>
-    `max(${roomCap(gutter)}, ${halfRoom(viewport, gutter)})`;
-  const blockSize = pair(
-    'block-size',
-    size('100vh', layerViewportInset.gutterBlockFallback),
-    size('100dvb', layerViewportInset.gutterBlock),
+  const minBlockSize = pair(
+    'min-block-size',
+    halfRoom('100vh', layerViewportInset.gutterBlockFallback),
+    halfRoom('100dvb', layerViewportInset.gutterBlock),
   );
-  return `@position-try ${fitRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}${blockSize}align-self:${anchorClearAlignment(side)};}`;
+  return `@position-try ${fitRuleName(side)}{${placementGeometry(side)}${spanGeometry(side)}block-size:-webkit-fill-available;block-size:stretch;${minBlockSize}align-self:${anchorClearAlignment(side)};}`;
 }
 
 /**
@@ -236,17 +247,16 @@ export function getAnchorClearFallbacks(placement: LayerPlacement): string {
 }
 
 /**
- * Every slide rule, for every placement and alignment, and the beside and fit
+ * Every slide and cover rule, for every placement, and the beside and fit
  * rules.
  */
 export function slideRulesCss(): string {
   return [
-    ...PLACEMENTS.flatMap(placement =>
-      ALIGNMENTS.flatMap(alignment => [
-        rule(placement, alignment, 'same'),
-        rule(placement, alignment, 'opposite'),
-      ]),
-    ),
+    ...PLACEMENTS.flatMap(placement => [
+      rule(placement, 'same'),
+      rule(placement, 'opposite'),
+      coverRule(placement),
+    ]),
     besideRule('end'),
     besideRule('start'),
     fitRule('above'),

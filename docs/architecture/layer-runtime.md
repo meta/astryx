@@ -149,19 +149,26 @@ owns Theme provider behavior; this record owns where a layer's DOM is hosted.
 
 - **context / anchor:** the anchor (the trigger unless a separate anchor is
   named) receives a unique CSS `anchor-name`; the
-  surface receives `position-anchor`, logical `position-area`, and ordered
-  fallback positions;
+  surface receives `position-anchor`, logical insets that call `anchor()`,
+  and ordered fallback positions;
 - **context / custom:** the anchor and `position-anchor` relationship remain,
   while the caller owns geometry, fallback, offset, and direction handling; and
 - **fixed:** the caller supplies viewport `x` and `y` coordinates and receives no
   CSS-anchor geometry.
 
 Anchor names form a list so several layers may share one anchor without
-clobbering one another. Standard placement uses the `self-*` logical keyword
-family so inherited direction controls RTL behavior. Every anchored placement
-can flip across either axis. Centered placements also gain span fallbacks so the
-surface can move along the alignment axis near viewport edges. Clearance is
-applied to both edges of the placement axis so a flip retains the gap.
+clobbering one another. Standard placement uses logical inset properties with
+`anchor(inside)` and `anchor(outside)`, and `self-*` alignment, so inherited
+direction controls RTL behavior. Insets resolve against the viewport itself.
+A position area is not used: it grows to include an anchor that runs past the
+viewport, so a layer placed in one could fit there while it left the screen.
+On the placement axis, the inset on the anchor side meets the anchor's far
+edge and the other inset meets the viewport edge. On the alignment axis, an
+aligned layer's inset meets its anchor's edge and a centered layer spans the
+viewport with `anchor-center`. Every anchored placement can flip across either
+axis; a flip mirrors the insets, margins and self alignment together.
+Clearance is applied to both edges of the placement axis so a flip retains the
+gap.
 
 Known limitation: a trigger inside SVG `<foreignObject>` cannot be a CSS
 anchor in Chromium, so an anchored surface for it opens at the viewport corner.
@@ -191,9 +198,12 @@ end inside the gutter or under a declared bar does not fit there and the next
 option is tried. On the placement axis the gutter rides the far edge beside
 the anchor clearance on the near edge; on the alignment axis it rides the far
 edge of an aligned layer — one on the anchor-facing edge would push the layer
-off its anchor — and both edges of a centered one. The flip tactics swap the
-margins with the area, so the clearance stays on the anchor side and the gutter
-on the far side, and the placement-axis gutter is one value for both edges —
+off its anchor — and both edges of a centered one. The aligned edge's inset is
+the larger of the gutter and the anchor's edge, so an anchor that runs past a
+viewport edge, such as one in a panel that scrolls sideways, never takes the
+layer past the gutter. The flip tactics swap the insets and margins together,
+so the clearance stays on the anchor side and the gutter on the far side, and
+the placement-axis gutter is one value for both edges —
 the larger of the two block gutters — so a bar declared on one block edge keeps
 a layer the same distance from the opposite edge.
 
@@ -209,14 +219,15 @@ painted surface with the same definition and clamps any minimum of its own
 expression, because a CSS minimum otherwise wins over a maximum.
 
 The fallback order is the runtime's: preferred position; flip across the
-placement axis; flip across the alignment axis; both; then, while the anchor is
+placement axis; flip across the alignment axis; then, while the anchor is
 in view, the slide: named `@position-try` options (`Layer/layerSlideRules.ts`)
-whose area spans the whole alignment axis, same side of the anchor first,
+whose insets span the whole alignment axis, same side of the anchor first,
 opposite side second, each carrying the gutter on both alignment-axis edges and
-the clearance-and-gutter pair of the side it lands on, which the browser's
-overflow alignment shifts the least distance that brings the margin box inside
-the viewport. Centered layers keep their one-sided spans ahead of the full
-span. The slide is its own option because a layer wider than the room on either
+the clearance-and-gutter pair of the side it lands on, centred on the anchor
+with `anchor-center`, which shifts the box the least distance that brings the
+margin box inside the viewport. A centered layer already slides that way in
+its own position, and the opposite slide serves a layer that needs both flips.
+The slide is its own option because a layer wider than the room on either
 side of its anchor overflows every flipped option on the alignment axis, and
 the browser would otherwise keep the base option and never move the layer to
 the side of the anchor with room on the placement axis. The rules are one
@@ -225,9 +236,14 @@ the layer's first paint — never inside the layer, where a role-bearing layer's
 text would name them to assistive technology, and never beside it, where they
 would change a parent's last child.
 Content taller than the placement axis can hold on either side is capped to the
-viewport minus both gutters and shifted into the viewport by the browser; its
-margin box stays inside the viewport, so it keeps its anchor clearance from the
-edge it meets. A layer that keeps its anchor clear (Tooltip) carries
+viewport minus both gutters and takes the last option, the cover: its
+placement-axis insets span the viewport between both gutters and it rests on
+the far edge of its preferred side, so it moves the least distance from its
+preferred position that brings it inside the viewport, and it may cover its
+anchor. The browser's own overflow shift is not used for this: it keeps a box
+inside the page's scrollable area, which can run past the viewport. Chromium
+tries no more than five options after a layer's own position, so the standard
+list is the two flips, the two slides and the cover. A layer that keeps its anchor clear (Tooltip) carries
 one combined list from its first frame, in place of the standard list
 (`spec:AST-059` DEC-7): the preferred block side at its own size, then the
 opposite block side at its own size, then beside the anchor on the inline end,
@@ -264,7 +280,8 @@ with the old ones, and the browser fires their cancel and start events), and a
 finished animation's start time is counted again from now while its held end
 time is kept.
 Once the anchor has left the viewport the runtime pins the layer's
-self-alignment `unsafe` toward the anchor, so the layer holds the position its
+self-alignment `unsafe` toward the anchor and its aligned inset to the
+anchor's edge without the gutter's hold, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. Components
 pass no fallbacks of their own to an anchor-mode layer.
 

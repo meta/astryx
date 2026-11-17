@@ -1284,6 +1284,29 @@ export const GutterAtTheEdge: Story = {
   },
 };
 
+export const AnchorRunsPastTheEdge: Story = {
+  name: 'Viewport inset: anchor runs past the viewport edge',
+  parameters: viewportParameters,
+  render: () => (
+    <ViewportLayer
+      at={{top: 120, right: -40}}
+      width={240}
+      caption="FR1, FR4 — The trigger runs 40px past the inline-end edge, as a control in a panel that scrolls sideways does. The start-aligned 240px layer does not fit beside it, so it flips to end alignment, and its inline-end edge stops 16px short of the viewport edge, not at the trigger's hidden edge.">
+      Kept on screen
+    </ViewportLayer>
+  ),
+  play: async ({canvasElement}) => {
+    const r = await open(canvasElement);
+    if (r.trigger.right <= r.vw) {
+      throw new Error(
+        `The trigger must run past the edge: its end edge is ${r.trigger.right} in a ${r.vw}px viewport`,
+      );
+    }
+    assertWidth(r, 240, 'anchor past the edge');
+    assertOnScreen(r, 'anchor past the edge');
+  },
+};
+
 export const SidePlacementWithAWidth: Story = {
   name: 'Viewport inset: side placement with a width',
   parameters: viewportParameters,

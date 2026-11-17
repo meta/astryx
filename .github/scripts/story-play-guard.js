@@ -310,6 +310,11 @@ const TARGETS = [
       guards:
         'FR1: a wrapping layer beside a flush trigger stops 16px short of the viewport edge',
     },
+    {
+      story: 'core-layer--anchor-runs-past-the-edge',
+      guards:
+        'FR1/FR4: a layer whose trigger runs past the viewport edge stays inside the gutters',
+    },
   ].flatMap(target => [
     {component: 'Layer', ...target},
     {

@@ -49,6 +49,9 @@ const INSET_INLINE_END = 'var(--astryx-layer-inset-inline-end, 0px)';
 // (useLayer.tsx's `keyboardCap`, from useLayerKeyboardClearance.ts). An
 // uncapped layer declares a limit out of reach.
 const KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
+// Each lifted layer's own style declares how far the software keyboard moves
+// it toward the block-start (`LAYER_LIFT_PROPERTY` in layerSlideRules.ts).
+const LIFT_PROPERTY = '--_astryx-layer-lift';
 
 const GUTTER_BLOCK_START = `calc(max(${SPACING}, env(safe-area-inset-top, 0px)) + ${INSET_BLOCK_START})`;
 const GUTTER_BLOCK_END = `calc(max(${SPACING}, env(safe-area-inset-bottom, 0px)) + ${INSET_BLOCK_END})`;
@@ -92,5 +95,10 @@ export const layerViewportInset = stylex.defineConsts({
    * it caps the layer.
    */
   maxBlockSize: `min(calc(100dvb - ${GUTTER_BLOCK_START} - ${GUTTER_BLOCK_END}), var(${KEYBOARD_CAP_PROPERTY}, 100dvb))`,
+  /**
+   * How far the software keyboard lifts the layer toward the block-start.
+   * Every block-start inset subtracts it and every block-end inset adds it.
+   */
+  lift: `var(${LIFT_PROPERTY}, 0px)`,
   maxBlockSizeFallback: `min(calc(100vh - ${SPACING} - ${SPACING} - ${INSET_BLOCK_START} - ${INSET_BLOCK_END}), var(${KEYBOARD_CAP_PROPERTY}, 100vh))`,
 });
