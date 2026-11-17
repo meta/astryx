@@ -17,7 +17,12 @@ export default function TextWrap() {
         <Text type="label" display="block">
           Wrap (default)
         </Text>
-        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>
+        <div
+          style={{
+            border: '1px solid var(--color-border)',
+            padding: 8,
+            width: 200,
+          }}>
           <Text type="body" textWrap="wrap">
             This text wraps normally at word boundaries when it reaches the
             edge.
@@ -30,7 +35,7 @@ export default function TextWrap() {
         </Text>
         <div
           style={{
-            border: '1px solid #ccc',
+            border: '1px solid var(--color-border)',
             padding: 8,
             width: 200,
             overflow: 'hidden',
@@ -44,7 +49,12 @@ export default function TextWrap() {
         <Text type="label" display="block">
           Balance
         </Text>
-        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>
+        <div
+          style={{
+            border: '1px solid var(--color-border)',
+            padding: 8,
+            width: 200,
+          }}>
           <Text type="body" textWrap="balance">
             This text is balanced for better visual appearance across lines.
           </Text>
@@ -54,7 +64,12 @@ export default function TextWrap() {
         <Text type="label" display="block">
           Pretty
         </Text>
-        <div style={{border: '1px solid #ccc', padding: 8, width: 200}}>
+        <div
+          style={{
+            border: '1px solid var(--color-border)',
+            padding: 8,
+            width: 200,
+          }}>
           <Text type="body" textWrap="pretty">
             This text uses pretty wrap to avoid orphans at the end of
             paragraphs.

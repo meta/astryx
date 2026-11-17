@@ -44,6 +44,7 @@ import {
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {useToast} from '@astryxdesign/core/Toast';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   PencilIcon,
   DocumentDuplicateIcon,
@@ -598,7 +599,7 @@ function getColumns({
   return [
     {
       key: 'status',
-      header: '',
+      header: <VisuallyHidden>Status</VisuallyHidden>,
       width: pixel(44),
       renderCell: task => (
         <Center axis="horizontal">
@@ -677,7 +678,7 @@ function getColumns({
     },
     {
       key: 'actions',
-      header: '',
+      header: <VisuallyHidden>Actions</VisuallyHidden>,
       width: pixel(56),
       renderCell: task => (
         <DropdownMenu

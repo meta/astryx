@@ -18,6 +18,7 @@ import {
   searchedComponents,
 } from '../../search/search.mjs';
 import {coreDirOrThrow} from '../../error.mjs';
+import {runBase} from '../../../foundation/bases/resolve.mjs';
 import {getResultCoverage} from '../../search/coverage.mjs';
 import {CORE_PROVIDER_ID} from '../../../foundation/identity/providers.mjs';
 import {
@@ -25,7 +26,7 @@ import {
   loadTemplates,
   loadWeights,
   pageDestination,
-  requireBuildCoreDir,
+  buildCoreContentDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind, nameTerms} from './kind.mjs';
@@ -85,7 +86,6 @@ export const FOUNDATION = [
   'Divider',
 ];
 
-const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -107,6 +107,10 @@ const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
  * @property {SearchResultEntry[]} blocks the blocks build names itself
  * @property {SearchResultEntry[]} domain
  * @property {string[]} kitBlocks the names of `blocks`
+ * @property {string[]} frame the always-on page-shell components; none on a
+ *   base other than Core
+ * @property {string[]} foundation the always-on layout, type, and action
+ *   components; none on a base other than Core
  * @property {BlockScore[]} searched every block search returned, in its order
  * @property {Map<string, SearchResultEntry>} searchedEntries search's entry for each of those blocks (the first of a name)
  * @property {Map<string, string>} blockText each of those blocks' display name and description, from the catalog
@@ -159,7 +163,13 @@ export async function kitSignals(query, options = {}) {
   const {cwd = process.cwd(), type, limit = 60} = options;
   // A kit is built from Core's components, hooks, and templates. An open
   // search without core covers the docs alone, so the kit asks for core here.
-  if (type !== 'doc') coreDirOrThrow(requireBuildCoreDir, cwd);
+  if (type !== 'doc') coreDirOrThrow(buildCoreContentDir, cwd);
+  // The always-on names are Core components, so they belong to a run on Core
+  // and to no other base.
+  const run = runBase(cwd);
+  const onCore = !run.ok || run.base.core;
+  const frame = onCore ? FRAME : [];
+  const foundation = onCore ? FOUNDATION : [];
   // search()'s JSDoc @returns widens results to object[]; the SearchResponse
   // shape is the contract (api/search/search.type.mjs). Cast locally rather than
   // tightening the search @returns (a separate follow-up).
@@ -235,12 +245,13 @@ export async function kitSignals(query, options = {}) {
   const blocks = searchedBlocks
     .filter(r => r.score >= DOMAIN_FLOOR)
     .slice(0, 5);
+  const always = new Set([...frame, ...foundation]);
   const domain = results
     .filter(
       r =>
         (r.domain === 'component' || r.domain === 'hook') &&
         r.score >= DOMAIN_FLOOR &&
-        !ALWAYS.has(r.name),
+        !always.has(r.name),
     )
     .slice(0, 6);
   const directMatch =
@@ -362,6 +373,8 @@ export async function kitSignals(query, options = {}) {
     blocks: blocksKept,
     domain: domainKept,
     kitBlocks: blocksKept.map(r => r.name),
+    frame,
+    foundation,
     searched: searchedBlocks.map(blockScore),
     searchedEntries: new Map(
       [...searchedBlocks].reverse().map(r => [r.name, r]),

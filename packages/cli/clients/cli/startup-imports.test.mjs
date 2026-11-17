@@ -46,6 +46,25 @@ const LARGE_CLI_MODULES = [
   'foundation/integrations/integrations.mjs',
 ];
 
+/**
+ * The CLI's own modules that only a run that resolves its base uses: the base
+ * resolver, and the identity code that brands provider names. A run whose
+ * base is plainly Core, as every run that prints the version is, answers
+ * without them.
+ */
+const BASE_RESOLUTION_MODULES = [
+  'foundation/bases/resolve.mjs',
+  'foundation/identity/provider-identity.mjs',
+  'foundation/identity/providers.mjs',
+];
+
+/**
+ * The most CLI modules a run that prints the version loads. Each one costs
+ * every run its load time, so a module new to this path takes the place of
+ * one, or raises this number on purpose.
+ */
+const VERSION_RUN_MODULE_LIMIT = 73;
+
 /** The runs that print the version, as text or as JSON. */
 const VERSION_RUNS = ['--version', '-V', '--version --json'];
 
@@ -154,6 +173,28 @@ describe('a run of the bin that prints the version', () => {
           ),
         ),
       ).toEqual([]);
+    },
+  );
+});
+
+describe('a run of the bin that prints the version, and its base', () => {
+  it.each(VERSION_RUNS)(
+    'loads no base resolver or identity module (astryx %s)',
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(
+        BASE_RESOLUTION_MODULES.filter(file => cliModules.has(file)),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(VERSION_RUNS)(
+    `loads at most ${VERSION_RUN_MODULE_LIMIT} of the CLI's own modules (astryx %s)`,
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(cliModules.size).toBeLessThanOrEqual(VERSION_RUN_MODULE_LIMIT);
     },
   );
 });

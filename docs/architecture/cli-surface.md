@@ -129,7 +129,10 @@ and remains available through explicit Core package selection.
 - **INV2 — Every `--json` emission is one valid envelope.** Success is
   `{apiVersion, type, data}` plus optional `package` (INV28) and `meta`, which
   carries `answeredBy` on every success (`spec:AST-081` FR5). Failure is
-  `{apiVersion, error, code}` plus optional `suggestions`. There is no third
+  `{apiVersion, error, code}` plus optional `suggestions`, and the
+  `requirement` member on `ERR_BASE_CAPABILITY` (`spec:AST-114` FR8). In a run
+  whose base is not Core, `answeredBy` also names the base (`spec:AST-114`
+  FR2). There is no third
   shape, no partial write, and no raw stack trace: an uncaught throw becomes an
   envelope at the bin error boundary.
 - **INV3 — The code is the contract; the prose is not.** `code` is stable and
@@ -285,7 +288,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -579,9 +582,11 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   hooks, templates, and codemods name `@astryxdesign/core`; the docs the CLI
   ships name `@astryxdesign/cli`; an integration's artifacts name the
   integration's package, with nothing written for it by the integration's
-  author. Two lists of plain names, `hook --list` and `swizzle --list`, hold
-  only Core's artifacts and name `package` once, in the envelope; `build`'s
-  `frame` and `foundation` are fixed lists of Core component names. Text
+  author. Two lists of plain names, `hook --list` and `swizzle --list`, name
+  `package` once, in the envelope: the run's active base, which is
+  `@astryxdesign/core` in a run on Core (`spec:AST-114` FR1). `build`'s
+  `frame` and `foundation` are fixed lists of Core component names in a run
+  on Core, and empty in a run on another base. Text
   output names the same package. Verbatim source output (`--source`,
   `--showcase`, and a template's source) keeps stdout to the source alone, so
   it pipes byte for byte, and names the package on stderr. A `--json` result

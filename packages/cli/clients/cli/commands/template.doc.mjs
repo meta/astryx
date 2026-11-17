@@ -30,6 +30,7 @@ export const doc = {
       param: 'name',
       required: false,
       description: 'Template id (see --list). Omit it to list the templates.',
+      names: 'template',
     },
     {
       name: 'path',
@@ -62,6 +63,7 @@ export const doc = {
     },
     {
       flag: '--skeleton',
+      requires: ['templates.skeleton'],
       param: 'options.skeleton',
       description:
         'Show layout skeleton with spatial annotations (padding, gap, nesting) instead of the source. Needs <name>. ' +
@@ -69,6 +71,7 @@ export const doc = {
     },
     {
       flag: '--cdn [path]',
+      requires: ['templates.standalonePage'],
       param: 'options.cdn',
       description:
         'Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are refused. ' +
