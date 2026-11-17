@@ -27,7 +27,10 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
-import {publishedSummary} from './command-pointers.mjs';
+import {
+  publishedOptionDescription,
+  publishedSummary,
+} from './command-pointers.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 
 /** The doc kinds that declare a namespace. */
@@ -98,13 +101,9 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
-      // The docs and search read a command's summary with its pointers.
       loaded.push({
         source,
-        doc:
-          doc.type === 'command' && doc.pointers?.length
-            ? {...doc, summary: publishedSummary(doc)}
-            : doc,
+        doc: doc.type === 'command' ? publishedCommandDoc(doc) : doc,
       });
     } catch (error) {
       failed.push({
@@ -114,6 +113,32 @@ export async function loadCliSelfDocs(
     }
   }
   return {loaded, failed};
+}
+
+/**
+ * A command doc as the docs and search read it: its summary with its
+ * pointers, and each option's description with its parts.
+ * @param {any} doc
+ * @returns {any}
+ */
+function publishedCommandDoc(doc) {
+  const options = doc.options?.some(
+    (/** @type {any} */ option) => option.pointers?.length,
+  );
+  if (!doc.pointers?.length && !options) return doc;
+  return {
+    ...doc,
+    ...(doc.pointers?.length ? {summary: publishedSummary(doc)} : {}),
+    ...(options
+      ? {
+          options: doc.options.map((/** @type {any} */ option) => {
+            if (!option.pointers?.length) return option;
+            const {pointers: _pointers, ...rest} = option;
+            return {...rest, description: publishedOptionDescription(option)};
+          }),
+        }
+      : {}),
+  };
 }
 
 /**

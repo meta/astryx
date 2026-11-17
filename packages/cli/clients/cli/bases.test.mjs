@@ -592,6 +592,29 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
+    'names in template help only what the base serves',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const help = astryx(['template', '--help'], dir);
+      expect(help.status).toBe(0);
+      expect(help.stdout).toContain(
+        'do nothing else: <name>, <path> and --overwrite are refused',
+      );
+      expect(help.stdout).toContain(
+        'Narrow to templates from a specific package.',
+      );
+      expect(help.stdout).not.toContain('--skeleton');
+      expect(help.stdout).not.toContain('@astryxdesign/core');
+      const json = JSON.stringify(
+        astryx(['--json', 'template', '--help'], dir).json().data,
+      );
+      expect(json).not.toContain('--skeleton');
+      expect(json).not.toContain('@astryxdesign/core');
+    },
+    SLOW,
+  );
+
+  it(
     "names the step on a hidden command's own help",
     () => {
       const dir = project({'@acme/native-ui': CONTENT_BASE});
