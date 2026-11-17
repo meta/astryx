@@ -14698,6 +14698,8 @@ export async function commitTheme(
   let problemList = [];
   /** @type {ThemeProblem[]} */
   let newProblems = [];
+  /** @type {ThemeProblem[]} */
+  let leftProblems = [];
   try {
     res = await resolvedTokens(ctx, slug);
     const modes = modesOf(data);
@@ -14746,13 +14748,24 @@ export async function commitTheme(
     problems = problemList.map(x => x.text);
     // The problems this change made: the ones the settings before it did
     // not have, measured the same way.
-    const had =
-      before && resBefore
-        ? new Set(
-            (await contrastProblems(ctx, before, resBefore)).map(x => x.key),
-          )
-        : new Set();
+    const beforeList =
+      before && resBefore ? await contrastProblems(ctx, before, resBefore) : [];
+    const had = new Set(beforeList.map(x => x.key));
     newProblems = problemList.filter(x => !had.has(x.key));
+    // A problem the theme had that this change moved but did not clear (a
+    // fill made darker, still not dark enough) is said apart, with what it
+    // was: no new problem, but this change's to finish, and show would be
+    // the first to say it otherwise.
+    const wasText = new Map(beforeList.map(x => [x.key, x.text]));
+    leftProblems = problemList
+      .filter(x => had.has(x.key) && wasText.get(x.key) !== x.text)
+      .map(x => {
+        const was = /\bis ([\d.]+):1\b/.exec(String(wasText.get(x.key)))?.[1];
+        return {
+          ...x,
+          text: `${x.text}${was ? ` (it was ${was}:1 before this change)` : ''}`,
+        };
+      });
     // What cannot be measured is a note, not a problem; a failure the base
     // theme draws itself is said when this change brings it (show says it
     // every time), not after every change.
@@ -14775,6 +14788,7 @@ export async function commitTheme(
     problems,
     problemList,
     newProblems,
+    leftProblems,
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
     notes,
