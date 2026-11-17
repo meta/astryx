@@ -7,10 +7,22 @@
  */
 
 /**
+ * What init did to one agent-doc file. `created`: the file did not exist.
+ * `updated`: its text changed. `unchanged`: it already held this text.
+ * `removed`: its Astryx block was removed, because another file holds it.
+ * @typedef {object} InitDocsChange
+ * @property {string} path The file, relative to the project root (the folder init writes agent docs in), `--agent-docs-path` files included. Never absolute.
+ * @property {'created' | 'updated' | 'unchanged' | 'removed'} change
+ * @property {string | null} from The Astryx version the block named before; null on `created`, and when there was no block or no version line.
+ * @property {string | null} to The Astryx version the block names now; null on `removed`, and when there is no block (such as an import of AGENTS.md).
+ */
+
+/**
  * @typedef {object} InitRunData
  * @property {'default' | 'features'} mode `default` (no flags) or `features` (--features/--all).
  * @property {string[]} features Features that were run, in order.
  * @property {string[]} docsWritten Agent-doc files written, relative to the directory init ran in (empty if agents weren't run or install failed). Without --agent-docs-path they sit at the project root: the nearest folder at or above it whose package.json declares an Astryx package, else the nearest with any package.json, within its repository and never the home folder; with none, the directory init ran in.
+ * @property {InitDocsChange[]} docsChanges What init did to each file in `docsWritten`, in the same order; each path is relative to the project root.
  * @property {{kind: 'path-safety' | 'install-failed', message?: string} | null} docsError Soft agent-docs failure, if any. `path-safety` also implies a non-zero exit. `install-failed` carries a message when init wrote no agent docs (the home folder, or a settings folder in it outside a project) or skipped a file that resolves outside the project; docsWritten then lists what was written.
  * @property {boolean} theme Whether the theme feature ran.
  * @property {'created' | 'skipped' | 'failed' | null} themeTemplate Outcome of writing the annotated theme template (`skipped` = a file was already there).

@@ -262,7 +262,10 @@ export function installCommandFor(packages, cwd) {
   }
   const resolved = resolveInstallVerb(cwd);
   const ranges = cliPackageRanges();
-  const specs = packages.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
+  // A `*` range pins nothing, so the bare name says the same in fewer bytes.
+  const specs = packages.map(p =>
+    ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p,
+  );
   if (resolved.verb !== null) {
     return {
       installCommand: `${resolved.verb} ${specs.join(' ')}`,
@@ -273,6 +276,26 @@ export function installCommandFor(packages, cwd) {
   return {
     installCommand: null,
     noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+  };
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note naming the folder
+ * whose lockfiles disagree when the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const {installCommand} = installCommandFor(packages, cwd);
+  if (installCommand) return {line: installCommand, note: null};
+  const resolved = resolveInstallVerb(cwd);
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${packages.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
   };
 }
 

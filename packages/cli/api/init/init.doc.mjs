@@ -100,7 +100,7 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
     },
     {
       type: 'init.remove',

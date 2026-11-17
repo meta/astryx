@@ -8,11 +8,33 @@
  * eject only to make an independent source fork.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, afterAll} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {getNextSteps} from '../../../api/init/init.mjs';
 
+/** @type {string[]} */
+const made = [];
+/**
+ * A project folder with the given files.
+ * @param {Record<string, string>} files
+ */
+function project(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-next-steps-'));
+  made.push(dir);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}');
+  for (const [name, text] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), text);
+  }
+  return dir;
+}
+afterAll(() => {
+  for (const dir of made) fs.rmSync(dir, {recursive: true, force: true});
+});
+
 describe('init Next steps theme guidance', () => {
-  const text = getNextSteps('npx astryx').join('\n');
+  const text = getNextSteps('npx astryx', project({})).join('\n');
 
   it('mentions the base CSS imports so the app is not left unstyled', () => {
     expect(text).toContain("'@astryxdesign/core/reset.css'");
@@ -20,8 +42,17 @@ describe('init Next steps theme guidance', () => {
   });
 
   it('adds an installed theme through the CLI', () => {
-    expect(text).toContain('npm install @astryxdesign/theme-neutral');
+    expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
     expect(text).toContain('npx astryx theme add neutral');
+  });
+
+  it("installs the theme with the project's package manager", () => {
+    const pnpm = getNextSteps(
+      'pnpm exec astryx',
+      project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n"}),
+    ).join('\n');
+    expect(pnpm).toContain('pnpm add @astryxdesign/theme-neutral\n');
+    expect(pnpm).not.toContain('npm install');
   });
 
   it('wires the generated theme record once', () => {
@@ -48,5 +79,23 @@ describe('init Next steps theme guidance', () => {
 
   it('does not teach a direct package theme import', () => {
     expect(text).not.toContain("from '@astryxdesign/theme-neutral");
+  });
+});
+
+describe('init Next steps when the lockfiles disagree', () => {
+  it('prints npm install and says the lockfiles disagree', () => {
+    const text = getNextSteps(
+      'npx astryx',
+      project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n", 'yarn.lock': '# yarn\n'}),
+    ).join('\n');
+    expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
+    expect(text).toContain('(the lockfiles in this folder disagree; use the package manager this project uses)');
+  });
+
+  it('follows a declared packageManager over a stray lockfile', () => {
+    const dir = project({'package-lock.json': '{}'});
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app","packageManager":"pnpm@10.0.0"}');
+    const text = getNextSteps('pnpm exec astryx', dir).join('\n');
+    expect(text).toContain('pnpm add @astryxdesign/theme-neutral\n');
   });
 });

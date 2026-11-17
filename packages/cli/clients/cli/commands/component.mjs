@@ -41,6 +41,9 @@ import {doc as componentFn} from '../../../api/component/component.doc.mjs';
 import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
+/** Component docs print as Markdown: doc text whose commands show with the project's runner. */
+const MARKDOWN = {lang: 'markdown'};
+
 /**
  * The api layer's component() widens its return to `{type: string, data: unknown}`,
  * so annotate the command-local result with the precise discriminated union from
@@ -145,12 +148,14 @@ function componentDetailBlocks(
               formatBrief(result.data, resolvedName, result.data.import, {
                 themeData,
               }),
+              MARKDOWN,
             )
           : detail === 'compact'
             ? code(
                 formatCompact(result.data, resolvedName, result.data.import, {
                   propsCommand,
                 }),
+                MARKDOWN,
               )
             : code(
                 formatFull(result.data, {
@@ -158,6 +163,7 @@ function componentDetailBlocks(
                   importHint: result.data.import,
                   propsCommand,
                 }),
+                MARKDOWN,
               ),
       );
       return out;
@@ -165,7 +171,7 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName)),
+        code(formatProps({props: result.data}, resolvedName), MARKDOWN),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':
@@ -375,6 +381,7 @@ export function registerComponent(program) {
                     categories: Object.keys(result.data.components),
                   }),
                 ),
+                MARKDOWN,
               ),
             );
             break;
