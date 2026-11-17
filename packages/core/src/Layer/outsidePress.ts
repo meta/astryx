@@ -15,12 +15,12 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
-import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
 import {touchActionAllowsPan} from '../utils/scrollView';
 import {sharedWeakMap} from '../utils/sharedRealm';
+import {hasPanBegun} from './panStart';
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */
@@ -127,13 +127,7 @@ export function watchOutsidePress(
     }
   };
   const handleMove = (event: PointerEvent) => {
-    if (
-      panStart?.id === event.pointerId &&
-      Math.max(
-        Math.abs(event.clientX - panStart.x),
-        Math.abs(event.clientY - panStart.y),
-      ) >= UIKIT_PAN.hysteresis.value
-    ) {
+    if (panStart?.id === event.pointerId && hasPanBegun(panStart, event)) {
       if (reportPan != null) {
         const axis =
           Math.abs(event.clientX - panStart.x) >=
