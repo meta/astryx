@@ -652,6 +652,24 @@ export default function Page() {
     );
     await render('src/types-only.tsx', {cwd: dir, out: 'types-only.html'});
     expect(fs.existsSync(path.join(dir, 'types-only.html'))).toBe(true);
+    // A parameter or a local binding named like an import is not the import.
+    put(
+      'src/shadowed.tsx',
+      [
+        "import {Button} from '@astryxdesign/core/Button';",
+        "import {Card} from '@astryxdesign/core/Card';",
+        'const Icon = () => <i>icon</i>;',
+        'function Row({Button}: {Button: any}) { return <Button.Icon />; }',
+        'const rows = [{Button: {Icon}}];',
+        'function Lede() { const Card = {Lede: () => <b>lede</b>}; return <Card.Lede />; }',
+        'export default function Page() {',
+        '  return <Card><Button label="Go" /><Row Button={{Icon}} />{rows.map(({Button}, i) => <Button.Icon key={i} />)}<Lede /></Card>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    await render('src/shadowed.tsx', {cwd: dir, out: 'shadowed.html'});
+    expect(fs.existsSync(path.join(dir, 'shadowed.html'))).toBe(true);
     // A type re-exported as a type, and a file the page reads as text, are no value uses.
     put(
       'src/types-re.ts',

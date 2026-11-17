@@ -51,7 +51,7 @@ import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
-import {droppedImports} from './value-uses.mjs';
+import {droppedImports, importUses} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -1503,68 +1503,15 @@ function reach(name) {
   parentPort?.postMessage({stage: name});
 }
 
-/** AST keys that never hold a value use of a name. */
-const SKIPPED_KEYS = new Set(['loc', 'start', 'end', 'extra', 'range', 'comments', 'leadingComments', 'trailingComments', 'innerComments']);
-
-/** AST keys whose subtree is a type, which a build drops. */
-const TYPE_KEYS = new Set(['typeAnnotation', 'returnType', 'typeParameters', 'typeArguments', 'superTypeParameters', 'implements']);
-
-/** Declarations that hold only types. */
-const TYPE_NODES = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSDeclareFunction', 'TSImportType', 'TSTypeQuery', 'TSTypeReference']);
-
-/**
- * The names a module uses as values, and each `<Name.Member>` element it
- * draws.
- * @typedef {Set<string> & {members?: {name: string, member: string, line: number}[]}} ValueUses
- */
-
-/**
- * The names among `names` that a module uses as values: in an expression or
- * JSX, not only in a type, a property key or an import.
- * @param {any} program the module's AST
- * @param {Set<string>} names
- * @returns {ValueUses}
- */
-function valueUses(program, names) {
-  /** @type {ValueUses} */
-  const used = new Set();
-  /** Each `<Name.Member>` element the module draws, for a name in `names`. */
-  used.members = [];
-  /** @param {any} node @param {any} parent @param {string} key @param {boolean} inType */
-  const walk = (node, parent, key, inType) => {
-    if (!node || typeof node.type !== 'string') return;
-    if (node.type === 'ImportDeclaration') return;
-    // `export type {A}` and `export {type A}` name a type, as a type position does.
-    const typeExport =
-      (node.type === 'ExportNamedDeclaration' || node.type === 'ExportSpecifier') && node.exportKind === 'type';
-    const typed = inType || typeExport || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
-    if (node.type === 'JSXMemberExpression' && node.object?.type === 'JSXIdentifier' && names.has(node.object.name)) {
-      used.members?.push({name: node.object.name, member: node.property.name, line: node.loc?.start.line ?? 0});
-    }
-    if ((node.type === 'Identifier' || node.type === 'JSXIdentifier') && names.has(node.name) && !typed) {
-      const isKey =
-        ((parent?.type === 'MemberExpression' || parent?.type === 'OptionalMemberExpression' || parent?.type === 'JSXMemberExpression') && key === 'property' && !parent.computed) ||
-        ((parent?.type === 'ObjectProperty' || parent?.type === 'ObjectMethod' || parent?.type === 'ClassProperty' || parent?.type === 'ClassMethod') && key === 'key' && !parent.computed) ||
-        (parent?.type === 'JSXAttribute' && key === 'name');
-      if (!isKey) used.add(node.name);
-    }
-    for (const [childKey, child] of Object.entries(node)) {
-      if (SKIPPED_KEYS.has(childKey) || !child || typeof child !== 'object') continue;
-      if (Array.isArray(child)) for (const item of child) walk(item, node, childKey, typed);
-      else walk(child, node, childKey, typed);
-    }
-  };
-  for (const statement of program.body) walk(statement, program, 'body', false);
-  return used;
-}
-
 /**
  * The first import in the page's own files of a name its module does not
- * export (a named import), where the page uses that name as a value. The page's own modules,
- * Astryx packages and StyleX variables modules (`.stylex`) are checked. A
- * missing component renders as "Element type is invalid", and StyleX
- * compiles a missing value to a variable that nothing defines; a bundler
- * would refuse the import in both cases.
+ * export (a named import), where the page uses that name as a value: a
+ * reference that resolves to the import binding, not to a parameter or a
+ * local binding of the same name. The page's own modules, Astryx packages
+ * and StyleX variables modules (`.stylex`) are checked. A missing component
+ * renders as "Element type is invalid", and StyleX compiles a missing value
+ * to a variable that nothing defines; a bundler would refuse the import in
+ * both cases.
  * @returns {Promise<{source: string, line: number, module: string, names: string[]} | null>}
  */
 async function missingNamedExports() {
@@ -1582,28 +1529,15 @@ async function missingNamedExports() {
       // A file that does not parse is reported where it is compiled.
       continue;
     }
-    /** @type {ValueUses | undefined} */
-    let used;
-    for (const node of ast.program.body) {
-      if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
+    for (const [node, bindings] of importUses(ast)) {
+      if (node.importKind === 'type') continue;
       const spec = String(node.source.value).split('?')[0];
       const target = importedFile(spec, file);
       const local = Boolean(target && path.isAbsolute(target) && isLocal(target) && /\.[cm]?[jt]sx?$/.test(target));
       if (!local && !spec.startsWith('@astryxdesign/') && !/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
-      const imported = node.specifiers.filter(
-        (/** @type {any} */ s) =>
-          s.type === 'ImportSpecifier' && s.importKind !== 'type',
+      const needed = bindings.filter(
+        ({specifier, values}) => specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' && values.length > 0,
       );
-      if (imported.length === 0) continue;
-      used ??= valueUses(
-        ast.program,
-        new Set(
-          ast.program.body
-            .filter((/** @type {any} */ n) => n.type === 'ImportDeclaration')
-            .flatMap((/** @type {any} */ n) => n.specifiers.map((/** @type {any} */ s) => s.local.name)),
-        ),
-      );
-      const needed = imported.filter((/** @type {any} */ s) => used?.has(s.local.name));
       if (needed.length === 0) continue;
       /** @type {any} */
       let exports;
@@ -1617,20 +1551,23 @@ async function missingNamedExports() {
       const nameOf = s => (s.imported.type === 'Identifier' ? s.imported.name : s.imported.value);
       // jiti hands back a module with a default export as that export with the
       // named ones on it (interopDefault), so a name is read, not listed.
-      const missing = needed.filter(
-        (/** @type {any} */ s) => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))),
-      );
+      const missing = needed
+        .map(({specifier}) => specifier)
+        .filter(s => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))));
       if (missing.length > 0) {
         return {source: file, line: missing[0].loc.start.line, module: spec, names: missing.map(nameOf)};
       }
       // An element drawn as `<Name.Member>` whose export has no such member
       // renders as "Element type is invalid" too.
-      for (const s of needed) {
-        const value = exports[nameOf(s)];
+      for (const {specifier, values} of needed) {
+        const value = exports[nameOf(specifier)];
         if (value == null || (typeof value !== 'object' && typeof value !== 'function')) continue;
-        const absentMember = (used.members ?? []).find(m => m.name === s.local.name && value[m.member] === undefined);
+        const absentMember = values.find(
+          ref => ref.parentPath.isJSXMemberExpression() && ref.key === 'object' && value[ref.parent.property.name] === undefined,
+        );
         if (absentMember) {
-          return {source: file, line: absentMember.line, module: spec, names: [`${nameOf(s)}.${absentMember.member}`]};
+          const line = absentMember.node.loc?.start.line ?? specifier.loc.start.line;
+          return {source: file, line, module: spec, names: [`${nameOf(specifier)}.${absentMember.parent.property.name}`]};
         }
       }
     }
@@ -1770,7 +1707,7 @@ try {
       } else if (e instanceof BundleError && e.missingExport) {
         failMissingExport(e.missingExport);
       } else if (e instanceof BundleError) {
-        fail(e.code, e.message, e.detail);
+        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
       } else {
         const message = e instanceof Error ? e.message : String(e);
         fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);

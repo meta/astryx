@@ -305,16 +305,13 @@ export class BundleError extends Error {
    * @param {Record<string, unknown>} [detail]
    * @param {unknown} [compile] the error of one of the page's own files that
    *   does not compile, which the render reports as a static import's
-   * @param {string} [code] the render's error code: a named import that the
-   *   module does not export is ERR_RENDER_COMPILE, as a build refuses it
    * @param {{source: string, line: number, names: string[]}} [missingExport]
    *   that import: the page's file that makes it, the line and the names
    */
-  constructor(message, detail = {}, compile = undefined, code = 'ERR_RENDER_SCRIPT', missingExport = undefined) {
+  constructor(message, detail = {}, compile = undefined, missingExport = undefined) {
     super(message);
     this.detail = detail;
     this.compile = compile;
-    this.code = code;
     this.missingExport = missingExport;
   }
 }
@@ -515,7 +512,7 @@ export async function bundleForBrowser({
     // the module, as for the same import on the server.
     const noExport = /^No matching export in "[^"]+" for import "([^"]+)"$/.exec(first.text);
     if (noExport && located && isPageFile(located)) {
-      throw new BundleError(first.text, {}, undefined, 'ERR_RENDER_COMPILE', {
+      throw new BundleError(first.text, {}, undefined, {
         source: located,
         line: first.location.line,
         names: [noExport[1]],
