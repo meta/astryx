@@ -2669,6 +2669,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string | null} [alsoState] - a second state said with the first ("hovered selected tabs"): the part in both at once
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
+ * @property {Clause} [exceptOf] - the one list item an except keeps a state of ("gray text on the rest" keeps the selected tab's text): it belongs to that item only
  * @property {Record<string, string>} decl - CSS written as `prop: value`
  * @property {string[]} [quoted] - family names the clause writes in quotes
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
@@ -5626,10 +5627,13 @@ export function draftAnswer(ctx, env, question) {
     // "the selected tab text white and the others gray", "primary buttons
     // blue and the others gray": the others are the same parts but that
     // state or variant, read as an except, its own ask. (Joined by a
-    // comma the same: "…white, the others gray".)
+    // comma the same: "…white, the others gray". Said as a place, "gray
+    // text on the rest", the place is those parts, in the item that says
+    // it.)
     .replace(
-      /^(.*?)(?:\band\s+|,\s*)(?:all\s+)?the\s+(?:others?|rest)\b([^,;.\n]*)/gim,
-      (m, before, after) => {
+      /^(.*?)(\band\s+|,\s*|\b(?:on|for)\s+)(?:all\s+)?the\s+(?:others?|rest)\b([^,;.\n]*)/gim,
+      (m, before, join, after) => {
+        const inPlace = /^(?:on|for)\s/i.test(String(join));
         const pairs = [
           ...String(before).matchAll(
             /(?=\b([a-z]+)\s+([a-z]+?)(s?)((?:\s+(?:text|background|border|fill|icons?|labels?))?)\b)/gi,
@@ -5652,12 +5656,15 @@ export function draftAnswer(ctx, env, question) {
               .map(String)
               .filter(v => v !== q && !/^(?:default|md)$/.test(v));
             if (!rest.length) continue;
+            if (inPlace)
+              return `${before}${join}${rest.map(v => `the ${v} ${noun}s`).join(' and ')}${after}`;
             return [
               String(before).replace(/[\s,]+$/, ''),
               ...rest.map(v => `the ${v} ${noun}s${aspect}${after}`),
             ].join('; ');
           }
           if (stateWord(q) == null) continue;
+          if (inPlace) return `${before}${join}the un${q} ${noun}s${after}`;
           return `${String(before).replace(/[\s,]+$/, '')}; the un${q} ${noun}s${aspect}${after}`;
         }
         return m;
@@ -7141,6 +7148,95 @@ export function draftAnswer(ctx, env, question) {
    */
   /** @type {WeakMap<Clause, Join>} */
   const joinOf = new WeakMap();
+  /**
+   * The subject of a part's colon list: the parts and state named before
+   * its colon, by the clause that holds the colon. The words after the
+   * colon are the list's first item, read as the other items are.
+   * @type {WeakMap<Clause, {parts: PartRef[], state: string | null}>}
+   */
+  const listSubjectOf = new WeakMap();
+  /** Colon heads whose first item names a part of its own. @type {WeakSet<Clause>} */
+  const namedFirstItem = new WeakSet();
+  /**
+   * Splits the clause that holds a part list's colon into its subject and
+   * its first item. The subject's own words add no look: a kind said of
+   * it ("outlined buttons", "filled buttons") names which parts, and the
+   * first item asks for its own looks only. A part word in the first item
+   * is first a piece of the subject's own part ("tables: … header
+   * background" is the table's header).
+   * @param {Clause} c
+   * @param {number} colon
+   */
+  const ownList = (c, colon) => {
+    const lead = c.text.slice(0, colon);
+    const item = c.text.slice(colon + 1);
+    const at = (/** @type {PartRef} */ p) =>
+      lex.parts
+        .filter(([, x]) => x.on === p.on)
+        .map(([re]) => re.exec(c.text)?.index ?? -1)
+        .filter(i => i >= 0)
+        .sort((x, y) => x - y)[0] ?? -1;
+    const subject = c.parts.filter(p => at(p) >= 0 && at(p) < colon);
+    if (!subject.length) return;
+    // (The colon ends the part's name: "filled buttons: …". After a look,
+    // "h3 font weight: 800", it is a declaration, no list.)
+    const endsWithPart = lex.parts.some(([re, x]) => {
+      if (!subject.some(p => p.on === x.on)) return false;
+      const m = re.exec(lead);
+      return m != null && !lead.slice(m.index + m[0].length).trim();
+    });
+    if (!endsWithPart) return;
+    const leadState = stateWord(lead);
+    listSubjectOf.set(c, {
+      parts: subject.map(p => ({...p})),
+      state: leadState ? c.state : null,
+    });
+    const itemAspects = aspectsOf(item);
+    const leadOnly = aspectsOf(lead).filter(a => !itemAspects.includes(a));
+    if (leadOnly.length) {
+      c.aspects = c.aspects.filter(a => !leadOnly.includes(a));
+      ownAspects.set(c, [...c.aspects]);
+    }
+    const named = c.parts.filter(p => !subject.includes(p));
+    if (!named.length) return;
+    const holder = subject[0].on;
+    const segs = holder.split('-');
+    // (The subject's word as said, one of it: "tables" is "table".)
+    const subjectWord = lex.parts
+      .filter(([, x]) => x.on === holder)
+      .map(([re]) => re.exec(lead)?.[0])
+      .find(Boolean)
+      ?.trim()
+      .split(/\s+/)
+      .map(singular)
+      .join(' ');
+    c.parts = named.map(p => {
+      const said = lex.parts
+        .filter(([, x]) => x.on === p.on)
+        .map(([re]) => re.exec(` ${item} `)?.[0])
+        .find(Boolean)
+        ?.trim()
+        .toLowerCase();
+      if (!said) return p;
+      // The word read after the subject's, as one name: "header" in a
+      // table's list is "table header".
+      if (subjectWord) {
+        const phrase = ` ${subjectWord} ${said} `;
+        const whole = lex.parts.find(([re]) => {
+          const m = re.exec(phrase);
+          return m != null && m.index <= 1 && m[0].trim().includes(said);
+        })?.[1];
+        if (whole && whole.on !== holder && C.MAP[whole.on])
+          return {on: whole.on};
+      }
+      const last = singular(said.split(/\s+/).at(-1) ?? '');
+      const piece = segs
+        .map((_, n) => `${segs.slice(0, n + 1).join('-')}-${last}`)
+        .find(k => k !== holder && C.MAP[k]);
+      return piece ? {on: piece} : p;
+    });
+    namedFirstItem.add(c);
+  };
   {
     /** @type {'colon' | 'with' | null} */
     let list = null;
@@ -7188,10 +7284,46 @@ export function draftAnswer(ctx, env, question) {
         lex.parts.some(
           ([re, x]) => c.parts.some(p => p.on === x.on) && re.test(` ${head} `),
         )
-      )
+      ) {
         list = 'colon';
+        // (A list's colon follows the part's name: never a ratio's, "3:1",
+        // nor a declaration's inside braces, "{ font-weight: 800 }".)
+        const colon = /^[^:{]*[a-z)'’]\s*(?=:(?:\s|$))/i.exec(c.text)?.[0]
+          .length;
+        if (colon) ownList(c, colon);
+      }
     }
   }
+  /**
+   * The clause a list hangs from: the nearest clause at or before `c` that
+   * starts its sentence. Null for a clause in no part's list.
+   * @param {Clause} c
+   * @returns {Clause | null}
+   */
+  const listHead = c => {
+    if (!['colon', 'with'].includes(String(joinOf.get(c)?.list))) return null;
+    let k = clauses.indexOf(c) - 1;
+    while (
+      k > 0 &&
+      !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
+    )
+      k--;
+    const head = k >= 0 ? clauses[k] : null;
+    return head && head !== c && head.parts.length ? head : null;
+  };
+  /**
+   * The owner of an item of a part's colon list: the list's subject, its
+   * parts and state. An item said with "with" belongs to the item it is
+   * said with ("the active page blue with white text"), so it has none.
+   * @param {Clause} c
+   * @returns {{parts: PartRef[], state: string | null} | null}
+   */
+  const listOwner = c => {
+    const j = joinOf.get(c);
+    if (j?.list !== 'colon' || j.sep === 'with') return null;
+    const head = listHead(c);
+    return head ? (listSubjectOf.get(head) ?? null) : null;
+  };
   /** What a later clause's own words make the whole theme's. */
   const THEME_ASPECTS = ['family', 'fontsize', 'leading', 'tracking', 'motion'];
   /** Type aspects, a text part's own. */
@@ -7421,26 +7553,33 @@ export function draftAnswer(ctx, env, question) {
     // long the list; never "white cards, SF Pro font", where the part is
     // a look's own word, nor the theme's font or spacing dial.)
     {
-      const head = (() => {
-        for (let k = clauses.indexOf(c) - 1; k >= 0; k--) {
-          const x = clauses[k];
-          if (lex.parts.some(([re]) => re.test(x.text))) return x;
-          if (joinOf.get(x)?.sep === 'break' || joinOf.get(x)?.sep === 'none')
-            return null;
-        }
-        return null;
-      })();
+      const head =
+        listHead(c) ??
+        (() => {
+          for (let k = clauses.indexOf(c) - 1; k >= 0; k--) {
+            const x = clauses[k];
+            if (lex.parts.some(([re]) => re.test(x.text))) return x;
+            if (joinOf.get(x)?.sep === 'break' || joinOf.get(x)?.sep === 'none')
+              return null;
+          }
+          return null;
+        })();
+      // (A colon list's subject is the words before its colon, "filled
+      // buttons:", however its kind is said.)
+      const subject = head ? listSubjectOf.get(head) : undefined;
       if (
         (j.sep === 'comma' || j.sep === 'and') &&
         head &&
         before.parts.length &&
         !before.parts.every(p => /^(?:page|body|app-shell)$/.test(p.on)) &&
-        lex.parts.some(
-          ([re, x]) =>
-            before.parts.some(p => p.on === x.on) &&
-            re.exec(head.text.replace(/^\s*(?:the|my|our|all)\s+/, ''))
-              ?.index === 0,
-        ) &&
+        (subject
+          ? subject.parts.some(p => before.parts.some(b => b.on === p.on))
+          : lex.parts.some(
+              ([re, x]) =>
+                before.parts.some(p => p.on === x.on) &&
+                re.exec(head.text.replace(/^\s*(?:the|my|our|all)\s+/, ''))
+                  ?.index === 0,
+            )) &&
         !own.includes('family') &&
         // (A list of several parts, "dark cards #1c1c1e, popovers #2c2c2e,
         // and subtle borders": an item with no subject is the theme's.)
@@ -7778,12 +7917,16 @@ export function draftAnswer(ctx, env, question) {
         ].includes(a),
       )
     ) {
-      // (Its own ask beside the look, so both run in turn.)
-      clauses.splice(ci + 1, 0, {
+      // (Its own ask beside the look, so both run in turn, in the same
+      // list as the look.)
+      const size = {
         ...c,
         parts: c.parts.map(x => ({...x})),
         aspects: ['fontsize'],
-      });
+      };
+      const join = joinOf.get(c);
+      if (join) joinOf.set(size, {...join, sep: 'and'});
+      clauses.splice(ci + 1, 0, size);
       c.lengths = [];
     }
   // ("selected tab with a 2px #635bff underline": the tab before a clause
@@ -8634,14 +8777,19 @@ export function draftAnswer(ctx, env, question) {
     }
     // (Nor a clause the scope reader gives the whole theme: "and the
     // accent darker", "and the text bigger".)
+    // (An item of a part's colon list is its subject's, never the item
+    // before's: "tables: a gray header background and a gray hover".)
+    const owner = listOwner(c);
     if (
       !c.parts.length &&
       scopeOf(
         c,
-        clauses
-          .slice(0, i)
-          .reverse()
-          .find(x => x.parts.length && !x.except),
+        owner
+          ? {...prev, parts: owner.parts, state: owner.state}
+          : clauses
+              .slice(0, i)
+              .reverse()
+              .find(x => x.parts.length && !x.except),
       ) === 'theme'
     )
       continue;
@@ -8649,7 +8797,7 @@ export function draftAnswer(ctx, env, question) {
       const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
         c.text,
       )?.[1];
-      c.parts = prev.parts.map(x => ({
+      c.parts = (owner?.parts ?? prev.parts).map(x => ({
         ...x,
         ...(own ? {when: `variant:${own}`} : {}),
       }));
@@ -9138,6 +9286,29 @@ export function draftAnswer(ctx, env, question) {
     }
     return null;
   };
+  /**
+   * The one part a place holds that takes a state, or null: "the current
+   * page in pagination" is pagination's own page button, the part inside
+   * it that can be current.
+   * @param {string} holder
+   * @param {string | null | undefined} state
+   * @returns {{part: string, state: string} | null}
+   */
+  const elementTaking = (holder, state) => {
+    if (!state) return null;
+    // ("the active page": active is selected or current, whichever the
+    // element has.)
+    const said = ['selected', 'current'].includes(state)
+      ? [state, state === 'selected' ? 'current' : 'selected']
+      : [state];
+    for (const st of said) {
+      const taking = (C.MAP[holder]?.contains ?? []).filter(k =>
+        settableStates(ctx, env.slug, env.data, k).includes(st),
+      );
+      if (taking.length === 1) return {part: taking[0], state: st};
+    }
+    return null;
+  };
   // "links on cards", "buttons inside cards", "links in the sidebar": the
   // place is never changed. A token the answer writes is set on it, so it
   // holds there only (the token cascades to the parts inside); a part's
@@ -9147,6 +9318,10 @@ export function draftAnswer(ctx, env, question) {
   // part, so it is never inside one) is that element, the part inside the
   // place that takes the state.
   for (const c of clauses) {
+    // (The first item of a part's colon list that names a piece of its
+    // subject was read with the subject as its place already: "tables:
+    // gray header background" is the table header's.)
+    if (namedFirstItem.has(c)) continue;
     // "the card title": a title Core draws as a heading inside the part is
     // that heading, kept to the part only by a token set on it.
     {
@@ -9313,14 +9488,31 @@ export function draftAnswer(ctx, env, question) {
       c.parts.length &&
       ['colon', 'with'].includes(String(joinOf.get(c)?.list))
     ) {
-      let k = clauses.indexOf(c) - 1;
-      while (
-        k > 0 &&
-        !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
-      )
-        k--;
-      const head = k >= 0 ? clauses[k] : null;
-      const holder = head?.parts[0]?.on;
+      const head = listHead(c);
+      const k = head ? clauses.indexOf(head) : -1;
+      const holder = head
+        ? (listSubjectOf.get(head)?.parts ?? head.parts)[0]?.on
+        : undefined;
+      // ("pagination: …, and the active page blue": the page, which holds
+      // every part, is never an item of a part's list: it is the element
+      // of that part the state picks, as "the active page in pagination"
+      // says it.)
+      if (
+        head &&
+        holder &&
+        head !== c &&
+        C.MAP[holder] &&
+        c.parts.every(x => x.on !== holder && /^(page|body)$/.test(x.on))
+      ) {
+        const taking = elementTaking(holder, c.state);
+        if (taking) {
+          c.parts = [{on: taking.part}];
+          c.state = taking.state;
+          c.container = holder;
+          c.byState = true;
+        } else c.parts = [{on: holder}];
+        continue;
+      }
       // (A with-list holds what is said with it, "with white text and an
       // action"; an item after a comma is an ask of its own, "dark sidebar
       // with white text, rounder cards".)
@@ -9335,7 +9527,7 @@ export function draftAnswer(ctx, env, question) {
           );
       // ("progress bar: #0d6efd fill and #e9ecef track": a word naming a
       // piece of the head's own part, its track, is that piece.)
-      if (holder && head !== c && inWith) {
+      if (head && holder && head !== c && inWith) {
         const segs = holder.split('-');
         const piece = c.text
           .toLowerCase()
@@ -9577,7 +9769,6 @@ export function draftAnswer(ctx, env, question) {
     c.parts = c.parts.filter(x => !inPlace.includes(x));
     if (inPlace.length === 1) {
       const holder = inPlace[0].on;
-      const holds = C.MAP[holder]?.contains ?? [];
       // (The page, which holds every part, is never an element inside
       // one: "the current page in pagination" names pagination's own; the
       // page's text "in cards", the cards' own text.)
@@ -9587,15 +9778,10 @@ export function draftAnswer(ctx, env, question) {
       if (strangers.length === c.parts.length) {
         // (The part inside it that takes the state named, if one does;
         // else the place itself.)
-        const taking = c.state
-          ? holds.filter(k =>
-              settableStates(ctx, env.slug, env.data, k).includes(
-                /** @type {string} */ (c.state),
-              ),
-            )
-          : [];
-        if (taking.length === 1) {
-          c.parts = [{on: taking[0]}];
+        const taking = elementTaking(holder, c.state);
+        if (taking) {
+          c.parts = [{on: taking.part}];
+          c.state = taking.state;
           c.container = holder;
           // (The state picks the element: the one inside that takes it.)
           c.byState = true;
@@ -10152,10 +10338,17 @@ export function draftAnswer(ctx, env, question) {
     const c = clauses[i];
     const prev = clauses[i - 1];
     const next = clauses[i + 1];
-    const before = clauses
+    const nearest = clauses
       .slice(0, i)
       .reverse()
       .find(x => x.parts.length && !x.except);
+    // (An item of a part's colon list is its subject's, never the item
+    // before's: "tabs: … on the selected tab, …, 14px medium text".)
+    const owner = nearest ? listOwner(c) : null;
+    const before =
+      nearest && owner
+        ? {...nearest, parts: owner.parts, state: owner.state}
+        : nearest;
     if (
       !c.parts.length &&
       before &&
@@ -10174,7 +10367,7 @@ export function draftAnswer(ctx, env, question) {
       (c.aspects.length ||
         c.colors.length ||
         c.lengths.length ||
-        (prev === before &&
+        (prev === nearest &&
           (c.dir != null || colorsIn(c.text).length > 0) &&
           c.text.trim().split(/\s+/).length <= 3))
     ) {
@@ -12576,11 +12769,14 @@ export function draftAnswer(ctx, env, question) {
   // "selected tabs red in light mode and blue in dark mode": a clause that
   // names no part of its own and took the part of the one before takes
   // its state too (the part phrase is "selected tabs").
+  // (An item of a part's colon list has its subject's state, never the
+  // item before's: "tabs: gray text on the rest, 14px medium text".)
   for (let i = 1; i < clauses.length; i++) {
     const c = clauses[i];
     if (c.state || c.except || !c.parts.length) continue;
     if (lex.parts.some(([re]) => re.test(` ${c.text} `))) continue;
     if (stateWord(c.text) != null) continue;
+    if (listOwner(c)) continue;
     const from = clauses
       .slice(0, i)
       .reverse()
@@ -12689,6 +12885,10 @@ export function draftAnswer(ctx, env, question) {
       decl: {},
       state: on,
       except: true,
+      // (In a part's colon list the kept state is the item's own: "tabs:
+      // a blue underline on the selected tab, gray text on the rest" keeps
+      // the selected tab's text, never the underline said before it.)
+      ...(listOwner(c) ? {exceptOf: c} : {}),
     });
   }
   // A mode said at the end of a run of clauses on one part, joined by
@@ -13197,7 +13397,7 @@ export function draftAnswer(ctx, env, question) {
       k--;
     if (['break'].includes(String(joinOf.get(c)?.sep))) continue;
     const head = clauses[k];
-    const holder = head?.parts[0]?.on;
+    const holder = (listSubjectOf.get(head)?.parts ?? head?.parts)?.[0]?.on;
     if (!holder || head === c) continue;
     const segs = holder.split('-');
     const piece = c.text
@@ -13607,7 +13807,12 @@ export function draftAnswer(ctx, env, question) {
     if (c.except) {
       // The except belongs to the whole ask before it ("remove borders from
       // cards and buttons except …"): every step since the last except, so
-      // the answer is one sequence.
+      // the answer is one sequence. An except of one list item belongs to
+      // that item only.
+      if (c.exceptOf) {
+        const from = tops.findIndex(t => t.clause === c.exceptOf);
+        if (from > exceptFloor) exceptFloor = from;
+      }
       const span = tops.slice(exceptFloor);
       const prior = span.length
         ? {
