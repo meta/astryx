@@ -355,11 +355,6 @@ describe('the allowlist', () => {
   it('fails a row whose crossing no longer occurs', () => {
     const comparison = compareWithAllowlist(rowsByCrossing([]), [
       {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
-      {
-        from: 'Table/TableCellContextMenu',
-        to: 'Layer/gestureCounter',
-        entries: ['Table'],
-      },
     ]);
     expect(comparison.ok).toBe(false);
     expect(comparison.stale).toEqual([
@@ -406,6 +401,11 @@ describe('the allowlist', () => {
         entries: ['Button', 'IconButton'],
       },
       {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
+      {
+        from: 'Table/TableCellContextMenu',
+        to: 'Layer/gestureCounter',
+        entries: ['Table'],
+      },
       {
         from: 'Table/BaseTable',
         to: 'Table/plugins/virtualization/useTableWindow',
