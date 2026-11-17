@@ -74,7 +74,19 @@ for (const dir of ['ltr', 'rtl'] as const) {
     await page.setViewportSize({width: 390, height: 800});
     await renderMarkdown(page, dir);
     const geometry = await page.locator('#storybook-root').evaluate(root => {
-      const paragraph = root.querySelector('p');
+      // The paragraph's block box is the column the lists share.
+      const text = [...root.querySelectorAll('*')].find(
+        element =>
+          element.children.length === 0 &&
+          element.textContent?.startsWith('A paragraph long enough'),
+      );
+      let paragraph = text ?? null;
+      while (
+        paragraph != null &&
+        getComputedStyle(paragraph).display.startsWith('inline')
+      ) {
+        paragraph = paragraph.parentElement;
+      }
       if (paragraph == null) {
         throw new Error('The story rendered no paragraph');
       }

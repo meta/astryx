@@ -650,13 +650,6 @@ const styles = stylex.create({
   taskListIndent: {
     marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
-  // Numbered document lists keep their ordinary text inset regardless of
-  // counter width, matching RichText's native outside markers (AST-061 FR11).
-  // These rows have no swipe actions: unlike general List, their outside ink
-  // may paint past the gutter instead of being clipped at a finite threshold.
-  markerGutter: {
-    paddingInlineStart: spacingVars['--spacing-4'],
-  },
   // HR
   hr: {
     borderWidth: 0,
@@ -1914,7 +1907,7 @@ function renderBlock(
             density="compact"
             edge="flush"
             start={node.ordered ? node.start : undefined}
-            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
+            xstyle={styles.blockIndent}>
             {node.children.map((item, i) => {
               const firstChild = item.children[0];
               const isInline =
