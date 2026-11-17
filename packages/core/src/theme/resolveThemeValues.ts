@@ -147,6 +147,8 @@ export function resolveTokenValue(
  * Named weights map to var(--font-weight-*); raw values pass through.
  */
 export function resolveFontWeight(weight: FontWeight): string {
+  // A numeric weight (700) is the CSS number, written as a string.
+  if (typeof weight === 'number') return String(weight);
   const named: Record<string, string> = {
     normal: 'var(--font-weight-normal)',
     medium: 'var(--font-weight-medium)',

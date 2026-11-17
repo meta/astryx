@@ -12,10 +12,11 @@
 
 /**
  * Named font weight — maps to var(--font-weight-*) at the token layer.
- * Raw CSS values (e.g. '800') are accepted as an escape hatch.
+ * Raw CSS values (e.g. '800', or the number 800) are accepted as an escape
+ * hatch.
  */
 export type FontWeight =
-  'normal' | 'medium' | 'semibold' | 'bold' | (string & {});
+  'normal' | 'medium' | 'semibold' | 'bold' | number | (string & {});
 
 /**
  * A typography role declaration (body, heading, or code).

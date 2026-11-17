@@ -1715,6 +1715,30 @@ describe('extension semantics and built metadata', () => {
     ).toBe(weightWithoutScale.tokens['--text-heading-1-weight']);
   });
 
+  it('takes a numeric heading weight under a base with adaptations, as a string token', () => {
+    const base = defineTheme({
+      name: 'numeric-weight-base',
+      typography: {scale: {base: 14, ratio: 1.25}},
+      adaptations: {
+        rules: [
+          {
+            when: {width: {from: 'lg'}},
+            value: {typography: {scale: {base: 18}}},
+          },
+        ],
+      },
+    });
+    const child = defineTheme({
+      name: 'numeric-weight-child',
+      extends: base,
+      typography: {scale: {base: 15, ratio: 1.2}, heading: {weight: 700}},
+    });
+    expect(child.tokens['--text-heading-1-weight']).toBe('700');
+    expect(child.__adaptationRules?.[0].tokens['--text-heading-1-weight']).toBe(
+      '700',
+    );
+  });
+
   it('ignores a child fallback that has no family, matching root resolution', () => {
     const base = defineTheme({
       name: 'fallback-only-base',
