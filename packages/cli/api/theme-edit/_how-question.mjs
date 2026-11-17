@@ -27294,6 +27294,11 @@ export function draftAnswer(ctx, env, question) {
         if (mode === 'dark') continue;
         /** @type {string[]} */
         const lost = [];
+        // (A piece of the part itself, a code block's header, is drawn as
+        // part of its surface: its own fill, near the new one, shows as a
+        // band of another tone, never as a part that would barely show.)
+        /** @type {Array<[string, string]>} */
+        const bands = [];
         for (const inner of C.MAP[one(st.on)]?.contains ?? []) {
           for (const r of C.partReads(inner, 'background') ?? []) {
             // (A control's own fill, a button's: never a surface that
@@ -27309,11 +27314,16 @@ export function draftAnswer(ctx, env, question) {
               const which = r.when
                 .map(w => /variant=([\w-]+)/.exec(w)?.[1])
                 .filter(Boolean)[0];
-              lost.push(`${which ? `${which} ` : ''}${inner}`);
+              if (inner.startsWith(`${one(st.on)}-`)) {
+                if (r.when.every(w => !w.trim()) && hex(v) !== hex(fill))
+                  bands.push([inner, hex(v)]);
+              } else lost.push(`${which ? `${which} ` : ''}${inner}`);
               break;
             }
           }
         }
+        if (bands.length && !/keeps its own fill \(/.test(d.text))
+          d.text += ` (note: ${bands.map(([p, v]) => `${p} keeps its own fill (${v}${st.mode ? ` in ${st.mode} mode` : ''})`).join(', ')}, so ${st.on} shows two tones; give ${bands.length > 1 ? 'them' : 'it'} ${st.value} too for one surface)`;
         if (lost.length && !/nearly the same color/.test(d.text))
           d.text += ` (note: ${[...new Set(lost)].slice(0, 4).join(', ')} inside ${st.on} ${lost.length > 1 ? 'have' : 'has'} nearly the same color as ${st.value}${st.mode ? ` in ${st.mode} mode` : ''}, so ${lost.length > 1 ? 'they' : 'it'} would barely show; give ${lost.length > 1 ? 'them' : 'it'} a fill of ${lost.length > 1 ? 'their' : 'its'} own too)`;
       }
@@ -27907,6 +27917,13 @@ export function draftAnswer(ctx, env, question) {
             // (A word an answer above already took, "contrast" in "more
             // contrast", "tabular-nums" in its line, is no word left out.)
             !answeredText.includes(w) &&
+            // (A word of a part's own name, "blocks" in "code blocks", was
+            // read with it.)
+            !partsSeen.some(p =>
+              p
+                .split('-')
+                .some(x => x === w || `${x}s` === w || `${x}es` === w),
+            ) &&
             !/^(?:dark|light|bright|pale|soft|subtle)$/.test(w) &&
             !partsSeen.some(p => w.startsWith(String(p))),
         ),
