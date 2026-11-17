@@ -41,7 +41,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
+import {builtinModules, createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {
   buttonsWithoutAction,
@@ -236,6 +236,9 @@ export function readTextFileIfExists(file) {
   }
 }
 
+/** As many source files as doctor lists in a project. */
+const SOURCE_FILE_LIMIT = 5000;
+
 /**
  * A bounded app-source walk that excludes dependencies, generated output, and
  * links. The doctor parses the returned bytes without executing app code.
@@ -249,7 +252,7 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
   const files = [];
   /** @type {string[]} */
   const queue = [root];
-  while (queue.length > 0 && files.length < 5000) {
+  while (queue.length > 0 && files.length < SOURCE_FILE_LIMIT) {
     const dir = /** @type {string} */ (queue.shift());
     let entries;
     try {
@@ -330,8 +333,6 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(tes
  */
 const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 
-/** As many source files as doctor lists in a project (see `listProjectSourceFiles`). */
-const SOURCE_FILE_LIMIT = 5000;
 
 /**
  * The name another module imports a module by: its file name without the
@@ -378,6 +379,19 @@ export function findButtonsWithoutAction(projectDir) {
     }
     return texts.get(file) ?? null;
   };
+  const declared = declaredPackages(projectDir);
+  /** @type {Map<string, boolean>} */
+  const installed = new Map();
+  // A bare module path is a package when Node has it, the project declares
+  // it, or it is installed where Node looks; any other is one only a bundler
+  // resolves, such as an alias with no tsconfig path.
+  const knownPackage = (/** @type {string} */ specifier, /** @type {string} */ file) => {
+    const {name} = splitSpecifier(specifier.replace(/^node:/, ''));
+    if (specifier.startsWith('node:') || builtinModules.includes(name) || declared.has(name)) return true;
+    const key = `${path.dirname(file)}\0${name}`;
+    if (!installed.has(key)) installed.set(key, findInstalledPackage(path.dirname(file), name, Infinity) != null);
+    return installed.get(key) === true;
+  };
   // An app that routes by the URL hash opens its first page from a `#` link.
   const hashRouting = files.some(file => /\b(?:HashRouter|createHashRouter)\b/.test(textOf(file) ?? ''));
   /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
@@ -393,6 +407,7 @@ export function findButtonsWithoutAction(projectDir) {
               isOwnCode: specifier => projectMapsImport(specifier, file),
               stem: moduleStem(file),
               hashRouting,
+              knownPackage: specifier => knownPackage(specifier, file),
             }),
       );
     }
@@ -420,6 +435,21 @@ export function findButtonsWithoutAction(projectDir) {
 }
 
 /**
+ * The packages the project's package.json declares in any dependency field,
+ * and its own name.
+ * @param {string} projectDir
+ * @returns {Set<string>}
+ */
+function declaredPackages(projectDir) {
+  const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
+  return new Set(
+    ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
+      .flatMap(field => Object.keys(pkg[field] ?? {}))
+      .concat(typeof pkg.name === 'string' ? [pkg.name] : []),
+  );
+}
+
+/**
  * Each file in the project's own source with icon imports that do not match
  * the project's icon sets (see `iconImportFindings`): an icon from a set that
  * is not in the list, or from a set later in the list than one that draws the
@@ -432,17 +462,7 @@ export function findButtonsWithoutAction(projectDir) {
  * @returns {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>}
  */
 export function findIconImports(projectDir, iconSets) {
-  const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
-  const declared = new Set(
-    [
-      'dependencies',
-      'devDependencies',
-      'peerDependencies',
-      'optionalDependencies',
-    ]
-      .flatMap(field => Object.keys(pkg[field] ?? {}))
-      .concat(typeof pkg.name === 'string' ? [pkg.name] : []),
-  );
+  const declared = declaredPackages(projectDir);
   // Only a file that names a set's module, a wrapped library, or an
   // icon-named export is parsed.
   const needles = [

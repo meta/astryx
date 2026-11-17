@@ -33,13 +33,14 @@ function stemOf(file) {
  * `file:line label` (the component when the button has no static label).
  * `@/` imports are the app's own code.
  * @param {Record<string, string>} modules file → source
+ * @param {{knownPackage?: (specifier: string) => boolean}} [options]
  */
-function deadButtons(modules) {
+function deadButtons(modules, {knownPackage = () => true} = {}) {
   const isOwnCode = (/** @type {string} */ specifier) => specifier.startsWith('@/');
   const scans = new Map(
     Object.entries(modules).map(([file, source]) => [
       file,
-      scanButtonActions(source, {isOwnCode, stem: stemOf(file)}),
+      scanButtonActions(source, {isOwnCode, stem: stemOf(file), knownPackage}),
     ]),
   );
   return buttonsWithoutAction({
@@ -179,6 +180,7 @@ describe('what is around the button', () => {
     ['a summary', '<details><summary><Button label="More" /></summary></details>'],
     ['an element with a click handler', '<div onClick={open}><Button label="Open" /></div>'],
     ['an element with a widget role', '<div role="button"><Button label="Open" /></div>'],
+    ['a component of the app named like a provider', '<AppProvider><Button label="Open" /></AppProvider>'],
     ['a disabled ButtonGroup', "<ButtonGroup isDisabled><Button label=\"Copy\" /></ButtonGroup>", "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';"],
     ['a disabled InputGroup', "<InputGroup isDisabled><Button label=\"Go\" /></InputGroup>", "import {InputGroup} from '@astryxdesign/core/InputGroup';"],
     ['a disabled fieldset', '<fieldset disabled><Button label="Send" /></fieldset>'],
@@ -213,12 +215,16 @@ describe('what is around the button', () => {
     ['a choice', '{open ? <Button label="Close" /> : null}'],
     ['a fragment', '<><Button label="Go" /></>'],
     ['plain HTML', '<div className="row"><section><Button label="Go" /></section></div>'],
-    ['a provider', '<ToastProvider><Button label="Go" /></ToastProvider>'],
+    ['a package provider', "<ToastProvider><Button label=\"Go\" /></ToastProvider>"],
+    ["a context's Provider", '<Theme.Provider value="dark"><Button label="Go" /></Theme.Provider>'],
     ['a landmark role on a layout component', '<Card role="main"><Button label="Go" /></Card>'],
     ['a landmark role on HTML', '<nav role="navigation"><div role="group"><Button label="Go" /></div></nav>'],
     ['a ButtonGroup that is not disabled', '<ButtonGroup isDisabled={false}><Button label="Copy" /></ButtonGroup>'],
   ])('%s: reported', (_, body) => {
-    const source = page(body, "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';").replace(
+    const source = page(
+      body,
+      "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup'; import {ToastProvider} from '@astryxdesign/core/Toast';",
+    ).replace(
       "import {VStack} from '@astryxdesign/core/Layout';",
       "import {VStack, Card, Layout} from '@astryxdesign/core/Layout';",
     );
@@ -288,6 +294,25 @@ describe('where the component that holds the button is rendered', () => {
     const app = {files: ['page.tsx'], scan: () => scanned, modulesNaming: () => ['page.tsx']};
     expect(buttonsWithoutAction(app)).toHaveLength(1);
     expect(buttonsWithoutAction({...app, complete: false})).toEqual([]);
+  });
+
+  it('a package.json subpath import is the app\'s own code', () => {
+    const page = (/** @type {string} */ body) => pageWith("import Hero from '#components/Hero';", body);
+    const heroModule = heroDefault;
+    expect(deadButtons({'Hero.tsx': heroModule, 'page.tsx': page('<a href="/x"><Hero /></a>')})).toEqual([]);
+    expect(deadButtons({'Hero.tsx': heroModule, 'page.tsx': page('<main><Hero /></main>')})).toEqual(['Hero.tsx:3 Start']);
+  });
+
+  it('a module path only a bundler resolves may render its imports anywhere', () => {
+    const knownPackage = (/** @type {string} */ specifier) => !specifier.startsWith('~/');
+    for (const body of ['<a href="/x"><Hero /></a>', '<main><Hero /></main>']) {
+      expect(
+        deadButtons({'Hero.tsx': heroDefault, 'page.tsx': pageWith("import Hero from '~/Hero';", body)}, {knownPackage}),
+      ).toEqual([]);
+    }
+    expect(
+      deadButtons({'Hero.tsx': hero, 'page.tsx': pageWith("const load = () => import('~/Hero');", '<a href="/x" onClick={load}>Go</a>')}, {knownPackage}),
+    ).toEqual([]);
   });
 
   it('an aliased import in the open is followed to the button', () => {

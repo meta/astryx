@@ -374,26 +374,29 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   and it reports no button in a folder named `test`, `tests`, `stories`,
   `fixtures` or `e2e`, though it reads those folders for where they render
   components. When the project has more source files than `doctor` reads, the
-  check does not run and says so.
-  The `button-actions` check warns for each `Button` or `IconButton` from
-  `@astryxdesign/core` that has no `onClick`, `clickAction`, `href`, or
-  `submit` or `reset` type, or whose handler has an empty body or whose link
-  goes nowhere, and that nothing around it can act on. A link goes nowhere
-  when it is an empty link, a `javascript:` link, or `#`, except in an app
-  that routes by the URL hash, where `#` opens the first page. Nothing acts
-  on a button when each element around it is a Core layout component, a React
-  wrapper, a provider, or HTML that holds no control and has no handler, link,
-  widget role or spread props, none of them disabled or inert, and when each
-  place the app renders the component that holds it is the same. A component that nothing in the app
-  renders or refers to, while its module exports it, is a page or an entry
-  point, and nothing is around it. The check does not report a button that it
-  cannot judge: one with props spread in, a ref, an id, a tooltip, a disabled
-  or loading state, or a prop it does not know; one inside an element, or a
-  prop of an element, that it does not trust; or one in a component that the
-  app refers to in a way the scan cannot follow, such as through `lazy` or
-  `import()` (directly or through a module that passes its exports on), a list
-  of components, a prop, a namespace read as a value, or a renamed re-export. The warning names each
-  button's file, line and label, and never fails `doctor`.
+  check does not run and says so. The `button-actions` check warns for each
+  `Button` or `IconButton` from `@astryxdesign/core` that has no `onClick`,
+  `clickAction`, `href`, or `submit` or `reset` type, or whose handler has an
+  empty body or whose link goes nowhere, and that nothing around it can act
+  on. A link goes nowhere when it is an empty link, a `javascript:` link, or
+  `#`, except in an app that routes by the URL hash, where `#` opens the first
+  page. Nothing acts on a button when each element around it is a Core layout
+  component, a React wrapper, a package's provider, a React context's
+  `Provider`, or HTML that holds no control and has no handler, link, widget
+  role or spread props, none of them disabled or inert, and when each place
+  the app renders the component that holds it is the same; relative imports,
+  path aliases and package.json `imports` are followed to the app's own code.
+  A component that nothing in the app renders or refers to, while its module
+  exports it, is a page or an entry point, and nothing is around it. The check
+  does not report a button that it cannot judge: one with props spread in, a
+  ref, an id, a tooltip, a disabled or loading state, or a prop it does not
+  know; one inside an element, or a prop of an element, that it does not
+  trust; or one in a component that the app refers to in a way the scan cannot
+  follow, such as through `lazy` or `import()` (directly or through a module
+  that passes its exports on), a list of components, a prop, a namespace read
+  as a value, a renamed re-export, or a module path only a bundler resolves.
+  The warning names each button's file, line and label, and never fails
+  `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

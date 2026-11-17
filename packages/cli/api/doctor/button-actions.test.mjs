@@ -25,6 +25,15 @@ afterEach(() => {
   fs.rmSync(tmp, {recursive: true, force: true});
 });
 
+/** A module whose one component renders a button with no action. */
+const HERO = [
+  "import {Button} from '@astryxdesign/core';",
+  'export default function Hero() {',
+  '  return <Button label="Start" />;',
+  '}',
+  '',
+].join('\n');
+
 const MAIN = [
   "import {createRoot} from 'react-dom/client';",
   "import App from './App';",
@@ -155,6 +164,42 @@ describe('the button-actions check', () => {
           '',
         ].join('\n'),
         'src/pages/test/Page.tsx': app('<Button label="Demo" />'),
+      });
+      expect(check?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'follows a package.json subpath import to the app\'s own code',
+    async () => {
+      const files = (/** @type {string} */ body) => ({
+        'package.json': JSON.stringify({
+          name: 'app',
+          private: true,
+          imports: {'#components/*': './src/components/*.tsx'},
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+        'src/main.tsx': MAIN,
+        'src/App.tsx': ["import Hero from '#components/Hero';", 'export default function App() {', `  return ${body};`, '}', ''].join('\n'),
+        'src/components/Hero.tsx': HERO,
+      });
+      expect((await buttonCheck(files('<a href="/start"><Hero /></a>')))?.status).toBe('pass');
+      expect((await buttonCheck(files('<main><Hero /></main>')))?.message).toBe(
+        '1 button does nothing when pressed: src/components/Hero.tsx:3 "Start".',
+      );
+    },
+    SLOW,
+  );
+
+  it(
+    'a component imported through an alias only the bundler knows is not reported',
+    async () => {
+      const check = await buttonCheck({
+        'vite.config.ts': "export default {resolve: {alias: {'~': '/src'}}};\n",
+        'src/main.tsx': MAIN,
+        'src/App.tsx': ["import Hero from '~/Hero';", 'export default function App() {', '  return <a href="/start"><Hero /></a>;', '}', ''].join('\n'),
+        'src/Hero.tsx': HERO,
       });
       expect(check?.status).toBe('pass');
     },

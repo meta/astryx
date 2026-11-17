@@ -397,7 +397,7 @@ function bindingReferent(path, local, member, isOwnCode) {
   const binding = path.scope.getBinding(local);
   const imported = importOf(binding);
   if (imported && !imported.typeOnly) {
-    const own = /^\.{1,2}(\/|$)/.test(imported.source) || isOwnCode(imported.source);
+    const own = ownModule(imported.source, isOwnCode);
     if (member != null) {
       if (own) return {kind: 'own', names: [member]};
       // A member of a namespace or default import is the module's export of
@@ -550,6 +550,8 @@ const ROUTERS = new Set(['react-router', 'react-router-dom']);
  * @typedef {object} ScanContext
  * @property {(specifier: string) => boolean} isOwnCode
  * @property {boolean} hashRouting whether the app routes by the URL hash
+ * @property {(specifier: string) => boolean} knownPackage whether a bare
+ *   module path names a package the project declares or has installed
  */
 
 /**
@@ -677,8 +679,8 @@ function isLayoutComponent(path, context) {
 /**
  * Whether an element renders its children in place and acts on no press: an
  * HTML element that holds no control, a Core layout component, a React
- * wrapper, or a context provider, none of them with a prop that may act on a
- * press.
+ * wrapper, a package's provider, or a context's `Provider`, none of them with
+ * a prop that may act on a press.
  * @param {any} path a JSXElement path
  * @param {ScanContext} context
  */
@@ -695,9 +697,11 @@ function rendersInPlace(path, context) {
       (target.source === 'react' && REACT_WRAPPERS.has(target.name)) ||
       /Provider$/.test(target.name);
     if (!layout) return false;
-  } else if (target.kind === 'own' || target.kind === 'local' || target.kind === 'other') {
-    const names = target.kind === 'local' ? [target.name] : target.names;
-    if (!names.some(name => /Provider$/.test(name))) return false;
+  } else {
+    // A context's own Provider (`Theme.Provider`) renders what it holds as it
+    // is; a component of the app named like a provider may wrap it in anything.
+    const name = path.node.openingElement.name;
+    if (name.type !== 'JSXMemberExpression' || name.property.name !== 'Provider') return false;
   }
   return !path.node.openingElement.attributes.some((/** @type {any} */ attribute) => actsOnPress(attribute, tag));
 }
@@ -774,7 +778,8 @@ function holdsActingContent(path, context) {
  * @property {'Button' | 'IconButton'} component
  * @property {string | null} label
  * @property {string | null} note the prop that does nothing, such as
- *   `empty onClick` or `href="#"`; null when the button has no action prop
+ *   `empty onClick` or `placeholder link: replace \`#\` with a real href`;
+ *   null when the button has no action prop
  * @property {Placement} placement
  */
 
@@ -849,7 +854,8 @@ function referredToElsewhere(binding) {
  * @param {(specifier: string) => boolean} isOwnCode
  */
 function ownModule(specifier, isOwnCode) {
-  return /^\.{1,2}(\/|$)/.test(specifier) || isOwnCode(specifier);
+  // A `#` specifier is a package.json `imports` entry: the package's own code.
+  return /^\.{1,2}(\/|$)|^#/.test(specifier) || isOwnCode(specifier);
 }
 
 /**
@@ -857,14 +863,16 @@ function ownModule(specifier, isOwnCode) {
  * action of their own, the components of the app it renders, and the
  * components it exports. Null when the module does not parse.
  * @param {string} source
- * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean}} options
+ * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean, knownPackage?: (specifier: string) => boolean}} options
  *   `isOwnCode` tells a path alias from a package; `stem` is the module's
  *   name as another module imports it (its file name, or its folder's for an
  *   `index` file); `hashRouting` says the app routes by the URL hash, so a
- *   `#` link opens its first page
+ *   `#` link opens its first page; `knownPackage` tells a package from a
+ *   module path only a bundler resolves (`~/Hero`), whose imports the scan
+ *   cannot follow (by default, every bare module path is a package)
  * @returns {ModuleScan | null}
  */
-export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}) {
+export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false, knownPackage = () => true}) {
   /** @type {any} */
   let file;
   try {
@@ -873,7 +881,8 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
     return null;
   }
   /** @type {ScanContext} */
-  const context = {isOwnCode, hashRouting};
+  const context = {isOwnCode, hashRouting, knownPackage};
+  const mayBeOwn = (/** @type {string} */ specifier) => ownModule(specifier, isOwnCode) || !knownPackage(specifier);
   /** @type {ButtonUse[]} */
   const buttons = [];
   /** @type {ComponentUse[]} */
@@ -912,10 +921,14 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
     },
     ImportDeclaration(/** @type {any} */ path) {
       const from = path.node.source.value;
-      if (path.node.importKind === 'type' || !ownModule(from, isOwnCode)) return;
+      if (path.node.importKind === 'type') return;
+      // A module path only a bundler resolves may be the app's own code, so
+      // every component it imports may render anywhere.
+      const unresolved = !ownModule(from, isOwnCode) && !knownPackage(from);
+      if (!unresolved && !ownModule(from, isOwnCode)) return;
       for (const specifier of path.node.specifiers) {
         if (specifier.importKind === 'type') continue;
-        if (!referredToElsewhere(path.scope.getBinding(specifier.local.name))) continue;
+        if (!unresolved && !referredToElsewhere(path.scope.getBinding(specifier.local.name))) continue;
         const imported = importOf(path.scope.getBinding(specifier.local.name))?.imported ?? '*';
         const fromStem = specifierStem(from);
         uses.push(
@@ -932,12 +945,12 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
     CallExpression(/** @type {any} */ path) {
       const [specifier] = path.node.arguments;
       if (path.node.callee.type !== 'Import' || specifier?.type !== 'StringLiteral') return;
-      if (!ownModule(specifier.value, isOwnCode)) return;
+      if (!mayBeOwn(specifier.value)) return;
       uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
     },
     ImportExpression(/** @type {any} */ path) {
       const specifier = path.node.source;
-      if (specifier?.type !== 'StringLiteral' || !ownModule(specifier.value, isOwnCode)) return;
+      if (specifier?.type !== 'StringLiteral' || !mayBeOwn(specifier.value)) return;
       uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
     },
     Program: {
@@ -951,7 +964,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
     },
     ExportAllDeclaration(/** @type {any} */ path) {
       const from = path.node.source.value;
-      if (!ownModule(from, isOwnCode)) return;
+      if (!mayBeOwn(from)) return;
       const fromStem = specifierStem(from);
       if (path.node.exported) {
         uses.push({local: null, names: [], module: fromStem, placement: 'blocked'});
@@ -975,7 +988,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
       if (from) {
         // A re-export under another name, or of a module's default export,
         // goes by a name the scan cannot match to the component.
-        if (!ownModule(from.value, isOwnCode)) return;
+        if (!mayBeOwn(from.value)) return;
         const fromStem = specifierStem(from.value);
         if (fromStem && !reexports.includes(fromStem)) reexports.push(fromStem);
         for (const specifier of specifiers ?? []) {
