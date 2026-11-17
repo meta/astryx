@@ -640,16 +640,23 @@ export function registerDiscover(program) {
             emit(
               record(withIconSetCoverage(d, iconSetCoverageOf(result)), {
                 omit: ['install', 'experimental'],
-                // An icon set is experimental (spec:AST-017 FR27): its name
-                // carries the mark, as in the list.
-                ...(d.experimental
-                  ? {
-                      format: {
+                format: {
+                  // An icon set is experimental (spec:AST-017 FR27): its name
+                  // carries the mark, as in the list.
+                  ...(d.experimental
+                    ? {
                         name: (/** @type {string} */ name) =>
                           `${name} [experimental]`,
-                      },
-                    }
-                  : {}),
+                      }
+                    : {}),
+                  // An icon set's default look reads as its variant name.
+                  ...(d.kind === 'icon-set'
+                    ? {
+                        default: (/** @type {{variant?: string}} */ look) =>
+                          look.variant ?? '',
+                      }
+                    : {}),
+                },
               }),
               // A doc that adds sections to another package's topic says how
               // to read each one.
