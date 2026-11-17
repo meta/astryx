@@ -26,10 +26,31 @@ import {dirname, join} from 'node:path';
 import * as nodeModule from 'node:module';
 import {existsSync, mkdirSync, realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
+import net from 'node:net';
 import {
   currentUid,
   isPrivateDir,
 } from '../../../foundation/env/private-dir.mjs';
+
+// Node writes to a file or a terminal synchronously, but on POSIX it writes
+// to a pipe asynchronously. A run that ends in `process.exit` while a pipe
+// write waits for a slow reader loses that output: the reader gets the first
+// 64 KiB (the pipe buffer), and a --json caller gets invalid JSON. So stdout
+// and stderr block on write when they are pipes, before anything prints. Each
+// write is then complete when it returns, and every exit keeps all its output,
+// in order. A write that fits in the pipe buffer returns at once, as before.
+// The stream's libuv handle sets the blocking mode; Node makes the same call
+// for a terminal and for a Windows pipe, which already block.
+if (process.platform !== 'win32') {
+  for (const stream of [process.stdout, process.stderr]) {
+    const handle = /** @type {{setBlocking?: (on: boolean) => number}} */ (
+      /** @type {any} */ (stream)._handle
+    );
+    if (stream instanceof net.Socket && !stream.isTTY) {
+      handle?.setBlocking?.(true);
+    }
+  }
+}
 
 // Node's compile cache keeps the compiled form of the CLI's modules between
 // runs, so a run skips most of their compiling. It lives in a folder of the
