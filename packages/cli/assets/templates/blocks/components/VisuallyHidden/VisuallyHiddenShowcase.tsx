@@ -8,6 +8,7 @@ import {Card} from '@astryxdesign/core/Card';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ArrowDownTrayIcon,
   ShareIcon,
@@ -29,6 +30,7 @@ const actions = [
  * so the demo genuinely exercises the component it documents.
  */
 export default function VisuallyHiddenShowcase() {
+  const showToast = useToast();
   return (
     <VStack gap={5} hAlign="center">
       <HStack gap={6} vAlign="stretch" wrap="wrap" hAlign="center">
@@ -44,6 +46,11 @@ export default function VisuallyHiddenShowcase() {
                   label={label}
                   icon={<Icon icon={icon} />}
                   variant="ghost"
+                  onClick={() =>
+                    showToast({
+                      body: `Demo: the ${label.toLowerCase()} action would run here`,
+                    })
+                  }
                 />
               ))}
             </HStack>

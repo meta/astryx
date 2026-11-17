@@ -25,6 +25,9 @@ export default function ToolbarThreeSlot() {
             variant="ghost"
             icon={<Icon icon={ArrowLeftIcon} xstyle={rtlStyles.mirror} />}
             isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: the previous page would open here'})
+            }
           />
         }
         centerContent={<Heading level={4}>Title</Heading>}

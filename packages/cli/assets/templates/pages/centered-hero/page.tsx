@@ -10,6 +10,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Section} from '@astryxdesign/core/Section';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
 import {ArrowRightIcon} from '@heroicons/react/20/solid';
 
 const IMAGE_URL = '/template-assets/light-scene-horizontal-1.png';
@@ -26,6 +27,7 @@ const heroFrame: CSSProperties = {
 };
 
 export default function CenteredHero() {
+  const showToast = useToast();
   return (
     <Layout
       content={
@@ -53,7 +55,6 @@ export default function CenteredHero() {
                 <Button
                   label="Get started"
                   variant="primary"
-                  href="#"
                   endContent={
                     <Icon
                       icon={ArrowRightIcon}
@@ -62,8 +63,17 @@ export default function CenteredHero() {
                       xstyle={rtlStyles.mirror}
                     />
                   }
+                  onClick={() =>
+                    showToast({body: 'Demo: sign-up would start here'})
+                  }
                 />
-                <Button label="Learn more" variant="secondary" href="#" />
+                <Button
+                  label="Learn more"
+                  variant="secondary"
+                  onClick={() =>
+                    showToast({body: 'Demo: the product tour would open here'})
+                  }
+                />
               </HStack>
             </VStack>
             <Section variant="transparent" padding={0}>

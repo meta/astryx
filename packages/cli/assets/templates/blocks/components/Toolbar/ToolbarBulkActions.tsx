@@ -13,6 +13,7 @@ import {
   useTableSelectionState,
 } from '@astryxdesign/core/Table';
 import {Stack} from '@astryxdesign/core/Layout';
+import {useToast} from '@astryxdesign/core/Toast';
 import {TrashIcon, ArchiveBoxIcon} from '@heroicons/react/24/outline';
 
 const DATA = [
@@ -24,6 +25,7 @@ const DATA = [
 ];
 
 export default function ToolbarBulkActions() {
+  const showToast = useToast();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(['1', '3', '5']),
   );
@@ -53,12 +55,22 @@ export default function ToolbarBulkActions() {
                 variant="ghost"
                 icon={<Icon icon={TrashIcon} />}
                 isIconOnly
+                onClick={() =>
+                  showToast({
+                    body: 'Demo: the selected rows would be deleted here',
+                  })
+                }
               />
               <Button
                 label="Archive"
                 variant="ghost"
                 icon={<Icon icon={ArchiveBoxIcon} />}
                 isIconOnly
+                onClick={() =>
+                  showToast({
+                    body: 'Demo: the selected rows would be archived here',
+                  })
+                }
               />
             </>
           }

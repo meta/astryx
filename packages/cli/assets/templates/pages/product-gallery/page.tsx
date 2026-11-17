@@ -10,6 +10,7 @@ import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
 import {ArrowRightIcon} from '@heroicons/react/24/outline';
 import type {CSSProperties} from 'react';
 
@@ -112,6 +113,7 @@ function ProductCard({product}: {product: Product}) {
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function ProductGalleryTemplate() {
+  const showToast = useToast();
   return (
     <Layout
       height="fill"
@@ -135,13 +137,15 @@ export default function ProductGalleryTemplate() {
                 <Button
                   label="Get started"
                   variant="primary"
-                  href="#"
                   endContent={
                     <Icon
                       icon={ArrowRightIcon}
                       color="inherit"
                       xstyle={rtlStyles.mirror}
                     />
+                  }
+                  onClick={() =>
+                    showToast({body: 'Demo: sign-up would start here'})
                   }
                 />
               </VStack>

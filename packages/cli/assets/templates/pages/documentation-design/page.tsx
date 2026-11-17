@@ -24,6 +24,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ArrowTopRightOnSquareIcon,
   ArrowsPointingOutIcon,
@@ -499,6 +500,7 @@ function getComponentDocs(key: string) {
 // ---------------------------------------------------------------------------
 
 function ComponentDetailView({activeNav}: {activeNav: string}) {
+  const showToast = useToast();
   const [exampleTabs, setExampleTabs] = useState<Record<string, string>>({});
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
@@ -664,17 +666,32 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                             variant="ghost"
                             size="sm"
                             icon={<Icon icon={ArrowTopRightOnSquareIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open in Craft here',
+                              })
+                            }
                           />
                           <Button
                             label="Send to CLI"
                             variant="ghost"
                             size="sm"
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would be sent to the CLI here',
+                              })
+                            }
                           />
                           <IconButton
                             label="Fullscreen"
                             variant="ghost"
                             size="sm"
                             icon={<Icon icon={ArrowsPointingOutIcon} />}
+                            onClick={() =>
+                              showToast({
+                                body: 'Demo: this example would open full screen here',
+                              })
+                            }
                           />
                         </HStack>
                       </HStack>

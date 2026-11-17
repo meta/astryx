@@ -6,6 +6,7 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 import {PlusIcon} from '@heroicons/react/24/outline';
 
 const VARIANTS = [
@@ -16,6 +17,7 @@ const VARIANTS = [
 ];
 
 export default function IconButtonFloating() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={4}>
       <Text type="supporting" color="secondary">
@@ -29,6 +31,11 @@ export default function IconButtonFloating() {
             variant={variant}
             icon={<Icon icon={PlusIcon} />}
             elevation="high"
+            onClick={() =>
+              showToast({
+                body: `Demo: the ${label.toLowerCase()} action would run here`,
+              })
+            }
           />
         ))}
       </Stack>
