@@ -88,6 +88,39 @@ export const NoLink: Story = {
   },
 };
 
+// Citations inside a sentence: a label chip, with and without an icon, sits
+// centred on the line; a number stays a superscript.
+export const InASentence: Story = {
+  render: () => (
+    <p style={{maxWidth: 520, margin: 0}}>
+      Hooks let a function component hold state{' '}
+      <Citation
+        source={{title: 'React Documentation', url: 'https://react.dev'}}
+        number={1}
+      />{' '}
+      and subscribe to outside data{' '}
+      <Citation
+        source={{
+          title: 'Documentation',
+          url: 'https://example.com',
+          icon: <Icon icon="externalLink" size="sm" />,
+        }}
+        number={2}
+      />
+      , as the guide explains
+      <Citation
+        source={{
+          title: 'TypeScript Handbook',
+          url: 'https://typescriptlang.org',
+        }}
+        number={3}
+        variant="number"
+      />
+      .
+    </p>
+  ),
+};
+
 export const Variants: Story = {
   render: () => (
     <div
