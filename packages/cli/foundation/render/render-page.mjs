@@ -1300,12 +1300,21 @@ export async function renderPage(entry, options = {}) {
   // Images and fonts the page or a stylesheet names by a relative path
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
+  /**
+   * Files the page uses from outside the folder it carries from, which no
+   * reverse writes; a package's own files are not the page's.
+   * @type {string[]}
+   */
+  const outside = [
+    .../** @type {string[]} */ (message.outsideFiles ?? []),
+  ];
   for (const sheet of carriedCss) {
-    if (
-      !isInside(sheet, scope) ||
-      path.relative(scope, sheet).split(path.sep).includes('node_modules')
-    )
+    if (path.relative(scope, sheet).split(path.sep).includes('node_modules'))
       continue;
+    if (!isInside(sheet, scope)) {
+      if (!outside.includes(sheet)) outside.push(sheet);
+      continue;
+    }
     if (!files.includes(sheet)) files.push(sheet);
   }
   /** Assets named in a warning already, so each is named once. @type {Set<string>} */
@@ -1446,6 +1455,14 @@ export async function renderPage(entry, options = {}) {
   }
   for (const asset of notCarried) {
     leftOut.push(path.relative(base, asset).split(path.sep).join('/'));
+  }
+  for (const f of outside) {
+    const rel = path.relative(base, f).split(path.sep).join('/');
+    leftOut.push(rel);
+    warnings.push({
+      code: 'not-embedded',
+      message: `${rel} is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
+    });
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
     .exec(markup)?.[1]

@@ -2469,6 +2469,39 @@ describe('render(): a page outside a project', () => {
     expect(renamed.stdout).not.toContain('notCarried');
   }, 60_000);
 
+  it('names a module the page imports from outside the folder it carries from', () => {
+    const tree = path.join(away, 'outside-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+    });
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html).toContain('North South');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: ../lib/rows.ts (--reverse cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+    // Rendered from the folder that holds both, the module is carried.
+    const whole = runBin(tree, ['experimental', 'render', 'page/page.tsx', '--out', 'whole.html']);
+    expect(whole.status).toBe(0);
+    expect(whole.json.data).not.toHaveProperty('notCarried');
+    expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts']);
+  }, 60_000);
+
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
     const tree = path.join(away, 'config-renamed');
     fs.mkdirSync(tree, {recursive: true});
