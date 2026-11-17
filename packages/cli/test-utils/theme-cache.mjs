@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The theme editor's part data and component docs for the CLI's own
- *   Core, built once per test run and copied into each fixture that links
+ * @file The theme editor's part data, component docs and page component
+ *   items for the CLI's own Core, built once per test run and copied into each fixture that links
  *   that Core, as a second run of the editor in an app finds them.
  * @input The run's folder for them (`astryxThemeCacheDir`, provided by the
  *   node project's globalSetup) and the fixture's root.
@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {inject} from 'vitest';
 
-/** The cache files of one Core: the part data and the component docs. */
-export const CACHE_FILES = ['parts.json', 'docs.json'];
+/** The cache files of one Core: the part data, the component docs and the component items of the editor's pages. */
+export const CACHE_FILES = ['parts.json', 'docs.json', 'items.json'];
 
 /**
  * A fixture's editor cache folder, beside the node_modules that holds its

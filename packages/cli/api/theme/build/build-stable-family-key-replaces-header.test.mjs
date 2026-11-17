@@ -117,7 +117,7 @@ describe('N4: a family key over a file the build did not write', () => {
     );
     expect(err).toBeUndefined();
     expect(lines.join('\n')).toContain(
-      'fam/index.js has no build header (an output from a CLI before 0.6.7, or a file of your own or another tool’s), and this build of fam/ocean.ts replaces it; to keep a file of your own there, build with another --family-key.'.replace(
+      'fam/index.js has no build header (an output of an earlier build, or a file of your own or another tool’s), and this build of fam/ocean.ts replaces it; to keep a file of your own there, build with another --family-key.'.replace(
         '’',
         "'",
       ),

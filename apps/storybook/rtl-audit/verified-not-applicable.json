@@ -155,7 +155,7 @@
   },
   {
     "component": "core/Code",
-    "reason": "Code is an inline typographic treatment with a monospace font, symmetric background/radius, and logical padding. The code string owns its own bidi content; the component adds no directional visual, positioning, ordering, interaction, or overlay."
+    "reason": "Code is an inline typographic treatment with a monospace font, symmetric background/radius, and logical padding. It isolates its content as left-to-right (dir=\"ltr\") so code reads in source order inside right-to-left text; the component adds no directional visual, positioning, ordering, interaction, or overlay."
   },
   {
     "component": "core/Divider",

@@ -37,7 +37,11 @@
  *   modules (api/theme/build/self-contained.mjs), each kept while every
  *   path it stamped but the CLI's own files (which its build id and the
  *   folder it runs from, both in every entry's key, stand for) is
- *   unchanged, in any command. The commands whose runs keep the other
+ *   unchanged, in any command. Through `persistedValue`, the stored docs
+ *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
+ *   doc's parse by the doc's text and the zod release the parsers load,
+ *   which with the build id are all the parse depends on, in a run that
+ *   keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
@@ -1117,6 +1121,90 @@ export function persistedDerived(key, compute, codec, inputs = []) {
     }
   });
   return value;
+}
+
+/**
+ * A value that is a function of `key` and of this CLI build alone, kept in
+ * the catalogs folder: the parse of a doc the CLI reads from the stored docs,
+ * by the doc's text. The build and the folder it runs from stand for the
+ * CLI's own code, as in every kept entry, so nothing else is stamped. Kept
+ * only in a run that keeps catalogs (recordRunFor), by an installed CLI whose
+ * cache folder exists, and only when `codec` stores the value as text that
+ * reads back exactly. The entry holds a digest of that text, so a value that
+ * was changed after it was written is a miss. Anywhere else, or on any read
+ * or write error, `compute` runs as before. A `compute` that throws keeps
+ * nothing, so it throws the same way on every run.
+ * @template T, E
+ * @param {unknown[]} key - Everything the value is a function of, besides
+ *   the CLI build; its first item names the kind of value.
+ * @param {() => T} compute
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
+ * @returns {T}
+ */
+export function persistedValue(key, compute, codec) {
+  if (!run) return compute();
+  const id = withoutRecording(buildId);
+  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return compute();
+  const file = entryFile(dir, key, id);
+  const entry = entryKey(key, id);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    const value =
+      stored?.format === FORMAT &&
+      stored.pure === true &&
+      stored.key === entry &&
+      stored.sum === textSum(JSON.stringify(stored.value))
+        ? readBack(() => stored.value, codec)
+        : undefined;
+    if (value !== undefined) {
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return value;
+    }
+  } catch {
+    // No usable entry: computed below.
+  }
+  const value = compute();
+  withoutRecording(() => {
+    try {
+      const body = storedText(codec, value);
+      if (body === undefined) return;
+      const head = JSON.stringify({
+        format: FORMAT,
+        pure: true,
+        key: entry,
+        sum: textSum(body),
+      });
+      // The value's text goes in as checked, as the head's last field.
+      const text = `${head.slice(0, -1)},"value":${body}}`;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evictOldest(dir, isEntry);
+    } catch {
+      // A value that cannot be stored is computed again next time.
+    }
+  });
+  return value;
+}
+
+/**
+ * The digest a value kept by persistedValue is checked against: its JSON
+ * text, as written and as the value read back writes it again.
+ * @param {string | undefined} text
+ * @returns {string | null}
+ */
+function textSum(text) {
+  return text === undefined
+    ? null
+    : createHash('sha256').update(text).digest('hex').slice(0, 32);
 }
 
 /**

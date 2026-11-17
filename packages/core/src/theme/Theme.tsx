@@ -49,7 +49,7 @@ import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {ThemeContext} from './useTheme';
+import {SystemSchemeContext, ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -64,7 +64,10 @@ import {createSharedContext} from '../utils/sharedContext';
 interface ThemeProps {
   /** Theme from defineTheme() */
   theme: DefinedTheme;
-  /** Color mode - 'system' follows OS preference */
+  /**
+   * Color mode. `system` takes the page's light or dark scheme: the reader's
+   * preference, unless the page or its host sets the root's scheme.
+   */
   mode?: ThemeMode;
   /** Children to render */
   children: React.ReactNode;
@@ -277,7 +280,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ * - 'system' → removes data-theme (Core's stylesheet and reset.css default the
+ *   root to color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -360,6 +364,10 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
+  const parentMode = use(ThemeContext)?.mode;
+  const parentForces = parentMode === 'light' || parentMode === 'dark';
+  const aroundScheme = use(SystemSchemeContext);
+  const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   registerTheme(theme);
 
@@ -371,33 +379,41 @@ export function Theme({
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
   useRootTextSizeSync(isNested);
 
-  // Get color-scheme style
+  // A system Theme takes the scheme around it. That is the page root's, or a
+  // system Theme's above it. Core's stylesheet and reset.css make the root
+  // follow the reader's preference, and a host can set its own. Under a Theme
+  // that forces light or dark, a system Theme declares `light dark`. Then it
+  // follows the reader's preference again.
   const colorSchemeStyle =
     mode === 'dark'
       ? wrapperStyles.dark
       : mode === 'light'
         ? wrapperStyles.light
-        : wrapperStyles.system;
+        : parentForces
+          ? wrapperStyles.system
+          : null;
 
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
 
   return (
-    <ThemeContext value={ctxValue}>
-      <ThemeNestingContext value={true}>
-        <div
-          {...stylex.props(
-            wrapperStyles.base,
-            colorSchemeStyle,
-            reducesMotion && wrapperStyles.reducedMotion,
-          )}
-          data-astryx-theme={theme.name}
-          {...reducedMotionMarkProps(reducesMotion)}
-          data-theme={mode === 'system' ? undefined : mode}>
-          {children}
-        </div>
-      </ThemeNestingContext>
-    </ThemeContext>
+    <SystemSchemeContext value={systemScheme}>
+      <ThemeContext value={ctxValue}>
+        <ThemeNestingContext value={true}>
+          <div
+            {...stylex.props(
+              wrapperStyles.base,
+              colorSchemeStyle,
+              reducesMotion && wrapperStyles.reducedMotion,
+            )}
+            data-astryx-theme={theme.name}
+            {...reducedMotionMarkProps(reducesMotion)}
+            data-theme={mode === 'system' ? undefined : mode}>
+            {children}
+          </div>
+        </ThemeNestingContext>
+      </ThemeContext>
+    </SystemSchemeContext>
   );
 }
 

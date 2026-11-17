@@ -312,4 +312,38 @@ describe('stable build typography values', () => {
       /500 is a number: a type mismatch/,
     );
   });
+
+  it('warns a radius scale with no base or multiplier, or one that is no number', async () => {
+    for (const [radius, why] of [
+      [
+        '{base: 8}',
+        /radius \(line 4\): the radius scale is given no multiplier.*NaNpx/,
+      ],
+      ['{multiplier: 2}', /given no base/],
+      ["{base: 'x', multiplier: 1}", /radius\.base .*is a number/],
+      // A falsy radius Core skips: the base's corners stay.
+      [
+        '0',
+        /Core skips a radius of 0 .*keeps its base theme's corners.*radius: \{base: 0, multiplier: 1\}/,
+      ],
+      ["''", /Core skips a radius of "" .*keeps its base theme's corners/],
+    ]) {
+      const r = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({\n  name: 'p',\n  radius: ${radius},\n});\n`,
+      );
+      expect(r.lines.join('\n'), String(radius)).toMatch(why);
+    }
+    // A whole scale, and one whose base Core multiplies as a number (a
+    // boolean counts as 1 or 0), warn nothing.
+    for (const radius of [
+      '{base: 8, multiplier: 1}',
+      '{base: true, multiplier: 1}',
+      '{base: 4, multiplier: false}',
+    ]) {
+      const whole = await buildSource(
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'p', radius: ${radius}});\n`,
+      );
+      expect(whole.lines.join('\n'), radius).not.toMatch(/radius/);
+    }
+  });
 });
