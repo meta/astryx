@@ -401,6 +401,29 @@ describe('useTheme system follows the page root', () => {
     expect(result.current.mode).toBe('light');
   });
 
+  it('reads the color-scheme meta when the root names no scheme, as the browser does', () => {
+    rootScheme = 'normal';
+    stubRootScheme();
+    vi.mocked(useMediaQuery).mockReturnValue(true);
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'color-scheme');
+    meta.setAttribute('data-probe', '');
+    document.head.append(meta);
+    for (const [content, mode] of [
+      ['light dark', 'dark'],
+      ['dark', 'dark'],
+      ['only light', 'light'],
+      ['normal', 'light'],
+    ] as const) {
+      meta.setAttribute('content', content);
+      const {result, unmount} = renderHook(() => useTheme(), {
+        wrapper: ({children}) => wrapper({children, mode: 'system'}),
+      });
+      expect(result.current.mode, content).toBe(mode);
+      unmount();
+    }
+  });
+
   it('leaves the preference to decide when the root names both schemes, or the engine reports none', () => {
     stubRootScheme();
     for (const scheme of ['light dark', '']) {

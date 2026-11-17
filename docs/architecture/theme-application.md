@@ -119,9 +119,10 @@ standard width map.
   unknown mode.** `Theme`'s mode values and default are owned by
   `component:Theme`. `system` writes no forced mode to `<html>`, and its
   wrapper takes the scheme around it (`component:Theme` FR2). `useTheme()`
-  resolves it the same way: to the one scheme the page root names (a host
-  that sets the root's `color-scheme` to `dark`, say), to light when the root
-  names none (the page then draws light), else to the platform's light/dark
+  resolves it the same way: to the one scheme the page draws in (a host
+  that sets the root's `color-scheme` to `dark`, say, or, when the root names
+  none, the page's `<meta name="color-scheme">`), to light when neither names
+  one (the page then draws light), else to the platform's light/dark
   preference; under a Theme that forces `light` or `dark`, to the
   platform preference. Only a `system` consumer under no forced Theme reads
   the root: one shared observer, created for the first such consumer and

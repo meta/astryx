@@ -8,7 +8,9 @@
  * @output Real-engine proof that a system Theme takes the scheme of the page
  *   root, so a host that forces the root dark gets dark inside the Theme and
  *   from `useTheme()`; that the root follows the reader's preference with
- *   reset.css, and that without it a root that names no scheme stays light;
+ *   reset.css, and that without it a root that names no scheme stays light
+ *   unless the page's color-scheme meta names dark, in the CSS and in
+ *   `useTheme()`;
  *   that a system Theme under a Theme that forces light follows the reader's
  *   preference; and that a root Theme that forces dark keeps the page dark
  * @position Run with `pnpm test:a11y-contract`. Which scheme an element
@@ -225,5 +227,39 @@ test.describe('the reader prefers dark', () => {
       'system-under-light': DARK,
       'system-under-system': LIGHT,
     });
+    await expect
+      .poll(() => hookModes(page))
+      .toEqual({
+        'root-system': 'light',
+        'forced-light': 'light',
+        'system-under-light': 'dark',
+        'system-under-system': 'light',
+      });
+  });
+
+  test('without reset.css, a page whose color-scheme meta names both schemes is dark, in the CSS and in useTheme()', async ({
+    page,
+  }) => {
+    await openStory(page, {withoutReset: true});
+    await page.evaluate(() => {
+      const meta = document.createElement('meta');
+      meta.name = 'color-scheme';
+      meta.content = 'light dark';
+      document.head.append(meta);
+    });
+    expect(await schemes(page)).toEqual({
+      'root-system': DARK,
+      'forced-light': LIGHT,
+      'system-under-light': DARK,
+      'system-under-system': DARK,
+    });
+    await expect
+      .poll(() => hookModes(page))
+      .toEqual({
+        'root-system': 'dark',
+        'forced-light': 'light',
+        'system-under-light': 'dark',
+        'system-under-system': 'dark',
+      });
   });
 });

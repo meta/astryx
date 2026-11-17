@@ -232,33 +232,53 @@ const rootScheme = sharedState(
 );
 
 const STYLE_NODES = 'style, link[rel~="stylesheet"]';
+/** The meta element that names the schemes a page supports. */
+const SCHEME_META = 'meta[name="color-scheme" i]';
 
 /**
- * `light` or `dark` when the page root names only that scheme, `light` when it
- * names none (`normal`: the page draws light), and null when it names both,
- * so the reader's preference decides, or when the engine reports no scheme.
+ * `light` or `dark` for schemes that name only that one, null for schemes
+ * that name both (the reader's preference decides), and undefined for none.
+ */
+function oneScheme(schemes: string): 'light' | 'dark' | null | undefined {
+  const names = schemes.toLowerCase().split(/\s+/);
+  const light = names.includes('light');
+  const dark = names.includes('dark');
+  if (light && dark) {
+    return null;
+  }
+  if (light || dark) {
+    return dark ? 'dark' : 'light';
+  }
+  return undefined;
+}
+
+/**
+ * The scheme the page draws in, as the browser picks it: the root's
+ * `color-scheme` when it names one or both, else the page's
+ * `<meta name="color-scheme">`, else light. `light` or `dark` when that names
+ * one scheme; null when it names both, so the reader's preference decides,
+ * or when the engine reports no scheme.
  */
 function getRootSchemeSnapshot(): 'light' | 'dark' | null {
   const declared: string | undefined = window.getComputedStyle(
     document.documentElement,
   ).colorScheme;
-  if (declared === 'normal') {
-    return 'light';
-  }
-  const names = (declared ?? '').split(/\s+/);
-  const light = names.includes('light');
-  const dark = names.includes('dark');
-  if (light === dark) {
+  if (declared == null || declared === '') {
     return null;
   }
-  return dark ? 'dark' : 'light';
+  if (declared !== 'normal') {
+    return oneScheme(declared) ?? null;
+  }
+  const meta = document.querySelector(SCHEME_META)?.getAttribute('content');
+  const fromMeta = meta == null ? undefined : oneScheme(meta);
+  return fromMeta === undefined ? 'light' : fromMeta;
 }
 
 /**
  * Whether a change can change the root's scheme: one of the root's
- * attributes, the text of a style element, an attribute of a style or link
- * element (`href`, `media`, `disabled`, `rel`), or a style or stylesheet link
- * that came or went in the head.
+ * attributes, the text of a style element, an attribute of a style, link or
+ * meta element (`href`, `media`, `disabled`, `rel`, `name`, `content`), or a
+ * style, stylesheet link or color-scheme meta that came or went in the head.
  */
 function changesRootScheme(records: MutationRecord[]): boolean {
   return records.some(record => {
@@ -271,12 +291,13 @@ function changesRootScheme(records: MutationRecord[]): boolean {
       return true;
     }
     if (record.type === 'attributes') {
-      return element?.matches('link, style') === true;
+      return element?.matches('link, style, meta') === true;
     }
+    const watched = `${STYLE_NODES}, ${SCHEME_META}`;
     return [...record.addedNodes, ...record.removedNodes].some(
       node =>
         node instanceof Element &&
-        (node.matches(STYLE_NODES) || node.querySelector(STYLE_NODES) != null),
+        (node.matches(watched) || node.querySelector(watched) != null),
     );
   });
 }
@@ -317,7 +338,7 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['href', 'media', 'disabled', 'rel'],
+      attributeFilter: ['href', 'media', 'disabled', 'rel', 'name', 'content'],
     });
     document.addEventListener('load', onStylesheetLoad, true);
     rootScheme.stop = () => {
@@ -335,8 +356,8 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
 }
 
 /**
- * The one scheme the page root names, or null when it names both or none.
- * With `watch` false it reads nothing and subscribes to nothing. Server
+ * The one scheme the page draws in (the root's, else its color-scheme meta,
+ * else light), or null when the reader's preference decides. With `watch` false it reads nothing and subscribes to nothing. Server
  * rendering reads null, so it resolves the OS preference as before.
  */
 function useRootScheme(watch: boolean): 'light' | 'dark' | null {
