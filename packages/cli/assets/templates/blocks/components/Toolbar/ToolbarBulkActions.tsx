@@ -59,7 +59,7 @@ export default function ToolbarBulkActions() {
                 isIconOnly
                 onClick={() =>
                   confirm.show({
-                    title: `Delete ${selectedKeys.size} rows?`,
+                    title: `Delete ${selectedKeys.size} ${selectedKeys.size === 1 ? 'row' : 'rows'}?`,
                     description: "This demo won't delete anything.",
                     actionLabel: 'Delete',
                     onAction: () => {
@@ -79,7 +79,7 @@ export default function ToolbarBulkActions() {
                 isIconOnly
                 onClick={() =>
                   confirm.show({
-                    title: `Archive ${selectedKeys.size} rows?`,
+                    title: `Archive ${selectedKeys.size} ${selectedKeys.size === 1 ? 'row' : 'rows'}?`,
                     description: "This demo won't archive anything.",
                     actionLabel: 'Archive',
                     onAction: () => {
