@@ -1715,7 +1715,7 @@ describe('extension semantics and built metadata', () => {
     ).toBe(weightWithoutScale.tokens['--text-heading-1-weight']);
   });
 
-  it("takes a numeric typography weight, written as its text, through an extended base's rules", () => {
+  it("takes a numeric typography weight from untyped input, written as its text, through an extended base's rules", () => {
     const base = defineTheme({
       name: 'numeric-weight-base',
       typography: {scale: {base: 14, ratio: 1.25}},
@@ -1728,14 +1728,16 @@ describe('extension semantics and built metadata', () => {
         ],
       },
     });
+    // A theme written in JavaScript has no types to stop a number.
+    const typography: unknown = {
+      scale: {base: 16, ratio: 1.2},
+      heading: {weight: 700, weights: {2: 800}},
+      body: {weight: 450},
+    };
     const child = defineTheme({
       name: 'numeric-weight-child',
       extends: base,
-      typography: {
-        scale: {base: 16, ratio: 1.2},
-        heading: {weight: 700, weights: {2: 800}},
-        body: {weight: 450},
-      },
+      typography: typography as DefineThemeInput['typography'],
     });
 
     expect(child.tokens['--text-heading-1-weight']).toBe('700');

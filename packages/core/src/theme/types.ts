@@ -12,11 +12,10 @@
 
 /**
  * Named font weight — maps to var(--font-weight-*) at the token layer.
- * Raw CSS values (e.g. '800') are accepted as an escape hatch, and so is a
- * number (`800`), which is written as its text.
+ * Raw CSS values (e.g. '800') are accepted as an escape hatch.
  */
 export type FontWeight =
-  'normal' | 'medium' | 'semibold' | 'bold' | (string & {}) | number;
+  'normal' | 'medium' | 'semibold' | 'bold' | (string & {});
 
 /**
  * A typography role declaration (body, heading, or code).
@@ -86,7 +85,8 @@ export interface TypographyConfig {
 export type StyleXStyles = any;
 
 /**
- * Theme mode - system follows OS preference
+ * Theme mode. `system` takes the page's light or dark scheme: the reader's
+ * preference, unless the page or its host sets the root's scheme.
  */
 export type ThemeMode = 'system' | 'light' | 'dark';
 
