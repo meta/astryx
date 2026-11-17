@@ -839,6 +839,97 @@ function ownWords(k) {
 }
 
 /**
+ * The corners of a box a clause names, as the logical longhands' keys
+ * (start-start is top-left in a left-to-right page): "the top corners",
+ * "rounded on top", "the top-left corner", "on the right side", "except
+ * the bottom". The words of the part the clause is about are left out
+ * first, so "bottom sheet" or "top nav" names no corner. `only` is true
+ * when the clause says the other corners are not to be rounded ("only",
+ * "just", "except"); `except` when the named corners are the ones left out.
+ * Null when it names none.
+ * @param {string} text
+ * @param {string | null} [part] the part (or group) the clause is about
+ * @returns {{corners: string[], only: boolean, except: boolean} | null}
+ */
+export function cornersNamed(text, part = null) {
+  let t = ` ${text.toLowerCase()} `;
+  if (part)
+    t = t.replace(
+      new RegExp(`\\b${part.split('-').join('[\\s-]')}(?:e?s)?\\b`, 'g'),
+      ' ',
+    );
+  t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
+  const KEY = /** @type {Record<string, string>} */ ({
+    'top-left': 'start-start',
+    'top-right': 'start-end',
+    'bottom-left': 'end-start',
+    'bottom-right': 'end-end',
+  });
+  const SIDE = /** @type {Record<string, string[]>} */ ({
+    top: ['start-start', 'start-end'],
+    bottom: ['end-start', 'end-end'],
+    left: ['start-start', 'end-start'],
+    right: ['start-end', 'end-end'],
+  });
+  // (In the order the longhands are written: the top, then the bottom.)
+  const ALL = ['start-start', 'start-end', 'end-start', 'end-end'];
+  /** @param {string} u @param {boolean} [bare] a side said alone counts ("except the bottom") */
+  const read = (u, bare = false) => {
+    /** @type {string[]} */
+    const got = [];
+    // One corner: "top-left", "top left corner", "left top".
+    const one =
+      /\b(top|bottom)[\s-]?(left|right)\b|\b(left|right)[\s-](top|bottom)\b(?=\s+corner)/g;
+    const rest = u.replace(one, (_, v, h, h2, v2) => {
+      got.push(String(KEY[`${v ?? v2}-${h ?? h2}`]));
+      return ' ';
+    });
+    // A side: "the top corners", "top and bottom corners", "on top", "at
+    // the bottom", "the right side", "the top of".
+    const SIDES = '(top|bottom|left|right)';
+    const sideRe = new RegExp(
+      [
+        `\\b${SIDES}(?=(?:\\s*(?:,|&|and)\\s*(?:the\\s+)?(?:top|bottom|left|right))*\\s+(?:side\\s+|edge\\s+)?corners?\\b)`,
+        `\\b(?:on|at|along|across|to)\\s+(?:the\\s+)?(?:very\\s+)?${SIDES}\\b`,
+        `\\b${SIDES}\\s+(?:side|edge|end)s?\\b`,
+        `\\bthe\\s+${SIDES}\\s+of\\b`,
+        `\\b(?:and|&|or)\\s+(?:the\\s+)?${SIDES}\\b(?=\\s+(?:side|edge|corners?)\\b)`,
+        ...(bare ? [`\\b${SIDES}\\b`] : []),
+      ].join('|'),
+      'g',
+    );
+    for (const m of rest.matchAll(sideRe)) {
+      const side = m.slice(1).find(Boolean);
+      if (side) got.push(...(SIDE[side] ?? []));
+    }
+    return [...new Set(got)];
+  };
+  const ex =
+    /\b(?:except|but not|other than|apart from|besides|save for)\s+(?:for\s+)?(.*)$/.exec(
+      t,
+    );
+  if (ex) {
+    const left = read(String(ex[1]), true);
+    // ("Except the bottom" after a side: "the top corners except the
+    // left one" is the corners named before, less those.)
+    const before = read(t.slice(0, ex.index));
+    if (left.length)
+      return {
+        corners: (before.length ? before : ALL).filter(k => !left.includes(k)),
+        only: true,
+        except: true,
+      };
+  }
+  const named = read(t);
+  if (!named.length) return null;
+  return {
+    corners: ALL.filter(k => named.includes(k)),
+    only: /\b(only|just|alone|solely)\b/.test(t),
+    except: false,
+  };
+}
+
+/**
  * Each status role with the words its own dial's help gives for it (the
  * words in its parentheses: success "done, valid, positive"), and its own
  * name: the vocabulary a color "for" a thing is matched against.
@@ -3333,7 +3424,7 @@ function clausesOf(q, partWords, words = null) {
       )
       .split(
         // A font stack ("Georgia, serif") is one value, not two asks.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b))/,
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
@@ -5502,8 +5593,12 @@ export function draftAnswer(ctx, env, question) {
       '',
     )
     // "just the headers bolder", "only the titles bigger": a scope, not a
-    // break between asks.
-    .replace(/(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)/gi, '')
+    // break between asks. ("Only the bottom corners" says the other corners
+    // are not rounded: the corners reader reads it.)
+    .replace(
+      /(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)(?!(?:the|my)\s+(?:top|bottom|left|right|upper|lower)\b[\w\s-]*\bcorners?\b)/gi,
+      '',
+    )
     // "headers bolder", "titles bigger": with a text word and no surface
     // word, the headings' type; with a surface word ("header background"),
     // the app header part.
@@ -12768,7 +12863,16 @@ export function draftAnswer(ctx, env, question) {
     // An except word inside an ask clause.
     const exceptWord =
       /\b(except|other than|apart from|aside from|besides)\b/.exec(text);
-    if (exceptWord && !c.except) unread.push(exceptWord[0]);
+    // (Not an except of corners, read by the corners reader: "4px except
+    // the bottom" writes the corners it leaves out.)
+    const cornerExcept =
+      cornersNamed(text)?.except &&
+      steps.some(x =>
+        /^border-(?:(?:start|end)-(?:start|end)-)?radius$/.test(
+          String(x.thing),
+        ),
+      );
+    if (exceptWord && !c.except && !cornerExcept) unread.push(exceptWord[0]);
     return [...new Set(unread.filter(Boolean))];
   };
   /**
@@ -20472,44 +20576,138 @@ export function draftAnswer(ctx, env, question) {
             };
         }
         // ("4px top corners", "square bottom corners", "round the left
-        // corners 8px": the corners on those sides only, each its own
-        // longhand, start and end in the writing direction.)
+        // corners 8px", "the top-left corner 12px", "rounded on top",
+        // "square on the right side", "4px except the bottom": the corners
+        // named, each its own longhand, start and end in the writing
+        // direction. The part's own words name no corner ("bottom sheet").
+        // A size, or square, goes on the corners named; the others stay as
+        // they are, unless the clause rounds only those ("round only the
+        // bottom corners", "4px except the bottom"), when they are square.
+        // Rounded with no size keeps the radius the corners named have now
+        // and squares the others. When every corner is settled, one radius
+        // of four is written.)
         {
-          const sides = [
-            ...new Set(
-              [
-                ...c.text.matchAll(
-                  /\b(top|bottom|left|right)\b(?=[\w\s-]*\bcorners?\b)|\bcorners?\b[\w\s-]*?\b(?:on|at|along) (?:the )?(top|bottom|left|right)\b/g,
-                ),
-              ].map(m => m[1] ?? m[2]),
-            ),
-          ];
-          const sidePx = /\b(square|sharp)\b/.test(c.text)
+          const named = on ? cornersNamed(c.text, on) : null;
+          const square = /\b(square[ds]?|sharp|squared off)\b/.test(c.text);
+          const sidePx = square
             ? '0'
             : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ?? null);
+          const sideWords = (/** @type {string[]} */ ks) => {
+            const NAME = /** @type {Record<string, string>} */ ({
+              'start-start': 'top-left',
+              'start-end': 'top-right',
+              'end-end': 'bottom-right',
+              'end-start': 'bottom-left',
+            });
+            const has = (/** @type {string[]} */ xs) =>
+              xs.every(x => ks.includes(x));
+            if (ks.length === 4) return 'all four corners';
+            for (const [w, xs] of /** @type {Array<[string, string[]]>} */ ([
+              ['top', ['start-start', 'start-end']],
+              ['bottom', ['end-start', 'end-end']],
+              ['left', ['start-start', 'end-start']],
+              ['right', ['start-end', 'end-end']],
+            ]))
+              if (ks.length === 2 && has(xs)) return `the ${w} corners`;
+            return `the ${ks.map(k => NAME[k]).join(', ')} corner${ks.length > 1 ? 's' : ''}`;
+          };
+          const ALL = ['start-start', 'start-end', 'end-end', 'end-start'];
           // (A step rounder moves every corner: for some only, a size.)
-          if (on && sides.length && c.dir && !sidePx)
+          if (named && named.corners.length && c.dir && !sidePx)
             return {
-              text: `a step ${c.dir === 'more' ? 'rounder' : 'sharper'} moves every corner of ${on}; for the ${sides.join(' and ')} corners only, give a size ("8px ${sides[0]} corners")`,
+              text: `a step ${c.dir === 'more' ? 'rounder' : 'sharper'} moves every corner of ${on}; for ${sideWords(named.corners)} only, give a size ("8px ${sideWords(named.corners).replace(/^the /, '')}")`,
               options: [],
               lookup: `${HOW} ${on}`,
             };
-          if (on && sides.length && sidePx && !c.dir) {
-            const LONG = /** @type {Record<string, string[]>} */ ({
-              top: ['start-start', 'start-end'],
-              bottom: ['end-start', 'end-end'],
-              left: ['start-start', 'end-start'],
-              right: ['start-end', 'end-end'],
-            });
-            const corners = [...new Set(sides.flatMap(x => LONG[x]))];
-            return {
-              text: `the ${sides.join(' and ')} corners on ${on}: ${sidePx === '0' ? 'square' : sidePx}, the other corners as they are`,
-              options: [
-                corners.map(k =>
-                  set(`border-${k}-radius`, sidePx, {...f, ...modeOf(c)}),
+          if (named && named.corners.length && !c.dir) {
+            const others = ALL.filter(k => !named.corners.includes(k));
+            // (Rounded, no size: the corners named keep the radius they
+            // have now; when that is none, the radius the part reads.)
+            const rounded = !sidePx;
+            const tok = C.partReads(
+              one(/** @type {string} */ (on)),
+              'corners',
+            )?.[0]?.token;
+            // (What the theme sets there, else the token the part reads,
+            // kept as that token so the corners dial still moves it.)
+            const ownNow = rounded
+              ? nowIn(/** @type {string} */ (on), 'border-radius')
+              : null;
+            const nowRadius = rounded
+              ? (ownNow ?? (tok ? current(tok) : null))
+              : null;
+            const roundNow =
+              nowRadius != null &&
+              String(nowRadius)
+                .trim()
+                .split(/\s+/)
+                .some(x => parseFloat(x) > 0);
+            // (Square now and reading no corner token: the round rung.)
+            const roundRung = CORNERS.find(([n]) => n === 'round')?.[1];
+            // ("Only" said of a size, "4px corners on top only", leaves the
+            // others as they are; said of rounding, "round only the bottom
+            // corners", or an except, the others are not rounded.)
+            const roundWord = /\bround(?:ed|ing)?\b/.test(c.text);
+            const squareRest =
+              !square && (rounded || named.except || (named.only && roundWord));
+            // (Every corner settled, one radius of four: top-left first,
+            // clockwise, as CSS gives them.)
+            const nowOne =
+              rounded && roundNow
+                ? ownNow == null
+                  ? tok
+                    ? `var(${tok})`
+                    : null
+                  : !/\s/.test(String(ownNow).trim())
+                    ? String(ownNow).trim()
+                    : null
+                : null;
+            const each = rounded
+              ? (nowOne ??
+                (roundNow
+                  ? null
+                  : tok
+                    ? `var(${tok})`
+                    : roundRung != null
+                      ? `${roundRung}px`
+                      : null))
+              : sidePx;
+            /** @type {Step[]} */
+            const steps =
+              squareRest && each
+                ? [
+                    set(
+                      'border-radius',
+                      ALL.map(k =>
+                        named.corners.includes(k) ? each : '0',
+                      ).join(' '),
+                      {...f, ...modeOf(c)},
                 ),
-              ],
-              sequence: corners.length > 1,
+                  ]
+                : [
+                    ...(rounded
+                      ? []
+                      : named.corners.map(k =>
+                          set(
+                            `border-${k}-radius`,
+                            /** @type {string} */ (sidePx),
+                            {
+                              ...f,
+                              ...modeOf(c),
+                            },
+                          ),
+                        )),
+                    ...(squareRest
+                      ? others.map(k =>
+                          set(`border-${k}-radius`, '0', {...f, ...modeOf(c)}),
+                        )
+                      : []),
+                  ];
+            if (steps.length)
+              return {
+                text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tok ?? `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
+                options: [steps],
+                sequence: steps.length > 1,
             };
           }
         }
