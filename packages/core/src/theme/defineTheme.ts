@@ -833,16 +833,6 @@ function assertCompleteMotionScale(
 }
 
 /**
- * Create an Astryx theme.
- *
- * Pass only the tokens you want to override — everything else
- * inherits from the Astryx defaults.
- *
- * When `typography.scale` is provided, it generates typography token overrides
- * that are merged into the token map. Explicit `tokens` entries take
- * precedence over generated values.
- */
-/**
  * The theme's palette, when it has one. A palette that `themePalette()` did
  * not make is refused: a plain object of seeds is palette input, and
  * `defineTheme` does not run the generator itself, so that apps without a
@@ -907,6 +897,16 @@ function withPaletteComponents(
   return merged as ComponentStyleMap;
 }
 
+/**
+ * Create an Astryx theme.
+ *
+ * Pass only the tokens you want to override — everything else
+ * inherits from the Astryx defaults.
+ *
+ * When `typography.scale` is provided, it generates typography token overrides
+ * that are merged into the token map. Explicit `tokens` entries take
+ * precedence over generated values.
+ */
 export function defineTheme<
   const IconVariants extends ReadonlyArray<string> | undefined = undefined,
   Base extends DefinedTheme | undefined = undefined,

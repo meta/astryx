@@ -4,7 +4,7 @@
  * @file types.ts
  * @input None
  * @output The request, candidate and diagnostics shapes of the tonal palette
- *   generator
+ *   generator, and the palette input
  * @position Public types of `@astryxdesign/core/palette`
  */
 
@@ -58,8 +58,8 @@ export interface TonalPaletteDarkChromaTaper {
 }
 
 export interface TonalPaletteGenerationInput {
-  /** The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with a dusty seed's pale tints kept at or below its own chroma. New palettes name the newest, v3 (the theme editor records it); a config pins its recipe by naming it. */
-  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+  /** The recipe to run: astryx-oklch-v1 when none is named, so a request or config made before v2 keeps its colors; astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's own chroma. New palettes name v2 (the theme editor records it); a config pins its recipe by naming it. */
+  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   families: TonalPaletteFamilyInput[];
   /** Chroma control from 0 (most muted) through 50 (default) to 100 (most vivid). */
   vibrancy?: number;
@@ -79,7 +79,7 @@ export interface TonalPaletteGenerationInput {
 export interface TonalPaletteCandidate {
   schemaVersion: 1;
   status: 'candidate';
-  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   /** Exact solid black for theme authoring outside a tonal family. */
   black: '#000000';
   /** Exact solid white for theme authoring outside a tonal family. */
@@ -140,7 +140,7 @@ export interface TonalPaletteCoordinationDiagnostics {
  * The request as the generator resolved it, with every default filled in.
  */
 export interface TonalPaletteNormalizedRequest {
-  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+  recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   vibrancy: number;
   neutralProfile: 'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom';
   modeStrategy: 'light-only' | 'dark-only' | 'light-and-dark';
@@ -173,17 +173,17 @@ export interface ThemePaletteInput {
   /** Chroma from 0 (most muted) through 50 (default) to 100 (most vivid). */
   vibrancy?: number;
   /** The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade. */
-  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';
 }
 
 /** A theme's colors made by `themePalette()`, for `defineTheme({palette})`. */
 export interface ThemePalette {
   readonly kind: 'theme-palette';
-  readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3';
+  readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   /** Each color token's `[light, dark]` value. */
   readonly tokens: Readonly<Record<string, readonly [string, string]>>;
-  /** Part styles that lift secondary text on the accent tint and the neutral track, as the official themes do. */
+  /** Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do: each value is a `light-dark()` CSS value. */
   readonly components: Readonly<
-    Record<string, Record<string, Record<string, readonly [string, string]>>>
+    Record<string, Record<string, Record<string, string>>>
   >;
 }

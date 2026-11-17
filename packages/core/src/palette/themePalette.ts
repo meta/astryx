@@ -134,7 +134,6 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
     base: defaultBase(),
     has: token => Object.hasOwn(tokenDefaults, token),
     reader: coreReader,
-    tokenDefaults,
   };
   const plan = planPaletteRequest(dials, {recipe, vibrancy}, context);
   if (!plan) {
@@ -146,20 +145,16 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   for (const [token, {light, dark}] of Object.entries(mapping.tokens)) {
     tokens[token] = Object.freeze([light.color, dark.color] as const);
   }
-  const components: Record<
-    string,
-    Record<string, Record<string, readonly [string, string]>>
-  > = {};
+  const components: Record<string, Record<string, Record<string, string>>> = {};
   for (const [part, block, ground] of LIFT_PARTS) {
     const lifted = mapping.lift?.[ground];
     if (!lifted?.light || !lifted.dark) {
       continue;
     }
+    // (A part style's value is one CSS value: the two modes as
+    // light-dark(), as the official themes write it.)
     (components[part] ??= {})[block] = {
-      '--color-text-secondary': Object.freeze([
-        lifted.light.color,
-        lifted.dark.color,
-      ] as const),
+      '--color-text-secondary': `light-dark(${lifted.light.color}, ${lifted.dark.color})`,
     };
   }
   return Object.freeze({

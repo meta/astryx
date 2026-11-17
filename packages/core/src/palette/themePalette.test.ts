@@ -12,13 +12,13 @@
 
 import {describe, expect, it} from 'vitest';
 import {defineTheme, tokenDefaults} from '../theme/defineTheme';
+import {generateThemeCSS} from '../theme/generateThemeRules';
 import {resolveThemeTokens} from '../theme/tokens';
 import {PALETTE_RECIPE, PALETTE_RECIPE_V2} from './generator';
 import {themePalette} from './themePalette';
 import type {ThemePaletteInput} from './types';
 
-// (A color the palette keeps at Core's own is written as Core writes it.)
-const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 
 function seeded(seed: number) {
   let state = seed;
@@ -52,8 +52,8 @@ function expectTokensApplied(input: ThemePaletteInput, name: string) {
     expect(Object.hasOwn(tokenDefaults, token), token).toBe(true);
     expect(l, token).toMatch(HEX);
     expect(d, token).toMatch(HEX);
-    expect(light[token]?.toLowerCase(), `${token} light`).toBe(l.toLowerCase());
-    expect(dark[token]?.toLowerCase(), `${token} dark`).toBe(d.toLowerCase());
+    expect(light[token]?.toLowerCase(), `${token} light`).toBe(l);
+    expect(dark[token]?.toLowerCase(), `${token} dark`).toBe(d);
   }
   return palette;
 }
@@ -182,6 +182,33 @@ describe('themePalette', () => {
 
 describe('defineTheme({palette})', () => {
   const palette = themePalette({accent: '#5b3cc4', neutral: '#6b6b70'});
+
+  it('compiles the lifted secondary text as a light-dark() value a browser reads', () => {
+    const theme = defineTheme({name: 'palette-compiled', palette});
+    const css = generateThemeCSS(theme).component;
+    const [light, dark] = palette.tokens['--color-text-secondary'];
+    // The lifted shades are the palette's grays on the accent tint.
+    const lifted = String(
+      palette.components.item?.selected?.['--color-text-secondary'],
+    );
+    expect(lifted).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
+    expect(css).toContain(`--color-text-secondary: ${lifted}`);
+    expect(css).not.toMatch(/--color-text-secondary:\s*\[/);
+    expect(css).not.toMatch(/--color-text-secondary:\s*#[0-9a-f]{6},/);
+    expect(light).toMatch(/^#/);
+    expect(dark).toMatch(/^#/);
+  });
+
+  it('lifts secondary text on each coloured card, as the official theme does', () => {
+    for (const color of ['blue', 'green', 'red', 'yellow']) {
+      expect(
+        palette.components.card?.[`variant:${color}`]?.[
+          '--color-text-secondary'
+        ],
+        color,
+      ).toMatch(/^light-dark\(/);
+    }
+  });
 
   it('lets an explicit token win, token by token', () => {
     const theme = defineTheme({

@@ -3,12 +3,13 @@
 /* global process, console */
 
 /**
- * @file Writes the CLI's copy of the tonal palette engine from Core's source.
- * The engine has one source, packages/core/src/palette. The CLI runs its own
- * generated copy, so `astryx theme palette generate` works with no Core
- * installed, or with an older one. `--check` compares without writing.
- * @input packages/core/src/palette/{color,generator,types}.ts
- * @output packages/cli/api/theme/palette/generate/{color,generator,types}.mjs,
+ * @file Writes the CLI's copy of the tonal palette engine and its token
+ * mapping from Core's source. Both have one source, packages/core/src/palette.
+ * The CLI runs its own generated copy, so `astryx theme palette generate`
+ * works with no Core installed, or with an older one. `--check` compares
+ * without writing.
+ * @input packages/core/src/palette/{color,generator,mapping,types}.ts
+ * @output packages/cli/api/theme/palette/generate/{color,generator,mapping,types}.mjs,
  *   JavaScript with JSDoc types like the CLI's own sources
  * @position Repository maintenance command and the drift guard for the copy
  */
@@ -22,7 +23,7 @@ import ts from 'typescript';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CORE_DIR = 'packages/core/src/palette';
 export const CLI_DIR = 'packages/cli/api/theme/palette/generate';
-const MODULES = ['color', 'generator', 'types'];
+const MODULES = ['color', 'generator', 'mapping', 'types'];
 
 /** @param {string} name */
 const header = name =>
@@ -92,7 +93,8 @@ export function toJsdocJavaScript(source, fileName) {
    * @param {ts.Node} node
    */
   const ownDoc = node => {
-    const ranges = ts.getLeadingCommentRanges(source, node.getFullStart()) ?? [];
+    const ranges =
+      ts.getLeadingCommentRanges(source, node.getFullStart()) ?? [];
     const last = ranges.at(-1);
     if (!last) return null;
     const text = source.slice(last.pos, last.end);
@@ -131,6 +133,9 @@ export function toJsdocJavaScript(source, fileName) {
   const signatureTags = fn => {
     /** @type {string[]} */
     const tags = [];
+    for (const param of fn.typeParameters ?? []) {
+      tags.push(`@template ${param.getText(sourceFile)}`);
+    }
     for (const param of fn.parameters) {
       const name = param.name.getText(sourceFile);
       const optional = Boolean(param.questionToken || param.initializer);
@@ -146,7 +151,13 @@ export function toJsdocJavaScript(source, fileName) {
   const interfaceTags = decl => {
     const tags = [`@typedef {object} ${decl.name.text}`];
     for (const member of decl.members) {
-      if (!ts.isPropertySignature(member) || !member.type) continue;
+      // (A method is written as a property holding a function.)
+      const type = ts.isMethodSignature(member)
+        ? `(${member.parameters.map(x => x.getText(sourceFile)).join(', ')}) => ${member.type ? typeText(member.type) : 'void'}`
+        : ts.isPropertySignature(member) && member.type
+          ? typeText(member.type)
+          : null;
+      if (!type) continue;
       const name = member.name.getText(sourceFile);
       const doc = ownDoc(member)
         ?.replace(/^\/\*\*\s?/, '')
@@ -154,7 +165,7 @@ export function toJsdocJavaScript(source, fileName) {
         .replace(/\n\s*\*\s?/g, ' ')
         .trim();
       tags.push(
-        `@property {${typeText(member.type)}} ${member.questionToken ? `[${name}]` : name}${doc ? ` ${doc}` : ''}`,
+        `@property {${type.replace(/\s+/g, ' ')}} ${member.questionToken ? `[${name}]` : name}${doc ? ` ${doc}` : ''}`,
       );
     }
     return tags;
@@ -166,7 +177,8 @@ export function toJsdocJavaScript(source, fileName) {
     /** @param {ts.Node} node @returns {ts.Node | undefined} */
     const visit = node => {
       if (ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) {
-        const spec = /** @type {ts.StringLiteral} */ (node.moduleSpecifier).text;
+        const spec = /** @type {ts.StringLiteral} */ (node.moduleSpecifier)
+          .text;
         const bindings = node.importClause.namedBindings;
         if (bindings && ts.isNamedImports(bindings)) {
           for (const element of bindings.elements) {
@@ -186,9 +198,7 @@ export function toJsdocJavaScript(source, fileName) {
         return undefined;
       }
       if (ts.isInterfaceDeclaration(node)) {
-        typedefs.push(
-          withDocText(ownDoc(node), interfaceTags(node)),
-        );
+        typedefs.push(withDocText(ownDoc(node), interfaceTags(node)));
         return undefined;
       }
       if (
@@ -227,7 +237,10 @@ export function toJsdocJavaScript(source, fileName) {
       if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
         const spec = node.moduleSpecifier;
         if (spec && ts.isStringLiteral(spec) && spec.text.startsWith('./')) {
-          const named = ts.factory.createStringLiteral(`${spec.text}.mjs`, true);
+          const named = ts.factory.createStringLiteral(
+            `${spec.text}.mjs`,
+            true,
+          );
           return ts.isImportDeclaration(node)
             ? ts.factory.updateImportDeclaration(
                 node,
