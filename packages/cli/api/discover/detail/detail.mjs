@@ -28,12 +28,24 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  *   version?: string,
  *   add?: (name: string, version?: string) => string,
  *   installedAs?: string,
- * }} [options]
+ *   iconSets?: boolean,
+ * }} [options] `iconSets`: icon features are on in the project
  * @returns {import('../discover.type.mjs').DiscoverDetailResponse}
  */
 export function detail(packages, name, options = {}) {
-  const {catalog, version, add, installedAs} = options;
+  const {catalog: listed, version, add, installedAs, iconSets} = options;
   const pkg = packages.find(p => p.name === name);
+  // An installed package's icon sets are read only where icon features are
+  // on (spec:AST-084 FR17), whichever version the page shows.
+  const catalog =
+    listed && (pkg != null || installedAs) && !iconSets
+      ? {
+          ...listed,
+          contributions: listed.contributions.filter(
+            c => c.kind !== 'icon-set',
+          ),
+        }
+      : listed;
   if (!pkg && !catalog) {
     throw new AstryxError(
       `Package "${name}" not found`,
@@ -64,7 +76,10 @@ export function detail(packages, name, options = {}) {
     : {
         ...catalogEntry(
           /** @type {NonNullable<typeof catalog>} */ (catalog),
-          version ?? defaultVersion(/** @type {NonNullable<typeof catalog>} */ (catalog)),
+          version ??
+            defaultVersion(
+              /** @type {NonNullable<typeof catalog>} */ (catalog),
+            ),
         ),
         installed: pkg != null,
         ...(pkg?.version ? {installedVersion: pkg.version} : {}),

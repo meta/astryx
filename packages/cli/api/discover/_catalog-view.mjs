@@ -110,6 +110,9 @@ export function catalogEntry(pkg, version) {
     ...(version ? {version} : {}),
     ...(pkg.description ? {description: pkg.description} : {}),
     ...others,
+    // Icon sets are experimental (spec:AST-017 FR27): the entry names the
+    // field that lists them, so a consumer can leave them out.
+    ...(others.iconSets ? {experimentalFields: ['iconSets']} : {}),
   };
 }
 

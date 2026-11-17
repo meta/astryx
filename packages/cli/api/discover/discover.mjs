@@ -33,8 +33,10 @@ import {
   discoverPackages,
   findComponent,
   hasSources,
+  iconSetCoverage,
   keptSavedSearch,
   loadReadKinds,
+  optedIntoIconSets,
   officialDeclarations,
   STABLE_KINDS,
   officialFirst,
@@ -44,6 +46,7 @@ import {
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
+export {iconSetCoverageOf} from './_icon-set-coverage.mjs';
 import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -422,6 +425,8 @@ export async function discover(query, options = {}) {
       // Only an entry the official list supplied gets a pinned version.
       add: entry?.official ? addOfficial : add,
       installedAs,
+      iconSets: optedIntoIconSets(project),
+      coverageOf: iconSetCoverage,
     };
     if (!target.item) {
       const {detail} = await detailLeaf();
