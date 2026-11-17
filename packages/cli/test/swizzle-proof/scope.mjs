@@ -32,7 +32,8 @@ export const COMPONENT_PACKAGES = ['core', 'lab', 'charts', 'richtext', 'vega'];
  * CLI modules it reads count too ({@link swizzleModules}).
  */
 const TOOLCHAIN = [
-  /^packages\/build\/src\//,
+  // The Build package's own tests are not part of what a copy builds with.
+  /^packages\/build\/src\/(?!.*\.test\.[cm]?[jt]sx?$)/,
   /^packages\/cli\/test\/swizzle-proof\//,
   /^packages\/(?:core|lab|charts|richtext|vega)\/package\.json$/,
 ];

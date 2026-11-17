@@ -12,7 +12,7 @@
 
 import {describe, expect, it} from 'vitest';
 
-import {proofScope} from './scope.mjs';
+import {proofScope, toolchainChange} from './scope.mjs';
 
 const component = ['packages/core/src/Button/Button.tsx'];
 
@@ -59,6 +59,18 @@ describe('which targets the swizzle proof checks', () => {
     });
     expect(scope.mode).toBe('all');
     expect(scope.reason).toContain('packages/build/src/babel.js');
+  });
+
+  it("counts the Build package's source as toolchain, but not its tests", () => {
+    expect(toolchainChange(['packages/build/src/babel.js'], 'HEAD')).toBe(
+      'packages/build/src/babel.js',
+    );
+    for (const test of [
+      'packages/build/src/next.turbopack.test.mjs',
+      'packages/build/src/vite.build.test.ts',
+    ]) {
+      expect(toolchainChange([test], 'HEAD'), test).toBeUndefined();
+    }
   });
 
   it('checks every target of a pull request whose change git cannot read', () => {
