@@ -123,6 +123,7 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArchiveBoxIcon,
   ArrowLeftIcon,
@@ -766,13 +767,24 @@ function useSurfaceWidth() {
  * unless something stops it. Guarding centrally rather than hanging
  * `stopPropagation` on each control is what keeps this true for the next
  * control somebody adds — and it has to cover the selection checkbox, which
- * the plugin renders and the template never touches.
+ * the plugin renders and the template never touches. A row's delete
+ * confirmation renders inside the row too, and its keys bubble through it, so
+ * the dialog counts as well.
  */
 const INTERACTIVE_WITHIN_ROW =
-  'button, input, a, label, [role="checkbox"], [role="button"], [role="menuitem"]';
+  'button, input, a, label, dialog, [role="checkbox"], [role="button"], [role="menuitem"]';
 
-function isRowItself(event: {target: EventTarget | null}): boolean {
-  return !(event.target as HTMLElement | null)?.closest(INTERACTIVE_WITHIN_ROW);
+// Only a control inside this row counts: the page itself may sit inside a
+// dialog or a link, and those ancestors are not the row's own controls.
+function isRowItself(event: {
+  target: EventTarget | null;
+  currentTarget: EventTarget | null;
+}): boolean {
+  const control = (event.target as HTMLElement | null)?.closest(
+    INTERACTIVE_WITHIN_ROW,
+  );
+  const row = event.currentTarget as HTMLElement;
+  return !control || control === row || !row.contains(control);
 }
 
 // ============= ROW ACTIONS =============
@@ -991,6 +1003,7 @@ function ReceivedCell({
   isOverlaid: boolean;
 }) {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     /* `height` reserves the buttons' line box. Without it the row is 40px at
        rest and 44px with the actions in it, so every row nudges its
@@ -1014,16 +1027,26 @@ function ReceivedCell({
             label={`${action.label} — ${item.subject}`}
             tooltip={action.label}
             icon={<Icon icon={action.icon} size="sm" />}
-            onClick={
-              // A delete needs a confirm step, which this demo does not have.
+            onClick={() =>
               action.id === 'delete'
-                ? undefined
-                : () =>
-                    // Demo only: replace this toast with the call that performs the action.
-                    showToast({
-                      body: `Demo: ${action.label} would run on “${item.subject}” here`,
-                      uniqueID: `${action.id}-${item.id}`,
-                    })
+                ? confirm.show({
+                    title: `Delete “${item.subject}”?`,
+                    description: "This demo won't delete anything.",
+                    actionLabel: 'Delete',
+                    onAction: () => {
+                      confirm.hide();
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: `Demo: “${item.subject}” would be deleted here`,
+                        uniqueID: `delete-${item.id}`,
+                      });
+                    },
+                  })
+                : // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: ${action.label} would run on “${item.subject}” here`,
+                    uniqueID: `${action.id}-${item.id}`,
+                  })
             }
           />
         ))}
@@ -1080,6 +1103,7 @@ function ReceivedCell({
           </Text>
         </HStack>
       </StackItem>
+      {confirm.element}
     </HStack>
   );
 }
@@ -1364,6 +1388,7 @@ function ConversationPane({
   isFullWidth: boolean;
 }) {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   // Named against the subject, because the pane is not the only Archive on
   // screen — every row in the list behind it has one.
   const threadActions = THREAD_ACTIONS.map(action => (
@@ -1373,16 +1398,26 @@ function ConversationPane({
       label={`${action.label} — ${conversation.subject}`}
       tooltip={action.label}
       icon={<Icon icon={action.icon} size="sm" />}
-      onClick={
-        // A delete needs a confirm step, which this demo does not have.
+      onClick={() =>
         action.id === 'delete'
-          ? undefined
-          : () =>
-              // Demo only: replace this toast with the call that performs the action.
-              showToast({
-                body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
-                uniqueID: `${action.id}-${conversation.id}`,
-              })
+          ? confirm.show({
+              title: `Delete “${conversation.subject}”?`,
+              description: "This demo won't delete anything.",
+              actionLabel: 'Delete',
+              onAction: () => {
+                confirm.hide();
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: “${conversation.subject}” would be deleted here`,
+                  uniqueID: `delete-${conversation.id}`,
+                });
+              },
+            })
+          : // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
+              uniqueID: `${action.id}-${conversation.id}`,
+            })
       }
     />
   ));
@@ -1577,6 +1612,7 @@ function ConversationPane({
           </HStack>
         </VStack>
       </StackItem>
+      {confirm.element}
     </VStack>
   );
 }
@@ -2016,6 +2052,7 @@ function ComposeWindow({
 
 export default function SupportInboxTemplate() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   const [category, setCategory] = useState<Category>('inbox');
   /**
    * Which thread the user has picked — `undefined` until they pick one.
@@ -2536,16 +2573,28 @@ export default function SupportInboxTemplate() {
                               variant="ghost"
                               size="sm"
                               icon={<Icon icon={action.icon} size="sm" />}
-                              onClick={
-                                // A delete needs a confirm step, which this demo does not have.
+                              onClick={() =>
                                 action.id === 'delete'
-                                  ? undefined
-                                  : () =>
-                                      // Demo only: replace this toast with the call that performs the action.
-                                      showToast({
-                                        body: `Demo: ${action.label} would run on the selected conversations here`,
-                                        uniqueID: `bulk-${action.id}`,
-                                      })
+                                  ? confirm.show({
+                                      title:
+                                        'Delete the selected conversations?',
+                                      description:
+                                        "This demo won't delete anything.",
+                                      actionLabel: 'Delete',
+                                      onAction: () => {
+                                        confirm.hide();
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the selected conversations would be deleted here',
+                                          uniqueID: 'bulk-delete',
+                                        });
+                                      },
+                                    })
+                                  : // Demo only: replace this toast with the call that performs the action.
+                                    showToast({
+                                      body: `Demo: ${action.label} would run on the selected conversations here`,
+                                      uniqueID: `bulk-${action.id}`,
+                                    })
                               }
                             />
                           ))}
@@ -2755,6 +2804,7 @@ export default function SupportInboxTemplate() {
         onOpenChange={setComposeOpen}
         draft={composeDraft}
       />
+      {confirm.element}
     </>
   );
 }

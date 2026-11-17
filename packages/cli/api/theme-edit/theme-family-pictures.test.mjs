@@ -3,7 +3,8 @@
 /**
  * @file show --png pictures the families of components the theme sets a
  * part of (the buttons when it sets none), each on a page of its own cut
- * from the full sheet, which is not pictured. Each page holds its family alone, is listed with the pictures,
+ * from the full sheet, which is not pictured; --section <family> pictures
+ * any other. Each page holds its family alone, is listed with the pictures,
  * and is named first in the pictures to open.
  */
 
@@ -21,6 +22,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 // The pages are real; a picture is a few bytes where the browser would
 // write it.
@@ -28,14 +34,14 @@ vi.mock('./_preview.mjs', async importOriginal => {
   const real = /** @type {any} */ (await importOriginal());
   return {
     ...real,
-    screenshot: async (
+    screenshots: async (
       /** @type {any} */ _project,
-      /** @type {string} */ _html,
-      /** @type {string} */ png,
-    ) => {
-      fs.writeFileSync(png, 'png');
-      return {ok: true};
-    },
+      /** @type {Array<{png: string}>} */ jobs,
+    ) =>
+      jobs.map(({png}) => {
+        fs.writeFileSync(png, 'png');
+        return {ok: true};
+      }),
   };
 });
 
@@ -91,6 +97,11 @@ describe('show --png', () => {
           `^open themes/t/sheet-${family}\\.png \\(one family of components each\\) and themes/t/preview\\.png`,
         ),
       );
+      // Any other family: by its section.
+      const inputs = /** @type {any} */ (
+        await themeEditShow('t', {cwd, png: true, section: 'inputs'})
+      );
+      expect(inputs.data.pictures).toContain('themes/t/sheet-inputs.png');
     },
     T,
   );
@@ -105,20 +116,20 @@ describe('show --png', () => {
         JSON.parse(fs.readFileSync(path.join(dir, 't.settings.json'), 'utf8')),
       );
       expect(touched).toEqual(['feedback']);
-      // The family set takes the overview's place; a file of yours at its
-      // page is left alone and named (so its picture is not taken).
       const mine = path.join(dir, 'sheet-feedback.html');
       fs.writeFileSync(mine, '<p>mine</p>');
       const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
       expect(fs.readFileSync(mine, 'utf8')).toBe('<p>mine</p>');
-      expect(r.data.pictures).toEqual([
-        'themes/t/preview.png',
-        'themes/t/preview-dark.png',
-        'themes/t/sheet-overlays.png',
-        'themes/t/sheet-overlays-dark.png',
-      ]);
+      expect(r.data.pictures).not.toContain('themes/t/sheet-feedback.png');
+      expect(r.data.pictures).not.toContain(
+        `themes/t/sheet-${FAMILY_OVERVIEW}.png`,
+      );
       expect(r.data.pictureProblem).toContain('themes/t/sheet-feedback.html');
       fs.rmSync(mine);
+      const again = /** @type {any} */ (
+        await themeEditShow('t', {cwd, png: true})
+      );
+      expect(again.data.pictures).toContain('themes/t/sheet-feedback.png');
     },
     T,
   );

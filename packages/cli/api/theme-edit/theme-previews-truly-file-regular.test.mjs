@@ -38,6 +38,10 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 import {appPackages, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read drawn components: drawn for real.)
+realRenders(true);
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(

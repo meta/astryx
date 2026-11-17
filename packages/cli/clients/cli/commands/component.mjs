@@ -20,6 +20,7 @@ import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -40,6 +41,9 @@ import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
 import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
+
+/** Component docs print as Markdown: doc text whose commands show with the project's runner. */
+const MARKDOWN = {lang: 'markdown'};
 
 /**
  * The api layer's component() widens its return to `{type: string, data: unknown}`,
@@ -145,12 +149,14 @@ function componentDetailBlocks(
               formatBrief(result.data, resolvedName, result.data.import, {
                 themeData,
               }),
+              MARKDOWN,
             )
           : detail === 'compact'
             ? code(
                 formatCompact(result.data, resolvedName, result.data.import, {
                   propsCommand,
                 }),
+                MARKDOWN,
               )
             : code(
                 formatFull(result.data, {
@@ -158,6 +164,7 @@ function componentDetailBlocks(
                   importHint: result.data.import,
                   propsCommand,
                 }),
+                MARKDOWN,
               ),
       );
       return out;
@@ -165,7 +172,7 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName)),
+        code(formatProps({props: result.data}, resolvedName), MARKDOWN),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':
@@ -191,7 +198,10 @@ function componentDetailBlocks(
                 markNotReady(showcase.displayName, showcase.isReady),
               ),
             },
-            {fields: ['displayName', 'description']},
+            {
+              fields: ['displayName', 'description'],
+              format: {description: docText},
+            },
           ),
         );
       }
@@ -203,7 +213,7 @@ function componentDetailBlocks(
               ...block,
               name: owned(block, markNotReady(block.name, block.isReady)),
             })),
-            {fields: ['name', 'description']},
+            {fields: ['name', 'description'], format: {description: docText}},
           ),
         );
       }
@@ -375,6 +385,7 @@ export function registerComponent(program) {
                     categories: Object.keys(result.data.components),
                   }),
                 ),
+                MARKDOWN,
               ),
             );
             break;

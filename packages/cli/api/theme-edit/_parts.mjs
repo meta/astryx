@@ -16,6 +16,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -39,12 +40,13 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /**
- * What the cached part data is built by: a fingerprint of this file and
- * every file it imports by a relative path, read once. Any change to the
- * code that draws and reads the census builds it again, with no number to
- * bump by hand (the installed Core is the cache folder's own key).
+ * A fingerprint of a module and every file it imports by a relative path,
+ * read once: what a cache built by that code is keyed by, so any change to
+ * the code builds it again, with no number to bump by hand (the installed
+ * Core is the cache folder's own key).
+ * @param {string} url the module's own `import.meta.url`
  */
-const CENSUS_KEY = (() => {
+export function codeFingerprint(url) {
   const hash = createHash('sha256');
   /** @type {Set<string>} */
   const seen = new Set();
@@ -65,9 +67,12 @@ const CENSUS_KEY = (() => {
     ))
       walk(path.resolve(path.dirname(file), m[1]));
   };
-  walk(fileURLToPath(import.meta.url));
+  walk(fileURLToPath(url));
   return hash.digest('hex').slice(0, 16);
-})();
+}
+
+/** What the cached part data is built by ({@link codeFingerprint}). */
+const CENSUS_KEY = codeFingerprint(import.meta.url);
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -199,12 +204,16 @@ export function demoProps(project, name) {
   )
     return null;
   const props = given ?? {};
-  // A search source its defaults leave out (a command palette's) is the
-  // page's sample one: without it the part lists nothing.
+  // A required prop its defaults leave out (a status dot's variant, a
+  // command palette's search source) takes its sample, as for a doc with no
+  // defaults: without it the part draws nothing (no color, no list).
   if (given)
-    for (const [p, d] of Object.entries(info.props ?? {}))
-      if (!(p in props) && /^SearchSource\b/.test(d.type))
-        props[p] = SAMPLE_SOURCE;
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (p in props || /^on[A-Z]/.test(p) || p === 'children') continue;
+      if (!d.required && !/^SearchSource\b/.test(d.type)) continue;
+      const v = d.slots?.[0] ?? sampleOf(name, d.type);
+      if (v !== undefined) props[p] = v;
+    }
   if (!given)
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
@@ -490,10 +499,55 @@ const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 export const renderDir = project =>
   path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
 
+/** The file in a render folder that names the process that made it. */
+const RENDER_OWNER = '.astryx-render-owner.json';
+/** The renders of this process running now, which share its render folder. */
+let rendersInFlight = 0;
+
+/**
+ * The process space this process runs in: its host and, on Linux, its pid
+ * namespace, so a process id read from a render folder's owner file is
+ * known to be this machine's own (a container that shares the project
+ * folder has another).
+ */
+const processSpace = () => {
+  let namespace = '';
+  try {
+    namespace = fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    // No pid namespaces here.
+  }
+  return `${os.hostname()}\0${namespace}`;
+};
+
+/**
+ * Whether the process that made a render folder is known to be gone: its
+ * owner file names this process space, and no process has its id.
+ * @param {string} dir
+ * @param {number} pid
+ */
+function renderOwnerGone(dir, pid) {
+  /** @type {any} */
+  let owner;
+  try {
+    owner = JSON.parse(fs.readFileSync(path.join(dir, RENDER_OWNER), 'utf8'));
+  } catch {
+    return false;
+  }
+  if (owner?.space !== processSpace() || owner?.pid !== pid) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return /** @type {any} */ (error)?.code === 'ESRCH';
+  }
+}
+
 /**
  * Remove render folders a stopped command left (killed, out of memory):
- * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
- * Links are never followed.
+ * `.astryx-render-<pid>-<random>` folders whose maker is known to be gone
+ * (its owner file names this process space, and no process has its id),
+ * else only those more than ten minutes old. Links are never followed.
  * @param {string} themes
  */
 function sweepRenders(themes) {
@@ -507,17 +561,23 @@ function sweepRenders(themes) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
     const p = path.join(themes, n);
-    // A process id from another process space may look gone or alive here,
-    // so age decides: a render takes at most three minutes, and a folder
-    // older than ten is a leftover.
-    /** @type {number} */
-    let age;
+    // A folder whose maker is known gone is a leftover at once. A process id
+    // from another process space may look gone or alive here, so there age
+    // decides: a render takes at most three minutes, and a folder older than
+    // ten is a leftover.
+    /** @type {import('node:fs').Stats} */
+    let stat;
     try {
-      age = Date.now() - fs.lstatSync(p).mtimeMs;
+      stat = fs.lstatSync(p);
     } catch {
       continue;
     }
-    if (age < 10 * 60_000) continue;
+    if (!stat.isDirectory()) continue;
+    if (
+      !renderOwnerGone(p, Number(m[1])) &&
+      Date.now() - stat.mtimeMs < 10 * 60_000
+    )
+      continue;
     try {
       if (fs.lstatSync(p).isDirectory())
         fs.rmSync(p, {recursive: true, force: true});
@@ -564,22 +624,33 @@ export async function renderGenerated(
   // still goes.
   const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
-  // Demo images point at the docs site's own folder (`/template-assets/…`),
-  // which a page opened from disk cannot reach: the inline placeholder
-  // takes their place, as when a template is scaffolded.
-  const {stripTemplateAssetRefs} =
-    await import('../../foundation/discovery/template-adapter.mjs');
-  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
-  for (const x of extra) {
-    fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
-    fs.copyFileSync(x.from, path.join(dir, x.name));
-  }
+  rendersInFlight++;
   try {
+    // Who made it, so a later render can tell it is left over once this
+    // process is gone (killed outright, which no handler sees).
+    fs.writeFileSync(
+      path.join(dir, RENDER_OWNER),
+      `${JSON.stringify({pid: process.pid, space: processSpace()})}\n`,
+    );
+    // Demo images point at the docs site's own folder
+    // (`/template-assets/…`), which a page opened from disk cannot reach:
+    // the inline placeholder takes their place, as when a template is
+    // scaffolded.
+    const {stripTemplateAssetRefs} =
+      await import('../../foundation/discovery/template-adapter.mjs');
+    fs.writeFileSync(entry, stripTemplateAssetRefs(source));
+    for (const x of extra) {
+      fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
+      fs.copyFileSync(x.from, path.join(dir, x.name));
+    }
     // The editor's pages render every component, and a busy machine slows
     // them down: they get three times the page limit.
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // A theme's image too large for a page is named by the editor (show's
+      // notes); the page goes on without it.
+      leaveLargeStyleAssets: true,
       ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
@@ -631,6 +702,10 @@ export async function renderGenerated(
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
+    // The owner file goes with this process's last render: then the folder
+    // holds nothing of a render still running.
+    if (--rendersInFlight === 0)
+      fs.rmSync(path.join(dir, RENDER_OWNER), {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
     untrack();

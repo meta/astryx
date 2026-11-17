@@ -396,6 +396,58 @@ export function makeCompiler(project, parts) {
         };
       }
     }
+    // Read only under conditions the part is not drawn in by default (a
+    // link reads --color-text-primary only as color primary; drawn as it
+    // is, it reads --color-text-accent): set on the part with no
+    // condition, it changes nothing in its default look. Said, with the
+    // token that look reads and the condition that reads this one.
+    if (
+      !wProp &&
+      allReads(target).has(token) &&
+      (g === 'text' || g === 'background')
+    ) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const attrsOf = (/** @type {string} */ c) => c.split(' ')[0];
+      const drawn = [
+        ...new Set(
+          parts.pairs
+            .filter(p =>
+              g === 'text' ? p.fg.target === target : p.bg.target === target,
+            )
+            .map(p => (g === 'text' ? p.fg.tokens[0] : p.bg.tokens[0]))
+            .filter(Boolean),
+        ),
+      ];
+      const inside = (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (
+        conds.length &&
+        conds.every(c => /=/.test(attrsOf(c))) &&
+        drawn.length &&
+        !drawn.includes(token) &&
+        !inside
+      ) {
+        const named = [
+          ...new Set(
+            conds
+              .flatMap(c => attrsOf(c).split(','))
+              .map(a => a.replace('=', ':')),
+          ),
+        ];
+        return {
+          soft: true,
+          message: `${target} reads ${token} only when ${named.join(' or ')}; as drawn by default it reads ${drawn.join(', ')}, so this changes nothing in its default look. For the default look: ${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}; for ${named[0]} alone: ${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          run: [
+            `${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}`,
+            `${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          ],
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.
