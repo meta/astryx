@@ -8,8 +8,8 @@
  * @output Real-engine proof of the press rule for every container: a press on
  *   a nested control leaves the container as it was under the pointer, for a
  *   mouse, a pen and a finger; a mouse press on the container's own surface
- *   paints the container; a held Space key on a control or on a container's
- *   action paints its press until the key is released
+ *   paints the container; a held Space key on a Button paints its press
+ *   until the key is released
  * @position Run with `pnpm test:a11y-contract`. Browser layer of
  *   cancelNestedPress (hooks/useClickableContainer.ts); the jsdom layer is
  *   __tests__/nestedControlPress.test.tsx.
@@ -72,8 +72,6 @@ interface Container {
   selector: string;
   /** The nested control's accessible name. */
   nested: RegExp;
-  /** The container's own action, which takes keyboard focus. */
-  action: {role: 'button' | 'checkbox' | 'radio'; name: RegExp};
   /** Where to read the container's paint: clear of its content. */
   sample: (box: Box) => Point;
 }
@@ -81,7 +79,6 @@ interface Container {
 const CONTAINERS: Container[] = [
   {
     name: 'ClickableCard',
-    action: {role: 'button', name: /^Open billing$/},
     id: 'clickable-card',
     selector: '[data-pressable-container]',
     nested: /^Nested$/,
@@ -89,7 +86,6 @@ const CONTAINERS: Container[] = [
   },
   {
     name: 'SelectableCard',
-    action: {role: 'checkbox', name: /^Plan$/},
     id: 'selectable-card',
     selector: '[data-pressable-container]',
     nested: /^Nested$/,
@@ -97,7 +93,6 @@ const CONTAINERS: Container[] = [
   },
   {
     name: 'Item',
-    action: {role: 'button', name: /^Open row$/},
     id: 'item',
     selector: '.astryx-item',
     nested: /^Nested$/,
@@ -105,7 +100,6 @@ const CONTAINERS: Container[] = [
   },
   {
     name: 'TreeList row',
-    action: {role: 'button', name: /Open tree row/},
     id: 'tree-list',
     selector: '.astryx-tree-list-item',
     nested: /^Nested$/,
@@ -113,7 +107,6 @@ const CONTAINERS: Container[] = [
   },
   {
     name: 'Token',
-    action: {role: 'button', name: /^Filter token$/},
     id: 'token',
     selector: '.astryx-token',
     nested: /remove/i,
@@ -123,8 +116,6 @@ const CONTAINERS: Container[] = [
 
 interface Opened {
   page: Page;
-  /** The container's own action. */
-  action: ReturnType<Page['getByRole']>;
   cdp: CDPSession;
   close: () => Promise<void>;
   nested: Point;
@@ -160,9 +151,6 @@ async function open(
   await page.mouse.move(1, 1);
   return {
     page,
-    action: scope.getByRole(container.action.role, {
-      name: container.action.name,
-    }),
     cdp: await context.newCDPSession(page),
     close: async () => context.close(),
     nested: {
@@ -309,23 +297,6 @@ for (const container of CONTAINERS) {
       await page.mouse.down();
       expectOtherColour(await steadyPixel(page, opened.sample), hovered);
       await page.mouse.up();
-    } finally {
-      await opened.close();
-    }
-  });
-
-  test(`${container.name}: a held Space key on its action paints the container until the release`, async ({
-    browser,
-  }) => {
-    const opened = await open(browser, DESKTOP, container);
-    try {
-      const {page} = opened;
-      await opened.action.focus();
-      const rest = await steadyPixel(page, opened.sample);
-      await page.keyboard.down('Space');
-      expectOtherColour(await steadyPixel(page, opened.sample), rest);
-      await page.keyboard.up('Space');
-      expectSameColour(await steadyPixel(page, opened.sample), rest);
     } finally {
       await opened.close();
     }

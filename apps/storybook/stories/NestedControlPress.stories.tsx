@@ -8,8 +8,8 @@
  *   ClickableCard and a SelectableCard with a Button, an Item row and a
  *   TreeList row with an end-content Button, and a Token with a remove
  *   button, and a standalone Button. A press on the nested control paints
- *   only that control; a press on the container's own surface, or a held
- *   Space key on its action, paints the container
+ *   only that control; a press on the container's own surface paints the
+ *   container
  * @position Fixture for __tests__/NestedControlPress.a11y.chromium.spec.ts
  */
 
