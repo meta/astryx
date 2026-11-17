@@ -24,13 +24,13 @@ export const docs = {
       "type": "code",
       "lang": "tsx",
       "label": "Token vars in StyleX",
-      "code": "import * as stylex from '@stylexjs/stylex';\nimport {colorVars, spacingVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  card: {\n    padding: spacingVars['--spacing-4'],\n    backgroundColor: colorVars['--color-background-surface'],\n    borderRadius: radiusVars['--radius-container'],\n  },\n});"
+      "code": "import * as stylex from '@stylexjs/stylex';\nimport {colorVars, spacingVars, sizeVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';\nimport {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';\n\nconst styles = stylex.create({\n  card: {\n    padding: spacingVars['--spacing-4'],\n    backgroundColor: colorVars['--color-background-surface'],\n    borderRadius: radiusVars['--radius-container'],\n  },\n  series: {\n    color: dataVars['--color-data-categorical-blue'],\n  },\n  button: {\n    height: sizeVars['--size-element-md'],\n  },\n});"
     },
     {
       "type": "list",
       "style": "unordered",
       "items": [
-        "Spacing: --spacing-0 to --spacing-12 in 0.25rem steps, plus --spacing-0-5 and --spacing-1-5",
+        "Spacing: --spacing-0 to --spacing-12, plus --spacing-0-5 and --spacing-1-5",
         "Text color: --color-text-primary, --color-text-secondary, --color-text-accent; status text --color-text-<status>",
         "Surfaces: --color-background-body, --color-background-surface, --color-background-card, --color-background-muted",
         "Borders: --color-border, --color-border-emphasized, --border-width",
@@ -39,7 +39,7 @@ export const docs = {
         "Control heights: --size-element-sm, --size-element-md, --size-element-lg",
         "Shadow: --shadow-low, --shadow-med, --shadow-high",
         "Type: --text-heading-1-size to --text-heading-6-size, --text-body-size, --font-weight-semibold",
-        "Charts: --color-data-categorical-<color> for each series, from dataVars in @astryxdesign/core/theme/dataTokens.stylex"
+        "Charts: --color-data-categorical-<color> for each series, where <color> is blue, orange, purple, green, pink, cyan, red, teal, brown, or indigo, from dataVars in @astryxdesign/core/theme/dataTokens.stylex"
       ]
     },
     {

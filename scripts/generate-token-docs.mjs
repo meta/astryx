@@ -12,8 +12,10 @@
  *
  * The namespace carries the topic's search keywords; a guide adds none of
  * its own, so search indexes each guide by its title, description, and text,
- * as it indexed the topic's sections. Each token is written once, in its
- * category's guide. A token reference
+ * as it indexed the topic's sections. Each token's value is written once, in
+ * its category's guide; the namespace page names the tokens most code needs,
+ * and the generator fails when it names one the sources do not define. A
+ * token reference
  * (`{type: 'token-ref', topic: 'tokens', section: 'Color Tokens'}`) resolves
  * through the tokens namespace to the guide that holds the table.
  *
@@ -389,13 +391,38 @@ export const docs = ${JSON.stringify(childDoc, null, 2)};
 // ---------------------------------------------------------------------------
 
 // The tokens most code reaches for, named on the namespace page itself, so a
-// read of `astryx docs tokens` alone is enough to write styles. Each line's
-// names must exist in the sources (checked below); `<status>` and `<color>`
-// stand for one of a family's names.
+// read of `astryx docs tokens` alone is enough to write styles. A family
+// placeholder (`<status>`, `<color>`) stands for each name of its family, read
+// from the sources, and the page lists those names; every named token, with
+// each placeholder expanded, must exist in the sources, so the page changes
+// with a token family or the generator fails.
+const tokenNames = new Set(
+  groups.flatMap(g =>
+    extractDefaults(g.exportName, g.file).map(([name]) => name),
+  ),
+);
+/** @param {RegExp} pattern a token name pattern with one capture group */
+function familyOf(pattern) {
+  return [...tokenNames].flatMap(name => {
+    const found = name.match(pattern);
+    return found ? [found[1]] : [];
+  });
+}
+/** @param {string[]} names */
+function listed(names) {
+  return names.length < 2
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')}, or ${names[names.length - 1]}`;
+}
+const FAMILIES = {
+  status: familyOf(/^--color-on-([a-z]+)-muted$/),
+  color: familyOf(/^--color-data-categorical-([a-z]+)$/),
+};
+
 const CORE_TOKEN_LINES = [
   [
     'Spacing',
-    '--spacing-0 to --spacing-12 in 0.25rem steps, plus --spacing-0-5 and --spacing-1-5',
+    '--spacing-0 to --spacing-12, plus --spacing-0-5 and --spacing-1-5',
   ],
   [
     'Text color',
@@ -408,7 +435,7 @@ const CORE_TOKEN_LINES = [
   ['Borders', '--color-border, --color-border-emphasized, --border-width'],
   [
     'Accent and status fills',
-    '--color-accent with --color-on-accent; --color-<status> with --color-on-<status>, where <status> is info, success, warning, or error',
+    `--color-accent with --color-on-accent; --color-<status> with --color-on-<status>, where <status> is ${listed(FAMILIES.status)}`,
   ],
   [
     'Radius',
@@ -425,25 +452,50 @@ const CORE_TOKEN_LINES = [
   ],
   [
     'Charts',
-    '--color-data-categorical-<color> for each series, from dataVars in @astryxdesign/core/theme/dataTokens.stylex',
+    `--color-data-categorical-<color> for each series, where <color> is ${listed(FAMILIES.color)}, from dataVars in @astryxdesign/core/theme/dataTokens.stylex`,
   ],
 ];
 
-const tokenNames = new Set(
-  groups.flatMap(g =>
-    extractDefaults(g.exportName, g.file).map(([name]) => name),
-  ),
-);
 for (const [label, line] of CORE_TOKEN_LINES) {
   for (const named of line.match(/--[a-z0-9<>-]+/g) ?? []) {
-    const pattern = new RegExp(`^${named.replace(/<[a-z]+>/g, '[a-z0-9]+')}$`);
-    if (![...tokenNames].some(name => pattern.test(name))) {
+    const placeholder = named.match(/<([a-z]+)>/)?.[1];
+    const family = placeholder ? FAMILIES[placeholder] : [''];
+    if (!family || family.length === 0) {
       throw new Error(
-        `generate-token-docs: "${label}" names ${named}, which no token source defines.`,
+        `generate-token-docs: "${label}" names ${named}, and no token family <${placeholder}> exists.`,
       );
+    }
+    for (const member of family) {
+      const name = placeholder
+        ? named.replace(`<${placeholder}>`, member)
+        : named;
+      if (!tokenNames.has(name)) {
+        throw new Error(
+          `generate-token-docs: "${label}" names ${name}, which no token source defines.`,
+        );
+      }
     }
   }
 }
+
+// The StyleX example, shown on the namespace page and in the usage guide.
+const USAGE_EXAMPLE = `import * as stylex from '@stylexjs/stylex';
+import {colorVars, spacingVars, sizeVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
+
+const styles = stylex.create({
+  card: {
+    padding: spacingVars['--spacing-4'],
+    backgroundColor: colorVars['--color-background-surface'],
+    borderRadius: radiusVars['--radius-container'],
+  },
+  series: {
+    color: dataVars['--color-data-categorical-blue'],
+  },
+  button: {
+    height: sizeVars['--size-element-md'],
+  },
+});`;
 
 const namespaceDoc = {
   type: 'namespace',
@@ -461,16 +513,7 @@ const namespaceDoc = {
       type: 'code',
       lang: 'tsx',
       label: 'Token vars in StyleX',
-      code: `import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
-
-const styles = stylex.create({
-  card: {
-    padding: spacingVars['--spacing-4'],
-    backgroundColor: colorVars['--color-background-surface'],
-    borderRadius: radiusVars['--radius-container'],
-  },
-});`,
+      code: USAGE_EXAMPLE,
     },
     {
       type: 'list',
@@ -520,23 +563,7 @@ const usageDoc = {
           type: 'code',
           lang: 'tsx',
           label: 'Using token imports',
-          code: `import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars, sizeVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
-
-const styles = stylex.create({
-  card: {
-    padding: spacingVars['--spacing-4'],
-    backgroundColor: colorVars['--color-background-surface'],
-    borderRadius: radiusVars['--radius-container'],
-  },
-  series: {
-    color: dataVars['--color-data-categorical-blue'],
-  },
-  button: {
-    height: sizeVars['--size-element-md'],
-  },
-});`,
+          code: USAGE_EXAMPLE,
         },
         {
           type: 'prose',
