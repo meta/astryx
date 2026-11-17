@@ -87,7 +87,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The labeled checkbox group, its `checkbox-list` target, the group's
+- The labeled checkbox group, its `checkbox-list` target, the option rows'
+  `checkbox-list-item` target, the group's
   description, status, and disabled-reason relationships, and where its
   base, `container*`, and `control*` props land.
 - Collection state shared with CheckboxListItem: checked membership, change
@@ -102,7 +103,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   states, density sizing, and checked-row fill — owned by
   `component:CheckboxListItem`.
 - List and option-row presentation — owned by `component:List`; its
-  `list-item` target reaches only the row root.
+  `list-item` target reaches only the row root. The row's own
+  `checkbox-list-item` target sits on the same element.
 - The checkbox control, its indicator, focus ring, and pressed overlay — owned
   by `component:CheckboxInput` and CheckboxIndicator.
 - Group-label and validation-message presentation — owned by Field under `family:input-fields` (shared owner section)
@@ -228,9 +230,7 @@ durable constraints and their verification target.
   "Options list": {
     "delegatesTo": {"owner": "component:List", "target": "list"}
   },
-  "Option row": {
-    "delegatesTo": {"owner": "component:List", "target": "list-item"}
-  },
+  "Option row": {"target": "checkbox-list-item"},
   "Checkbox": {
     "delegatesTo": {
       "owner": "component:CheckboxInput",
@@ -269,9 +269,11 @@ reaches it. Item, not Text, renders option labels and descriptions in separate
 untargeted spans, so neither delegates to Text nor inherits the row-root
 `list-item` target; future exposure remains unsettled. Rich label content and end
 content are caller-provided, and end content intentionally stays outside
-CheckboxList's public theming ownership. The `Option row` delegation reaches the
+CheckboxList's public theming ownership. The `Option row` target reaches the
 row surface and, on a checked, enabled, editable row, its `selected` state
-(`component:CheckboxListItem` FR15).
+(`component:CheckboxListItem` FR15), through the row's own
+`checkbox-list-item` target, which reaches CheckboxList rows and no other
+list's rows (`component:CheckboxListItem` FR16).
 
 ## Family and system relationships
 

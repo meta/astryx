@@ -25,7 +25,8 @@ const anatomy = [
   {
     name: 'Option row',
     required: true,
-    description: 'Selectable row containing one option.',
+    description:
+      'Selectable row containing one option; themed through checkbox-list-item.',
   },
   {
     name: 'Checkbox',
@@ -257,7 +258,13 @@ export const docs = {
     ],
   },
   theming: {
-    targets: [{className: 'astryx-checkbox-list'}],
+    targets: [
+      {className: 'astryx-checkbox-list'},
+      {
+        className: 'astryx-checkbox-list-item',
+        states: ['selected', 'disabled'],
+      },
+    ],
     vars: [
       {
         name: '--_checkbox-row-press-paint',
