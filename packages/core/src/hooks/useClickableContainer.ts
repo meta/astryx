@@ -18,9 +18,8 @@
  *   `--_nested-press-paint` there, resets it on its own element, and declares
  *   `--_nested-press-rest`:
  * - /packages/core/src/utils/interactionOverlay.stylex.ts
- * - /packages/core/src/privateAttributes/press.stylex.ts
- * - /packages/core/src/ClickableCard/ClickableCard.tsx
- * - /packages/core/src/SelectableCard/SelectableCard.tsx
+ * - /packages/core/src/privateAttributes/press.stylex.ts (row layers, and
+ *   the card and thumbnail overlay)
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
