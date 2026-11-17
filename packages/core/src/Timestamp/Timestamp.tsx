@@ -281,35 +281,9 @@ function isRelativeFormat(
 // Component
 // =============================================================================
 
-/** Roles whose accessible name comes from their content. */
-const NAMED_FROM_CONTENT = new Set([
-  'button',
-  'link',
-  'tab',
-  'menuitem',
-  'menuitemcheckbox',
-  'menuitemradio',
-  'option',
-  'radio',
-  'checkbox',
-  'switch',
-  'treeitem',
-]);
-
-/** The element's role: its own `role`, or the implicit role of a control. */
-function roleOf(element: Element): string {
-  const role = element.getAttribute('role');
-  if (role != null) {
-    return role;
-  }
-  if (element.tagName === 'BUTTON' || element.tagName === 'SUMMARY') {
-    return 'button';
-  }
-  if (element.tagName === 'A' && element.hasAttribute('href')) {
-    return 'link';
-  }
-  return '';
-}
+/** Controls whose accessible name comes from their content. */
+const NAMED_FROM_CONTENT =
+  'button,summary,a[href],[role=button],[role=link],[role=tab],[role^=menuitem],[role=option],[role=radio],[role=checkbox],[role=switch],[role=treeitem]';
 
 /**
  * Whether `focused` is the time, or a control whose name the time helps form:
@@ -318,22 +292,14 @@ function roleOf(element: Element): string {
  * such as a log, is neither.
  */
 function focusIsNamedBy(time: HTMLElement, focused: Element | null): boolean {
-  if (focused == null || focused === time.ownerDocument.body) {
-    return false;
-  }
-  if (focused === time) {
-    return true;
-  }
-  if (
-    focused.contains(time) &&
-    NAMED_FROM_CONTENT.has(roleOf(focused)) &&
-    !focused.hasAttribute('aria-label') &&
-    !focused.hasAttribute('aria-labelledby')
-  ) {
-    return true;
-  }
-  const label = time.closest('label');
-  return label != null && label.control === focused;
+  return (
+    focused === time ||
+    (focused != null &&
+      focused.contains(time) &&
+      focused.matches(NAMED_FROM_CONTENT) &&
+      !focused.matches('[aria-label],[aria-labelledby]')) ||
+    (focused != null && time.closest('label')?.control === focused)
+  );
 }
 
 /**
