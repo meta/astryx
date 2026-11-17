@@ -535,13 +535,16 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     if (
       isTouchPointerRef.current ||
       !hoverEligibleRef.current ||
-      showTimeoutRef.current != null ||
-      isLayerOpen
+      showTimeoutRef.current != null
     ) {
       return;
     }
+    if (isLayerOpen) {
+      cancelHide();
+      return;
+    }
     scheduleShow();
-  }, [isLayerOpen, isTouchPointerRef, scheduleShow]);
+  }, [cancelHide, isLayerOpen, isTouchPointerRef, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {

@@ -542,6 +542,18 @@ describe('useTooltip — hide delay', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels a pending hide when the pointer returns to the trigger', () => {
+    const onHide = vi.fn();
+    showTooltip(onHide, {hideDelay: 500});
+
+    fireEvent.mouseLeave(trigger());
+    tick(100);
+    hover(trigger());
+    tick(500);
+
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
   it('uses an explicit hideDelay instead of the hover bridge', () => {
     const onHide = vi.fn();
     showTooltip(onHide, {hideDelay: 500});
