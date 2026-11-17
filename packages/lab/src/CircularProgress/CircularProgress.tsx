@@ -286,6 +286,10 @@ const styles = stylex.create({
     position: 'relative',
     display: 'inline-flex',
   },
+  // A disabled ring dims as a whole, as Slider and Switch dim a disabled track.
+  ringWrapperDisabled: {
+    opacity: 0.5,
+  },
 });
 
 const variantStyles = stylex.create({
@@ -303,6 +307,7 @@ const variantStyles = stylex.create({
   },
   // The secondary text role reaches 3:1 on the neutral track in every bundled
   // theme and mode; the disabled text role is close to the track's own color.
+  // A disabled ring takes the same fill and dims as a whole.
   neutral: {
     stroke: colorVars['--color-text-secondary'],
   },
@@ -645,7 +650,11 @@ export function CircularProgress({
         {label}
       </span>
 
-      <div {...stylex.props(styles.ringWrapper)}>
+      <div
+        {...stylex.props(
+          styles.ringWrapper,
+          isDisabled && styles.ringWrapperDisabled,
+        )}>
         <svg
           role="progressbar"
           aria-labelledby={labelId}

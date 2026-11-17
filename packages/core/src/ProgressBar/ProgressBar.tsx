@@ -242,6 +242,18 @@ const styles = stylex.create({
     position: 'relative',
     width: '100%',
   },
+  // A disabled bar dims its track, fill and marks as Slider and Switch dim a
+  // disabled track. Forced colors drop opacity, so the fill outline turns
+  // GrayText there.
+  trackContainerDisabled: {
+    opacity: 0.5,
+  },
+  fillDisabled: {
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'GrayText',
+    },
+  },
   // The semantic rail holds only the fill and clips it to the rounded rail:
   // the determinate fill slides in from the inline-start side and the
   // indeterminate one overshoots both ends. Marks live outside the track (in
@@ -451,7 +463,8 @@ const variantStyles = stylex.create({
   },
   // The secondary text role reaches 3:1 on the track in every bundled theme
   // and mode. The disabled text role does not: it is the track's own color in
-  // some themes.
+  // some themes. A disabled bar takes the same fill and dims as a whole
+  // (`trackContainerDisabled`).
   neutral: {
     backgroundColor: colorVars['--color-text-secondary'],
   },
@@ -701,7 +714,11 @@ export function ProgressBar({
         <VisuallyHidden id={labelId}>{label}</VisuallyHidden>
       )}
 
-      <div {...stylex.props(styles.trackContainer)}>
+      <div
+        {...stylex.props(
+          styles.trackContainer,
+          isDisabled && styles.trackContainerDisabled,
+        )}>
         <div
           role="progressbar"
           aria-valuenow={isIndeterminate ? undefined : clampedValue}
@@ -721,6 +738,7 @@ export function ProgressBar({
                 stylex.props(
                   styles.indeterminateFill,
                   variantStyles[fillVariant],
+                  isDisabled && styles.fillDisabled,
                 ),
               )}
               style={pulseStyle(null)}
@@ -733,6 +751,7 @@ export function ProgressBar({
                   styles.fill,
                   percentage === 0 && styles.fillEmpty,
                   variantStyles[fillVariant],
+                  isDisabled && styles.fillDisabled,
                 ),
               )}
               style={fillStyle}

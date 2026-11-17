@@ -759,3 +759,23 @@ describe('CircularProgress neutral and disabled colors', () => {
     },
   );
 });
+
+describe('CircularProgress disabled treatment', () => {
+  // A disabled ring is exempt from the contrast floor but must read as
+  // quieter than a live neutral ring, so it dims as a whole.
+  function ringOf(container: HTMLElement): HTMLElement {
+    return container.querySelector('[role="progressbar"]')
+      ?.parentElement as HTMLElement;
+  }
+
+  it('dims a disabled ring and leaves a neutral one at full opacity', () => {
+    const {container: off} = render(
+      <CircularProgress value={60} label="Off" isDisabled />,
+    );
+    const {container: live} = render(
+      <CircularProgress value={60} label="Live" variant="neutral" />,
+    );
+    expect(getComputedStyle(ringOf(off)).opacity).toBe('0.5');
+    expect(getComputedStyle(ringOf(live)).opacity).not.toBe('0.5');
+  });
+});

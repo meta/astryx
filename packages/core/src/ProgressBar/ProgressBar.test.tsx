@@ -1375,3 +1375,24 @@ describe('ProgressBar fill colors', () => {
     expect(fillColor(props)).toContain(token);
   });
 });
+
+describe('ProgressBar disabled treatment', () => {
+  // A disabled bar is exempt from the contrast floor but must read as quieter
+  // than a live neutral bar: it dims as a whole, as Slider and Switch dim a
+  // disabled track.
+  function trackContainerOf(container: HTMLElement): HTMLElement {
+    return container.querySelector('[role="progressbar"]')
+      ?.parentElement as HTMLElement;
+  }
+
+  it('dims a disabled bar and leaves a neutral one at full opacity', () => {
+    const {container: off} = render(
+      <ProgressBar value={60} label="Off" isDisabled />,
+    );
+    const {container: live} = render(
+      <ProgressBar value={60} label="Live" variant="neutral" />,
+    );
+    expect(getComputedStyle(trackContainerOf(off)).opacity).toBe('0.5');
+    expect(getComputedStyle(trackContainerOf(live)).opacity).not.toBe('0.5');
+  });
+});
