@@ -241,7 +241,7 @@ for (const [name, Icon] of Object.entries(icons)) {
         },
         {
           type: 'prose',
-          text: 'An export that is not a component goes through your adapter: a function in your package that turns it into one. Pass it to `experimental icon new-set` as `--adapter ./src/adapt.js#adapt`, which declares it in the data file as `"adapter": {"module": "./src/adapt.js", "export": "adapt"}`; with `--from`, every data export becomes an icon through it, and `experimental icon add` writes `export const RocketIcon = /* @__PURE__ */ adaptIcon(RocketIconSource);` (the mark lets a bundler drop the icons an app does not use):',
+          text: 'An export that is not a component goes through your adapter: a function in your package that turns it into one. Pass it to `experimental icon new-set` as `--adapter ./src/adapt.js#adapt`, which declares it in the data file as `"adapter": {"module": "./src/adapt.js", "export": "adapt"}`; with `--from`, every data export becomes an icon through it, and `experimental icon add` writes `export const RocketIcon = /* @__PURE__ */ adaptIcon(RocketIconSource);` (the mark lets a bundler drop the icons an app does not use, so the adapter must only build the component, with no other effect):',
         },
         {
           type: 'code',

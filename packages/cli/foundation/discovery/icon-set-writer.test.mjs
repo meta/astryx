@@ -149,6 +149,25 @@ describe('generatedModuleText marks its top-level calls pure', () => {
     },
   );
 
+  it.each([
+    ['as the CLI spells it', '/* @__PURE__ */ '],
+    ['in the other spelling', '/*#__PURE__*/'],
+  ])('keeps the mark of a statement written by hand %s', (_, mark) => {
+    const before = `${written.js}export const BrandIcon = ${mark}makeBrand('brand');\n`;
+    const again = write(before);
+    expect(again.js).toContain(
+      "export const BrandIcon = /* @__PURE__ */ makeBrand('brand');",
+    );
+    expect(write(again.js).js).toBe(again.js);
+  });
+
+  it('leaves a statement written by hand without a mark unmarked', () => {
+    const before = `${written.js}export const BrandIcon = makeBrand('brand');\n`;
+    expect(write(before).js).toContain(
+      "export const BrandIcon = makeBrand('brand');",
+    );
+  });
+
   it('types the marked module as it types the unmarked one', () => {
     expect(written.dts).toContain(
       'export declare const XIcon: ComponentType<SVGProps<SVGSVGElement>>;',
