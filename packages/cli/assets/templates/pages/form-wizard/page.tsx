@@ -173,10 +173,11 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 // primary button's label grows from "Next" to "Create workspace".
 const footerZone: CSSProperties = {flexBasis: 0};
 // The actions keep their full labels: when Back and Next no longer fit beside
-// the counter, the whole zone moves to its own line instead of cutting them.
+// the counter, the zone moves to its own line, and on a narrower screen the
+// two buttons stack inside it instead of being cut.
 const footerActionsZone: CSSProperties = {
   flexBasis: 0,
-  minWidth: 'max-content',
+  minWidth: 'fit-content',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -850,7 +851,7 @@ export default function FormWizardPage() {
               {step + 1} of {STEPS.length}
             </Text>
             <StackItem size="fill" style={footerActionsZone}>
-              <HStack gap={3} hAlign="end">
+              <HStack wrap="wrap" gap={3} hAlign="end">
                 <Button
                   label="Back"
                   variant="secondary"
