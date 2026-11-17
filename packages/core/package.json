@@ -844,6 +844,11 @@
       "types": "./dist/internal/reorder.d.ts",
       "default": "./dist/internal/reorder.js"
     },
+    "./internal/reorderHandle.stylex": {
+      "source": "./src/internal/reorderHandle.stylex.ts",
+      "types": "./dist/internal/reorderHandle.stylex.d.ts",
+      "default": "./dist/internal/reorderHandle.stylex.js"
+    },
     "./internal/touchHitArea.stylex": {
       "source": "./src/internal/touchHitArea.stylex.ts",
       "types": "./dist/internal/touchHitArea.stylex.d.ts",

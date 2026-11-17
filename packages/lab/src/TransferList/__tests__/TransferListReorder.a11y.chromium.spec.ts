@@ -261,39 +261,44 @@ test.describe('a disabled list', () => {
     deviceScaleFactor: 1,
   });
 
-  test('dims a disabled row once: its label, Remove and handle at half opacity', async ({
-    page,
-  }) => {
-    await page.goto(
-      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story`,
-    );
-    await page.getByRole('switch', {name: 'Disable the list'}).click();
-    const row = page.locator('[data-transfer-list-row="owner"]');
-    const handle = 'button[data-astryx-list-reorder]';
-    await expect(row.locator(handle)).toHaveAttribute('aria-disabled', 'true');
-    // The opacity a reader sees: the product of the element's own and its
-    // ancestors' opacity, up to the row.
-    const seen = async (selector: string) =>
-      row
-        .locator(selector)
-        .first()
-        .evaluate(element => {
-          let opacity = 1;
-          for (
-            let node: Element | null = element;
-            node != null && !node.matches('[data-transfer-list-row]');
-            node = node.parentElement
-          ) {
-            opacity *= Number(getComputedStyle(node).opacity);
-          }
-          return Math.round(opacity * 100) / 100;
-        });
-    await expect.poll(() => seen('text=Owner')).toBe(0.5);
-    await expect
-      .poll(() => seen('[data-transfer-list-action="selected"]'))
-      .toBe(0.5);
-    await expect.poll(() => seen(handle)).toBe(0.5);
-  });
+  for (const placement of ['end', 'start'] as const) {
+    test(`dims a disabled row once: its label, Remove and handle at half opacity (handle at the ${placement})`, async ({
+      page,
+    }) => {
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handlePlacement:${placement}`,
+      );
+      await page.getByRole('switch', {name: 'Disable the list'}).click();
+      const row = page.locator('[data-transfer-list-row="owner"]');
+      const handle = 'button[data-astryx-list-reorder]';
+      await expect(row.locator(handle)).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      // The opacity a reader sees: the product of the element's own and its
+      // ancestors' opacity, up to the row.
+      const seen = async (selector: string) =>
+        row
+          .locator(selector)
+          .first()
+          .evaluate(element => {
+            let opacity = 1;
+            for (
+              let node: Element | null = element;
+              node != null && !node.matches('[data-transfer-list-row]');
+              node = node.parentElement
+            ) {
+              opacity *= Number(getComputedStyle(node).opacity);
+            }
+            return Math.round(opacity * 100) / 100;
+          });
+      await expect.poll(() => seen('text=Owner')).toBe(0.5);
+      await expect
+        .poll(() => seen('[data-transfer-list-action="selected"]'))
+        .toBe(0.5);
+      await expect.poll(() => seen(handle)).toBe(0.5);
+    });
+  }
 
   test('keeps each reorder handle focusable and disabled, with the focus where it was', async ({
     page,

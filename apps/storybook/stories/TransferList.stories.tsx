@@ -24,7 +24,10 @@ import type {TransferListOption} from '@astryxdesign/lab';
 import {Theme} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -174,10 +177,14 @@ const BASIC_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
 function useMoveReorderable<T extends string>(
   setValue: (update: (value: readonly T[]) => readonly T[]) => void,
   isReorderable?: (value: T) => boolean,
+  handle?: ReorderHandle,
 ) {
+  const revealBehavior = handle?.revealBehavior;
+  const placement = handle?.placement;
   return useMemo(
     () =>
       createReorderable<T>({
+        handle: {revealBehavior, placement},
         onReorder: ({key, to}) =>
           setValue(current => {
             const next = current.filter(item => item !== key);
@@ -186,17 +193,17 @@ function useMoveReorderable<T extends string>(
           }),
         isReorderable,
       }),
-    [setValue, isReorderable],
+    [setValue, isReorderable, revealBehavior, placement],
   );
 }
 
-function DefaultExample() {
+function DefaultExample({handle}: {handle?: ReorderHandle}) {
   const [value, setValue] = useState<readonly string[]>([
     'name',
     'owner',
     'status',
   ]);
-  const reorderable = useMoveReorderable(setValue);
+  const reorderable = useMoveReorderable(setValue, undefined, handle);
   return (
     <TransferList
       label="Visible fields"
@@ -216,6 +223,23 @@ function DefaultExample() {
 /** The primitive rendered inline, without the selector's popover. */
 export const Default: Story = {
   render: () => <DefaultExample />,
+};
+
+type ReorderHandleArgs = {
+  placement: 'start' | 'end';
+  revealBehavior: 'always' | 'adaptive';
+};
+
+/** The reorderable's `handle` option: the handle's edge and how it reveals. */
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {placement: 'end', revealBehavior: 'always'},
+  argTypes: {
+    placement: {control: 'inline-radio', options: ['end', 'start']},
+    revealBehavior: {control: 'inline-radio', options: ['always', 'adaptive']},
+  },
+  render: ({revealBehavior, placement}) => (
+    <DefaultExample handle={{revealBehavior, placement}} />
+  ),
 };
 
 const LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
