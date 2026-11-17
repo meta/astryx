@@ -616,6 +616,57 @@ describe('themeBuild() — check mode', () => {
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
   });
+
+  it('is up to date when another CLI release built the same outputs, and stale when another Core did', async () => {
+    const themeFile = path.join(tmpDir, 'release.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'release', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('release.mjs', {}, {cwd: tmpDir});
+    const outputs = ['release.css', 'release.js', 'release.d.ts'].map(name =>
+      path.join(tmpDir, name),
+    );
+    /** @param {RegExp} line @param {string} written */
+    const rewriteHeaders = (line, written) => {
+      for (const file of outputs) {
+        const before = fs.readFileSync(file, 'utf8');
+        const after = before.replace(line, written);
+        expect(after).not.toBe(before);
+        fs.writeFileSync(file, after);
+      }
+    };
+
+    // The header names the CLI release that built each output; a build with
+    // another release writes the same files apart from that line.
+    rewriteHeaders(
+      /CLI: @astryxdesign\/cli@\S+/,
+      'CLI: @astryxdesign/cli@0.0.1',
+    );
+    const otherCli = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCli?.data.upToDate).toBe(true);
+    expect(otherCli?.data.stale).toEqual([]);
+
+    rewriteHeaders(
+      /Core: @astryxdesign\/core@\S+/,
+      'Core: @astryxdesign/core@0.0.1',
+    );
+    const otherCore = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCore?.data.upToDate).toBe(false);
+    expect(otherCore?.data.stale.map(s => s.reason)).toEqual([
+      'outdated',
+      'outdated',
+      'outdated',
+    ]);
+  });
 });
 
 describe('themeBuild() — component override validation', () => {

@@ -49,7 +49,8 @@
  *
  * With `{check: true}`, it compiles the same outputs in memory but writes
  * nothing: it compares each generated file against what is on disk (ignoring
- * only the volatile `@generated` `Command:` line) and returns a
+ * the `@generated` header's volatile `Command:` line and its `CLI:` line,
+ * which names the CLI release that built the file) and returns a
  * `theme.build.check` receipt listing any stale or missing outputs. This is
  * the CI guard for committed, generated theme CSS: the source of truth is
  * `<theme>.ts`, and `theme build --check` fails when the committed
@@ -659,8 +660,9 @@ function readPkgVersion(dir) {
 /**
  * Resolve the CLI and core package versions recorded in generated headers.
  * These are stable (unlike a timestamp): identical inputs produce byte-identical
- * output, so rebuilds don't churn git and `theme build --check` stays a pure
- * content-drift signal.
+ * output, so rebuilds don't churn git. `theme build --check` ignores the CLI
+ * version (normalizeThemeBuildForCompare), so it stays a content-drift signal
+ * whichever CLI release answers.
  * @param {string} cwd - Consumer cwd, used to locate the installed core.
  * @returns {{cli: string, core: string}}
  */
@@ -824,26 +826,42 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
 }
 
 /**
- * Normalize generated file content for staleness comparison by dropping the
- * volatile `Command:` line of the `@generated` header (it embeds the
- * invocation, e.g. an explicit --out). Everything else — including the rest of
- * the header and all real content — is compared verbatim. Used only by
- * `--check`: a differing command must NOT report a file as stale, but any real
- * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content. CRLF
- * line endings read as LF.
+ * Generated file content without the volatile `Command:` line of the
+ * `@generated` header (it embeds the invocation, e.g. an explicit --out).
+ * CRLF line endings read as LF, since a checkout may turn line endings into
+ * CRLF.
+ * @param {string} content
+ * @returns {string}
+ */
+export function withoutBuildCommandLine(content) {
+  return content
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter(line => !headerText(line).startsWith('Command:'))
+    .join('\n');
+}
+
+/** @param {string} line */
+function headerText(line) {
+  return line.replace(/^\s*\*?\s?/, '');
+}
+
+/**
+ * Normalize generated file content for staleness comparison: without the
+ * header's `Command:` line ({@link withoutBuildCommandLine}) and its `CLI:`
+ * line, which names the CLI release that built the file. Which release
+ * answers depends on how the CLI was started (a global install, a tool that
+ * runs it, or the project's own copy) and changes with each update, so the
+ * same outputs built by another release are not stale. Everything else, the
+ * `Core:` line and all real content included, is compared verbatim. Used only
+ * by `--check`: any real content drift reports a file as stale.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  // A checkout may turn line endings into CRLF; the text is the same.
-  return content
-    .replace(/\r\n/g, '\n')
+  return withoutBuildCommandLine(content)
     .split('\n')
-    .filter(line => {
-      const t = line.replace(/^\s*\*?\s?/, '');
-      return !t.startsWith('Command:');
-    })
+    .filter(line => !headerText(line).startsWith('CLI: @astryxdesign/cli@'))
     .join('\n');
 }
 
@@ -6218,7 +6236,7 @@ async function themeBuildInternal(
 
   // Check mode: compare generated content against what's on disk instead of
   // writing. A file is "stale" if it's missing or its content differs once the
-  // volatile @generated `Command:` line is ignored. Returns a
+  // @generated header's `Command:` and `CLI:` lines are ignored. Returns a
   // receipt listing stale/missing outputs so callers (CI) can fail on drift.
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);

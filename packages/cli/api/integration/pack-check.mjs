@@ -57,8 +57,8 @@ import {
   resolveThemeImports,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
-  normalizeThemeBuildForCompare,
   themeBuildWithHandOff,
+  withoutBuildCommandLine,
 } from '../theme/build/build.mjs';
 import {
   discoverIntegrationComponents,
@@ -113,11 +113,12 @@ const BUILT_BY_LINE =
  * and, in a built module, the one `built by` line that names the command
  * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
  * malformed, reordered, or any other bytes stay significant. `theme build
- * --check` deliberately stays strict.
+ * --check` stays strict about the Source and Core lines and the built-by
+ * line; only the CLI line counts for neither.
  * @param {string} content
  */
 export function normalizeThemeVerifyForCompare(content) {
-  const normalized = normalizeThemeBuildForCompare(content);
+  const normalized = withoutBuildCommandLine(content);
   const lines = normalized.split('\n');
   if (lines[0] !== '/*' && lines[0] !== '/**') return normalized;
   const close = lines.indexOf(' */', 1);
