@@ -82,7 +82,7 @@ const ICON_SET_FIELDS = /** @type {const} */ (['iconCount', 'definitions']);
 
 /**
  * The catalog with every icon-set-only field taken off its items, so a project
- * that has not opted into icon sets checks a catalog exactly as a CLI without
+ * where icon features are off checks a catalog exactly as a CLI without
  * them does: those fields are unknown, so dropped unread. Anything not shaped
  * like a catalog is returned as is, for the schema to report.
  * @param {unknown} value
@@ -124,8 +124,8 @@ function withoutIconSetFields(value) {
  *
  * @param {unknown} value
  * @param {string} [label]
- * @param {{iconSets?: boolean}} [options] `iconSets`: the project opts into
- *   icon sets (`experimental.iconSet`)
+ * @param {{iconSets?: boolean}} [options] `iconSets`: icon features are on
+ *   in the project (an installed icon-set package or `experimental.iconSet`)
  * @returns {import('./type.js').DiscoverCatalog}
  */
 export function parseDiscoverCatalog(

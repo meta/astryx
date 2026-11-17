@@ -106,8 +106,13 @@ jobs:
       # scripts/lib brings the scripts/ files beside it too: the Node leg
       # planner, the modules it imports and the recorded Node times;
       # .github/scripts/lib holds the glob matcher it shares.
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the admission action
+        id: checkout
         uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           sparse-checkout: |
             .github/actions/ci-admission
@@ -115,6 +120,26 @@ jobs:
             scripts/lib
           path: .ci-admission
           persist-credentials: false
+
+      - name: Check out the admission action (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
+            scripts/lib
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       # The unit run's Node legs, from the recorded times: as many as shorten
       # the slowest leg, at most twelve (spec:AST-030 FR22, DEC-17), with the
@@ -150,9 +175,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - name: Check package.json exports are in sync
         run: node scripts/sync-exports.js --check
@@ -191,9 +237,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -224,10 +291,32 @@ jobs:
       # Two commits: the swizzle proof diffs main's squash-merged commit
       # against its parent to prove only the copies that change affects
       # (spec:AST-110 FR7).
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
           fetch-depth: 2
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+          fetch-depth: 2
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 
@@ -242,6 +331,9 @@ jobs:
           # (spec:AST-110 FR7).
           SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
           SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
+          # The full run draws the theme editor's pages for real in every
+          # test (a pull request's tests stand in for the drawing).
+          THEME_EDIT_REAL_RENDERS: '1'
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its
@@ -254,9 +346,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
+      - name: Check out the commit under test
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Check out the commit under test (second try)
+        id: checkout-again
+        if: steps.checkout.outcome != 'success'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
+          exit 1
 
       - uses: ./.github/actions/setup
 

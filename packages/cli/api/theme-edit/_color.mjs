@@ -522,6 +522,28 @@ const toLinear = c => {
   return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 };
 
+/**
+ * A color in OKLab (lightness, a, b), from its sRGB channels: what the eye
+ * sees as close or far ({@link oklabDistance}).
+ * @param {[number, number, number]} rgb
+ * @returns {number[]}
+ */
+export function oklabOf(rgb) {
+  return linearToOklab(rgb.map(toLinear));
+}
+
+/**
+ * How far apart two colors look: their distance in OKLab (0 the same; about
+ * 0.02 the least a person tells apart).
+ * @param {[number, number, number]} a
+ * @param {[number, number, number]} b
+ */
+export function oklabDistance(a, b) {
+  const x = oklabOf(a);
+  const y = oklabOf(b);
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
 /** Linear sRGB to OKLab. @param {number[]} lin @returns {number[]} */
 function linearToOklab([r, g, b]) {
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);

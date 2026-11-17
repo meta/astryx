@@ -40,14 +40,25 @@ async function iconCheckOf(options) {
 }
 
 describe('icon-sets check', () => {
-  it('a project without experimental.iconSet has no check, sets installed or not', async () => {
+  it('a project with no icon-set package and no experimental.iconSet has no check', async () => {
     // Icon sets are experimental (spec:AST-017 FR27): the report is unchanged
-    // until the project opts in.
+    // until the icon feature gate is on.
     expect(await iconCheckOf({packages: []})).toBeUndefined();
-    expect(await iconCheckOf({})).toBeUndefined();
-    expect(
-      await iconCheckOf({packages: [{}, {name: '@acme/lines'}]}),
-    ).toBeUndefined();
+  });
+
+  it('one installed icon-set package and no experimental.iconSet passes, naming the set', async () => {
+    const check = await iconCheckOf({});
+    expect(check).toMatchObject({status: 'pass'});
+    expect(check?.message).toContain(
+      '"@acme/glyphs/glyphs" is the only installed icon set.',
+    );
+  });
+
+  it('two installed icon-set packages and no experimental.iconSet pass, saying none is the main set', async () => {
+    const check = await iconCheckOf({packages: [{}, {name: '@acme/lines'}]});
+    expect(check).toMatchObject({status: 'pass'});
+    expect(check?.message).toContain('2 icon sets installed.');
+    expect(check?.message).toContain('so none is your main set');
   });
 
   it('the configured set installed passes', async () => {
@@ -212,9 +223,14 @@ describe('icon-placeholders check', () => {
   /**
    * @param {Record<string, unknown> | null} config
    * @param {Record<string, string>} files project files by relative path
+   * @param {Array<Record<string, unknown>>} [packages] the icon packages
+   *   installed; one valid set when omitted
    */
-  async function placeholderCheckOf(config, files) {
-    const cwd = writeIconSetProject(tmp, {config});
+  async function placeholderCheckOf(config, files, packages = undefined) {
+    const cwd = writeIconSetProject(tmp, {
+      config,
+      ...(packages ? {packages} : {}),
+    });
     const pkgFile = path.join(cwd, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
     pkg.dependencies = {...pkg.dependencies, '@astryxdesign/core': '*'};
@@ -339,9 +355,23 @@ describe('icon-placeholders check', () => {
     expect(check).toMatchObject({status: 'pass'});
   });
 
-  it('a project without experimental.iconSet has no check, placeholder or not', async () => {
+  it('a project with no icon-set package and no experimental.iconSet has no check', async () => {
     expect(
-      await placeholderCheckOf(null, {'src/page.tsx': PAGE}),
+      await placeholderCheckOf(null, {'src/page.tsx': PAGE}, []),
+    ).toBeUndefined();
+  });
+
+  it('one installed icon-set package and no experimental.iconSet warns about a placeholder in use', async () => {
+    const check = await placeholderCheckOf(null, {'src/page.tsx': PAGE});
+    expect(check).toMatchObject({status: 'warn'});
+  });
+
+  it('two installed icon-set packages and no main set have no placeholder check', async () => {
+    expect(
+      await placeholderCheckOf(null, {'src/page.tsx': PAGE}, [
+        {},
+        {name: '@acme/lines'},
+      ]),
     ).toBeUndefined();
   });
 });
