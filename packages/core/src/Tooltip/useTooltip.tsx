@@ -1018,8 +1018,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {isValidElement(children) && children.type === MediaTheme ? (
-            // The caller already chose the media context for its content.
+          {typeof children === 'string' ||
+          typeof children === 'number' ||
+          (isValidElement(children) && children.type === MediaTheme) ? (
+            // Plain text reads no tokens, so it renders as before. Content
+            // that holds a MediaTheme already chose its media context.
             children
           ) : (
             <TooltipMediaContent surfaceRef={contentRef} isShown={isLayerOpen}>

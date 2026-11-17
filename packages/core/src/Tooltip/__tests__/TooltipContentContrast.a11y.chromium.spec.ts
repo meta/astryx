@@ -19,6 +19,7 @@
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -164,6 +165,8 @@ for (const theme of SHIPPED_THEMES) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:${theme};colorMode:${mode}`,
       );
+      // Measure at rest, not during the entrance fade.
+      await holdMotionStill(page);
       await expect(page.getByRole('tooltip')).toHaveCount(6);
       await expect(page.getByText('Body text')).toBeVisible();
       await page.evaluate(async () => {
@@ -189,6 +192,8 @@ for (const theme of SHIPPED_THEMES) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:${theme};colorMode:${mode}`,
       );
+      // Measure at rest, not during the entrance fade.
+      await holdMotionStill(page);
       await expect(page.getByRole('tooltip')).toHaveCount(6);
       const found = await page.evaluate(() => {
         const out: string[] = [];
