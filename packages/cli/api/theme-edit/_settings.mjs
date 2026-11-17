@@ -127,6 +127,7 @@ import {
   readWrittenRecord,
   writeWrittenRecord,
   familyRamp,
+  derivedStatusWords,
 } from './_palette.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -5124,6 +5125,8 @@ export function roleReach(ctx, data, base) {
       )?.[1];
     if (token) roles.add(token);
   }
+  // The status roles the look grows (derivedStatusWords) move with it too.
+  for (const w of derivedStatusWords(data)) roles.add(w);
   /** @type {Array<{part: string, when: string | undefined, prop: string, value: string | null}>} */
   const out = [];
   if (!roles.size) return out;

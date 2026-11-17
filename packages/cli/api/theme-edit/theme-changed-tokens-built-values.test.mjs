@@ -99,7 +99,7 @@ describe('changedTokens', () => {
         // The theme's own tokens keep their line shape; the category and
         // chart colors that move with the look are counted in one line each.
         const look =
-          /^(?:category colors \(badges, tokens and card tints\)|chart colors): \d+ values moved with the look$/;
+          /^(?:category colors \(badges, tokens and card tints\)|chart colors|status colors \([a-z, ]+\)): \d+ values moved with the look$/;
         for (const line of r.data.changedTokens)
           if (!look.test(line))
             expect(line).toMatch(
@@ -119,7 +119,11 @@ describe('changedTokens', () => {
                       ? 'chart colors:'
                       : 'category colors',
                   ),
-                )),
+                )) ||
+              (/^--color-(?:(?:on|text|icon|border)-)?(?:info|success|warning|error)(?:-muted)?$/.test(
+                prop,
+              ) &&
+                changed.some(x => x.startsWith('status colors ('))),
             prop,
           ).toBe(true);
         if (dial === 'vibrancy') {

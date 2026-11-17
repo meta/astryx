@@ -44,8 +44,10 @@ import {
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
 import {
   deriveLookColors,
+  deriveStatusColors,
   isLookFamily,
   lookSeeds,
+  statusSeeds,
 } from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
@@ -313,6 +315,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
 
@@ -688,6 +691,20 @@ function dialFamilies(data) {
 }
 
 /**
+ * The token words of the status roles a theme's look derives: every role
+ * it leaves unset, once it sets a color.
+ * @param {{settings: Setting[]}} data
+ * @returns {string[]}
+ */
+export function derivedStatusWords(data) {
+  const fams = dialFamilies(data);
+  if (!fams.length) return [];
+  return Object.keys(STATUS_TOKEN)
+    .filter(d => !fams.some(f => f.id === d))
+    .map(d => STATUS_TOKEN[d]);
+}
+
+/**
  * Whether a token is one the look derives: a category color (Badge, Token,
  * Card tint) or a chart color.
  * @param {string} token
@@ -702,9 +719,16 @@ export const isLookToken = token =>
  * said in one line each, as counts: they move together with every look
  * change, and one line per value would bury the rest.
  * @param {unknown[]} lines - `token (mode): before -> after` lines.
+ * @param {string[]} [statusWords] - The status words whose colors the look derives (derivedStatusWords): theirs are counted too.
  */
-export function lookCollapsed(lines) {
+export function lookCollapsed(lines, statusWords = []) {
   const tokenOf = (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0];
+  const status = new RegExp(
+    `^--color-(?:(?:on|text|icon|border)-)?(?:${statusWords.join('|') || '(?!)'})(?:-muted)?$`,
+  );
+  const statusLines = lines.filter(c => status.test(tokenOf(c)));
+  const rest = lines.filter(c => !status.test(tokenOf(c)));
+  lines = rest;
   const look = lines.filter(c => isLookToken(tokenOf(c))).map(String);
   const badges = look.filter(c => !tokenOf(c).startsWith('--color-data-'));
   const chart = look.length - badges.length;
@@ -717,8 +741,13 @@ export function lookCollapsed(lines) {
           ]
         : []),
       ...(chart ? [`chart colors: ${chart} values moved with the look`] : []),
+      ...(statusLines.length
+        ? [
+            `status colors (${statusWords.join(', ')}): ${statusLines.length} values moved with the look`,
+          ]
+        : []),
     ],
-    look,
+    look: [...look, ...statusLines.map(String)],
   };
 }
 
@@ -1152,6 +1181,7 @@ function tools(
     solid,
     surfaces,
     onFor,
+    onChoices,
     page,
     neutral,
   };
@@ -1429,6 +1459,29 @@ function planPalette(cwd, slug, data, base) {
     for (const [id, seed] of Object.entries(derived))
       if (!families.some(f => f?.id === id))
         families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each (statusSeeds). They are grown again at every plan: a
+  // status family that is not a setting is the editor's.
+  if (fams.length) {
+    const unset = Object.keys(STATUS_TOKEN).filter(
+      d => !fams.some(f => f.id === d),
+    );
+    /** @type {Record<string, string>} */
+    const baseColors = {};
+    for (const d of unset) {
+      const v = base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+      const rgb = v ? parseColor(v) : null;
+      if (rgb && alphaOf(String(v)) >= 1)
+        baseColors[d] = hex(/** @type {number[]} */ (rgb));
+    }
+    const seeds = statusSeeds(
+      baseColors,
+      fams.find(f => f.id === 'accent')?.seed,
+    );
+    for (const [id, seed] of Object.entries(seeds))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  }
   // A color change on a palette made with the first recipe says what the
   // newer one does, and how to choose it.
   /** @param {any} c */
@@ -2868,6 +2921,39 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   }
 
   const categories = mapCategories();
+  const statuses = mapStatuses();
+  /**
+   * The status roles the theme leaves unset, from the palette's families of
+   * them (deriveStatusColors), written as its shades; a token set by hand
+   * keeps its value, and a role that cannot be drawn readable and apart
+   * from the accent keeps the base theme's.
+   * @returns {NonNullable<PaletteMapping['statuses']>}
+   */
+  function mapStatuses() {
+    const pal = /** @type {any} */ (candidate.palette);
+    const roles = Object.keys(STATUS_TOKEN).filter(
+      d => !fams.some(f => f.id === d) && pal[d],
+    );
+    if (!roles.length) return {roles: {}, why: []};
+    const derived = deriveStatusColors({
+      palette: pal,
+      stops,
+      modes,
+      roles,
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      inks: (m, id) =>
+        t.onChoices(id, m).map(r => ({
+          stop: r.stop,
+          color: r.color,
+          family: String(r.family ?? 'neutral'),
+        })),
+      accent: m => tokens['--color-accent']?.[m]?.color ?? null,
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens))
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    return {roles: derived.roles, why: derived.why};
+  }
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
@@ -2920,6 +3006,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     contrast: checks.filter(c => c.note !== ''),
     lift,
     categories,
+    statuses,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
     unread,
@@ -3108,8 +3195,9 @@ export function paletteFailedKeys(pal) {
  * with every dial's.
  * @param {PaletteMapping} pal
  * @param {string} dial
+ * @param {string} [slug]
  */
-export function categoryNotes(pal, dial) {
+export function categoryNotes(pal, dial, slug = '<theme>') {
   const c = pal.categories;
   if (!c) return [];
   /** @type {string[]} */
@@ -3142,6 +3230,19 @@ export function categoryNotes(pal, dial) {
     out.push(
       `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
     );
+  const st = pal.statuses;
+  const grown = ['info', 'success', 'warning', 'danger'].filter(
+    role => st?.roles[role] === 'derived',
+  );
+  if (dial === 'accent' && grown.length)
+    out.push(
+      `${grown.join(', ')} ${grown.length > 1 ? 'grow' : 'grows'} from the base theme's ${grown.length > 1 ? 'hues' : 'hue'} at your accent's strength and the palette's vibrancy, kept apart from your accent (badges, banners, status dots, field status); an exact setting of ${grown.length > 1 ? 'one' : 'it'} chooses it`,
+    );
+  for (const [role, how] of Object.entries(st?.roles ?? {}))
+    if (how !== 'derived')
+      out.push(
+        `${role} keeps the base theme's colors: ${how === 'alike' ? 'grown from your look it would be drawn like your accent' : (st?.why.find(w => w.includes(`-${STATUS_TOKEN[role]}`)) ?? 'grown from your look it would not read')}; ${P} set ${slug} ${role} <color> chooses it`,
+      );
   if (c.chart === 'merged')
     out.push(
       `chart colors keep Core's: your look would draw ${pairs(true).join(', ')} alike; a stronger accent or a higher vibrancy keeps them apart`,
@@ -3204,7 +3305,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
-  notes.push(...categoryNotes(pal, dial));
+  notes.push(...categoryNotes(pal, dial, slug));
   notes.push(
     `the generated colors are in ${f.palette}, made from ${f.config} (receipt: ${f.receipt}); the theme imports only the shades it uses, from ${f.refs}`,
   );

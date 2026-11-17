@@ -209,6 +209,7 @@ import {
   isLookToken,
   lookCollapsed,
   categoryNotes,
+  derivedStatusWords,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -6145,7 +6146,7 @@ async function changeOnce(
         was: before,
         parts: [],
         group: null,
-        changedTokens: lookCollapsed(r.changed).lines,
+        changedTokens: lookCollapsed(r.changed, derivedStatusWords(data)).lines,
         changedPartTokens: r.changedParts ?? [],
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
@@ -7289,7 +7290,19 @@ async function changeOnce(
       }`,
     );
   }
-  if (s.thing === 'accent' && sub === 'set') {
+  // The status roles the look derives (deriveStatusColors) sit with the
+  // palette already: only a role kept at the base theme's is said.
+  const grownRoles = new Set(
+    Object.entries(
+      (s.thing === 'accent' || s.thing === 'vibrancy'
+        ? paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults)
+        : null
+      )?.statuses?.roles ?? {},
+    )
+      .filter(([, how]) => how === 'derived')
+      .map(([role]) => role),
+  );
+  if (s.thing === 'accent' && sub === 'set' && !grownRoles.has('info')) {
     notes.push(...infoClashNotes(data, base, slug, String(s.value)));
   }
   if (s.thing === 'vibrancy') {
@@ -7298,7 +7311,7 @@ async function changeOnce(
         ? `every color this theme sets is made again at vibrancy ${s.value} (0 is gray, 100 the most vivid, ${VIBRANCY_DEFAULT} the default)`
         : `every color this theme sets is made again at the default vibrancy, ${VIBRANCY_DEFAULT}`,
     );
-    notes.push(...unsetColorNotes(data, base, slug));
+    notes.push(...unsetColorNotes(data, base, slug, grownRoles));
   }
   // A font set (the dial, a part's own font-family, a font token): how
   // it loads.
@@ -7327,7 +7340,10 @@ async function changeOnce(
   // A change that moved the category or chart colors says why they keep the
   // base theme's when the look would draw two hues alike (an accent change
   // says it with the accent's notes).
-  if (lookCollapsed(r.changed).look.length && dialOfToken !== 'accent') {
+  if (
+    lookCollapsed(r.changed, derivedStatusWords(data)).look.length &&
+    dialOfToken !== 'accent'
+  ) {
     const look = paletteMapping(
       cwd,
       slug,
@@ -7335,7 +7351,7 @@ async function changeOnce(
       base,
       ctx.project.core.tokenDefaults,
     );
-    for (const n of look ? categoryNotes(look, '') : [])
+    for (const n of look ? categoryNotes(look, '', slug) : [])
       if (!notes.includes(n)) notes.push(n);
   }
   // A change that changed nothing writes nothing, the preview included,
@@ -7420,7 +7436,7 @@ async function changeOnce(
             onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
           }
         : null,
-      changedTokens: lookCollapsed(r.changed).lines,
+      changedTokens: lookCollapsed(r.changed, derivedStatusWords(data)).lines,
       changedPartTokens: r.changedParts ?? [],
       styled,
       kept,
@@ -7497,12 +7513,14 @@ function infoClashNotes(data, base, slug, accent) {
  * values whatever the vibrancy, with the commands that bring them in: each
  * seeded with the base theme's own color, so it is then generated at the
  * theme's vibrancy. Colored cards and other info-tinted surfaces follow info.
+ * A role the look derives (`derived`) follows the vibrancy already.
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @param {string} slug
+ * @param {Set<string>} [derived]
  * @returns {string[]}
  */
-function unsetColorNotes(data, base, slug) {
+function unsetColorNotes(data, base, slug, derived = new Set()) {
   const word = /** @type {Record<string, string>} */ ({
     info: '--color-info',
     success: '--color-success',
@@ -7510,7 +7528,9 @@ function unsetColorNotes(data, base, slug) {
     danger: '--color-error',
   });
   const unset = Object.keys(word).filter(
-    d => !data.settings.some(x => x.source === 'dial' && x.thing === d),
+    d =>
+      !derived.has(d) &&
+      !data.settings.some(x => x.source === 'dial' && x.thing === d),
   );
   if (!unset.length) return [];
   return [
@@ -8993,23 +9013,22 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
   if (!pal)
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /**
-   * The category colors (badges, tokens and card tints) and chart colors:
-   * why a themed look leaves them at the base theme's, or that the build
-   * still shows the base theme's where the palette now derives them.
+   * The category colors (badges, tokens and card tints), chart colors and
+   * status roles: why a themed look leaves some at the base theme's, or that
+   * the build still shows the base theme's where the palette now derives
+   * them.
    */
   const lookNote = () => {
+    const said = categoryNotes(pal, '', slug);
     const c = pal.categories;
-    if (!c) return [];
-    if (c.badges !== 'derived' || c.chart !== 'derived') {
-      const said = categoryNotes(pal, '');
-      if (said.length) return said;
-      return [
-        `category colors (badges, tokens and card tints) and chart colors keep the base theme's: the CLI's own palette could not be read, so none is grown from your look`,
-      ];
-    }
+    if (!c || c.badges !== 'derived' || c.chart !== 'derived') return said;
+    const words = derivedStatusWords(data);
+    const status = new RegExp(
+      `^--color-(?:(?:on|text|icon|border)-)?(?:${words.join('|') || '(?!)'})(?:-muted)?$`,
+    );
     const behind = Object.entries(pal.tokens).filter(
       ([k, v]) =>
-        isLookToken(k) &&
+        (isLookToken(k) || status.test(k)) &&
         !(k in own) &&
         !data.settings.some(
           x => x.source === 'token' && x.thing === k && !x.on && !x.when,
@@ -9023,9 +9042,10 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
     );
     return behind.length
       ? [
-          `category colors (badges, tokens and card tints) and chart colors still show the base theme's in this build (${behind.length} values): your palette grows them from your look now, and the next change rebuilds them, for example ${P} set ${slug} vibrancy ${pal.vibrancy}`,
+          ...said,
+          `category, chart and status colors still show the base theme's in this build (${behind.length} values): your palette grows them from your look now, and the next change rebuilds them, for example ${P} set ${slug} vibrancy ${pal.vibrancy}`,
         ]
-      : [];
+      : said;
   };
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
@@ -9861,7 +9881,8 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      changedTokens: lookCollapsed(committed.changed).lines,
+      changedTokens: lookCollapsed(committed.changed, derivedStatusWords(prev))
+        .lines,
       changedPartTokens: committed.changedParts ?? [],
       problems: committed.problems,
       newProblems: [

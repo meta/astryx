@@ -73,6 +73,30 @@ const halves = (slug, token) => {
   return [m[1], m[2]];
 };
 
+/**
+ * A token's half as it shows over a page color: a see-through value
+ * (`#rrggbbaa`) composited over it.
+ * @param {string} slug @param {string} token @param {number} i @param {string} page
+ */
+const seen = (slug, token, i, page) => {
+  const m = new RegExp(
+    `${token}: light-dark\\((#[0-9a-f]{6,8}), (#[0-9a-f]{6,8})\\)`,
+  ).exec(css(slug));
+  if (!m) throw new Error(`${token} is not a light-dark() pair in ${slug}`);
+  const v = m[1 + i];
+  if (v.length === 7) return v;
+  const a = parseInt(v.slice(7), 16) / 255;
+  const ch = (/** @type {string} */ c, /** @type {number} */ k) =>
+    parseInt(c.slice(1 + k * 2, 3 + k * 2), 16);
+  return `#${[0, 1, 2]
+    .map(k =>
+      Math.round(a * ch(v, k) + (1 - a) * ch(page, k))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+};
+
 /** @param {string} a @param {string} b */
 const contrast = (a, b) =>
   ratio(
@@ -218,5 +242,71 @@ describe('category and chart colors follow the look', () => {
       hexToOklch(halves('calm', '--color-background-red')[0]).C,
     ).toBeGreaterThan(0.04);
     expect(before).not.toEqual(halves('calm', '--color-background-red'));
+  }, 240_000);
+});
+
+describe('status roles follow the look', () => {
+  it('grows the roles a theme leaves unset, readable and apart from the accent', async () => {
+    await themeEditNew('corp', {cwd, like: 'neutral'});
+    await themeEditSet('corp', 'accent', '#0052cc', {cwd});
+    for (const [i, mode] of /** @type {const} */ ([
+      'light',
+      'dark',
+    ]).entries()) {
+      const page = halves('corp', '--color-background-body')[i];
+      const accent = halves('corp', '--color-accent')[i];
+      for (const w of ['info', 'success', 'warning', 'error']) {
+        const fill = halves('corp', `--color-${w}`)[i];
+        const on = halves('corp', `--color-on-${w}`)[i];
+        const text = halves('corp', `--color-text-${w}`)[i];
+        // The dark tint is see-through: measured as it shows on the page.
+        const tint = seen('corp', `--color-${w}-muted`, i, page);
+        const onTint = halves('corp', `--color-on-${w}-muted`)[i];
+        expect(
+          contrast(on, fill),
+          `${mode} text on ${w}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(text, page),
+          `${mode} ${w} text`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(onTint, tint),
+          `${mode} text on ${w} tint`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          perceptualDelta(fill, accent),
+          `${mode} ${w} apart`,
+        ).toBeGreaterThanOrEqual(5);
+      }
+    }
+    // Info stays a blue, turned away from the blue accent.
+    const info = hexToOklch(halves('corp', '--color-info')[0]);
+    expect(info.H).toBeGreaterThan(200);
+    expect(info.H).toBeLessThan(270);
+    const source = fs.readFileSync(
+      path.join(cwd, 'themes', 'corp', 'corp.settings.ts'),
+      'utf8',
+    );
+    expect(source).toMatch(/"--color-info": \[\s*palette\.info\.light\[\d+\]/);
+  }, 240_000);
+
+  it('lets a role the theme sets win, and says what the look grew', async () => {
+    const r = /** @type {any} */ (
+      await themeEditSet('corp', 'danger', '#9f1239', {cwd})
+    );
+    expect(halves('corp', '--color-error')[0]).toBe('#9f1239');
+    const a = /** @type {any} */ (
+      await themeEditSet('corp', 'accent', '#0050c8', {cwd})
+    );
+    const notes = /** @type {string[]} */ (a.data.notes);
+    expect(
+      notes.some(n =>
+        /^info, success, warning grow from the base theme's hues/.test(n),
+      ),
+    ).toBe(true);
+    expect(r.data.notes.join(' ')).not.toMatch(
+      /keep the base theme's colors at any vibrancy/,
+    );
   }, 240_000);
 });
