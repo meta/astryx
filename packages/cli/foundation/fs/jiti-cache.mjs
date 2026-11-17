@@ -7,8 +7,8 @@
  * @input The per-user cache folder (foundation/env/user-dirs.mjs), the
  *   private-folder check (foundation/env/private-dir.mjs) and the size limit
  *   the copies share with the kept catalogs (cache-eviction.mjs).
- * @output `jitiCacheOptions()`, the options of the CLI's jiti loaders;
- *   `transpiledCacheDir()` and `oldTranspileCacheDir()`, for doctor.
+ * @output `jitiCacheOptions()`, the options of the CLI's jiti loaders, and
+ *   `SUBFOLDERS`, for doctor. The folders' paths are in user-dirs.mjs.
  * @position Read by module-loader.mjs, doc-compiler/import.mjs, theme build
  *   and gather-cache.mjs. AST-081 says how copies are named and trimmed.
  */
@@ -18,8 +18,9 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
-import {userCacheDir} from '../env/user-dirs.mjs';
+import {transpiledCacheDir} from '../env/user-dirs.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
+import {exactText} from './exact-codec.mjs';
 import {withoutRecording} from './read-record.mjs';
 
 const requireFromHere = createRequire(import.meta.url);
@@ -47,37 +48,6 @@ const UNFINISHED = /^[0-9a-f]{62}\.js\.\d+\.\d+\.tmp$/;
 
 /** How many copies this process has written, for unfinished-write names. */
 let writes = 0;
-
-/**
- * The folder of the copies.
- * @param {import('../env/user-dirs.mjs').UserDirOptions} [options]
- * @returns {string}
- */
-export function transpiledCacheDir(options) {
-  return cacheChild(options, 'transpiled');
-}
-
-/**
- * The single folder where earlier CLIs left jiti's own copies. This CLI
- * never reads, lists or writes it.
- * @param {import('../env/user-dirs.mjs').UserDirOptions} [options]
- * @returns {string}
- */
-export function oldTranspileCacheDir(options) {
-  return cacheChild(options, 'jiti');
-}
-
-/**
- * A folder in the per-user cache folder, joined as the platform joins paths.
- * @param {import('../env/user-dirs.mjs').UserDirOptions | undefined} options
- * @param {string} name
- * @returns {string}
- */
-function cacheChild(options, name) {
-  const platform = options?.platform ?? process.platform;
-  const join = platform === 'win32' ? path.win32.join : path.join;
-  return join(userCacheDir(options), name);
-}
 
 /** @type {{fsCache?: false, transform?: (opts: any) => any} | undefined} */
 let options;
@@ -163,67 +133,35 @@ let jitiVersion;
 
 /**
  * The name of a transform's copy: a hash of the source text and of every
- * setting the transform reads, or null when a setting is not plain data,
- * such as a Babel plugin function, and so cannot be part of a name. jiti
- * reads the file name for two things: a `.tsx` file is TypeScript with JSX,
- * and `import.meta.url`, `.dirname` and `.filename` become the file's own
- * path in the code. `import.meta` cannot be written with escapes, so text
- * without "meta" gives code that holds no path; text with it names the copy
- * for its file too.
+ * setting the transform reads, or null when a setting is not plain data
+ * (exact-codec.mjs), such as a Babel plugin function, and so cannot be part
+ * of a name. jiti reads the file name for two things: a `.tsx` file is
+ * TypeScript with JSX, and `import.meta.url`, `.dirname` and `.filename`
+ * become the file's own path in the code. `import.meta` cannot be written
+ * with escapes, so text without "meta" gives code that holds no path; text
+ * with it names the copy for its file too.
  * @param {any} opts
  * @returns {string | null}
  */
 export function copyName(opts) {
   const {filename, source, ...settings} = opts ?? {};
-  if (typeof source !== 'string' || !isPlain(settings)) return null;
+  if (typeof source !== 'string') return null;
   jitiVersion ??= String(requireFromHere('jiti/package.json').version);
   const file = typeof filename === 'string' ? filename : '';
   const tsx = /\.[cm]?tsx$/.test(file);
   const at = source.includes('meta') ? file : null;
+  let key;
+  try {
+    key = exactText([FORMAT, jitiVersion, settings, tsx, at]);
+  } catch {
+    return null;
+  }
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify([FORMAT, jitiVersion, sorted(settings), tsx, at]))
+    .update(key)
     .update('\0')
     .update(source)
     .digest('hex');
-}
-
-/**
- * Whether a value is plain data that JSON keeps whole: no function,
- * undefined, symbol, class instance or number JSON cannot write.
- * @param {unknown} value
- * @returns {boolean}
- */
-function isPlain(value) {
-  if (value === null || typeof value === 'string') return true;
-  if (typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      if (!(i in value) || !isPlain(value[i])) return false;
-    }
-    return true;
-  }
-  if (typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return false;
-  return Object.values(value).every(isPlain);
-}
-
-/**
- * A plain value with its object keys in order, so equal settings give one
- * name.
- * @param {any} value
- * @returns {any}
- */
-function sorted(value) {
-  if (Array.isArray(value)) return value.map(sorted);
-  if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map(key => [key, sorted(value[key])]),
-  );
 }
 
 /**

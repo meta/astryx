@@ -17,7 +17,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {
   oldTranspileCacheDir,
   transpiledCacheDir,
-} from '../../foundation/fs/jiti-cache.mjs';
+} from '../../foundation/env/user-dirs.mjs';
 import {checkOldTranspileCache, removeFolderCommand} from './doctor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -49,7 +49,7 @@ describe('the old transpile cache row', () => {
       label: 'Old transpile cache',
       status: 'info',
       message: `An earlier Astryx CLI left transpiled copies in ${old}. This CLI keeps its copies in ${path.join(cache, 'astryx', 'transpiled')} and never reads the old folder.`,
-      fix: `To remove it, run: rm -rf '${old}'. An earlier CLI that still runs on this computer makes it again.`,
+      fix: `To remove it, run: rm -rf ${old}. An earlier CLI that still runs on this computer makes it again.`,
     });
   });
 
@@ -67,7 +67,7 @@ describe('the old transpile cache row', () => {
     expect(row?.message).toContain(
       path.join(home, 'Library', 'Caches', 'astryx', 'transpiled'),
     );
-    expect(row?.fix).toContain(`rm -rf '${old}'`);
+    expect(row?.fix).toContain(`rm -rf ${old}.`);
   });
 
   it("gives Windows its local app data folder and PowerShell's command", () => {
@@ -80,6 +80,13 @@ describe('the old transpile cache row', () => {
     );
     expect(removeFolderCommand(old, 'win32')).toBe(
       "Remove-Item -Recurse -Force -LiteralPath 'C:\\Users\\o''neil\\AppData\\Local\\astryx\\Cache\\jiti'",
+    );
+    // PowerShell also ends a quoted string at a typographic quote.
+    expect(removeFolderCommand('C:\\Users\\Macy\u2019s\\jiti', 'win32')).toBe(
+      "Remove-Item -Recurse -Force -LiteralPath 'C:\\Users\\Macy\u2019\u2019s\\jiti'",
+    );
+    expect(removeFolderCommand('C:\\Users\\me\\jiti', 'win32')).toBe(
+      'Remove-Item -Recurse -Force -LiteralPath C:\\Users\\me\\jiti',
     );
   });
 

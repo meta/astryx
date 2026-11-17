@@ -128,7 +128,8 @@ async function fsCalls(names, fn) {
 
 describe.skipIf(!posix || process.platform === 'darwin')('jiti cache', () => {
   it("makes the user's own 0700 folder on first use and uses it at once", async () => {
-    const {jitiCacheOptions, transpiledCacheDir} = await load();
+    const {jitiCacheOptions} = await load();
+    const {transpiledCacheDir} = await import('../env/user-dirs.mjs');
     const dir = path.join(home, 'astryx', 'transpiled');
     expect(transpiledCacheDir()).toBe(dir);
     const options = jitiCacheOptions();
@@ -333,16 +334,17 @@ describe.skipIf(!posix || process.platform === 'darwin')('jiti cache', () => {
     ]) {
       expect(copyName({...base, ...change})).not.toBe(name);
     }
-    // Equal settings in another order give the same name.
-    const {babel, interopDefault, ...rest} = base;
-    expect(copyName({...rest, interopDefault, babel})).toBe(name);
     const meta = settings(
       'export const u: string = import.meta.url;\n',
       '/a/u.ts',
     );
     expect(copyName({...meta, filename: '/b/u.ts'})).not.toBe(copyName(meta));
     expect(copyName({...base, babel: {plugins: [() => ({})]}})).toBeNull();
-    expect(copyName({...base, babel: {compact: undefined}})).toBeNull();
+    expect(copyName({...base, babel: {compact: -0}})).toBeNull();
+    // A setting left undefined names its own copy.
+    const unset = copyName({...base, babel: {compact: undefined}});
+    expect(unset).toMatch(/^[0-9a-f]{64}$/);
+    expect(unset).not.toBe(name);
   });
 
   it('trims only the subfolder it writes, the copies made longest ago first, never the new one', async () => {

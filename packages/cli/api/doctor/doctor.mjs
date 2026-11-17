@@ -28,10 +28,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
 import {
-  SUBFOLDERS,
   oldTranspileCacheDir,
   transpiledCacheDir,
-} from '../../foundation/fs/jiti-cache.mjs';
+} from '../../foundation/env/user-dirs.mjs';
+import {SUBFOLDERS} from '../../foundation/fs/jiti-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -57,6 +57,7 @@ import {
   formatCliCommand,
   getCliInvocation,
   guessCliInvocation,
+  quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {
   chooseDeclaredCliCommand,
@@ -2875,9 +2876,10 @@ export function checkOldTranspileCache(options) {
  * @returns {string}
  */
 export function removeFolderCommand(dir, platform = process.platform) {
+  const folder = quoteCommandArgument(dir, platform);
   return platform === 'win32'
-    ? `Remove-Item -Recurse -Force -LiteralPath '${dir.replaceAll("'", "''")}'`
-    : `rm -rf '${dir.replaceAll("'", "'\\''")}'`;
+    ? `Remove-Item -Recurse -Force -LiteralPath ${folder}`
+    : `rm -rf ${folder}`;
 }
 
 /**
