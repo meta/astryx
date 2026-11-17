@@ -209,7 +209,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `search`), and the reading whose best match scores higher answers, the
   word as typed on a tie (`PaperClip` still finds `paperclip`). Only for this
   command's own search answer, when no reading answers a query of several
-  words, every icon that carries one or more of its words is a word match:
+  words, every icon that carries one or more of its words, as typed or split
+  from an export name, is a word match:
   the word, or its plural or singular, is one of the icon's id parts, a part
   of one of its words, or a part of a word of a definition it draws. Word
   matches keep set order first, as every equal score does (FR8); within a

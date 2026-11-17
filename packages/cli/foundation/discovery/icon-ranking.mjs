@@ -31,7 +31,8 @@
  * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
  * icon carries every word. For the finder's own search answers only, when
  * no reading answers a query of several words, each icon that carries one
- * or more of its words is a word match. An icon carries a word when the word, or its
+ * or more of its words, as typed or split from an export name, is a word
+ * match. An icon carries a word when the word, or its
  * plural or singular, is one of its id parts, a part of one of its words, or
  * a part of a word of a definition the set maps it for. A word weighs more
  * the fewer searched icons carry it, so the word that names the glyph
@@ -396,9 +397,9 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * ({@link exportNameWords}); the reading whose best match scores higher
  * answers, the one without filler words on a tie. With `words`, a query
  * of several words that no reading answers is ranked by the words each
- * icon carries ({@link rankWords}): the finder's own search answers ask
- * for that, while callers that look for a near spelling or a fitting
- * definition do not.
+ * icon carries ({@link rankWords}), the words of both readings together:
+ * the finder's own search answers ask for that, while callers that look for
+ * a near spelling or a fitting definition do not.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
  * @param {{words?: boolean}} [options]
@@ -416,7 +417,9 @@ export function rankIcons(sets, query, {words = false} = {}) {
     spelled === named || spelled === typed ? [] : rankTerm(sets, spelled);
   const best = topScore(asSpelled) > topScore(answered) ? asSpelled : answered;
   if (best.length > 0) return best;
-  return words && spelled.includes(' ') ? rankWords(sets, spelled) : [];
+  if (!words) return [];
+  const asked = [...new Set([...named.split(' '), ...spelled.split(' ')])];
+  return asked.length > 1 ? rankWords(sets, asked.join(' ')) : [];
 }
 
 /**

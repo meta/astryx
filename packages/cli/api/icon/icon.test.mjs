@@ -598,6 +598,9 @@ describe('a word matches whole words (FR6)', () => {
       id: 'paper-clip',
       score: 90,
     });
+    // Word matches read the words of both readings.
+    expect(answer(whole, 'PaperClip button')[0]).toBe('paperclip');
+    expect(answer(split, 'PaperClip button')[0]).toBe('paper-clip');
   });
 
   it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
