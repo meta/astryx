@@ -137,10 +137,14 @@ works on is `spec:AST-040` FR9's.
     its version, as it did before global mode (DEC-10). A run that starts in
     another copy MUST hand the run to it (FR9) before loading anything the
     project provides: its `astryx.config`, its integrations, or its Core.
-    `doctor` warns when that CLI and the project's Core are different releases
-    and names the command that brings them to one release; from a folder
-    inside the project whose `package.json` is not the project's
-    (`spec:AST-040` FR9), it says to run from the project's folder instead.
+    `doctor` warns when that CLI and the project's Core are different
+    releases, and names the command that brings them to one release. When the
+    CLI is the newer one, that command moves Core up to the CLI's release. It
+    also moves every other package that the project lists and that Astryx
+    releases with Core, such as its themes, because each one names Core's
+    exact release. From a folder inside the project whose `package.json` is
+    not the project's (`spec:AST-040` FR9), `doctor` says to run from the
+    project's folder instead.
   - When the project installs no CLI, as a project with only Core or a fresh
     clone with nothing installed, the copy that started the run answers, as
     it did before global mode (DEC-10), reading the project's Core as it
@@ -167,6 +171,15 @@ works on is `spec:AST-040` FR9's.
     lockfile records, else the newest published release that the Core range
     the project declares allows; a project that records no Core is matched by
     the CLI it locks or declares, in the same order.
+  - Every command the CLI prints that adds `@astryxdesign/*` packages at one
+    version, such as the hint above, `doctor`'s fixes, `discover`'s install
+    lines, and FR10's project notice, saves them as exactly that version when
+    the project's `package.json` pins its Core (or, with no Core, its CLI) to
+    one version, such as `0.7.16` or `=0.7.16`, as a starter's does (FR8): the
+    package manager's flag that saves a version exactly, `-E` or Bun's
+    `--exact`, follows its add command. A command that adds a range, or a
+    package outside `@astryxdesign/*`, carries no such flag, so the package
+    manager saves it as it saves any package.
   - When the project's own CLI is installed but cannot start, the matched
     release answers: the copy that started the run when it is that release,
     otherwise the release in the per-user cache, installed there through the
@@ -223,7 +236,8 @@ works on is `spec:AST-040` FR9's.
   integrations (FR12), and any integration a programmatic host approves (FR1).
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
-  command that needs Core answers from the carried Core: the
+  command that needs Core answers from the carried Core when the run's base is
+  Core (`spec:AST-114` FR2): the
   `@astryxdesign/core` release equal to the answering CLI, beside it, carried by
   its door (FR1), or kept in the per-user cache, where a copy that carries none
   installs it the first time a command needs it. The global copy also installs
@@ -407,7 +421,8 @@ works on is `spec:AST-040` FR9's.
     package packs (for `integration check` and `doctor integration validate`
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
-    record), the CLI's own docs tree, and doctor's
+    record), the CLI's own docs tree, each stored doc's checked contents,
+    keyed by its text, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
@@ -419,7 +434,7 @@ works on is `spec:AST-040` FR9's.
     create it to keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept). A
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
@@ -467,9 +482,10 @@ works on is `spec:AST-040` FR9's.
   - Every agent text a release prints or writes names only the command name FR5
     picks for its surface. The computer-level text is its own short text: it
     tells an agent that Astryx is on the computer, when it is relevant, and to
-    start with `astryx search`; it names no version, no release-specific
-    command or prop, and only entry points every release keeps (`search`,
-    `docs`, `component`, and the like), so an older copy never misleads.
+    start a page with `astryx build` and anything else with `astryx search`;
+    it names no version, no release-specific command or prop, and only entry
+    points every release keeps (`search`, `docs`, `component`, and the like),
+    so an older copy never misleads.
     It also gives the build route the project agent docs give, through their
     shared workflow wording: work in a project folder, new or existing, adding
     `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
@@ -599,7 +615,9 @@ works on is `spec:AST-040` FR9's.
   - Inside a project, when the release that answers it is older than the newest
     release the check found: the command installs `@astryxdesign/core` and
     `@astryxdesign/cli`, so a project that installed only Core gets its own CLI
-    too, at the newest release with the project's own package manager, then runs
+    too, and every other package the project lists for its install that Astryx
+    releases with Core, such as its themes, which name Core's exact release,
+    all at the newest release with the project's own package manager, then runs
     `astryx upgrade --from <current> --apply` with the command name FR5 picks
     for that release, as `<install command>, then <upgrade command>`. For this
     notice, the project is the one `spec:AST-040` FR9 defines, as in FR2's
@@ -884,7 +902,7 @@ needs no Changeset.
 | FR7      | File-system comparison before and after each command in the empty-folder run and in projects                                                                                                                                  | each command that writes; absolute, traversal, and symlinked paths; a home folder                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A file lands outside the named places, or a refusal writes first                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR8      | Release build, drift checks, a starter build in CI, and computer-level text tests                                                                                                                                             | the official list; the agent text for each door; each starter; the global copy's first run and a switch; `--agent` lists; an opt-out; a file a person edited; a file without markers; a link in a file's place; a strict YAML parse of every skill file                                                                                                                                                                                                                                                                                                                                                                                                                             | A committed copy drifts, a global asset is fetched at run time, the computer-level text names a version, a starter fails to scaffold, install, or build, the global copy writes after an opt-out or into an edited file, a command waits for the text, or a skill's frontmatter does not parse                                                                                                                                                                                                                                     |
 | FR9      | Hand-off probes: every command example run through each copy in each folder kind, compared with the release FR2 names run directly in that folder                                                                             | the CLI package installed for the computer on an older and on a newer release than the project's CLI, run directly and run by a package runner in place of a fetch; a package runner's copy, unversioned and with a version requested inside a project, for a read and for `upgrade`; a project with Core but no CLI, through a package runner that fetches the newest release; a package with no Astryx inside a project, which the package runner takes for the project; a project CLI that predates the hand-off and one that hands off itself; a declined project CLI; a project CLI that cannot start; a non-zero exit; piped standard input; outside a project; text and JSON | A release other than the one FR2 names answers in a project, outside the declined case; a project CLI that differs from its Core answers; a requested version answers inside a project; a run is handed off twice or returns to a copy it left; arguments, folder, streams, or exit status differ from a direct run of the project's CLI; outside a project, a release answers that FR3 and FR6 do not name; or the line is missing, prints twice, prints in JSON mode, or prints for a run the project's own CLI answers directly |
-| FR10     | Notice tests                                                                                                                                                                                                                  | the global copy behind, for npm, pnpm, Yarn, Bun, and Volta installs; a newest release that needs a newer Node; a project behind, with and without its own CLI; an old `astryx` first on the search path; two runs in one day and a run the next day; a failed command; JSON mode; `CI`; `NO_UPDATE_NOTIFIER`; standard error not a terminal; a prerelease                                                                                                                                                                                                                                                                                                                          | A notice prints in JSON mode, after a failure, twice in a day, with `CI` or `NO_UPDATE_NOTIFIER` set, or before the command's output; it names another package manager's command; or `doctor` omits it                                                                                                                                                                                                                                                                                                                             |
+| FR10     | Notice tests                                                                                                                                                                                                                  | the global copy behind, for npm, pnpm, Yarn, Bun, and Volta installs; a newest release that needs a newer Node; a project behind, with and without its own CLI, and with a theme Astryx releases with Core; an old `astryx` first on the search path; two runs in one day and a run the next day; a failed command; JSON mode; `CI`; `NO_UPDATE_NOTIFIER`; standard error not a terminal; a prerelease                                                                                                                                                                                                                                                                              | A notice prints in JSON mode, after a failure, twice in a day, with `CI` or `NO_UPDATE_NOTIFIER` set, or before the command's output; it names another package manager's command; or `doctor` omits it                                                                                                                                                                                                                                                                                                                             |
 | FR11     | One test per row of the global and project table, with packed CLI copies in each install layout                                                                                                                               | every row of the table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A row's answer, line, or test differs from the table, or a row has no test                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR12     | Computer-level integration tests and table rows G35–G43                                                                                                                                                                       | npm and pnpm global folders; a door's package set; a runner's temporary install; the release cache; outside a project; inside one with and without the same integration; an incompatible peer range; a manifest that fails                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A computer-level integration contributes inside a project, is missing outside one, loads beside the project's copy, loads with an excluded peer range, or `discover` and `doctor` omit it                                                                                                                                                                                                                                                                                                                                          |
 | FR13     | Plugin-skill drift check (`--check`) and `scripts/generate-agent-plugin-skill.test.mjs`                                                                                                                                       | the committed plugin skill matches its rendering; a different rendering; a missing file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The committed file differs from the rendering and the check passes, or the skill is edited by hand                                                                                                                                                                                                                                                                                                                                                                                                                                 |

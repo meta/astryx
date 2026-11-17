@@ -313,11 +313,7 @@ export function registerBuild(program) {
           ),
         );
       }
-      out.push(
-        section(
-          'COMPONENTS',
-          `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
-        ),
+      const componentLines = [
         ...(domain.length
           ? [
               records(
@@ -328,8 +324,20 @@ export function registerBuild(program) {
               ),
             ]
           : []),
-        record({frame, foundation}),
-      );
+        ...(frame.length + foundation.length
+          ? [record({frame, foundation})]
+          : []),
+      ];
+      // A section with no lines under it is left out.
+      if (componentLines.length > 0) {
+        out.push(
+          section(
+            'COMPONENTS',
+            `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+          ),
+          ...componentLines,
+        );
+      }
 
       // Last, so it is the line the reader leaves with — and only when the kit
       // was thin enough that "the package has nothing" is the wrong conclusion.

@@ -68,6 +68,47 @@ export function widenOf(jobs) {
   }
   return 0;
 }
+
+// Each leg of a matrix that limits its legs with `max-parallel` runs a step
+// of this name, which gives that limit (`strategy.max-parallel`). GitHub lists
+// the legs it holds back as queued, but they hold no runner, so a run counts
+// at most that many live legs of the matrix.
+export const AT_ONCE_STEP = /^Run at most (\d+) legs at once$/;
+
+/** The matrix a job is a leg of, from its `<job> (<index>/<total>)` name. */
+const matrixOf = name => /^(.+) \(\d+\/\d+\)$/.exec(name ?? '')?.[1];
+
+/**
+ * The jobs a run holds: its live jobs, with each matrix that names its
+ * `max-parallel` (AT_ONCE_STEP) counted at no more legs than that.
+ */
+export function liveJobs(jobs) {
+  const live = jobs.filter(job => LIVE.includes(job.status));
+  const atOnce = new Map();
+  for (const job of live) {
+    const matrix = matrixOf(job.name);
+    if (matrix == null) continue;
+    for (const step of job.steps ?? []) {
+      const match = AT_ONCE_STEP.exec(step.name ?? '');
+      if (match) atOnce.set(matrix, Number(match[1]));
+    }
+  }
+  const legs = new Map();
+  let holds = 0;
+  for (const job of live) {
+    const matrix = matrixOf(job.name);
+    if (matrix != null && atOnce.has(matrix)) {
+      legs.set(matrix, (legs.get(matrix) ?? 0) + 1);
+    } else {
+      holds += 1;
+    }
+  }
+  for (const [matrix, count] of legs) {
+    holds += Math.min(count, atOnce.get(matrix));
+  }
+  return holds;
+}
+
 // The most jobs a run holds at once, by workflow: ci.yml's release-check and
 // Main's runs (a push's fast checks or a unit run) from their `peak`
 // (ci-admission.test.mjs), a pull-request ci.yml run from its measured most
@@ -78,7 +119,7 @@ export function widenOf(jobs) {
 // prettier-ignore
 const ESTIMATE = {
   '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 21 + widenOf(jobs)),
-  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
+  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 20),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
 };
@@ -199,9 +240,7 @@ export async function countLook({
           !main ||
           !(span.began > mine || (span.began === mine && run.id > selfId));
         const holds =
-          isMain(run) && ahead
-            ? estimate(run)
-            : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
+          isMain(run) && ahead ? estimate(run) : Math.max(1, liveJobs(jobs));
         if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS))
           mainWaiting = true;
         large += holds;
@@ -226,7 +265,7 @@ export async function countLook({
           startedAtLimit.push({id: run.id, ago: Date.now() - span.ended});
         }
       }
-      const live = jobs.filter(job => LIVE.includes(job.status)).length;
+      const live = liveJobs(jobs);
       const ended = waits
         .map(step => Date.parse(step.completed_at ?? ''))
         .filter(Number.isFinite);

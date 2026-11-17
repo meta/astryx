@@ -166,7 +166,6 @@ const ROOT_KINDS = /** @type {const} */ ([
   'themes',
 ]);
 
-const UNREACHABLE_SCAN_LIMIT = 5_000;
 const UNREACHABLE_SKIP_DIRS = new Set([
   'node_modules',
   '.git',
@@ -211,7 +210,9 @@ function unreadThemeFolderIssues(packageDir, loaded) {
  * Find real contribution metadata that sits outside every declared root. The
  * scan is local-authoring-only, skips dependency/build output, never follows
  * symlinks, and parses candidates before reporting them so ordinary JS files do
- * not become noise.
+ * not become noise. It reads every file name in the package: only a
+ * `.doc` or `.template` module is opened, so a package of tens of thousands
+ * of generated files costs one directory listing per folder.
  *
  * @param {string} packageDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration} loaded
@@ -246,8 +247,6 @@ async function findUnreachableContributionIssues(
   /** @type {Issue[]} */
   const issues = [];
   const context = createFixContext(packageDir, usable);
-  let scanned = 0;
-  let truncated = false;
 
   /** @param {string} dir */
   async function walk(dir) {
@@ -279,7 +278,6 @@ async function findUnreachableContributionIssues(
       return;
     }
     for (const entry of entries) {
-      if (truncated) return;
       if (UNREACHABLE_SKIP_DIRS.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -287,11 +285,6 @@ async function findUnreachableContributionIssues(
         continue;
       }
       if (!entry.isFile()) continue;
-      scanned += 1;
-      if (scanned > UNREACHABLE_SCAN_LIMIT) {
-        truncated = true;
-        return;
-      }
       if (
         !TEMPLATE_CANDIDATE_RE.test(entry.name) &&
         !DOC_CANDIDATE_RE.test(entry.name)
@@ -310,14 +303,6 @@ async function findUnreachableContributionIssues(
   }
 
   await walk(packageDir);
-  if (truncated) {
-    issues.push(
-      warning(
-        'unreachable_scan_truncated',
-        `Stopped unreachable-contribution scanning after ${UNREACHABLE_SCAN_LIMIT} files. Narrow the package or move generated output under dist/build.`,
-      ),
-    );
-  }
   return issues;
 }
 

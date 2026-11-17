@@ -43,6 +43,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
@@ -254,7 +255,7 @@ const ATTACHMENT_ICONS = {
   file: DocumentTextIcon,
 };
 
-// Identical for every row, so it is built once rather than per render.
+// The parts of every row's Delete that do not depend on the row.
 const ATTACHMENT_DELETE: DropdownMenuOption = {
   label: 'Delete',
   icon: TrashIcon,
@@ -374,6 +375,7 @@ function PageHeader({
   onToggleDetails: () => void;
   isNarrow: boolean;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <VStack gap={4}>
@@ -411,6 +413,13 @@ function PageHeader({
                   label={action.label}
                   variant="secondary"
                   icon={<Icon icon={action.icon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would happen here`,
+                      uniqueID: `header-${action.label}`,
+                    })
+                  }
                 />
               ))}
               <Button
@@ -576,12 +585,24 @@ function SubtasksSection({
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Attachments"
-          action={<Button label="Add attachment" />}
+          action={
+            <Button
+              label="Add attachment"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a file picker would open here',
+                  uniqueID: 'add-attachment',
+                })
+              }
+            />
+          }
         />
         <VStack gap={1}>
           {ATTACHMENTS.map(attachment => (
@@ -625,13 +646,30 @@ function AttachmentsSection() {
                           uniqueID: `edit-${attachment.id}`,
                         }),
                     },
-                    ATTACHMENT_DELETE,
+                    {
+                      ...ATTACHMENT_DELETE,
+                      onClick: () =>
+                        confirm.show({
+                          title: `Delete ${attachment.title}?`,
+                          description: "This demo won't delete anything.",
+                          actionLabel: 'Delete',
+                          onAction: () => {
+                            confirm.hide();
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: `Demo: ${attachment.title} would be deleted here`,
+                              uniqueID: `delete-${attachment.id}`,
+                            });
+                          },
+                        }),
+                    },
                   ]}
                 />
               </HStack>
             </ClickableCard>
           ))}
         </VStack>
+        {confirm.element}
       </VStack>
     </Section>
   );

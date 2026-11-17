@@ -120,7 +120,7 @@ export default function ProductGalleryTemplate() {
         <LayoutContent padding={6}>
           <VStack gap={6}>
             {/* Header — Grid handles responsive stacking */}
-            <Grid columns={{minWidth: 280}} gap={4} align="start">
+            <Grid columns={{minWidth: 280, max: 2}} gap={4} align="start">
               <Heading level={1}>
                 Make every day a little more delightful, one small detail at a
                 time.

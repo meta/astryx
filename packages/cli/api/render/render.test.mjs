@@ -2028,6 +2028,87 @@ describe('render(): refusals', () => {
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
   }, 30_000);
 
+  it('names the file and the line a compile error points at', async () => {
+    put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
+    put('broken/page.tsx', "import {Card} from './Card';\nexport default function Page() { return <Card />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('broken/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(/^The page does not compile \((?:broken\/)?Card\.tsx, line 1\): Unterminated JSX contents/);
+    // No machine path: the file is named from the project.
+    expect(error.message).not.toContain(dir);
+  }, 30_000);
+
+  it('names the value and the import when StyleX cannot read an imported value at build time', async () => {
+    put('sx/tokens.ts', 'export const gap = 8;\n');
+    put(
+      'sx/Row.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {\n  gap,\n} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap}});\nexport function Row() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+    );
+    put('sx/page.tsx', "import {Row} from './Row';\nexport default function Page() { return <Row />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?Row\.tsx, line 3\): StyleX could not read `gap` from \.\/tokens at build time\. A value a style uses must be written in the style, or come from a \.stylex\.ts or \.stylex\.js file that defines it with stylex\.defineVars or stylex\.defineConsts\.$/,
+    );
+  }, 30_000);
+
+  it('reads the error the same with colour forced on, and names an aliased import by its local name', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      put(
+        'sx/AliasRow.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {gap as space} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap: space}});\nexport function AliasRow() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+      );
+      put('sx/alias.tsx', "import {AliasRow} from './AliasRow';\nexport default function Page() { return <AliasRow />; }\n");
+      /** @type {any} */
+      let error;
+      try {
+        await render('sx/alias.tsx', {cwd: dir});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_COMPILE');
+      expect(error.message).toMatch(
+        /^The page does not compile \((?:sx\/)?AliasRow\.tsx, line 2\): StyleX could not read `space` from \.\/tokens at build time\./,
+      );
+      expect(error.message).not.toContain('\u001b[');
+    } finally {
+      if (previous === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previous;
+    }
+  }, 30_000);
+
+  it('says which .stylex file StyleX could not find', async () => {
+    put(
+      'sx/missing.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {tones} from './gone.stylex';\nconst styles = stylex.create({text: {color: tones.ink}});\nexport default function Page() {\n  return <p {...stylex.props(styles.text)}>Hi</p>;\n}\n",
+    );
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/missing.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?missing\.tsx, line 2\): StyleX could not find \.\/gone\.stylex, which `tones` comes from, at build time\. Check that the file exists, or that its package is installed where the page is\.$/,
+    );
+  }, 30_000);
+
   it('refuses wrong inputs and flags', async () => {
     expect(await codeOf(() => render('', {cwd: dir}))).toBe('ERR_MISSING_ARGUMENT');
     expect(await codeOf(() => render('missing.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
