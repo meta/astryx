@@ -248,7 +248,7 @@ export const docs = {
       name: 'plugins',
       type: 'Record<string, TablePlugin<T>>',
       description:
-        'Named plugins that extend table behavior via the transform pipeline. Converted to an ordered array internally.',
+        "Named plugins: the objects that the useTable* hooks return, or your own TablePlugin<T> (import the type from @astryxdesign/core/Table), an object of optional transform functions that Table calls in this order: transformColumns, transformTable, transformHeaderCell, transformHeaderRow, transformBodyCell, transformBodyRow, transformScrollWrapper, transformTableContext. Their arguments and results: transformColumns(columns) adds, removes, or reorders columns; transformTable(props) changes the <table> props; transformHeaderCell(props, column, columnIndex, columns) changes a <th>, with slots before, content, after, overlay, and below; transformHeaderRow(props) changes the header <tr>; transformBodyCell(props, column, item, columnIndex, columns, context) changes a <td>; transformBodyRow(props, item, index, context) changes a body <tr>, and can add afterRow content below the row; transformScrollWrapper(props, context) changes the scroll region and can add beforeTable or afterTable content; transformTableContext(children) wraps the table in providers. Each transform receives {htmlProps, xstyle, ...} and must return the same shape, with the earlier values kept. Header and body cell transforms can also append contextMenuActions for a right-click menu. A plugin that has transformBodyRow or transformBodyCell and keeps one row per data item must set rowModel: 'flat'; without it, row virtualization uses full rendering. Keep each plugin object stable (create it in useMemo): a new object on each render renders all rows again. Plugins with the first-party names columnSettings, sort, tree, selection, and pagination run in that order; other names run after them, in record order.",
     },
     {
       name: 'rowIndexStart',
@@ -262,6 +262,13 @@ export const docs = {
       type: 'number',
       description:
         'Total number of body rows across all pages/windows, used for aria-rowcount so assistive tech can announce "row X of Y" against the full dataset. When omitted but rowIndexStart is set (windowed view with an unknown total), aria-rowcount is set to -1 per the ARIA unknown-count convention. Data-driven mode only.',
+    },
+    {
+      name: 'emptyState',
+      type: 'ReactNode | false',
+      description:
+        'Content that shows when data is an empty array, for example an EmptyState that says no rows match the filters. It renders in one row across all columns. Omit it for a compact "No data" EmptyState. Pass false for an empty body. Table does not know why data is empty: choose the content from your own state, for example "No results" when filters are active and "No users yet" when they are not.',
+      default: '<EmptyState title="No data" isCompact />',
     },
     {
       name: 'children',
@@ -324,6 +331,16 @@ export const docs = {
           'Use the data-driven API from React Server Components: proportional(), pixel(), and column definitions without function props are server-safe. Columns using renderCell (or any function prop) need the table wrapped in a "use client" component, since functions cannot cross the server-client boundary.',
       },
       {
+        guidance: true,
+        description:
+          "To open a row (go to a detail page, open a side panel), put a Link or a Button in the row's main cell with renderCell. Table has no row-click prop. A click handler on the <tr> cannot be reached with the keyboard or a screen reader, so do not use it as the only way to open a row.",
+      },
+      {
+        guidance: true,
+        description:
+          'When filters or a search can leave no rows, set emptyState to say so and offer a way out, for example an EmptyState with a "Clear filters" Button.',
+      },
+      {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
@@ -341,6 +358,56 @@ export const docs = {
     ],
     anatomy,
   },
+  examples: [
+    {
+      label: 'Open a row from a link in its main cell',
+      code: `const columns = [
+  {
+    key: 'name',
+    header: 'Name',
+    // A real link: keyboard, screen reader, and open-in-new-tab all work.
+    renderCell: user => <Link href={\`/users/\${user.id}\`}>{user.name}</Link>,
+  },
+  {key: 'role', header: 'Role'},
+];
+
+<Table data={users} columns={columns} idKey="id" hasHover />;`,
+    },
+    {
+      label: 'Open a row in a side panel and mark the open row',
+      code: `const [openId, setOpenId] = useState(null);
+
+const columns = [
+  {
+    key: 'name',
+    header: 'Name',
+    renderCell: user => (
+      <Button label={user.name} variant="ghost" onClick={() => setOpenId(user.id)} />
+    ),
+  },
+  {key: 'role', header: 'Role'},
+];
+
+// A custom plugin: transformBodyRow adds aria-current to the open row.
+const openRowPlugin = useMemo(
+  () => ({
+    rowModel: 'flat', // one row per item, so virtualization still works
+    transformBodyRow: (props, user) =>
+      user.id === openId
+        ? {...props, htmlProps: {...props.htmlProps, 'aria-current': 'true'}}
+        : props,
+  }),
+  [openId],
+);
+
+<Table
+  data={users}
+  columns={columns}
+  idKey="id"
+  plugins={{openRow: openRowPlugin}}
+/>;`,
+    },
+  ],
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
@@ -406,6 +473,16 @@ export const docsDense = {
         guidance: true,
         description:
           'Data-driven API is RSC-safe: proportional(), pixel(), column defs w/o function props work in Server Components. renderCell (any function prop) requires a "use client" wrapper.',
+      },
+      {
+        guidance: true,
+        description:
+          'Row open/click: no row-click prop. Put a Link or Button in the main cell via renderCell. <tr> onClick alone is not keyboard or screen-reader reachable.',
+      },
+      {
+        guidance: true,
+        description:
+          'Filtered/searched data can be empty: set emptyState (e.g. EmptyState + "Clear filters" Button).',
       },
       {
         guidance: false,

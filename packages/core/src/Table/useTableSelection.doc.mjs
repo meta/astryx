@@ -45,14 +45,14 @@ export const docs = {
       name: 'getIsItemSelectable',
       type: '(item: T) => boolean',
       description:
-        'Returns whether a row should show a checkbox. Non-selectable rows render nothing in the selection cell.',
+        'Returns false for a row that can never be selected (no checkbox, an empty selection cell), unlike getIsItemEnabled, which shows a disabled checkbox. Use it for rows such as a read-only system row. This hook does not change select-all: your onSelectAll and getIsAllSelected must skip these rows. useTableSelectionState does this for you.',
       default: '() => true',
     },
     {
       name: 'getIsItemEnabled',
       type: '(item: T) => boolean',
       description:
-        'Returns whether a row checkbox is interactive. Disabled rows show a disabled checkbox.',
+        'Returns false for a selectable row whose checkbox shows but is disabled and keeps its checked state, unlike getIsItemSelectable, which removes the checkbox. Use it for rows that are selectable in other conditions, such as a locked or busy row. This hook does not change select-all: your onSelectAll must not add or remove these rows. useTableSelectionState does this for you.',
       default: '() => true',
     },
     {
@@ -70,6 +70,29 @@ export const docs = {
     },
   ],
   examples: [
+    {
+      label: 'Rows without a checkbox and rows with a disabled checkbox',
+      code: `// useTableSelectionState excludes both kinds of row from select-all.
+const {selectionConfig} = useTableSelectionState({
+  data: visibleUsers,
+  idKey: 'id',
+  selectedKeys,
+  setSelectedKeys,
+  // System accounts can never be selected: no checkbox.
+  getIsItemSelectable: user => !user.isSystem,
+  // Locked accounts show a disabled checkbox that keeps its state.
+  getIsItemEnabled: user => !user.isLocked,
+});
+const selectionPlugin = useTableSelection(selectionConfig);
+
+<Table
+  data={visibleUsers}
+  columns={columns}
+  idKey="id"
+  plugins={{selection: selectionPlugin}}
+/>;
+`,
+    },
     {
       label: 'Accessible per-row checkbox names',
       code: `
@@ -188,9 +211,9 @@ export const docsDense = {
     getIsIndeterminate:
       'Returns partial selection state; renders indeterminate checkbox.',
     getIsItemSelectable:
-      'Returns whether row shows checkbox; non-selectable rows render nothing.',
+      'false => row never selectable: no checkbox, empty cell (e.g. read-only system row). Your onSelectAll/getIsAllSelected must skip it; useTableSelectionState does.',
     getIsItemEnabled:
-      'Returns whether row checkbox is interactive; disabled rows show disabled checkbox.',
+      'false => checkbox shows but disabled, keeps its checked state (e.g. locked/busy row). Your onSelectAll must not change it; useTableSelectionState does this.',
     getRowLabel:
       'Derives row identity for the checkbox\'s hidden label: `Select ${getRowLabel(item)}`. Falls back to "Select row" when omitted.',
     hasRowHighlight:
