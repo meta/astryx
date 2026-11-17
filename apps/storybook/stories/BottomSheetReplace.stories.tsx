@@ -4,7 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {useEffect, useState} from 'react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
-import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Section} from '@astryxdesign/core/Section';
@@ -210,19 +210,23 @@ function NotificationChannelsSheet({
           <Text type="supporting" color="secondary">
             Choose any combination. You can change these preferences later.
           </Text>
-          <VStack gap={2}>
-            <CheckboxInput label="Email" value={email} onChange={setEmail} />
-            <CheckboxInput
+          <CheckboxList label="Notification channels" isLabelHidden>
+            <CheckboxListItem
+              label="Email"
+              isChecked={email}
+              onCheck={setEmail}
+            />
+            <CheckboxListItem
               label="Push notifications"
-              value={pushNotifications}
-              onChange={setPushNotifications}
+              isChecked={pushNotifications}
+              onCheck={setPushNotifications}
             />
-            <CheckboxInput
+            <CheckboxListItem
               label="Text messages"
-              value={textMessages}
-              onChange={setTextMessages}
+              isChecked={textMessages}
+              onCheck={setTextMessages}
             />
-          </VStack>
+          </CheckboxList>
           <HStack gap={2} hAlign="end">
             <Button label="Back" variant="secondary" onClick={onBack} />
             <Button label="Finish" onClick={onFinish} />

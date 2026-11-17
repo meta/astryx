@@ -242,7 +242,7 @@ extension Theme {
     ),
     dark: Tokens(
       color: ColorTokens(
-        accent: Color(.sRGB, red: 0.14901960784313725, green: 0.5803921568627451, blue: 0.996078431372549, opacity: 1),
+        accent: Color(.sRGB, red: 0.00392156862745098, green: 0.44313725490196076, blue: 0.8901960784313725, opacity: 1),
         accentMuted: Color(.sRGB, red: 0, green: 0.5098039215686274, blue: 0.984313725490196, opacity: 0.24705882352941178),
         backgroundBlue: Color(.sRGB, red: 0.00392156862745098, green: 0.44313725490196076, blue: 0.8901960784313725, opacity: 0.2),
         backgroundBody: Color(.sRGB, red: 0.06666666666666667, green: 0.06666666666666667, blue: 0.07058823529411765, opacity: 1),

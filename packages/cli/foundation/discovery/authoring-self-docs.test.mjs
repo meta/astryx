@@ -20,6 +20,7 @@ import {doc as graphFieldsDoc} from '../../authoring/doctypes/base/graph-fields.
 import {doc as namespaceDoc} from '../../authoring/doctypes/namespace/namespace.doc.mjs';
 import {doc as referenceDoc} from '../../authoring/doctypes/reference/reference.doc.mjs';
 import {docs} from '../../api/docs/docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -150,7 +151,7 @@ describe('auditAuthoringSelfDocs', () => {
   let root;
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-self-docs-'));
+    root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-self-docs-'));
     fs.mkdirSync(path.join(root, 'kept'));
     fs.writeFileSync(
       path.join(root, 'kept', 'kept.doc.mjs'),

@@ -3,7 +3,8 @@
 /**
  * @file The one `Logger`. Source of truth: the `Logger` type is generated from
  * the JSDoc here, and `logger` is the single instance every side-effecting
- * command (`upgrade`, `init`, `themeBuild`) writes progress through.
+ * command (`upgrade`, `init`, `themeBuild`, the experimental icon commands)
+ * writes progress through.
  *
  * It is silent by default, so a programmatic caller (or `--json` mode) sees
  * nothing but the returned `{type, data}`. The CLI calls `logger.setSilent(false)`

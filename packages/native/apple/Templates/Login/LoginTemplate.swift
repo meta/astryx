@@ -38,7 +38,7 @@ public struct LoginTemplate: View {
     ScrollView {
       LoginTemplateContent(form: $form, signIn: signIn)
     }
-    .background(astryx.color("color-background-body").ignoresSafeArea())
+    .background(astryx.tokens.color.backgroundBody.ignoresSafeArea())
   }
 
   private func signIn() {
@@ -59,18 +59,18 @@ struct LoginTemplateContent: View {
   @Environment(\.astryx) private var astryx
 
   var body: some View {
-    VStack(spacing: astryx.space(4)) {
-      VStack(spacing: astryx.space(2)) {
+    VStack(spacing: astryx.tokens.space.s4) {
+      VStack(spacing: astryx.tokens.space.s2) {
         Image(systemName: "cube")
-          .font(.system(size: astryx.fontSize("font-size-2xl", 24)))
-          .foregroundStyle(astryx.color("color-icon-primary"))
+          .font(.system(size: astryx.tokens.font.size.s2xl * astryx.textScale))
+          .foregroundStyle(astryx.tokens.color.iconPrimary)
           .accessibilityHidden(true)
         Text("Product Inc.", size: .lg, weight: .bold)
       }
 
       Card(padding: .v8) {
-        VStack(alignment: .leading, spacing: astryx.space(4)) {
-          VStack(spacing: astryx.space(1)) {
+        VStack(alignment: .leading, spacing: astryx.tokens.space.s4) {
+          VStack(spacing: astryx.tokens.space.s1) {
             Heading("Sign in", level: .v2)
             Text("Enter your credentials to continue", size: .sm, color: .secondary)
           }
@@ -82,15 +82,17 @@ struct LoginTemplateContent: View {
 
           TextInput(
             label: "Email",
-            value: $form.email,
+            value: form.email,
             type: .email,
+            onChange: { form.email = $0 },
             size: .lg,
             placeholder: "you@example.com"
           )
           TextInput(
             label: "Password",
-            value: $form.password,
+            value: form.password,
             type: .password,
+            onChange: { form.password = $0 },
             size: .lg,
             placeholder: "Enter your password"
           )
@@ -99,14 +101,14 @@ struct LoginTemplateContent: View {
             variant: .primary,
             size: .lg,
             isLoading: form.isLoading,
-            fillsWidth: true,
-            action: signIn
+            width: .fill,
+            onClick: signIn
           )
         }
       }
     }
     .frame(maxWidth: 400)
-    .padding(astryx.space(6))
+    .padding(astryx.tokens.space.s6)
     .frame(maxWidth: .infinity)
   }
 }

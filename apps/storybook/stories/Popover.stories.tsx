@@ -7,12 +7,15 @@ import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Popover} from '@astryxdesign/core/Popover';
 import type {PopoverTriggerRenderProps} from '@astryxdesign/core/Popover';
 import {Button} from '@astryxdesign/core/Button';
+import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
 import {Token} from '@astryxdesign/core/Token';
 import {Link} from '@astryxdesign/core/Link';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Switch} from '@astryxdesign/core/Switch';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Section} from '@astryxdesign/core/Section';
@@ -343,6 +346,70 @@ export const Default: Story = {
   },
 };
 
+function ResizablePanel() {
+  const resizable = useResizable({defaultSize: 120, minSize: 60, maxSize: 320});
+  return (
+    <div style={{display: 'flex', blockSize: 64}}>
+      <section
+        aria-label="Resizable panel"
+        style={{inlineSize: resizable.size, overflow: 'hidden'}}>
+        <Text>{resizable.size}px</Text>
+      </section>
+      <ResizeHandle
+        direction="horizontal"
+        hasDivider
+        resizable={resizable}
+        label="Resize panel"
+      />
+    </div>
+  );
+}
+
+/**
+ * An open Popover above page controls that take a finger's drag: a resize
+ * handle and rows with swipe actions. On a touch screen each follows the
+ * finger while the Popover is open.
+ */
+/** The message rows' swipe actions, defined once at module scope. */
+const messageSwipe = createSwipe({
+  trailing: [
+    {id: 'archive', label: 'Archive', onActivate: () => {}, variant: 'neutral'},
+    {
+      id: 'delete',
+      label: 'Delete',
+      onActivate: () => {},
+      variant: 'destructive',
+    },
+  ],
+});
+
+export const OverPageControls: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <VStack gap={4}>
+      <Popover
+        placement="below"
+        label="Settings"
+        width={240}
+        content={<Text>Popover content</Text>}>
+        <Button label="Settings">Settings</Button>
+      </Popover>
+      <div style={{blockSize: 120}} />
+      <ResizablePanel />
+      <List>
+        {['Message 1', 'Message 2', 'Message 3'].map(label => (
+          <ListItem
+            key={label}
+            label={label}
+            onClick={() => {}}
+            swipe={messageSwipe}
+          />
+        ))}
+      </List>
+    </VStack>
+  ),
+};
+
 // =============================================================================
 // Filter Panel
 // =============================================================================
@@ -406,6 +473,46 @@ function FilterContent({onApply}: {onApply?: () => void}) {
     </VStack>
   );
 }
+
+/**
+ * A controlled Popover that a separate button also opens and closes. A press
+ * on that button while the popover is open closes it, and the button's label
+ * follows the state.
+ */
+export const ToggledByAnotherControl: Story = {
+  render: function ToggledByAnotherControlStory() {
+    const [isOpen, setIsOpen] = React.useState(false);
+    return (
+      <HStack gap={3}>
+        <Popover
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Details"
+          width={260}
+          placement="below"
+          content={
+            <VStack gap={2}>
+              <Heading level={4} tabIndex={-1}>
+                Details
+              </Heading>
+              <Text type="body">
+                The button beside the trigger also opens and closes this
+                popover.
+              </Text>
+            </VStack>
+          }>
+          <Button label="Details">Details</Button>
+        </Popover>
+        <Button
+          label={isOpen ? 'Hide details' : 'Show details'}
+          variant="secondary"
+          onClick={() => setIsOpen(value => !value)}>
+          {isOpen ? 'Hide details' : 'Show details'}
+        </Button>
+      </HStack>
+    );
+  },
+};
 
 export const FilterPanel: Story = {
   render: function FilterPanelStory() {
@@ -819,6 +926,79 @@ export const TriggerInteractionEvidence: Story = {
       trigger.click();
     }
   },
+};
+
+// =============================================================================
+// Keyboard Avoidance
+// =============================================================================
+
+const NOTE_TIPS = [
+  'Notes are shared with everyone on the project.',
+  'Mention a teammate to send them the note.',
+  'Pin a note to keep it at the top of the list.',
+  'Notes older than a year are archived.',
+  'Attach a file by dropping it on the note.',
+  'Use a short title: it is what the list shows.',
+];
+
+function NoteContent() {
+  const [title, setTitle] = React.useState('');
+  return (
+    <VStack gap={3}>
+      <Heading level={4} tabIndex={-1}>
+        Add a note
+      </Heading>
+      <TextInput
+        label="Title"
+        placeholder="Short title"
+        value={title}
+        onChange={setTitle}
+      />
+      <Divider />
+      {NOTE_TIPS.map(tip => (
+        <Text key={tip}>{tip}</Text>
+      ))}
+      <Button label="Save note" variant="primary">
+        Save note
+      </Button>
+    </VStack>
+  );
+}
+
+function SearchNotesField() {
+  const [query, setQuery] = React.useState('');
+  return (
+    <div style={{marginTop: 16, maxWidth: 320}}>
+      <TextInput
+        label="Search notes"
+        placeholder="Search"
+        value={query}
+        onChange={setQuery}
+      />
+    </div>
+  );
+}
+
+export const KeyboardAvoidance: Story = {
+  name: 'Keyboard Avoidance',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'A tall popover with a text field. On a phone, the field brings up the software keyboard; the popover keeps its top and stays clear of the keyboard, as a popover on iOS does. Search notes, below the trigger, brings the keyboard up before the popover opens: it then opens clear of the keyboard.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover label="Add a note" width={320} content={<NoteContent />}>
+        <Button label="Add note">Add note</Button>
+      </Popover>
+      <SearchNotesField />
+    </div>
+  ),
 };
 
 export const KeepPopoverPresentation: Story = {

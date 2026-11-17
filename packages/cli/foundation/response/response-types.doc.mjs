@@ -25,7 +25,7 @@ export const doc = {
     {
       value: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted.',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (`missing` | `stale` | `current`: the agent docs before the write; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`), any soft `docsError`, whether theme guidance was emitted, the template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (false outside a project, and when `agentDocsStatus` was `current`).',
     },
     {
       value: 'init.remove',
@@ -71,7 +71,7 @@ export const doc = {
     {
       value: 'component.detail.blocks',
       description:
-        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category}); each block names the package that owns it, and the envelope's package names the component's owner.",
+        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category, isReady}); each block names the package that owns it, and the envelope's package names the component's owner.",
     },
 
     // docs
@@ -83,12 +83,12 @@ export const doc = {
     {
       value: 'docs.detail',
       description:
-        "One topic's full ReferenceDoc (the JSON read of a topic, --full, --dense, or a topic with one section), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
+        "One topic's full ReferenceDoc (the JSON read of a topic; in text, a read of a topic whose whole text is 16 KB or less, --full, or --dense), with token-ref blocks inlined and each section naming the package that wrote it, plus links ({up, previous, next}: the commands that open the level it sits in and its neighbors there). A topic or guide that took another's place carries replaces and replacedPackage, the package whose topic or guide it replaced.",
     },
     {
       value: 'docs.index',
       description:
-        "One topic's section index, the text read of a topic with more than one section (and --index): the topic's name, title, and description, plus sections, each {id, title, package, summary} (pass the id as the section argument; package is the npm package that wrote the section; summary is the section's one-line summary), and links ({up, previous, next}: the commands that open the level it sits in and its neighbors there); replaces and replacedPackage when the topic or guide took another's place.",
+        "One topic's section index, the text read of a topic whose whole text is over 16 KB (and --index): the topic's name, title, and description, plus sections, each {id, title, package, summary} (pass the id as the section argument; package is the npm package that wrote the section; summary is the section's one-line summary), and links ({up, previous, next}: the commands that open the level it sits in and its neighbors there); replaces and replacedPackage when the topic or guide took another's place.",
     },
     {
       value: 'docs.detail.section',
@@ -112,18 +112,73 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
+    // experimental theme editor and preview (experimental: may change or be removed in a patch release)
+    {
+      value: 'themeEdit.new',
+      stability: 'experimental',
+      description:
+        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), the dial `settings` it started with, font `notes`, contrast `problems`, what those settings did not reach as a change reports it (`missed`, `missedParts`, `missedOn`, left out when none), the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken), and `sheetStale` when a sheet.html left in the folder shows an older look. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.set',
+      stability: 'experimental',
+      description:
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), how many misses the changes to the theme leave (`missed`), on how many parts (`missedParts`; a part can miss two ways, its border and its shadow) and which (`missedOn`), all left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.show',
+      stability: 'experimental',
+      description:
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `openProblems` (every contrast problem the theme has now, each with the command that fixes it; the text shows the first eight and counts the rest), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `missed` (the parts the changes the theme makes did not reach, most flagged first, each with why and the line that reaches it), `unreached` (the parts with a fill of their own the theme leaves on the base look, most visible first: no setting on them and their fill or text color as the base gives it), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures` with the two to open (`look`, left out when none was taken), and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.undo',
+      stability: 'experimental',
+      description:
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, `alsoRemoved` (when the setting was listed more than once by hand: the other entries, removed with it), and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.previewAdd',
+      stability: 'experimental',
+      description:
+        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added`, the pages that were there already and are written again (`refreshed`), every page (`pages`), each template page picked and why (`matched`), the template pages `skipped` (each with its `reason` and `installCommand`), the `files` the preview wrote, `notes`, and how to `open` it. Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.previewApp',
+      stability: 'experimental',
+      description:
+        'A new starter app with the theme preview inside: the app `folder`, the `theme` copied into it that the pages wear (null for its own neutral theme), the preview `pages`, the `files` written, `notes`, and how to `open` it (install, run, then the page). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.previewList',
+      stability: 'experimental',
+      description:
+        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, `themeMissing` (true when that theme is gone), the `pages` (`id`, `label`) and `notes`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.previewRemove',
+      stability: 'experimental',
+      description:
+        'A page or the whole theme preview removed: the route `folder`, the files `removed`, and the `pages` left (empty when the whole preview went). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.how',
+      stability: 'experimental',
+      description:
+        'A how answer; `kind` says which: `part` (`component`, `recorded`, `group`, `groupMembers`, `spreads`, `variants`, `states`, `reads` per aspect, `contains`), `group` (`members`, `spreads`), `setting` (a dial: `values`, `help`, `examples`, and for a color the `shades` each token starts from; a token: `tokenType`, `default`, `perMode`, `readBy`, `examples`; a property: `setBy`, `examples`), `aspect` or `question` (`results`, each a `text` and its `commands`), `picture` (main colors or the color at points) or `list` (the `items`). Experimental: may change or be removed in a patch release.',
+    },
     // render (experimental: may change or be removed in a patch release)
     {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',
       stability: 'experimental',
       description:
-        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
+        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), the path-alias imports no alias here names, with the `paths` entries they need and the config those belong in (`aliased`: `config`, `paths`, `imports`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
     },
 
     // experimental icon (installed icon sets, AST-084): experimental values,
@@ -238,7 +293,7 @@ export const doc = {
     {
       value: 'search',
       description:
-        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
+        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName, kind and isReady (templates; false when the template doc sets isReady: false). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
     },
 
     // build
@@ -250,19 +305,19 @@ export const doc = {
     {
       value: 'build.kit',
       description:
-        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ...} (the start and each alternative name the package that owns the template), pages (search's closest templates), blocks and domain as SearchResultEntry[] (each naming its package), frame and foundation (Core component names), and hint {reason, commands} when thin.",
+        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ..., isReady} (the start and each alternative name the package that owns the template, and carry isReady), pages (search's closest templates that build could start from), blocks and domain as SearchResultEntry[] (each naming its package; each template with isReady), frame and foundation (Core component names in a run on Core; empty in a run on another base), and hint {reason, commands} when thin.",
     },
 
     // swizzle
     {
       value: 'swizzle.list',
       description:
-        "The names of swizzlable components discoverable from cwd's @astryxdesign/core. The envelope's package is @astryxdesign/core.",
+        "The names of swizzlable components discoverable from cwd's @astryxdesign/core; none in a run on another base. The envelope's package is the run's active base: @astryxdesign/core in a run on Core.",
     },
     {
       value: 'swizzle.copy',
       description:
-        "An eject receipt: component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
+        "An eject receipt: component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; owner modules copied beside it start with ../), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
     },
 
     // gap reports
@@ -286,17 +341,17 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media).",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content), and isReady (false when the template's doc sets isReady: false).",
     },
     {
       value: 'template.skeleton',
       description:
-        "A layout skeleton (structural tags with spatial annotations) plus the template's description and the components it composes. The envelope's package names the npm package that owns the template.",
+        "A layout skeleton (structural tags with spatial annotations) plus the template's description, the components it composes, and isReady. The envelope's package names the npm package that owns the template.",
     },
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined), and isReady. The envelope's package names the npm package that owns the template.",
     },
 
     {
@@ -309,7 +364,7 @@ export const doc = {
     {
       value: 'hook.list',
       description:
-        "The hook catalog grouped by category: `detail` (the level: names | compact | full) and `components`, the grouped map of hook names, brief entries, or a full HookDoc per entry. The envelope's package is @astryxdesign/core, the only package that ships hooks.",
+        "The hook catalog grouped by category: `detail` (the level: names | compact | full) and `components`, the grouped map of hook names, brief entries, or a full HookDoc per entry. The envelope's package is the run's active base: @astryxdesign/core in a run on Core.",
     },
     {
       value: 'hook.detail',
@@ -326,12 +381,12 @@ export const doc = {
     {
       value: 'theme.build',
       description:
-        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load).',
+        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
     },
     {
       value: 'theme.build.check',
       description:
-        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), and the full list of checked paths. Writes nothing.',
+        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, and, when any is stale or missing, code ERR_THEME_STALE. Writes nothing.',
     },
     {
       value: 'theme.build.batch',
@@ -341,7 +396,7 @@ export const doc = {
     {
       value: 'theme.list',
       description:
-        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, owner package or local root, source, added, and default fields. Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
+        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, package (the package that provides it, or the local root), source, added, and default fields, plus owner (the package the app imports the built theme from, such as the bundled theme package @astryxdesign/theme-<slug>, or the local root) and installed (whether that owner is installed). Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
     },
     {
       value: 'theme.app',
@@ -366,7 +421,7 @@ export const doc = {
     {
       value: 'theme.palette.generate',
       description:
-        'An author-reviewable OKLCH palette response: recipe (`astryx-oklch-v1`), status (`candidate`), familyCount, stopCount, modes, candidate (`TonalPaletteCandidate`), and generationReceipt. The generationReceipt contains schemaVersion (1), recipe, generatorVersion (`palette-generator-v1`), candidateFormatVersion (`palette-typescript-v1` or `palette-json-v1`), candidateSha256, optional preview, resolved request, and diagnostics. File-write fields are output, receipt, preview, written, and reason (`exists` or null).',
+        'An author-reviewable OKLCH palette response: recipe (the one the request or config names; `astryx-oklch-v1` when it names none), status (`candidate`), familyCount, stopCount, modes, candidate (`TonalPaletteCandidate`), and generationReceipt. The generationReceipt contains schemaVersion (1), recipe, generatorVersion (`palette-generator-v1`), candidateFormatVersion (`palette-typescript-v1` or `palette-json-v1`), candidateSha256, optional preview, resolved request, and diagnostics. File-write fields are output, receipt, preview, written, and reason (`exists` or null).',
     },
 
     // upgrade
@@ -432,7 +487,7 @@ export const doc = {
     {
       value: 'integration.validate',
       description:
-        'The validation result: validated (false when nothing was validated: with no package.json the issues list carries one no_package error so the command exits 1, and with a package.json but no integration manifest the issues list is empty and proves nothing), the package name and version (both null when validated is false) plus issues, an AstryxIntegrationIssue[] of {code, severity: warning | error, message, fix?, file?, line?} (fix: the change that resolves it; file and line: where, relative to the package), and notes when there are any: {code, message, next?} information beside the issues (text output marks a next note [next minor]); a note fails nothing by default, and one with next: true counts as a warning under integration check --next, fails integration check --strict --next, and fails --strict from the next minor release. Notes include invalid_cli_command for a malformed cliCommand and cli_peer_version when the running CLI is outside the @astryxdesign/cli peer range of the package, and the package layout findings added after the last minor release, each with its fix in the message (duplicate_component_doc, symlinked_root, unreadable_file, invalid_package_json, no_provider_id, source_without_component_doc where a doc and its source still pair), and doc_name_mismatch and unknown_block_component, until they become warnings in the next minor release. For the commands a topic writes, runner_command (written with a package runner), plain_command (written bare), package_manager_command (written for one package manager) and doc_token (a token that does not parse) notes each give the file, line and the token to write. A doc_target_not_found note names a doc whose replaces or extends names no topic and no guide of the CLI docs or the docs of the package (such as a namespace), and a doc_section_unplaced note a section whose before or after names no section of what it extends (it is added at the end), and a duplicate_guide_replacement note two docs of the package that replace one guide; they become warnings in the next minor release. When the manifest loads, docTypes checks each doc against its published authoring type: status (checked | skipped), reason, typescript, docs, findings (all warnings, each naming the field and a fix), unchecked, and fixtures (test fixture docs not checked). When the manifest loads, docNames lists the component doc names it could not judge: status (checked), findings (always empty; a doc name the module its import names provably does not export is a doc_name_mismatch note, with its fix in the message) and unchecked ({file, name, reason}: a doc whose name differs from the name it is listed under and whose source exports cannot all be read, such as a re-export from another package). When the manifest loads, blockComponents lists the component names templates give in exampleFor or componentsUsed that could not be judged: status (checked), findings (always empty; a name neither the package nor Core has, and the template does not import, is an unknown_block_component note, with its fix in the message) and unchecked ({file, name, reason}: a name the template may reach through anything other than named imports and re-exports from Core, React, StyleX, local helpers or the entry of the package itself, such as an import from another package, a default or namespace import, an alias of or member read off an imported binding, require() or a dynamic import(), or a local module that cannot be read, or any name Core would have to resolve when Core is not installed). Since 0.7.3 each import apps cannot use is also a note (its fix in the message), listed only and failing --strict from the next minor. So are the examples a package ships: component_without_example (a published component no block shows with exampleFor and isShowcase: true, or names in alsoShowcaseFor), template_category (a category written as a path, such as components/X), showcase_not_standalone (a showcase importing server-only code or reading process.env past NODE_ENV) and template_asset_not_packed (a new URL(…, import.meta.url) asset missing, or left out by npm pack --dry-run). When npm cannot list the files, an asset no files entry can reach is still a note and any other is listed in exampleAssets ({status: checked, findings: [], unchecked}, only when it lists any) as {file, asset, reason}. publicImports ({status: checked, findings: [], unchecked}) lists each import the check could not judge as {file, specifier, reason}; never counted or failed on. For the package being authored, olderCliNotes ({file, kind: template | namespace, field, message}) lists each descriptor field a CLI before 0.7.4 refuses, such as stability on a template or namespace doc; it is present only when it has entries, and is never counted or fails a check.',
+        'The validation result: validated (false when nothing was validated: with no package.json the issues list carries one no_package error so the command exits 1, and with a package.json but no integration manifest the issues list is empty and proves nothing), the package name and version (both null when validated is false) plus issues, an AstryxIntegrationIssue[] of {code, severity: warning | error, message, fix?, file?, line?} (fix: the change that resolves it; file and line: where, relative to the package), and notes when there are any: {code, message, next?} information beside the issues (text output marks a next note [next minor]); a note fails nothing by default, and one with next: true counts as a warning under integration check --next, fails integration check --strict --next, and fails --strict from the next minor release. Notes include invalid_cli_command for a malformed cliCommand and cli_peer_version when the running CLI is outside the @astryxdesign/cli peer range of the package, and the package layout findings added after the last minor release, each with its fix in the message (duplicate_component_doc, symlinked_root, unreadable_file, invalid_package_json, no_provider_id, source_without_component_doc where a doc and its source still pair), and doc_name_mismatch and unknown_block_component, until they become warnings in the next minor release. For the commands a topic writes, runner_command (written with a package runner), plain_command (written bare), package_manager_command (written for one package manager) and doc_token (a token that does not parse) notes each give the file, line and the token to write. A doc_target_not_found note names a doc whose replaces or extends names no topic and no guide of the CLI docs or the docs of the package (such as a namespace), and a doc_section_unplaced note a section whose before or after names no section of what it extends (it is added at the end), and a duplicate_guide_replacement note two docs of the package that replace one guide; they become warnings in the next minor release. When the manifest loads, docTypes checks each doc against its published authoring type: status (checked | skipped), reason, typescript, docs, findings (all warnings, each naming the field and a fix), unchecked, and fixtures (test fixture docs not checked). When the manifest loads, docNames lists the component doc names it could not judge: status (checked), findings (always empty; a doc name the module its import names provably does not export is a doc_name_mismatch note, with its fix in the message) and unchecked ({file, name, reason}: a doc whose name differs from the name it is listed under and whose source exports cannot all be read, such as a re-export from another package). When the manifest loads, blockComponents lists the component names templates give in exampleFor or componentsUsed that could not be judged: status (checked), findings (always empty; a name neither the package nor Core has, and the template does not import, is an unknown_block_component note, with its fix in the message) and unchecked ({file, name, reason}: a name the template may reach through anything other than named imports and re-exports from Core, React, StyleX, local helpers or the entry of the package itself, such as an import from another package, a default or namespace import, an alias of or member read off an imported binding, require() or a dynamic import(), or a local module that cannot be read, or any name Core would have to resolve when Core is not installed). Since 0.7.3 each import apps cannot use is also a note (its fix in the message), listed only and failing --strict from the next minor. So are the examples a package ships: component_without_example (a published component no block shows with exampleFor and isShowcase: true, or names in alsoShowcaseFor), template_category (a category written as a path, such as components/X), showcase_not_standalone (a showcase importing server-only code or reading process.env past NODE_ENV) and template_asset_not_packed (a new URL(…, import.meta.url) asset missing, or left out by npm pack --dry-run). When npm cannot list the files, an asset no files entry can reach is still a note and any other is listed in exampleAssets ({status: checked, findings: [], unchecked}, only when it lists any) as {file, asset, reason}. Since 0.7.15, package_without_logo (logo.light in the integration file, or a logo.dark that is set, names no packed PNG, JPEG, WebP or shapes-only SVG of at most 512 KB in the package; package.json marketplace.logo is read when the integration file has no logo) and package_without_example (components, other than those component_without_example exempts, but no block with isShowcase: true and exampleFor, or alsoShowcaseFor; themes-, docs- or codemods-only packages need none) say what a catalog needs to list the package, as notes without next that fail no check under any flag; a logo npm cannot be asked about is listed in exampleAssets with the file that names it. publicImports ({status: checked, findings: [], unchecked}) lists each import the check could not judge as {file, specifier, reason}; never counted or failed on. Each component example that is not kind setup but cannot run on its own, by the rule previewableExample in @astryxdesign/cli/authoring defines, is a next note with its fix in the message: example_does_not_compile, example_renders_nothing, example_undefined_name, example_server_only and example_import_unresolvable; exampleCode ({status: checked, findings: [], unchecked}, only when it lists any) lists as {file, example, reason} each example the check could not judge: its names, when the docs of Core or React cannot be read beside the package, or the example itself, when it cannot be read. For the package being authored, olderCliNotes ({file, kind: template | namespace, field, message}) lists each descriptor field a CLI before 0.7.4 refuses, such as stability on a template or namespace doc; it is present only when it has entries, and is never counted or fails a check.',
     },
     {
       value: 'integration.template-conflicts',

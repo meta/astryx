@@ -5,25 +5,33 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
-import {listDir, listDirEntries, pathExists} from '../fs/listing-cache.mjs';
+import {
+  listDir,
+  listDirEntries,
+  listingCacheActive,
+  oncePerListing,
+  pathExists,
+  withListingCache,
+} from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
+import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
+import {
+  checkedComponentList,
+  storedComponentList,
+} from './stored-component-list.mjs';
 import {
   HAS_COMPUTED,
   moduleExportSource,
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
-import {
-  inspectPackageExport,
-  sourceExportTarget,
-} from './package-exports.mjs';
-
-const require = createRequire(import.meta.url);
+import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -34,7 +42,7 @@ export const CORE_PACKAGE = CORE_PROVIDER_ID;
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
 
 // Component source files are named `XDS{Name}.tsx` today. The XDS-prefix
-// migration (P2380608025, P4) renames them to the bare `{Name}.tsx` form, so
+// migration (phase 4) renames them to the bare `{Name}.tsx` form, so
 // discovery must recognize BOTH. The `XDS` prefix has historically doubled as
 // a "this is a top-level component" marker, so naively matching all PascalCase
 // `.tsx` files would surface internal helpers that happen to be PascalCase
@@ -169,9 +177,6 @@ function readDocMeta(docPath) {
   }
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
 /**
  * A property of an object literal, by its plain key.
  * @param {any} object - an ObjectExpression node
@@ -204,13 +209,9 @@ function docMemberNames(source) {
   /** @type {any} */
   let ast;
   try {
-    babelParser ??= require('@babel/parser');
-    ast = /** @type {typeof import('@babel/parser')} */ (babelParser).parse(
-      source,
-      {
-        sourceType: 'module',
-      },
-    );
+    ast = babelParser().parse(source, {
+      sourceType: 'module',
+    });
   } catch {
     return [];
   }
@@ -370,10 +371,51 @@ export function familyMember(docs, name) {
  *
  * Keys are sorted alphabetically (groups and ungrouped components interleaved).
  * Components within each group are also sorted alphabetically.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  if (coreDir == null) return {};
+  // The component matcher calls this for each name it resolves, so one
+  // operation reads the docs once. Each caller gets its own copy to change.
+  // The Core the CLI was published with, unchanged, has its list stored.
+  const found = oncePerListing(`components\0${coreDir}`, () => {
+    const stored = storedComponentList(coreDir)?.groups;
+    return stored
+      ? inGroupOrder(
+          Object.entries(stored).map(([key, values]) => ({key, values})),
+        )
+      : readComponentGroups(coreDir);
+  });
+  return Object.fromEntries(
+    Object.entries(found).map(([key, names]) => [key, [...names]]),
+  );
+}
+
+/**
+ * The Core component names `keep` accepts, in discovery order. Each name is
+ * listed exactly when {@link discoverComponents} lists it, but no doc is read
+ * for a name `keep` rejects, so a check for one name is cheap.
+ * @param {string} coreDir
+ * @param {(name: string) => boolean} keep
+ * @param {Set<string>} [tops] the top folders of `src` that can hold a name
+ *   `keep` accepts; the others are not read
+ * @returns {string[]}
+ */
+export function discoverComponentNamesWhere(coreDir, keep, tops) {
+  return Object.values(readComponentGroups(coreDir, keep, tops)).flat();
+}
+
+/**
+ * The component groups under `coreDir`, read from disk.
+ * @param {string} coreDir
+ * @param {(name: string) => boolean} [keep] the names to read; the others
+ *   are left out
+ * @param {Set<string>} [tops] the top folders to read, when only these can
+ *   hold a name `keep` accepts
+ * @returns {Record<string, string[]>}
+ */
+function readComponentGroups(coreDir, keep = () => true, tops) {
   const srcDir = path.join(coreDir, 'src');
   /** @type {Map<string, string|null>} componentName → group */
   const componentGroups = new Map();
@@ -390,7 +432,10 @@ export function discoverComponents(coreDir) {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         results.push(...collectXDSFiles(path.join(dirPath, entry.name)));
-      } else if (isComponentSourceFile(entry.name, dirPath)) {
+      } else if (
+        keep(componentNameFromFile(entry.name)) &&
+        isComponentSourceFile(entry.name, dirPath)
+      ) {
         results.push(entry.name);
       }
     }
@@ -400,9 +445,11 @@ export function discoverComponents(coreDir) {
   const topEntries = listDirEntries(srcDir);
   for (const entry of topEntries) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+    if (tops && !tops.has(entry.name)) continue;
 
     const dirPath = path.join(srcDir, entry.name);
     const xdsFiles = collectXDSFiles(dirPath);
+    if (xdsFiles.length === 0) continue;
 
     // Read the group from the directory's .doc.mjs file (if it exists)
     // Check both {Name}.doc.mjs and Astryx{Name}.doc.mjs naming conventions
@@ -450,7 +497,9 @@ export function discoverComponents(coreDir) {
   // (HStack and VStack in Stack's doc).
   for (const entry of topEntries) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+    if (tops && !tops.has(entry.name)) continue;
     const name = entry.name;
+    if (!keep(name)) continue;
     if (componentGroups.has(name) || name.endsWith('Context')) continue;
     if (
       listDir(path.join(srcDir, name)).some(file => file.endsWith('.doc.mjs'))
@@ -494,26 +543,71 @@ export function discoverComponents(coreDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  return inGroupOrder(entries);
+}
 
+/**
+ * Groups as one record, keys in the fixed text order (`compareText`), so a
+ * live read and the list stored at publish print alike on every host.
+ * @param {Array<{key: string, values: string[]}>} entries
+ * @returns {Record<string, string[]>}
+ */
+function inGroupOrder(entries) {
+  entries.sort((a, b) => compareText(a.key, b.key));
   /** @type {Record<string, string[]>} */
   const ordered = {};
   for (const {key, values} of entries) {
     ordered[key] = values;
   }
-
   return ordered;
+}
+
+/**
+ * The folders of `srcDir`, in listing order, whose own listing holds one of
+ * `names`: the only folders a probe for `<folder>/<name>` can find. Inside an
+ * operation each listing is read once, for every name. Outside one, every
+ * folder is returned, so each probe reads the disk.
+ * @param {string} srcDir
+ * @param {fs.Dirent[]} entries `srcDir`'s listing
+ * @param {string[]} names
+ * @returns {fs.Dirent[]}
+ */
+function foldersHolding(srcDir, entries, names) {
+  const folders = entries.filter(entry => entry.isDirectory());
+  if (!listingCacheActive()) return folders;
+  const byName = oncePerListing(`folder-names\0${srcDir}`, () => {
+    /** @type {Map<string, Set<string>>} */
+    const index = new Map();
+    for (const folder of folders) {
+      let listed;
+      try {
+        listed = listDir(path.join(srcDir, folder.name));
+      } catch {
+        continue;
+      }
+      for (const name of listed) {
+        let holders = index.get(name);
+        if (!holders) index.set(name, (holders = new Set()));
+        holders.add(folder.name);
+      }
+    }
+    return index;
+  });
+  return folders.filter(folder =>
+    names.some(name => byName.get(name)?.has(folder.name)),
+  );
 }
 
 /**
  * Find the .doc.mjs file for a component.
  * For sub-components (e.g. StackItem), returns the parent's .doc.mjs
  * if the sub-component is documented there.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentReadme(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const exactDoc = `${name}.doc.mjs`;
   const xdsDoc = `XDS${name}.doc.mjs`;
@@ -526,8 +620,7 @@ export function findComponentReadme(coreDir, name) {
 
   // Nested match: src/*/{name}/{Name}.doc.mjs or src/*/{name}/Astryx{Name}.doc.mjs
   const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const entry of foldersHolding(srcDir, entries, [name])) {
     const nested = path.join(srcDir, entry.name, name, exactDoc);
     if (existsCaseExact(nested, srcDir)) return nested;
     const nestedXds = path.join(srcDir, entry.name, name, xdsDoc);
@@ -535,8 +628,7 @@ export function findComponentReadme(coreDir, name) {
   }
 
   // Per-component doc in a parent directory: src/*/{Name}.doc.mjs or src/*/Astryx{Name}.doc.mjs
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const entry of foldersHolding(srcDir, entries, [exactDoc, xdsDoc])) {
     const perComp = path.join(srcDir, entry.name, exactDoc);
     if (existsCaseExact(perComp, srcDir)) return perComp;
     const perCompXds = path.join(srcDir, entry.name, xdsDoc);
@@ -574,41 +666,56 @@ export function findComponentReadme(coreDir, name) {
  * `useResizable.ts`), so `.ts` candidates are searched alongside `.tsx`. Without
  * this, deriving the import path for a `.ts`-authored function falls back to the
  * bare `@astryxdesign/core` root instead of its tree-shakeable subpath.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentSource(coreDir, name) {
+  if (coreDir == null) return null;
+  const found = ownSourceFile(coreDir, name);
+  if (found == null) return null;
+  // A component's exact name in another case (`tokenizer` for Tokenizer) is
+  // that component's. A module that only shares the spelling, such as
+  // `CodeBlock/tokenizer.ts`, never stands for it.
+  return caseSpelledComponentSource(path.join(coreDir, 'src'), name) == null
+    ? found
+    : null;
+}
+
+/**
+ * The file named for `name` in `src/`, found as {@link findComponentSource}
+ * describes, before the case-spelling check.
+ * @param {string} coreDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function ownSourceFile(coreDir, name) {
   const srcDir = path.join(coreDir, 'src');
-  // Try the prefixed forms (`XDSButton.tsx`) first since that is the current
-  // on-disk convention, then the bare forms (`Button.tsx`) that the Astryx-prefix
-  // migration (P4) renames to. `.tsx` before `.ts` within each so a component's
-  // `.tsx` wins over a same-named `.ts` helper; `.ts` covers hooks/functions.
-  const candidateFiles = [
-    `XDS${name}.tsx`,
-    `${name}.tsx`,
-    `XDS${name}.ts`,
-    `${name}.ts`,
-  ];
+  const candidateFiles = ownFileNames(name);
 
   /**
    * @param {string} dirPath
    * @returns {string | null}
    */
-  function searchDir(dirPath) {
-    if (!pathExists(dirPath)) return null;
+  function searchDir(dirPath, listed = false) {
+    // A folder from its parent's listing exists; only a starting folder
+    // needs the check.
+    if (!listed && !pathExists(dirPath)) return null;
     const entries = listDirEntries(dirPath);
 
-    // Check for an exact match (prefixed or bare) first
+    // Check for an exact match (prefixed or bare) first. The listing in hand
+    // holds every name in the folder, so no name is probed on disk.
     for (const candidate of candidateFiles) {
+      const entry = entries.find(e => e.name === candidate);
+      if (!entry) continue;
       const exact = path.join(dirPath, candidate);
-      if (existsCaseExact(exact, dirPath)) return exact;
+      if (!entry.isSymbolicLink() || pathExists(exact)) return exact;
     }
 
     // Recurse into subdirectories
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        const found = searchDir(path.join(dirPath, entry.name));
+        const found = searchDir(path.join(dirPath, entry.name), true);
         if (found) return found;
       }
     }
@@ -622,11 +729,12 @@ export function findComponentSource(coreDir, name) {
     if (found) return found;
   }
 
-  // Search nested (component might be under a parent dir)
-  const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const nestedDir = path.join(srcDir, entry.name, name);
+  // Search nested (component might be under a parent dir): only the folders
+  // whose listing holds the name, in listing order.
+  const nested = foldersHolding(srcDir, listDirEntries(srcDir), [name]).map(
+    entry => path.join(srcDir, entry.name, name),
+  );
+  for (const nestedDir of nested) {
     if (existsCaseExact(nestedDir, srcDir)) {
       const found = searchDir(nestedDir);
       if (found) return found;
@@ -638,20 +746,86 @@ export function findComponentSource(coreDir, name) {
 }
 
 /**
+ * The file names a component's own source can have. The `XDS` forms come
+ * first, so an older prefixed file wins over a bare one. `.tsx` comes before
+ * `.ts`, so a component wins over a same-named helper. `.ts` covers hooks and
+ * functions.
+ * @param {string} name
+ * @returns {string[]}
+ */
+function ownFileNames(name) {
+  return [`XDS${name}.tsx`, `${name}.tsx`, `XDS${name}.ts`, `${name}.ts`];
+}
+
+// A component's name (PascalCase) or a hook's (`use` followed by PascalCase).
+const COMPONENT_OR_HOOK_NAME_RE = /^(?:use)?[A-Z][A-Za-z0-9]*$/;
+
+/**
+ * Every component or hook file in `src/`, by its stem in lower case: its
+ * stem (without an `XDS` prefix) and its path. Built once per operation.
+ * @param {string} srcDir
+ * @returns {Map<string, Array<{stem: string, file: string}>>}
+ */
+function caseStemIndex(srcDir) {
+  return oncePerListing(`case-stems\0${srcDir}`, () => {
+    /** @type {Map<string, Array<{stem: string, file: string}>>} */
+    const index = new Map();
+    /** @param {string} dirPath */
+    const visit = dirPath => {
+      for (const entry of listDirEntries(dirPath)) {
+        const entryPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__') visit(entryPath);
+          continue;
+        }
+        const stem = /^(?:XDS)?(.+)\.tsx?$/.exec(entry.name)?.[1];
+        if (stem == null || !COMPONENT_OR_HOOK_NAME_RE.test(stem)) continue;
+        const key = stem.toLowerCase();
+        index.set(key, [...(index.get(key) ?? []), {stem, file: entryPath}]);
+      }
+    };
+    if (pathExists(srcDir)) visit(srcDir);
+    return index;
+  });
+}
+
+/**
+ * The source of the component or hook whose exact name `name` spells in
+ * another case. A file named for it, anywhere in `src/`, exports it, as
+ * `TabList/Tab.tsx` exports Tab for `tab`. Null when no such file exists.
+ * @param {string} srcDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function caseSpelledComponentSource(srcDir, name) {
+  for (const {stem, file} of caseStemIndex(srcDir).get(name.toLowerCase()) ??
+    []) {
+    if (
+      stem !== name &&
+      (moduleExportsName(file, stem) || moduleExportsName(file, `XDS${stem}`))
+    ) {
+      return file;
+    }
+  }
+  return null;
+}
+
+/**
  * Compute the Levenshtein (edit) distance between two strings.
  * Used for fuzzy-matching component names. Dependency-free.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: every
+ *   name then imports from the package root
  * @param {string} componentName
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  if (coreDir == null) return '@astryxdesign/core';
+  const stored = checkedComponentList(coreDir)?.imports;
+  if (stored && Object.hasOwn(stored, componentName)) {
+    return stored[componentName];
+  }
   const srcDir = path.join(coreDir, 'src');
-  const pkgPath = path.join(coreDir, 'package.json');
-  const pkg = pathExists(pkgPath)
-    ? JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    : null;
-
-  const exportKeys = Object.keys(pkg?.exports || {});
+  const exportKeys = exportKeysOf(coreDir);
 
   // Priority 1: exact subpath export matching the component name (e.g. ./Heading)
   // This allows convenience re-export directories to win over the source directory.
@@ -677,6 +851,22 @@ export function resolveImportPath(coreDir, componentName) {
   }
 
   return '@astryxdesign/core';
+}
+
+/**
+ * The subpaths the package's `exports` map names, read once per operation:
+ * a search resolves the import of every component.
+ * @param {string} coreDir
+ * @returns {string[]}
+ */
+function exportKeysOf(coreDir) {
+  const pkgPath = path.join(coreDir, 'package.json');
+  return oncePerListing(`export-keys\0${pkgPath}`, () => {
+    const pkg = pathExists(pkgPath)
+      ? JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+      : null;
+    return Object.keys(pkg?.exports || {});
+  });
 }
 
 /**
@@ -852,7 +1042,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};
@@ -910,8 +1100,8 @@ export function findExternalComponentDoc(docsDir, name) {
 // by package and route source/issues correctly.
 
 // A doc's `name` can name another export of its file, and a family doc's full
-// entries are components under their own names; every other doc reads as before.
-const COMPONENT_NAME_RE = /^[A-Z][\w$]*$/;
+// entries are components under their own names; every other doc reads as
+// before. Such a name has the shape COMPONENT_NAME_RE.
 
 /** @type {Map<string, {stamp: string, value: Record<string, any> | null}>} doc reads, reused while the doc file is unchanged */
 const docReads = new Map();
@@ -1703,6 +1893,16 @@ export function unscopedComponentOwners(owners) {
  * @returns {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>}
  */
 export function discoverOwnedComponents(coreDir, loadedIntegrations = []) {
+  // Read-only: one listing of each folder serves the whole discovery.
+  return withListingCache(() => ownedComponents(coreDir, loadedIntegrations));
+}
+
+/**
+ * @param {string} coreDir
+ * @param {Array<{name: string, components?: string, issuesUrl?: string}>} loadedIntegrations
+ * @returns {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>}
+ */
+function ownedComponents(coreDir, loadedIntegrations) {
   /** @type {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>} */
   const records = [];
 

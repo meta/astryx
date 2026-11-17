@@ -5,15 +5,28 @@
  * @description Tests for the cross-file stylex style reader.
  */
 
-import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {describe, expect, it, beforeEach} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, beforeEach} from 'vitest';
 import {
   clearStyleModuleCache,
   extractStylexStyleProperties,
   resolveImportedStyleProperties,
 } from './stylex-style-source.js';
+
+/**
+ * Every module tree these tests build lives here, removed once they finish.
+ * It is made in beforeAll, not when the module loads: Vitest skips both hooks
+ * when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = mkdtempSync(join(tmpdir(), 'astryx-style-source-test-'));
+});
+afterAll(() => {
+  rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 beforeEach(() => {
   clearStyleModuleCache();
@@ -105,7 +118,7 @@ describe('extractStylexStyleProperties', () => {
 describe('resolveImportedStyleProperties', () => {
   /** Builds a throwaway module tree and returns its root directory. */
   function fixture(files) {
-    const root = mkdtempSync(join(tmpdir(), 'astryx-style-source-'));
+    const root = mkdtempSync(join(TEMP_ROOT, 'astryx-style-source-'));
     for (const [name, content] of Object.entries(files)) {
       const path = join(root, name);
       mkdirSync(join(path, '..'), {recursive: true});

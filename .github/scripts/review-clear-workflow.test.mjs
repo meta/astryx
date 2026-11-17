@@ -2,8 +2,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
+
+// The raw file host is offline here, so the job reads its helper through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflowSource = fs.readFileSync(
@@ -59,6 +64,13 @@ const appReview = (state, commitId = head2) => ({
   commit_id: commitId,
 });
 const ungatedSuccess = gateStatus('success', 'No code review required.');
+// The spec-owner job's decision for a PR that changes no spec record.
+const specOk = {
+  context: 'spec-owner-approval',
+  state: 'success',
+  description: 'Mirrors review-required · spec ok',
+  creator: {login: 'github-actions[bot]'},
+};
 
 function harness(
   reviews,
@@ -70,6 +82,7 @@ function harness(
     statuses = [pendingGate],
     reviewApp = '',
     permission = 'write',
+    author = {login: 'author', type: 'User'},
   } = {},
 ) {
   const calls = [];
@@ -78,11 +91,11 @@ function harness(
     number: 17,
     head: {sha: head2},
     base: {sha: oldBaseSha},
-    user: {login: 'author', type: 'User'},
+    user: author,
     labels: labels.map(name => ({name})),
   };
   const methods = {
-    listCommitStatusesForRef: async () => ({data: statuses}),
+    listCommitStatusesForRef: async () => ({data: [...statuses, specOk]}),
     listReviews: async () => ({data: reviews}),
   };
   const github = {
@@ -103,6 +116,17 @@ function harness(
       },
       repos: {
         getContent: async ({ref, path: filePath}) => {
+          // The shared rate-limit wait, read before anything else.
+          if (filePath === '.github/scripts/lib/rate-limit-backoff.cjs') {
+            return {
+              data: {
+                type: 'file',
+                content: fs
+                  .readFileSync(path.join(root, filePath))
+                  .toString('base64'),
+              },
+            };
+          }
           calls.push(`read:${ref}:${filePath}`);
           if (!helperAt.includes(ref)) {
             throw Object.assign(new Error('Not Found'), {status: 404});
@@ -137,7 +161,7 @@ function harness(
     },
   };
   const context = {
-    repo: {owner: 'facebook', repo: 'astryx'},
+    repo: {owner: 'meta', repo: 'astryx'},
     sha: trustedSha,
     payload: {
       workflow_run: {
@@ -276,6 +300,38 @@ describe('review-clear exact-head workflow', () => {
       input: expect.objectContaining({
         sha: head2,
         context: 'review-required',
+        state: 'pending',
+        description: 'Waiting on code review after approval withdrawal.',
+      }),
+    });
+  });
+
+  it('restores a gate cleared under a spec wait and then spec-approved, on changes requested', async () => {
+    const specWait = gateStatus(
+      'pending',
+      '⏳ Waiting for human spec approval: an eng owner can reply /approve-spec <sha>',
+    );
+    const h = harness([review('APPROVED'), review('CHANGES_REQUESTED')], {
+      labels: [],
+      // Newest first: /approve-spec, review-clear's clear, the code wait.
+      statuses: [
+        gateStatus(
+          'success',
+          '✅ Spec approved by @cixzhang · Review complete.',
+        ),
+        specWait,
+        gateStatus(
+          'pending',
+          'Waiting on code review: core runtime change (+ spec approval)',
+        ),
+      ],
+    });
+
+    await run(h);
+
+    expect(h.calls).toContainEqual({
+      type: 'status',
+      input: expect.objectContaining({
         state: 'pending',
         description: 'Waiting on code review after approval withdrawal.',
       }),
@@ -463,6 +519,30 @@ describe('review-clear review-app approval for write-access authors', () => {
     ]);
   });
 
+  it('restores an app clear hidden under a spec wait when the app path no longer applies', async () => {
+    const h = harness([appReview('APPROVED')], {
+      labels: [],
+      // REVIEW_APP is unset; newest first: the spec wait over the app's clear.
+      statuses: [
+        gateStatus(
+          'pending',
+          '⏳ Waiting for human spec approval: an eng owner can reply /approve-spec <sha>',
+        ),
+        gateStatus(
+          'pending',
+          'Waiting on code review: core runtime change (+ spec approval)',
+        ),
+      ],
+    });
+
+    await run(h);
+
+    expect(statusesOf(h.calls).at(-1)).toMatchObject({
+      state: 'pending',
+      description: expect.stringContaining('withdrawal'),
+    });
+  });
+
   it('ignores app reviews when REVIEW_APP is unset', async () => {
     const h = harness([appReview('APPROVED')]);
 
@@ -483,4 +563,33 @@ describe('review-clear review-app approval for write-access authors', () => {
       expect.objectContaining({state: 'pending'}),
     ]);
   });
+});
+
+describe("review-clear re-gates a trainer pass on the review app's own pull request (spec:AST-030 FR15)", () => {
+  it.each([
+    ['a request for changes', 'CHANGES_REQUESTED'],
+    ['a dismissal', 'DISMISSED'],
+  ])(
+    'sets review-required pending again after %s of the trainer pass',
+    async (_name, state) => {
+      const h = harness([review('APPROVED'), review(state)], {
+        labels: [],
+        statuses: [clearedGate],
+        reviewApp: APP,
+        author: {login: APP, type: 'Bot'},
+      });
+
+      await run(h);
+
+      expect(h.calls).toContainEqual({
+        type: 'status',
+        input: expect.objectContaining({
+          sha: head2,
+          context: 'review-required',
+          state: 'pending',
+          description: 'Waiting on code review after approval withdrawal.',
+        }),
+      });
+    },
+  );
 });

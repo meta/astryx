@@ -13,9 +13,11 @@
  * @position Used by rtl-audit.mjs for the D1, D5, and D6 auto-discovery passes
  *   and the curated pass. A page that failed a story can be unusable — a
  *   navigation that never commits, a crashed or hung renderer — and a worker
- *   that kept it would fail every later story it was handed. Recovery never
- *   retries the failed story: its error record stays, and only what follows
- *   runs on the new page.
+ *   that kept it would fail every later story it was handed. Without
+ *   `retry`, recovery never retries the failed story: its error record stays,
+ *   and only what follows runs on the new page. With `retry`, a story whose
+ *   scan threw (an ERROR, no verdict) is scanned once more on the fresh page;
+ *   a returned verdict is never retried.
  */
 
 /** How long to wait for a discarded page to close before moving on. */
@@ -79,9 +81,12 @@ export async function createPagePool({
     })),
   );
   const recoveries = [];
+  const retries = [];
   return {
     slots,
     recoveries,
+    /** Each story retried after an ERROR, with its first reason and outcome. */
+    retries,
     /** The page in the first slot now; it changes when that slot recovers. */
     first() {
       return slots[0].page;
@@ -112,11 +117,22 @@ export async function createPagePool({
  * worker finished first. When `scan` throws, the item's result is
  * `onError(item, error)`, and that worker's page is replaced before it takes
  * its next item. `describe(item)` names the item in the recovery record.
+ *
+ * With `retry`, a throw is retried exactly once on the replacement page. A
+ * retry that returns gives `onRetried(result, firstError)`; one that throws
+ * gives `onError(item, error, {firstError})`, so the item stays an error and
+ * both reasons are kept. Each retry is recorded in `pool.retries`.
  */
 export async function mapPool(
   items,
   pool,
-  {scan, onError, describe = () => ({})},
+  {
+    scan,
+    onError,
+    describe = () => ({}),
+    retry = false,
+    onRetried = result => result,
+  },
 ) {
   const out = new Array(items.length);
   let next = 0;
@@ -129,12 +145,37 @@ export async function mapPool(
       for (let i = next++; i < items.length; i = next++) {
         try {
           out[i] = await scan(items[i], slot.page);
+          continue;
         } catch (error) {
-          out[i] = onError(items[i], error);
           await recover(reason => pool.replace(slot, reason), {
             ...describe(items[i]),
             error: firstLine(error),
           });
+          if (!retry) {
+            out[i] = onError(items[i], error);
+            continue;
+          }
+          const firstError = firstLine(error);
+          try {
+            out[i] = onRetried(await scan(items[i], slot.page), firstError);
+            pool.retries.push({
+              ...describe(items[i]),
+              firstError,
+              outcome: 'recovered',
+            });
+          } catch (retryError) {
+            out[i] = onError(items[i], retryError, {firstError});
+            pool.retries.push({
+              ...describe(items[i]),
+              firstError,
+              outcome: 'error',
+              error: firstLine(retryError),
+            });
+            await recover(reason => pool.replace(slot, reason), {
+              ...describe(items[i]),
+              error: firstLine(retryError),
+            });
+          }
         }
       }
     }),

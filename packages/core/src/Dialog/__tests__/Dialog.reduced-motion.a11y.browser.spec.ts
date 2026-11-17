@@ -12,10 +12,14 @@
  *
  * The checks are the record's Verification rows: the animations the browser
  * runs on the dialog as it opens, read when each starts (`animationstart`),
- * so a short cross-fade is caught however late the test looks.
+ * so a short cross-fade is caught however late the test looks. When a loaded
+ * machine runs the listener after a short fade has already finished, the
+ * fade is read from its `@keyframes` rule and the computed animation
+ * longhands instead of the live Animation. A script animation, such as the
+ * touch motion's, is read as its script starts it.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -62,7 +66,10 @@ const cases: Case[] = [
 ];
 
 interface Entrance {
-  /** Each animation the dialog ran as it opened, read when it started. */
+  /**
+   * Each animation the dialog ran as it opened, read when it started. Its
+   * duration runs until its last change of value.
+   */
   animations: {properties: string[]; durationMs: number; delayMs: number}[];
   /** The dialog's computed opacity at the first frame after it opened. */
   firstFrameOpacity: number;
@@ -81,6 +88,101 @@ async function openDialog(
   await page.evaluate(() => {
     const seen: Entrance['animations'] = [];
     (window as unknown as {__entrance: typeof seen}).__entrance = seen;
+
+    /** Reads the animation an `animationstart` names without a live Animation. */
+    function entranceFromEvent(
+      {animationName}: AnimationEvent,
+      target: Element,
+    ): Entrance['animations'][number] {
+      const style = getComputedStyle(target);
+      const names = style.animationName.split(',').map(name => name.trim());
+      const index = Math.max(0, names.indexOf(animationName));
+      // Computed animation longhands repeat their list to match the names.
+      const at = (list: string) => {
+        const values = list.split(',');
+        return (values[index % values.length] ?? '').trim();
+      };
+      const toMs = (time: string) =>
+        time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000;
+      const properties = new Set<string>();
+      const visit = (rules: CSSRuleList) => {
+        for (const rule of Array.from(rules)) {
+          if (rule instanceof CSSKeyframesRule) {
+            if (rule.name !== animationName) {
+              continue;
+            }
+            for (const frame of Array.from(rule.cssRules)) {
+              const declarations = (frame as CSSKeyframeRule).style;
+              for (let i = 0; i < declarations.length; i++) {
+                // getKeyframes() names properties in camelCase; match it.
+                properties.add(
+                  declarations[i].replace(/-([a-z])/g, (_, letter: string) =>
+                    letter.toUpperCase(),
+                  ),
+                );
+              }
+            }
+          } else if ('cssRules' in rule) {
+            visit((rule as CSSGroupingRule).cssRules);
+          }
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        visit(sheet.cssRules);
+      }
+      return {
+        properties: [...properties].sort(),
+        durationMs: toMs(at(style.animationDuration)),
+        delayMs: toMs(at(style.animationDelay)),
+      };
+    }
+
+    /**
+     * Reads a live animation's animated properties and timing. Its duration
+     * ends at its last change: keyframes that only hold the end value, as
+     * the animator's do, change nothing.
+     */
+    function entranceOf(animation: Animation): Entrance['animations'][number] {
+      const effect = animation.effect as KeyframeEffect;
+      const timing = effect.getComputedTiming();
+      const keyframes = effect.getKeyframes();
+      const properties = new Set<string>();
+      for (const keyframe of keyframes) {
+        for (const key of Object.keys(keyframe)) {
+          if (
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(key)
+          ) {
+            properties.add(key);
+          }
+        }
+      }
+      const last = keyframes[keyframes.length - 1];
+      const holdsEnd = (keyframe: ComputedKeyframe) =>
+        [...properties].every(key => keyframe[key] === last[key]);
+      let changesUntil = 1;
+      for (let i = keyframes.length - 2; i >= 0; i -= 1) {
+        if (!holdsEnd(keyframes[i])) {
+          break;
+        }
+        changesUntil = keyframes[i].computedOffset;
+      }
+      return {
+        properties: [...properties].sort(),
+        durationMs: Number(timing.duration) * changesUntil,
+        delayMs: timing.delay ?? 0,
+      };
+    }
+
+    // A script animation fires no `animationstart`. Each one on the dialog,
+    // its backdrop included, is read as the script starts it.
+    const scripted = new WeakSet<Animation>();
+    const noteScripted = (animation: Animation) => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      if (target?.tagName === 'DIALOG' && !scripted.has(animation)) {
+        scripted.add(animation);
+        seen.push(entranceOf(animation));
+      }
+    };
     document.addEventListener(
       'animationstart',
       event => {
@@ -88,30 +190,40 @@ async function openDialog(
         if (target.tagName !== 'DIALOG') {
           return;
         }
-        for (const animation of target.getAnimations()) {
-          const effect = animation.effect as KeyframeEffect;
-          const timing = effect.getComputedTiming();
-          const properties = new Set<string>();
-          for (const keyframe of effect.getKeyframes()) {
-            for (const key of Object.keys(keyframe)) {
-              if (
-                !['offset', 'computedOffset', 'easing', 'composite'].includes(
-                  key,
-                )
-              ) {
-                properties.add(key);
-              }
-            }
+        const live = target.getAnimations();
+        if (live.length === 0) {
+          // On a busy machine a short entrance can finish before this
+          // listener runs, and a finished animation is gone from
+          // getAnimations(). The event still names it, so read it from its
+          // @keyframes rule and the dialog's computed animation longhands.
+          seen.push(entranceFromEvent(event, target));
+          return;
+        }
+        for (const animation of live) {
+          if (!scripted.has(animation)) {
+            seen.push(entranceOf(animation));
           }
-          seen.push({
-            properties: [...properties].sort(),
-            durationMs: Number(timing.duration),
-            delayMs: timing.delay ?? 0,
-          });
         }
       },
       true,
     );
+
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      noteScripted(animation);
+      return animation;
+    };
+    const play = Animation.prototype.play;
+    Animation.prototype.play = function (this: Animation) {
+      play.call(this);
+      if (!(this instanceof CSSAnimation || this instanceof CSSTransition)) {
+        noteScripted(this);
+      }
+    };
   });
   await page.getByRole('button', {name: opener}).click();
   const dialog = page.getByRole(role, {name});

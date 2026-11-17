@@ -6,11 +6,85 @@ export const docs = {
   name: 'theme',
   title: 'Theming',
   category: 'guide',
-  keywords: ['theme', 'theming', 'theme system', 'dark mode', 'defineTheme', 'provider'],
+  keywords: [
+    'theme',
+    'theming',
+    'theme system',
+    'dark mode',
+    'defineTheme',
+    'provider',
+    'brand colors',
+    'brand theme',
+    'custom theme',
+    'create theme',
+    'make a theme',
+    'change theme colors',
+    'accent color',
+  ],
   description:
-    'How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral`. The steps follow, then how to publish a theme so other teams can use it.',
 
   sections: [
+    {
+      id: 'make-or-change',
+      title: 'Make or change a theme',
+      content: [
+        {
+          type: 'prose',
+          text: 'Use the experimental theme editor: `astryx experimental theme editor new <name> --like neutral`, then `editor set` / `editor how "<what you want>"`, and wire it with `astryx theme add <name>`.',
+        },
+      ],
+    },
+    {
+      id: 'look-after-each-change',
+      title: 'Look after each change',
+      content: [
+        {
+          type: 'prose',
+          text: 'After each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components): a theme change is not done until you have looked.',
+        },
+      ],
+    },
+    {
+      id: 'denser-or-roomier',
+      title: 'A denser or roomier app',
+      content: [
+        {
+          type: 'prose',
+          text: 'A denser or roomier app is a theme change too, not page code: `astryx experimental theme editor set <name> spacing tight` (or `roomy`), then look again.',
+        },
+      ],
+    },
+    {
+      id: 'one-kind-of-part',
+      title: 'One kind of part',
+      content: [
+        {
+          type: 'prose',
+          text: 'A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line.',
+        },
+      ],
+    },
+    {
+      id: 'no-app-yet',
+      title: 'No app yet',
+      content: [
+        {
+          type: 'prose',
+          text: '`astryx experimental theme preview app <dir>` makes a starter app that shows the theme. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+        },
+      ],
+    },
+    {
+      id: 'share-with-other-teams',
+      title: 'Share a theme with other teams',
+      content: [
+        {
+          type: 'prose',
+          text: 'To publish a theme so other teams can use it, ship it in a package: the package holds the theme in its themes folder, builds it with `{@command theme build}`, and is published like any package. Another team installs the package and runs `{@command theme add <name> --package <package>}`. See {@link generic:add-a-theme}.',
+        },
+      ],
+    },
     {
       id: 'quick-start',
       title: 'Wrap your app in a theme',
@@ -50,6 +124,22 @@ export const docs = {
           lang: 'tsx',
           label: 'Map semantic tokens to generated palette stops',
           code: "import {defineTheme} from '@astryxdesign/core/theme';\nimport {palette} from './palette.generated';\n\nconst myTheme = defineTheme({\n  name: 'my-theme',\n  tokens: {\n    '--color-background-surface': [\n      palette.neutral.light[100],\n      palette.neutral.dark[15],\n    ],\n  },\n});",
+        },
+      ],
+    },
+    {
+      id: 'icon-sizes',
+      title: 'Icon sizes',
+      content: [
+        {
+          type: 'prose',
+          text: "A theme sets the dimension of each Icon size in its stylesheet: `width` and `height` on `components.icon['size:sm']` (or `xsm`, `md`, `lg`) resize that size's glyph, for semantic icon names and SVG components passed to `Icon` alike. Give the dimension in `px` or `rem`: a semantic icon takes its font size from it, so an `em` value would also grow its box. A size the theme leaves alone stays 12, 16, 20, or 24px at a 16px root (`xsm`, `sm`, `md`, `lg`) and scales with the root font size; `rem` keeps that scaling. The four size names are fixed.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Set Icon size dimensions',
+          code: "const brandTheme = defineTheme({\n  name: 'brand',\n  components: {\n    icon: {\n      'size:sm': {width: '1.125rem', height: '1.125rem'},\n      'size:lg': {width: '1.75rem', height: '1.75rem'},\n    },\n  },\n});",
         },
       ],
     },

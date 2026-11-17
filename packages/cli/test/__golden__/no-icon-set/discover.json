@@ -7,7 +7,10 @@
       "package": "@acme/glyphs",
       "category": "@acme/glyphs",
       "components": [],
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "iconSets": [
+        "glyphs"
+      ]
     }
   ],
   "meta": {
@@ -16,7 +19,10 @@
         "name": "@astryxdesign/richtext",
         "package": "@astryxdesign/richtext",
         "components": [
-          "RichTextEditor"
+          "RichTextEditor",
+          "RichTextEditorAutoLinkPlugin",
+          "RichTextEditorToolbar",
+          "RichTextView"
         ],
         "version": "<version>",
         "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",

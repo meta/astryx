@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "platform": "Android 15 emulator",
+  "browser": "Chromium 158.0.8123.0",
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Mobile Safari/537.36",
+  "dpr": 1.75,
+  "pointerType": "touch",
+  "coarse": true,
+  "gesture": "fling",
+  "caveat": "Rig input is synthetic, not a finger: Android injects at 120 Hz through a uinput touchscreen and desktop through CDP, each through the browser's real input pipeline; iOS input is HID through idb on a leased simulator, which delivers a move every ~30 ms (not 120 Hz), so iOS speeds are the distance Safari delivered between the first and last moving pointermove, over that time. A physical finger's 120–240 Hz jittered sampling is not reproduced.",
+  "injected": {
+    "source": "one continuous touch through a uinput touchscreen (no stylus) at 120 Hz, Android 15 emulator, panel 720×1600",
+    "hz": 120,
+    "speed": 2000,
+    "restMs": 0,
+    "points": [
+      [0, 0, 0],
+      [8.333, 0, 16.677],
+      [16.667, 0, 33.354],
+      [25, 0, 50.032],
+      [33.333, 0, 66.709],
+      [41.667, 0, 83.386],
+      [50, 0, 100.063],
+      [58.333, 0, 116.741],
+      [66.667, 0, 133.418],
+      [75, 0, 150.095],
+      [83.333, 0, 166.772],
+      [91.667, 0, 183.45],
+      [100, 0, 200.127],
+      [108.333, 0, 216.804],
+      [116.667, 0, 233.481],
+      [125, 0, 250.159],
+      [133.333, 0, 266.836],
+      [141.667, 0, 283.513],
+      [150, 0, 300.19]
+    ]
+  },
+  "release": {
+    "at": "pointerup"
+  },
+  "liftAfterLastMoveMs": 0,
+  "events": [
+    ["pointerdown", 0, 0, 0],
+    ["touchstart", 0, 0, 0],
+    ["pointermove", 0, 0, 16.685, [[0, 0, 16.685]], 0],
+    ["touchmove", 0, 0, 16.685],
+    ["pointermove", 4.5, 0, 33.343, [[4.5, 0, 33.343]], 0],
+    ["touchmove", 4.5, 0, 33.343],
+    [
+      "pointermove",
+      21.3,
+      0,
+      66.713,
+      [
+        [13.1, 0, 50.028],
+        [21.3, 0, 66.713]
+      ],
+      3
+    ],
+    ["touchmove", 21.3, 0, 66.713],
+    [
+      "pointermove",
+      38,
+      0,
+      100.056,
+      [
+        [29.9, 0, 83.398],
+        [38, 0, 100.056]
+      ],
+      3
+    ],
+    ["touchmove", 38, 0, 100.056],
+    ["pointermove", 46.5, 0, 116.741, [[46.5, 0, 116.741]], 3],
+    ["touchmove", 46.5, 0, 116.741],
+    [
+      "pointermove",
+      71.6,
+      0,
+      166.769,
+      [
+        [55, 0, 133.426],
+        [63.5, 0, 150.112],
+        [71.6, 0, 166.769]
+      ],
+      3
+    ],
+    ["touchmove", 71.6, 0, 166.769],
+    [
+      "pointermove",
+      88.4,
+      0,
+      200.139,
+      [
+        [80.1, 0, 183.454],
+        [88.4, 0, 200.139]
+      ],
+      3
+    ],
+    ["touchmove", 88.4, 0, 200.139],
+    [
+      "pointermove",
+      104.9,
+      0,
+      233.482,
+      [
+        [96.6, 0, 216.797],
+        [104.9, 0, 233.482]
+      ],
+      3
+    ],
+    ["touchmove", 104.9, 0, 233.482],
+    ["pointermove", 113.2, 0, 250.167, [[113.2, 0, 250.167]], 3],
+    ["touchmove", 113.2, 0, 250.167],
+    [
+      "pointermove",
+      138.4,
+      0,
+      300.195,
+      [
+        [121.8, 0, 266.853],
+        [130, 0, 283.51],
+        [138.4, 0, 300.195]
+      ],
+      3
+    ],
+    ["touchmove", 138.4, 0, 300.195],
+    ["pointerup", 138.4, 0, 300.195],
+    ["touchend", 138.4, 0, 300.195]
+  ]
+}

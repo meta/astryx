@@ -6,8 +6,29 @@
 /* Screen-reader-only live-region announcement while a Button is in its loading state (spinner shown, action in flight). Progressive sense ("work in progress"), not a noun. Kept separate from `typeahead.loading` — translations may diverge. */
 "@astryx.button.loading" = "Načítání";
 
+/* Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text. */
+"@astryx.field.optional" = "Volitelné";
+
+/* Visible indicator shown next to a form field's label when the field must be filled in (isRequired). Mutually exclusive with the optional indicator. Very short — appears inline after the label text. */
+"@astryx.field.required" = "Povinné";
+
+/* Screen-reader-only description appended to a read-only form control when the platform does not expose aria-readonly for that control's host element. Short state label, not an instruction. */
+"@astryx.input.readOnly" = "Jen pro čtení";
+
+/* Accessible name for the focusable status icon button inside an input when statusVariant is 'tooltip' and the status type is error. Activating or focusing the button reveals the error message in a tooltip. Keep it short — it labels an icon-only button. */
+"@astryx.input.statusButton.error" = "Podrobnosti chyby";
+
+/* Accessible name for the focusable status icon button inside an input when statusVariant is 'tooltip' and the status type is success. Activating or focusing the button reveals the success message in a tooltip. */
+"@astryx.input.statusButton.success" = "Podrobnosti úspěchu";
+
+/* Accessible name for the focusable status icon button inside an input when statusVariant is 'tooltip' and the status type is warning. Activating or focusing the button reveals the warning message in a tooltip. */
+"@astryx.input.statusButton.warning" = "Podrobnosti varování";
+
 /* Screen-reader-only default name for a standalone Spinner's role="status" element, used when the consumer supplies neither `aria-label` nor a visible string label. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge. */
 "@astryx.spinner.loading" = "Načítání";
+
+/* Screen-reader-only label on the X that clears the value from a TextInput. Example: `Clear Email`, `Clear Name`. */
+"@astryx.textInput.clearLabel" = "Vymazat {label}";
 
 /* Generic screen-reader name for a Thumbnail (image preview) that has no `alt` or `label`. Last-resort fallback so the control is never nameless; prefer a real name via `alt` or `label`. */
 "@astryx.thumbnail.fallbackName" = "Náhled";

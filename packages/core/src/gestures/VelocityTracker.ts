@@ -88,15 +88,22 @@ export class VelocityTracker {
    * Record a position. Timestamps must not go backwards (an older sample is
    * ignored), and a moved sample at the newest moved sample's timestamp
    * replaces it. A sample at the newest position is not motion: it changes
-   * no velocity.
+   * no velocity, unless `isMotion` says the contact moved anyway (a pinch's
+   * value holding while both fingers move, which reads as zero velocity for
+   * that interval).
    */
-  add(x: number, y: number, time: number): void {
+  add(
+    x: number,
+    y: number,
+    time: number,
+    {isMotion = false}: {isMotion?: boolean} = {},
+  ): void {
     if (this.newest != null && time < this.newest.time) {
       return;
     }
     this.newest = {x, y, time};
     const last = this.moved[this.moved.length - 1];
-    if (last != null && x === last.x && y === last.y) {
+    if (last != null && x === last.x && y === last.y && !isMotion) {
       return;
     }
     if (last != null && time === last.time) {
@@ -112,6 +119,41 @@ export class VelocityTracker {
       }
     }
     this.pan = panVelocity(this.moved);
+  }
+
+  /**
+   * Re-base the samples by an offset (a recognizer whose value was set
+   * mid-gesture): every interval, the moved-sample count and the velocity
+   * carry on unchanged.
+   */
+  offsetBy(dx: number, dy: number): void {
+    const shift = (sample: TouchSample): TouchSample => ({
+      ...sample,
+      x: sample.x + dx,
+      y: sample.y + dy,
+    });
+    this.newest = this.newest == null ? null : shift(this.newest);
+    this.moved = this.moved.map(shift);
+  }
+
+  /**
+   * Re-base the samples by a factor (a pinch whose scale was set
+   * mid-gesture): positions and velocities scale with it, and the
+   * moved-sample count carries on.
+   */
+  scaleBy(factor: number): void {
+    const scale = (sample: TouchSample): TouchSample => ({
+      ...sample,
+      x: sample.x * factor,
+      y: sample.y * factor,
+    });
+    this.newest = this.newest == null ? null : scale(this.newest);
+    this.moved = this.moved.map(scale);
+    this.pan = {x: this.pan.x * factor, y: this.pan.y * factor};
+    this.previousPan = {
+      x: this.previousPan.x * factor,
+      y: this.previousPan.y * factor,
+    };
   }
 
   /** Record every sample in order. */

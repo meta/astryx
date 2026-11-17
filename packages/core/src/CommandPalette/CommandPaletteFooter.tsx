@@ -24,7 +24,13 @@ import {
 } from '../theme/tokens.stylex';
 import {Kbd} from '../Kbd';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPaletteFooter.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   footer: {
@@ -90,7 +96,7 @@ export function CommandPaletteFooter({
   style,
   ...props
 }: CommandPaletteFooterProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   return (
     <div

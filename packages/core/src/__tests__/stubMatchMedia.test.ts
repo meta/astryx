@@ -55,6 +55,17 @@ describe('stubMatchMedia', () => {
     expect(matchMedia('(max-width: 768px)').matches).toBe(true);
   });
 
+  it('answers the pointer queries from their own knob, fine by default', () => {
+    stubMatchMedia();
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    expect(matchMedia('(pointer: fine)').matches).toBe(true);
+
+    stubMatchMedia({pointer: 'coarse'});
+    expect(matchMedia('(pointer: coarse)').matches).toBe(true);
+    expect(matchMedia('(pointer: fine)').matches).toBe(false);
+    expect(matchMedia('(max-width: 768px)').matches).toBe(true);
+  });
+
   it('lets a non-motion query be answered false', () => {
     // Above the breakpoint, motion still reduced — the other axis of the
     // combination, so neither knob can be quietly driving both.

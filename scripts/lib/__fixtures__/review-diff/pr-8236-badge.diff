@@ -1,0 +1,12 @@
+diff --git a/packages/core/src/Badge/Badge.tsx b/packages/core/src/Badge/Badge.tsx
+index c6e109aa7bc39..0b57ce8f55499 100644
+--- a/packages/core/src/Badge/Badge.tsx
++++ b/packages/core/src/Badge/Badge.tsx
+@@ -239,5 +249,7 @@ export function Badge({
+         ? label
+         : undefined;
++  // Whether the label renders anything, which is when the badge grows with it.
++  const hasLabel = label !== '' && label != null && typeof label !== 'boolean';
+ 
+   return (
+     <span

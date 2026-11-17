@@ -16,11 +16,12 @@ import {
   docPackageManager,
   runWithDocPackageManager,
 } from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {
   CORE_PACKAGE,
-  requireCoreDir,
+  coreContentDir,
   loadIntegrationsSafely,
   resolveOwners,
   scopeIntegrationMember,
@@ -30,6 +31,8 @@ import {
   legacyExternalKeeps,
   resolveCoreSourcePath,
   resolveUnscopedDoc,
+  withExampleBlockPointer,
+  withOtherCommandHint,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
@@ -136,7 +139,7 @@ function parseComponentSelector(value, packageScope) {
  * version. Its structured suggestion points at the command that can discover
  * the requested package release.
  * @param {{package?: string, version?: string}} target
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @returns {void}
  */
@@ -208,7 +211,7 @@ function batchFailure(selector, error) {
  * @param {string|null} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {Promise<import('./component.type.mjs').ComponentBatchResponse>}
  */
 async function componentBatch(selectors, options, coreDir) {
@@ -265,13 +268,16 @@ export async function component(name, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   // Every read resolves the links in the doc text it returns (spec:AST-047
   // FR9); a batch's results are each a read of their own. Doc tokens render
-  // for the project in `cwd`.
-  return runWithDocPackageManager(
-    docPackageManager(cwd),
-    async () =>
-      /** @type {any} */ (
-        await linkComponentResponse(await componentRead(name, options), cwd)
-      ),
+  // for the project in `cwd`. A call's lookups walk the same source tree, so
+  // the call reads each directory once.
+  return withListingCache(() =>
+    runWithDocPackageManager(
+      docPackageManager(cwd),
+      async () =>
+        /** @type {any} */ (
+          await linkComponentResponse(await componentRead(name, options), cwd)
+        ),
+    ),
   );
 }
 
@@ -334,7 +340,7 @@ async function componentRead(name, options = {}) {
     );
   }
 
-  const coreDir = requireCoreDir(cwd);
+  const coreDir = coreContentDir(cwd);
 
   // A public API caller could pass a non-string category; the list leaf does
   // `category.toLowerCase()`, so guard it up front (same class as the name
@@ -619,7 +625,25 @@ async function componentRead(name, options = {}) {
     });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+    loadedIntegrations,
+  }).catch(async error => {
+    const pointed = await withExampleBlockPointer(error, dirName, {
+      coreDir,
+      cwd,
+    });
+    // A block's pointer already names `astryx template`.
+    throw pointed === error
+      ? await withOtherCommandHint(error, dirName, {
+          coreDir,
+          cwd,
+          loadedIntegrations,
+        })
+      : pointed;
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────

@@ -12,7 +12,7 @@ import {CubeIcon, FolderIcon, HomeIcon} from '@heroicons/react/24/outline';
 import {HomeIcon as HomeIconSolid} from '@heroicons/react/24/solid';
 
 const meta: Meta<typeof SideNav> = {
-  title: 'Core/SideNav/Collapse Ownership',
+  title: 'Core/SideNav',
   component: SideNav,
   parameters: {layout: 'centered'},
   decorators: [
@@ -27,7 +27,8 @@ const meta: Meta<typeof SideNav> = {
 export default meta;
 type Story = StoryObj<typeof SideNav>;
 
-export const Acceptance: Story = {
+export const CollapseOwnership: Story = {
+  name: 'Collapse ownership',
   args: {
     collapsible: true,
     resizable: {

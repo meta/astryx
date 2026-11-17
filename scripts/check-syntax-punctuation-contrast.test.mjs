@@ -15,7 +15,7 @@
  * @output Fails when a theme's punctuation/background pair drops below 4.5:1
  *   in either colour scheme.
  * @position Repo-level guard, sibling of the other scripts/check-*.
- * @see https://github.com/facebook/astryx/issues/5386
+ * @see https://github.com/meta/astryx/issues/5386
  */
 
 import {describe, it, expect} from 'vitest';

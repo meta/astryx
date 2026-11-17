@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/facebook/astryx/blob/main/internal/vibe-tests/schema/execution-provenance-v1.schema.json",
+  "$id": "https://github.com/meta/astryx/blob/main/internal/vibe-tests/schema/execution-provenance-v1.schema.json",
   "title": "ExecutionProvenanceV1",
   "description": "Executor-neutral provenance for one vibe-test result.",
   "type": "object",

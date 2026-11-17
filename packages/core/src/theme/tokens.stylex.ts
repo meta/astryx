@@ -24,7 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 
 export const colorDefaults = {
   // Core semantic
-  '--color-accent': 'light-dark(#0064E0, #2694FE)',
+  '--color-accent': 'light-dark(#0064E0, #0171E3)',
   '--color-accent-muted': 'light-dark(#0082FB33, #0082FB3F)',
   '--color-on-accent': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-neutral':
@@ -307,6 +307,8 @@ export const durationDefaults = {
   '--duration-slow-min': '730ms',
   '--duration-slow': '975ms',
   '--duration-slow-max': '1300ms',
+  /** The standard dismissal duration. */
+  '--duration-exit': 'var(--duration-fast)',
 } as const;
 
 export const durationVars = stylex.defineVars(durationDefaults);
@@ -316,9 +318,24 @@ export type DurationVarName = keyof typeof durationDefaults;
 // =============================================================================
 // Motion Tokens — Easing
 // =============================================================================
+// --ease-standard decelerates: things arriving and state changes.
+// --ease-exit accelerates: things leaving. It moves off from rest (no rise at
+// the start) and is quickest as the surface leaves, so the travel lands inside
+// the duration instead of in its first few frames.
 
 export const easeDefaults = {
   '--ease-standard': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Entrances: a layer or element arriving. A theme's `character` sets it
+   * (spec:AST-108 FR2); at `'standard'` it equals --ease-standard.
+   */
+  '--ease-entrance': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Moves: an element changing place or size on screen. A theme's
+   * `character` sets it; at `'standard'` it equals --ease-standard.
+   */
+  '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-exit': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
 } as const;
 
 export const easeVars = stylex.defineVars(easeDefaults);

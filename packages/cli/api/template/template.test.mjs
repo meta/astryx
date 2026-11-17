@@ -88,7 +88,7 @@ describe('stripTemplateAssetRefs', () => {
 
 describe('template --skeleton component extraction (prefix-agnostic)', () => {
   // Regression guard: templates author bare component names post un-prefix
-  // migration (P2380608025). The extractors previously matched only the
+  // migration. The extractors previously matched only the
   // `XDS`-prefixed form, so `--skeleton` returned an empty components list and
   // an empty skeleton body for bare templates.
   it('extracts components and a skeleton from a bare-named template', async () => {

@@ -80,6 +80,8 @@ export interface ReducedMotionView {
   readonly restingOpacity: number;
   /** Whether a move of an earlier call still waits to land. */
   readonly hasPendingLanding: boolean;
+  /** Whether an earlier dip's fade back in still waits on its landing. */
+  readonly hasWaitingDip: boolean;
 }
 
 /** What Reduce Motion makes of a call. */
@@ -93,6 +95,11 @@ export interface ReducedMotionPlan {
   readonly landing: PlannedLanding | null;
   /** The stylesheet opacity a dip borrowed (no call owns opacity). */
   readonly borrowed?: number | null;
+  /**
+   * The call joins the waiting dip: it names the opacity the dip returns to
+   * and moves nothing, so the fade goes on as it was.
+   */
+  readonly joins?: boolean;
 }
 
 /** The opacity no call has changed. */
@@ -162,7 +169,7 @@ export function planReducedMotion(
   // A move still waiting to land (an earlier dip's) lands at this call's
   // invisible moment, never while the element shows.
   const pending = view.hasPendingLanding;
-  // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
+  // Not a role: nothing lengthens it (design:reduced-motion DR4).
   const ms = reducedMotionCrossFade.durationMs;
   const landsLater = (
     at: number,
@@ -183,6 +190,18 @@ export function planReducedMotion(
         : {}),
     };
   };
+  // A call that names the opacity a waiting dip returns to, and names no
+  // travel, joins that dip: the fade goes on as it was and the call settles
+  // when the dip ends. A second dip, opened from where the first had got
+  // to, would fade the element out twice.
+  if (
+    named &&
+    view.hasWaitingDip &&
+    !properties.some(property => TRAVEL_PROPERTIES.includes(property)) &&
+    Math.abs(opacityTo - view.opacityHeading()) < 1e-6
+  ) {
+    return {atOnce: [], opacityFade: null, holds, landing: null, joins: true};
+  }
   // Travel lands only while the element is transparent (DR1, DR2): an
   // entrance that starts visible, or an exit that ends visible, dips instead
   // when it has travel or a waiting landing to carry.

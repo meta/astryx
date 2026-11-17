@@ -12,6 +12,9 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+    # Only a Core component directory can add a component (spec:AST-030 FR14).
+    paths:
+      - 'packages/core/src/**'
 
 permissions: {}
 
@@ -39,7 +42,7 @@ jobs:
 
             // Find new component directories:
             //   packages/core/src/<Name>/XDS<Name>.tsx  (current convention)
-            //   packages/core/src/<Name>/<Name>.tsx      (post XDS-prefix migration, P2380608025)
+            //   packages/core/src/<Name>/<Name>.tsx      (after the XDS-prefix migration)
             const newComponentPattern = /^packages\/core\/src\/([A-Z][A-Za-z]+)\/(?:XDS)?\1\.tsx$/;
             const newComponents = new Set();
 

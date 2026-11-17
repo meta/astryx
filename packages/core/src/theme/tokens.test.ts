@@ -102,6 +102,21 @@ describe('resolveThemeToken', () => {
     );
   });
 
+  it('resolves the exit curve to its accelerating default and to an override', () => {
+    // No rise at the start (y1 = 0): an exit moves off from rest and leaves
+    // fast, so its travel stays visible for the whole duration.
+    expect(resolveThemeToken(null, '--ease-exit', {mode: 'light'})).toBe(
+      'cubic-bezier(0.3, 0, 0.6, 0.6)',
+    );
+    const snappyExit = defineTheme({
+      name: 'snappy-exit',
+      tokens: {'--ease-exit': 'ease-in'},
+    });
+    expect(resolveThemeToken(snappyExit, '--ease-exit', {mode: 'dark'})).toBe(
+      'ease-in',
+    );
+  });
+
   it('returns fallback for unknown token names', () => {
     expect(
       resolveThemeToken(testTheme, '--missing-token', {

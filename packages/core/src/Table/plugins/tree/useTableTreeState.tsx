@@ -17,6 +17,7 @@
  */
 
 import {useCallback, useMemo, useRef, useState} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import type {
   TableTreeRowMeta,
   UseTableTreeDataConfig,
@@ -139,16 +140,21 @@ export function useTableTreeState<T extends Record<string, unknown>>(
 
   // Stable refs so callbacks don't churn on inline-prop identity changes
   const expandedIdsRef = useRef(expandedIds);
-  expandedIdsRef.current = expandedIds;
   const onExpandedIdsChangeRef = useRef(onExpandedIdsChange);
-  onExpandedIdsChangeRef.current = onExpandedIdsChange;
+  // Syncs the refs with the committed render. A render that React discards,
+  // as a suspended transition does, must not leave its rows or callback
+  // behind.
+  useIsomorphicLayoutEffect(() => {
+    expandedIdsRef.current = expandedIds;
+    onExpandedIdsChangeRef.current = onExpandedIdsChange;
+  });
 
   const commitExpandedIds = useCallback(
     (next: ReadonlySet<string>) => {
       // Advance the ref immediately so a second commit in the same React
       // batch (e.g. two onToggleItem calls in one event handler) builds
       // on this one instead of the pre-batch set. The ref re-syncs from
-      // the resolved state on the next render either way.
+      // the resolved state at the next commit either way.
       expandedIdsRef.current = next;
       if (!isControlled) {
         setInternalExpandedIds(next);

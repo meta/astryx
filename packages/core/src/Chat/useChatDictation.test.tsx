@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import type {ReactNode} from 'react';
+import {Suspense, startTransition, use, type ReactNode} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {renderHook, act} from '@testing-library/react';
+import {act, render, renderHook} from '@testing-library/react';
 import {InternationalizationProvider} from '../i18n';
 import {useSpeechRecognition} from './useSpeechRecognition';
 import {useChatDictation} from './useChatDictation';
@@ -365,5 +365,167 @@ describe('useChatDictation', () => {
 
     expect(result.current.isListening).toBe(false);
     expect(lastInstance?.abort).toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// Values from a render React discards
+// =============================================================================
+
+describe('callbacks and audio context as last committed', () => {
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    children,
+    isPending,
+  }: {
+    children: ReactNode;
+    isPending: boolean;
+  }) {
+    return (
+      <Suspense fallback={null}>
+        {children}
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  // An audio graph call throws, so each hook stops at the first call it
+  // makes, and the test can tell which context it reached.
+  const noAudioGraph = () => {
+    throw new Error('no audio graph in tests');
+  };
+
+  it('useSpeechRecognition keeps the committed callbacks and audio context when React discards a render, as a suspended transition does', async () => {
+    const committedStart = vi.fn();
+    const discardedStart = vi.fn();
+    // The volume analyser asks for the microphone, then for its context.
+    // The test waits for that second step, whichever context it reaches.
+    let reached: (context: string) => void = () => {};
+    const reachedContext = new Promise<string>(resolve => {
+      reached = resolve;
+    });
+    const contextNamed = (name: string) => ({
+      createMediaStreamSource: vi.fn(() => {
+        reached(name);
+        noAudioGraph();
+      }),
+    });
+    const committedContext = contextNamed('committed');
+    const discardedContext = contextNamed('discarded');
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {getUserMedia: async () => ({}) as MediaStream},
+    });
+    function Recognizer({
+      onStart,
+      audioContext,
+    }: {
+      onStart: () => void;
+      audioContext: object;
+    }) {
+      const speech = useSpeechRecognition({
+        onStart,
+        audioContext: audioContext as AudioContext,
+      });
+      return (
+        <button type="button" onClick={speech.start}>
+          Start
+        </button>
+      );
+    }
+    try {
+      const {getByRole, rerender} = render(
+        <Screen isPending={false}>
+          <Recognizer
+            onStart={committedStart}
+            audioContext={committedContext}
+          />
+        </Screen>,
+      );
+      // The transition renders new callbacks and a new context, then
+      // suspends for good, so React keeps the committed tree and never
+      // commits that render.
+      await act(async () => {
+        startTransition(() => {
+          rerender(
+            <Screen isPending>
+              <Recognizer
+                onStart={discardedStart}
+                audioContext={discardedContext}
+              />
+            </Screen>,
+          );
+        });
+      });
+      act(() => {
+        getByRole('button', {name: 'Start'}).click();
+      });
+      expect(await reachedContext).toBe('committed');
+      expect(discardedStart).not.toHaveBeenCalled();
+      expect(committedStart).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (navigator as unknown as {mediaDevices?: unknown}).mediaDevices;
+    }
+  });
+
+  it('useChatDictation keeps the committed callbacks and audio context when React discards a render, as a suspended transition does', async () => {
+    const committedStart = vi.fn();
+    const discardedStart = vi.fn();
+    const committedContext = {
+      currentTime: 0,
+      createOscillator: vi.fn(noAudioGraph),
+    };
+    const discardedContext = {
+      currentTime: 0,
+      createOscillator: vi.fn(noAudioGraph),
+    };
+    function Dictation({
+      onStart,
+      audioContext,
+    }: {
+      onStart: () => void;
+      audioContext: object;
+    }) {
+      const dictation = useChatDictation({
+        onStart,
+        audioContext: audioContext as AudioContext,
+        hasSounds: true,
+      });
+      return (
+        <button type="button" onClick={dictation.start}>
+          Start
+        </button>
+      );
+    }
+    const {getByRole, rerender} = render(
+      <Screen isPending={false}>
+        <Dictation onStart={committedStart} audioContext={committedContext} />
+      </Screen>,
+    );
+    // The transition renders new callbacks and a new context, then suspends
+    // for good, so React keeps the committed tree and never commits that
+    // render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen isPending>
+            <Dictation
+              onStart={discardedStart}
+              audioContext={discardedContext}
+            />
+          </Screen>,
+        );
+      });
+    });
+    act(() => {
+      getByRole('button', {name: 'Start'}).click();
+    });
+    expect(discardedStart).not.toHaveBeenCalled();
+    expect(committedStart).toHaveBeenCalledTimes(1);
+    expect(discardedContext.createOscillator).not.toHaveBeenCalled();
+    expect(committedContext.createOscillator).toHaveBeenCalled();
   });
 });

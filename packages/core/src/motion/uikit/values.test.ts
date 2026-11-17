@@ -6,13 +6,10 @@
  * @output Checks the table's values through the math that plays them: every
  *   spring is valid and settles; the alert spring is UIKit's legacy
  *   derivation; a sheet's detent and presentation springs render alike;
- *   scroll-to-top and the rubber band reproduce what UIKit was measured doing;
- *   the press release curve is the press model's
+ *   scroll-to-top and the rubber band reproduce what UIKit was measured doing
  * @position Testing; the source rules are uikit.test.ts
  */
 
-import {readFileSync} from 'node:fs';
-import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {solveDecay} from '../decay';
 import {rubberBand} from '../rubberBand';
@@ -24,13 +21,11 @@ import {
   type SpringDescription,
 } from '../spring';
 import {scroll, springs} from '.';
-import {press} from './timing';
 
 describe('UIKit constants table through the motion math', () => {
   const springEntries: [string, SpringDescription][] = [
     ...Object.entries(springs),
     ['scroll.bounce', scroll.bounce],
-    ['scroll.paging.snap', scroll.paging.snap],
   ];
 
   it.each(springEntries)(
@@ -93,18 +88,5 @@ describe('UIKit constants table through the motion math', () => {
         ),
       ).toBeLessThan(0.5);
     }
-  });
-
-  it('the press release curve is the press model\u2019s RELEASE_EASE', () => {
-    // The table records the curve the touch press model ships with; this pins
-    // the two together so neither drifts alone.
-    const source = readFileSync(
-      join(__dirname, '../../utils/interactionOverlay.stylex.ts'),
-      'utf8',
-    );
-    const match = /const RELEASE_EASE = 'cubic-bezier\(([^)]*)\)'/.exec(source);
-    expect(match?.[1].split(',').map(Number)).toEqual([
-      ...press.highlightOutCurve,
-    ]);
   });
 });

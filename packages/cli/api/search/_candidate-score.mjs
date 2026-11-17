@@ -35,15 +35,15 @@
  * "cable" is not "table".
  */
 
-import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {
   stem,
-  wordForms,
   sameWord,
-  startsAWordOf,
+  sameTermWord,
+  startsATermWordOf,
+  termWords,
   wordsOf,
   joined,
-  isTypo,
+  typoDistance,
 } from './_words.mjs';
 import {pluralOf} from './_query.mjs';
 
@@ -79,20 +79,142 @@ function spellsOut(term, name, description) {
 /**
  * Whether a one-word term is a name's last word and every word before it is a
  * single letter: Stack in VStack and HStack.
- * @param {string} term
+ * @param {import('./_words.mjs').TermWords} t
  * @param {string} name
  */
-function headOfLetters(term, name) {
+function headOfLetters(t, name) {
   const parts = wordsOf(name);
   return (
     parts.length >= 2 &&
-    sameWord(term, parts[parts.length - 1]) &&
+    sameTermWord(t, parts[parts.length - 1]) &&
     parts.slice(0, -1).every(p => p.length === 1)
   );
 }
 
 /** How many of a family's members a query naming the family lists. */
 const FAMILY_MEMBERS = 3;
+
+/**
+ * The pattern that finds any form of a term as a whole word in prose, with
+ * any common suffix, built once per term: a search tests it against every
+ * candidate's description.
+ * @type {Map<string, RegExp>}
+ */
+const mentionPatterns = new Map();
+
+/**
+ * How many terms' patterns are kept before the cache starts over. A compiled
+ * pattern is several kilobytes and a long-running caller sees ever new
+ * terms, so this cache stays small; one search uses a handful of terms.
+ */
+const MENTION_LIMIT = 1_000;
+
+/**
+ * @param {string} term
+ * @param {ReturnType<typeof termWords>} t - the term's words
+ * @returns {RegExp}
+ */
+function mentionPattern(term, t) {
+  let re = mentionPatterns.get(term);
+  if (!re) {
+    if (mentionPatterns.size >= MENTION_LIMIT) mentionPatterns.clear();
+    // Any form of the term, with any common suffix: `spacing` finds
+    // "space" and "spaces", `tables` finds "table".
+    const roots = [...new Set([stem(term), ...t.forms])]
+      .filter(f => f.length >= 3)
+      .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);
+    mentionPatterns.set(term, re);
+  }
+  return re;
+}
+
+/**
+ * Each candidate's names and keywords lowercased once, and its description,
+ * prose and guidance lowercased on first use: a search scores every candidate
+ * for every term and synonym. Keyed by the candidate object, so it goes when
+ * the catalog does. A candidate's name, aliases, keywords, description, prose
+ * and guidance must not change after its first score, as no catalog changes
+ * them: an edited candidate, including one in a stored index passed to
+ * `rankSearchIndex()` again, would still be scored on its first text.
+ * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
+ */
+const prepared = new WeakMap();
+
+/**
+ * Whether a doc's keyword is a word its text mentions rather than one it is
+ * named or declared by: a code term or a table cell its keywords gather
+ * (`issuesUrl`), not the author's declared keywords, its title or headings,
+ * or its name, including its route's last part written with spaces (a
+ * placed guide answers to `tokens border`). Another domain's keywords are
+ * all its own.
+ * @param {any} candidate
+ * @param {string} lower the keyword, lowercased
+ */
+function mentionKeyword(candidate, lower) {
+  if (candidate.domain !== 'doc') return false;
+  const leaves = [candidate.name, candidate._topic]
+    .map(n => String(n ?? ''))
+    .map(n => n.slice(n.lastIndexOf('/') + 1));
+  const own = [
+    ...(candidate._declared ?? []),
+    ...(candidate.titles ?? []),
+    candidate.name,
+    ...leaves,
+    ...leaves.map(leaf => leaf.replaceAll('-', ' ')),
+  ];
+  return !own.some(x => x != null && String(x).toLowerCase() === lower);
+}
+
+/** @param {any} candidate */
+function prepare(candidate) {
+  let p = prepared.get(candidate);
+  if (p === undefined) {
+    const {name, aliases = [], keywords = []} = candidate;
+    p = {
+      names: [name, ...aliases.filter(Boolean)].map(n => {
+        const l = n.toLowerCase();
+        return {name: n, lower: l, leaf: l.slice(l.lastIndexOf('/') + 1)};
+      }),
+      keywords: keywords.map((/** @type {string} */ kw) => {
+        const text = String(kw);
+        return {kw, text, lower: text.toLowerCase()};
+      }),
+      description: undefined,
+      prose: [],
+      guidance: [],
+    };
+    prepared.set(candidate, p);
+  }
+  return p;
+}
+
+/**
+ * @param {(string | undefined)[]} memo
+ * @param {unknown[]} blobs
+ * @param {number} i
+ */
+function loweredAt(memo, blobs, i) {
+  let out = memo[i];
+  if (out === undefined) {
+    out = String(blobs[i]).toLowerCase();
+    memo[i] = out;
+  }
+  return out;
+}
+
+/**
+ * A derived name's score for a term: 60 for the same word, 40 for a word the
+ * term starts, else 0.
+ * @param {import('./_words.mjs').TermWords} t - The lowercased search term.
+ * @param {string} kw - The derived name as authored.
+ * @returns {number}
+ */
+function weakKeywordScore(t, kw) {
+  const kwLower = String(kw).toLowerCase();
+  if (kwLower === t.term || sameTermWord(t, kwLower)) return 60;
+  return startsATermWordOf(t, kw) ? 40 : 0;
+}
 
 /**
  * Score a single candidate against the search term across name, keywords,
@@ -107,57 +229,74 @@ const FAMILY_MEMBERS = 3;
  *   also matches typed as words: `command palette` is CommandPalette.
  * @param {string[]} [candidate.keywords] - Authored intent (componentsUsed, category words).
  * @param {string[]} [candidate.weakKeywords] - Derived signal (components a page renders).
+ * @param {string[]} [candidate.weakKeywordBound] - Every name `weakKeywords`
+ *   can hold, when reading them is costly: they are read only if one matches.
  * @param {string} [candidate.description]
  * @param {string[]} [candidate.prose] - Extra free-text blobs (doc section text, best practices).
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
  * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
  * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
- * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
- * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword'} | null}
- *   `alias` marks a hit that read the query's words joined.
+ * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean, mentions?: boolean}} [opts] - `mentions`: also say whether the hit is only a mention (see `inText`); only the reading of a one-identifier query asks, so other searches pay nothing for it. `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
+ * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true} | null}
+ *   `alias` marks a hit that read the query's words joined; `inText`, asked
+ *   for with `mentions`, a hit that is the term mentioned in the
+ *   description, docs or guidance, or a doc keyword its text gathers (see
+ *   mentionKeyword), not a name or a keyword of its own.
  */
 export function scoreCandidate(
   term,
+  candidate,
   {
-    name,
-    aliases = [],
+    fuzzy = true,
+    joins = true,
+    part = false,
+    synonym = false,
+    mentions = false,
+  } = {},
+) {
+  const {
     domain,
-    keywords = [],
-    weakKeywords = [],
     description = '',
     prose = [],
     guidance = [],
     _family,
     _familyIndex,
-  },
-  {fuzzy = true, joins = true, part = false, synonym = false} = {},
-) {
+  } = candidate;
+  // The term's forms, worked out once for every word below.
+  const t = termWords(term);
+  const p = prepare(candidate);
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
   let alias = false;
+  /** Whether the best hit is a mention in text, not a name or keyword. */
+  let inText = false;
   /**
    * @param {number} score
    * @param {string} why
    * @param {'partial' | 'keyword' | false} [byAlias] - the hit reads the
    *   query's words joined, into part of a name or into a keyword
+   * @param {boolean} [mention] - the hit is the term mentioned in text
    */
-  const consider = (score, why, byAlias = false) => {
+  const consider = (score, why, byAlias = false, mention = false) => {
     if (score > best) {
       best = score;
       reason = why;
       alias = byAlias;
+      inText = mention;
     }
   };
 
   // ── Name signals ────────────────────────────────────────────────
   // An alias is a name too: a theme answers to its display name as well as
   // its slug.
-  for (const candidateName of [name, ...aliases.filter(Boolean)]) {
-    const nameLower = candidateName.toLowerCase();
+  for (const {
+    name: candidateName,
+    lower: nameLower,
+    leaf: leafLower,
+  } of p.names) {
     // A placed guide's name is its route, and the route's last segment is its
     // name too, as a flat topic's is: `codemods` is authoring/building-blocks/codemods.
-    const leafLower = nameLower.slice(nameLower.lastIndexOf('/') + 1);
 
     // A plural of the name is the name: `integration` is the `integrations`
     // guides, `tab` the `tabs` doc.
@@ -194,23 +333,23 @@ export function scoreCandidate(
       // outranks the Token component for `tokens`.
       consider(99, 'plural of the name');
     } else {
-      if (sameWord(term, nameLower)) consider(95, `name "${candidateName}"`);
+      if (sameTermWord(t, nameLower)) consider(95, `name "${candidateName}"`);
       // The term is a word of the name, or starts one: "input" in TextInput.
       else if (
         !part &&
         domain !== 'doc' &&
         domain !== 'theme' &&
-        headOfLetters(term, candidateName)
+        headOfLetters(t, candidateName)
       ) {
         // The whole query is the name's head word after single letters (Stack
         // in VStack, HStack): a variant named by its head, as a keyword is.
         consider(90, `name "${candidateName}" ends in "${term}"`);
-      } else if (startsAWordOf(term, candidateName)) {
+      } else if (startsATermWordOf(t, candidateName)) {
         consider(60, `name contains "${term}"`);
       }
       if (fuzzy) {
-        const dist = levenshteinDistance(term, nameLower);
-        if (isTypo(term, nameLower, dist)) {
+        const dist = typoDistance(term, nameLower);
+        if (dist != null) {
           consider(
             dist === 1 ? 80 : dist === 2 ? 40 : 20,
             `similar name (distance ${dist})`,
@@ -239,35 +378,55 @@ export function scoreCandidate(
 
   // ── Keyword signals ─────────────────────────────────────────────
   const termJoined = joined(term);
-  for (const kw of keywords) {
-    const kwLower = String(kw).toLowerCase();
+  for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
     // capitalized one names another entry (a block's `componentsUsed`). A
     // doc's keywords include code terms, matched as written.
     if (kwLower === term) {
-      consider(90, `keyword "${kw}"`);
+      consider(
+        90,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
-    if (
-      joins &&
-      domain !== 'doc' &&
-      /\s/.test(term) &&
-      String(kw) === termJoined
-    ) {
-      consider(90, `keyword "${kw}"`, 'keyword');
+    if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
+      consider(
+        90,
+        `keyword "${kw}"`,
+        'keyword',
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
-    if (sameWord(term, kwLower)) {
-      consider(88, `keyword "${kw}"`);
+    if (sameTermWord(t, kwLower)) {
+      consider(
+        88,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
-    if (startsAWordOf(term, kw)) consider(70, `keyword "${kw}"`);
+    if (startsATermWordOf(t, kw))
+      consider(
+        70,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
     if (fuzzy) {
-      const dist = levenshteinDistance(term, kwLower);
-      if (isTypo(term, kwLower, dist) && dist <= 2) {
-        consider(dist === 1 ? 70 : 30, `keyword "${kw}" (distance ${dist})`);
+      const dist = typoDistance(term, kwLower);
+      if (dist != null && dist <= 2) {
+        consider(
+          dist === 1 ? 70 : 30,
+          `keyword "${kw}" (distance ${dist})`,
+          false,
+          mentions && mentionKeyword(candidate, kwLower),
+        );
       }
     }
   }
@@ -277,32 +436,28 @@ export function scoreCandidate(
   // confident-match gate on its own; it still counts toward multi-term
   // coverage, which is where "this page renders that" is real evidence.
   // No Levenshtein tier — fuzzy matching a derived signal is pure noise.
-  for (const kw of weakKeywords) {
-    const kwLower = String(kw).toLowerCase();
-    if (kwLower === term || sameWord(term, kwLower)) {
-      consider(60, `renders ${kw}`);
-      continue;
+  // A bound skips the read when no name the page can yield matches the term,
+  // and then no weak keyword can match it either.
+  const bound = candidate.weakKeywordBound;
+  if (!bound || bound.some(kw => weakKeywordScore(t, kw) > 0)) {
+    for (const kw of candidate.weakKeywords ?? []) {
+      const score = weakKeywordScore(t, kw);
+      if (score > 0) consider(score, `renders ${kw}`);
     }
-    if (startsAWordOf(term, kw)) consider(40, `renders ${kw}`);
   }
 
   // ── Prose / description / guidance signals (stem-tolerant whole word) ──
   // Match the term's stem as a whole word, tolerating plural/gerund suffixes
   // so "chart" matches "charts" and "filter" matches "filtering".
   if (term.length >= 3) {
-    // Any form of the term, with any common suffix: `spacing` finds
-    // "space" and "spaces", `tables` finds "table".
-    const roots = [...new Set([stem(term), ...wordForms(term)])]
-      .filter(f => f.length >= 3)
-      .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);
-    if (description && re.test(description.toLowerCase())) {
-      consider(50, `description mentions "${term}"`);
+    const re = mentionPattern(term, t);
+    if (description && re.test((p.description ??= description.toLowerCase()))) {
+      consider(50, `description mentions "${term}"`, false, true);
     } else {
       let matchedProse = false;
-      for (const blob of prose) {
-        if (blob && re.test(String(blob).toLowerCase())) {
-          consider(50, `docs mention "${term}"`);
+      for (let i = 0; i < prose.length; i++) {
+        if (prose[i] && re.test(loweredAt(p.prose, prose, i))) {
+          consider(50, `docs mention "${term}"`, false, true);
           matchedProse = true;
           break;
         }
@@ -311,9 +466,9 @@ export function scoreCandidate(
       // so the term appearing there is weaker evidence than the component's own
       // summary. Only consulted when nothing stronger matched.
       if (!matchedProse) {
-        for (const blob of guidance) {
-          if (blob && re.test(String(blob).toLowerCase())) {
-            consider(45, `guidance mentions "${term}"`);
+        for (let i = 0; i < guidance.length; i++) {
+          if (guidance[i] && re.test(loweredAt(p.guidance, guidance, i))) {
+            consider(45, `guidance mentions "${term}"`, false, true);
             break;
           }
         }
@@ -321,5 +476,9 @@ export function scoreCandidate(
     }
   }
 
-  return best > 0 ? {score: best, reason, ...(alias ? {alias} : {})} : null;
+  if (best <= 0) return null;
+  /** @type {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true}} */
+  const hit = {score: best, reason, ...(alias ? {alias} : {})};
+  if (mentions && inText) hit.inText = true;
+  return hit;
 }

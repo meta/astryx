@@ -1,6 +1,6 @@
 # @astryxdesign/theme-matcha
 
-Earthy green theme with Figtree typography. Uses [Lucide](https://lucide.dev) icons.
+Earthy green theme with Playwrite US Trad for headings and DM Sans for body text. Uses [Lucide](https://lucide.dev) icons.
 
 ## Install
 
@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-matcha
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {matchaTheme} from '@astryxdesign/theme-matcha/built';
 
 function App() {
-  return <XDSTheme theme={matchaTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={matchaTheme}>{/* your app */}</Theme>;
 }
 ```
 

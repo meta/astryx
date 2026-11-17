@@ -20,6 +20,7 @@ import {
 } from '../../foundation/discovery/docs-section-key.mjs';
 import {sectionProse, codeTerms, headings, plain} from './_doc-text.mjs';
 import {loadAuthoringSelfDocs} from '../../foundation/discovery/authoring-self-docs.mjs';
+import {readDocAsData} from '../../foundation/discovery/docs-discovery.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -73,12 +74,16 @@ export async function gatherDocs(cwd) {
     }
     const read = lowered?.doc ?? null;
     if (isExperimentalDoc(read)) continue;
+    const hiddenHere = new Set([
+      ...hidden,
+      ...(await experimentalSectionKeys(entry.extensions)),
+    ]);
     const doc =
-      read && hidden.size > 0 && Array.isArray(read.sections)
+      read && hiddenHere.size > 0 && Array.isArray(read.sections)
         ? {
             ...read,
             sections: read.sections.filter(
-              (/** @type {any} */ section) => !hidden.has(section.id),
+              (/** @type {any} */ section) => !hiddenHere.has(section.id),
             ),
           }
         : read;
@@ -192,6 +197,28 @@ export async function gatherDocs(cwd) {
     });
   }
   return candidates;
+}
+
+/**
+ * The keys of the sections that experimental extensions add to a topic: like
+ * an experimental topic, they are read on their own and never searched.
+ * @param {ReadonlyArray<{path: string}>} extensions
+ * @returns {Promise<string[]>}
+ */
+async function experimentalSectionKeys(extensions) {
+  /** @type {string[]} */
+  const keys = [];
+  for (const extension of extensions) {
+    let doc;
+    try {
+      doc = /** @type {any} */ (await readDocAsData(extension.path));
+    } catch {
+      continue;
+    }
+    if (!isExperimentalDoc(doc) || !Array.isArray(doc.sections)) continue;
+    keys.push(...doc.sections.map(sectionKey));
+  }
+  return keys;
 }
 
 /**

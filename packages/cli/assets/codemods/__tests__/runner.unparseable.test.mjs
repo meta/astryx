@@ -19,13 +19,14 @@ import migrateThemeSelectors, {
 import migrateDeprecatedThemeSurface, {
   meta as migrateDeprecatedThemeSurfaceMeta,
 } from '../transforms/v0.7.0/migrate-deprecated-theme-surface.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-runner-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-runner-test-'));
   process.chdir(tmpDir);
 });
 

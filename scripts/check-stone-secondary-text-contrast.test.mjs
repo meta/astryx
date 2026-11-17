@@ -13,7 +13,7 @@
  *   core consumers pair it with.
  * @output Fails when a resolved foreground/background pair drops below 4.5:1.
  * @position Repo-level theme contrast guard, sibling of the other scripts/check-*.
- * @see https://github.com/facebook/astryx/issues/5505
+ * @see https://github.com/meta/astryx/issues/5505
  */
 
 import {describe, expect, it} from 'vitest';

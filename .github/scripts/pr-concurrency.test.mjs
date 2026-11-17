@@ -59,6 +59,8 @@ describe('pull-request workflow concurrency', () => {
           true,
           "${{ github.event_name == 'pull_request' }}",
           "${{ github.event_name != 'workflow_dispatch' }}",
+          // ci.yml: a release re-check also takes main's lane (spec:AST-030 FR23).
+          "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
         ],
         `${name} does not cancel superseded pull-request runs`,
       ).toContain(concurrency['cancel-in-progress']);
@@ -78,4 +80,40 @@ describe('pull-request workflow concurrency', () => {
       }
     },
   );
+});
+
+describe('ci.yml re-runs', () => {
+  const ci = workflows.find(({name}) => name === 'ci.yml').value;
+  const format = (text, ...args) =>
+    text.replace(/\{(\d+)\}/g, (_, i) => String(args[i]));
+  // The group GitHub computes for a run.
+  const groupFor = github => {
+    const [, expression] = /^ci-\$\{\{\s*(.*?)\s*\}\}$/.exec(
+      ci.concurrency.group,
+    );
+    return `ci-${Function('github', 'format', `return (${expression});`)(github, format)}`;
+  };
+  // GitHub reads a missing property as null; the stubs carry both objects.
+  const pull = attempt => ({
+    event_name: 'pull_request',
+    event: {pull_request: {number: 7}, merge_group: {}},
+    run_attempt: attempt,
+    run_id: 99,
+  });
+
+  it("gives a re-run a group of its own, so it never cancels the run for the pull request's current head", () => {
+    // A push's run shares the pull request's group, so a newer push cancels it.
+    expect(groupFor(pull('1'))).toBe('ci-7');
+    // Any attempt after the first runs apart from it.
+    expect(groupFor(pull('2'))).toBe('ci-7-rerun-99');
+    expect(groupFor(pull('3'))).toBe('ci-7-rerun-99');
+    expect(
+      groupFor({
+        event_name: 'merge_group',
+        event: {pull_request: {}, merge_group: {head_sha: 'abc'}},
+        run_attempt: '1',
+        run_id: 5,
+      }),
+    ).toBe('ci-abc');
+  });
 });

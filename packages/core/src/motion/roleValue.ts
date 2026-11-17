@@ -69,7 +69,8 @@ export function short(n: number): string {
  *   spring: mass folds into the duration, overdamping into a negative bounce);
  * - duration: `250ms`;
  * - curve: `cubic-bezier(0.42, 0, 0.58, 1)`, usable as is in CSS.
- * Throws on a value that is not a valid value of its kind.
+ * Throws on a value that is not a valid value of its kind, a spring that
+ * never settles included.
  */
 export function formatMotionRoleValue(
   kind: MotionRoleKind,

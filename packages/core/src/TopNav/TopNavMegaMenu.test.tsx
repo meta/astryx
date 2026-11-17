@@ -9,13 +9,15 @@
  * SYNC: When TopNavMegaMenu changes, update tests to match new behavior
  */
 
+import {createRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
-import {render, screen, act, fireEvent} from '@testing-library/react';
+import {render, screen, act, fireEvent, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TopNavMegaMenu} from './TopNavMegaMenu';
 import {TopNavMegaMenuItem} from './TopNavMegaMenuItem';
+import {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 import {TopNavRenderContext} from './TopNavRenderContext';
 
 // =============================================================================
@@ -73,6 +75,13 @@ function restorePopoverApiMock() {
 // =============================================================================
 // Default (desktop) mode
 // =============================================================================
+
+/** A finger tap: a touch press, then its click. */
+function tap(el: HTMLElement) {
+  fireEvent.pointerDown(el, {pointerType: 'touch'});
+  fireEvent.pointerUp(el, {pointerType: 'touch'});
+  fireEvent.click(el, {detail: 1});
+}
 
 describe('TopNavMegaMenu — default mode', () => {
   it('renders the trigger button with label', () => {
@@ -605,6 +614,236 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('closes and returns focus to the trigger when a panel link is picked', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    const link = screen.getByRole('link', {name: /Analytics/, hidden: true});
+    link.addEventListener('click', event => event.preventDefault());
+    link.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes and returns focus to the trigger when a panel action is tapped', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Start a trial" onClick={onClick} />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('button', {name: /Start a trial/, hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the panel open after a mouse click on a custom link component that forwards only onClick', async () => {
+    const user = userEvent.setup();
+    const OnlyClick = ({
+      href,
+      onClick,
+      children,
+    }: {
+      href?: string;
+      onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+      children?: ReactNode;
+    }) => (
+      <a
+        href={href}
+        onClick={event => {
+          event.preventDefault();
+          onClick?.(event);
+        }}>
+        {children}
+      </a>
+    );
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Analytics"
+            href="/analytics"
+            as={OnlyClick}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    await user.click(
+      screen.getByRole('link', {name: /Analytics/, hidden: true}),
+    );
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes on a keyboard pick through a custom link component that calls onClick without the event', async () => {
+    const user = userEvent.setup();
+    const NoEvent = ({
+      href,
+      onClick,
+      children,
+    }: {
+      href?: string;
+      onClick?: () => void;
+      children?: ReactNode;
+    }) => (
+      <a
+        href={href}
+        onClick={event => {
+          event.preventDefault();
+          onClick?.();
+        }}>
+        {children}
+      </a>
+    );
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Analytics"
+            href="/analytics"
+            as={NoEvent}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const link = screen.getByRole('link', {name: /Analytics/, hidden: true});
+    link.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the panel open after a mouse click on a panel action', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Start a trial" onClick={onClick} />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    await user.click(
+      screen.getByRole('button', {name: /Start a trial/, hidden: true}),
+    );
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the panel open after a pick on an item that sets hasCloseOnSelect to false', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Copy link"
+            onClick={onClick}
+            hasCloseOnSelect={false}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('button', {name: /Copy link/, hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it("closes and returns focus to the trigger when the featured card's link is tapped", async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        featured={
+          <TopNavMegaMenuFeaturedCard
+            title="New"
+            linkLabel="Read more"
+            linkHref="/new"
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const link = screen.getByRole('link', {name: /Read more/, hidden: true});
+    link.addEventListener('click', event => event.preventDefault());
+    tap(link);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('does not reopen a hover-opened panel closed by a pick until the pointer leaves and returns', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <TopNavMegaMenu
+          label="Products"
+          items={
+            <TopNavMegaMenuItem title="Start a trial" onClick={() => {}} />
+          }
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Products'});
+      await user.hover(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      screen.getByRole('button', {name: /Start a trial/, hidden: true}).focus();
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The closing panel puts the trigger back under a still pointer, and
+      // the browser fires a new mouseenter: it must not reopen the panel.
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // A real leave and return opens it again.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('closes on Escape and returns focus to the trigger', async () => {
     const user = userEvent.setup();
     render(
@@ -843,6 +1082,33 @@ describe('TopNavMegaMenuItem', () => {
   it('renders as a desktop item by default', () => {
     render(<TopNavMegaMenuItem title="Analytics" href="/analytics" />);
     expect(screen.getByRole('link', {name: /Analytics/})).toBeInTheDocument();
+  });
+
+  it('makes a desktop onClick-only item a keyboard-operable non-submit button', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavMegaMenuItem title="Request a demo" onClick={onClick} ref={ref} />,
+    );
+    const action = screen.getByRole('button', {name: 'Request a demo'});
+    expect(ref.current).toBe(action);
+    expect(action).toHaveAttribute('type', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a desktop item without a destination or action non-interactive', () => {
+    render(<TopNavMegaMenuItem title="Overview" />);
+    expect(screen.getByText('Overview')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('renders description in desktop mode', () => {
@@ -1128,5 +1394,72 @@ describe('TopNavMegaMenuItem pass-through props', () => {
     expect(screen.getByTestId('drawer-item').getAttribute('class')).not.toEqual(
       drawerWithout,
     );
+  });
+});
+
+describe('TopNavMegaMenu ref', () => {
+  const items = <TopNavMegaMenuItem title="Analytics" href="/analytics" />;
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMegaMenu ref={ref} label="Products" items={items} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu ref={ref} label="Products" items={items} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TopNavMegaMenu empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no featured wrapper in the drawer for %s', (_name, featured) => {
+    const section = (element: HTMLElement) => {
+      const trigger = within(element).getByRole('button', {name: 'Products'});
+      // Both renders share an id, so look the group up inside this render.
+      return element
+        .querySelector(`[id="${trigger.getAttribute('aria-controls')}"]`)!
+        .innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    };
+    const {container: withFeatured} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+          featured={featured as ReactNode}
+        />
+      </TopNavRenderContext>,
+    );
+    const {container: without} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    expect(section(withFeatured)).toBe(section(without));
+  });
+
+  it('renders 0 as featured content, as React does', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu label="Products" featured={0} />
+      </TopNavRenderContext>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Products'}));
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 });
