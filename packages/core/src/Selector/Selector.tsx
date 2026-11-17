@@ -444,9 +444,14 @@ const styles = stylex.create({
     transitionProperty: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // The layer prefers the trigger's width as its minimum, clamped by the
+  // runtime's viewport cap because a CSS minimum beats a maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Empty state
