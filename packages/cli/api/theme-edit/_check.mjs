@@ -10,6 +10,7 @@
  */
 
 import {CUSTOM_PROPERTY} from '../theme/build/written-values.mjs';
+import {readSetLine} from './_set-line.mjs';
 import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -3815,6 +3816,123 @@ function colorPropDefaults(prop, reads) {
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
+  ctx,
+  slug,
+  data,
+  thing,
+  value,
+  flags,
+  unset = false,
+  scope = {},
+) {
+  try {
+    return checkTyped(ctx, slug, data, thing, value, flags, unset, scope);
+  } catch (e) {
+    throw keepTypedScope(e, ctx, slug, data, flags);
+  }
+}
+
+/** The scope flags a refusal's line keeps from the line typed. */
+const SCOPE_FLAGS = /** @type {const} */ (['state', 'when', 'mode']);
+
+/**
+ * Every line a refusal offers for the theme keeps the scope typed: a
+ * `--state` or `--when` on the same part, and a `--mode`, that the line
+ * leaves out and does not give another value for go back into it whenever
+ * the command takes the line with them, so following the line never writes
+ * wider than what was asked (a hovered link's color offered for every
+ * link). A line the command refuses with that flag (a `--mode` on what is
+ * not a color) is the one that works, and is kept as it is.
+ * @param {unknown} e
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {SetFlags} flags
+ */
+function keepTypedScope(e, ctx, slug, data, flags) {
+  if (!(e instanceof AstryxError) || !e.suggestions?.length || !data) return e;
+  const typed = SCOPE_FLAGS.filter(k => flags?.[k]);
+  if (!typed.length) return e;
+  /** The line as the command reads it, set or undo. @param {string} name */
+  const read = name => {
+    const sub = name.startsWith(`${P} undo ${slug} `)
+      ? 'undo'
+      : name.startsWith(`${P} set ${slug} `)
+        ? 'set'
+        : null;
+    if (!sub) return null;
+    const line = readSetLine(
+      sub === 'undo' ? name.replace(`${P} undo `, `${P} set `) : name,
+      slug,
+    );
+    return line ? {sub, ...line} : null;
+  };
+  /**
+   * Whether the command takes the line with these flags.
+   * @param {NonNullable<ReturnType<typeof read>>} line
+   * @param {SetFlags} withFlags
+   */
+  const takes = (line, withFlags) => {
+    try {
+      checkTyped(
+        ctx,
+        slug,
+        structuredClone(data),
+        line.thing,
+        line.value,
+        withFlags,
+        line.sub === 'undo',
+      );
+      return true;
+    } catch (err) {
+      if (err instanceof AstryxError) return false;
+      throw err;
+    }
+  };
+  e.suggestions = e.suggestions.map(x => {
+    const line = read(x.name);
+    if (!line) return x;
+    const missing = typed.filter(
+      k =>
+        line.flags[k] == null &&
+        (k === 'mode' || (line.flags.on ?? null) === (flags.on ?? null)),
+    );
+    if (!missing.length) return x;
+    /** @type {SetFlags} */
+    const withFlags = {...line.flags};
+    for (const k of missing) /** @type {any} */ (withFlags)[k] = flags[k];
+    // Each flag on its own when the line does not take them together.
+    const kept = takes(line, withFlags)
+      ? withFlags
+      : missing
+          .map(k => ({...line.flags, [k]: flags[k]}))
+          .find(f => takes(line, f));
+    if (!kept) return x;
+    const name = setLine(
+      slug,
+      line.thing,
+      line.value,
+      kept,
+      line.sub === 'undo',
+    );
+    return {...x, name};
+  });
+  return e;
+}
+
+/**
+ * {@link checkSetting} without the scope pass on its refusals.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {SetFlags} flags
+ * @param {boolean} [unset]
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope]
+ * @returns {import('./_settings.mjs').Setting}
+ */
+function checkTyped(
   ctx,
   slug,
   data,
@@ -7637,14 +7755,17 @@ function checkOne(
                 .find(Boolean),
               ctx.C.MAP[/** @type {string} */ (s.on)]?.own?.color?.tokens,
             );
-        const tail = `${s.on ? ` --on ${s.on}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colors.map(c => `${c}: --color-text-${c}`).join('; ')}) on ${s.on} instead.`,
           {
-            run: colors.map(
-              c =>
-                `${P} set ${slug} --color-text-${c} ${quoteCommandArgument(color)}${tail}`,
+            // The token on the part, in the scope typed: a hovered link's
+            // color is the hovered link's token, never every link's.
+            run: colors.map(c =>
+              setLine(slug, `--color-text-${c}`, color, {
+                ...s,
+                when: named ? undefined : s.when,
+              }),
             ),
           },
         );
