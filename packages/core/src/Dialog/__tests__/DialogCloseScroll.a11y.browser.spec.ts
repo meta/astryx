@@ -8,7 +8,8 @@
  *   dialog's trigger.
  * @output Real-engine proof that closing a modal dialog keeps the page where
  *   it was: the scroll offset and the trigger's place on screen are the same
- *   after a pointer close (Cancel, the backdrop) and after Escape.
+ *   after a pointer close (Cancel, the backdrop) and after Escape. A Tab-stop
+ *   opener the page scrolled off screen comes back just into view (`nearest`).
  * @position Chromium and WebKit. The page focuses the region before a
  *   programmatic click opens the dialog, as a tap leaves focus in Safari, where
  *   a button is not mouse-focusable; the dialog then records the region as its
@@ -135,4 +136,64 @@ test('an Escape close keeps the page where it was', async ({page}) => {
   await openDialog(page, opener);
   await page.keyboard.press('Escape');
   await expectPageStill(page, opener, openerTop);
+});
+
+const SPACER_HEIGHT = 3000;
+
+/** Puts the story below a tall spacer, scrolls to the top, and focuses the
+ * opener without a scroll, so the focused opener is off screen. */
+async function mountOpenerOffScreen(page: Page) {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-dialog--default&viewMode=story`,
+  );
+  const opener = page.getByRole('button', {name: 'Open Modal', exact: true});
+  await expect(opener).toBeVisible();
+  await page.evaluate(spacerHeight => {
+    const root = document.getElementById('storybook-root');
+    if (root?.parentNode == null) {
+      throw new Error('no story root');
+    }
+    const spacer = document.createElement('div');
+    spacer.style.height = `${spacerHeight}px`;
+    root.parentNode.insertBefore(spacer, root);
+    window.scrollTo(0, 0);
+  }, SPACER_HEIGHT);
+  await opener.evaluate(node =>
+    (node as HTMLElement).focus({preventScroll: true}),
+  );
+  await expect(opener).toBeFocused();
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await isOpenerInViewport(page)).toBe(false);
+  return opener;
+}
+
+async function isOpenerInViewport(page: Page): Promise<boolean> {
+  return page
+    .getByRole('button', {name: 'Open Modal', exact: true})
+    .evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.top >= 0 && rect.bottom <= window.innerHeight;
+    });
+}
+
+test('an Escape close brings an opener scrolled off screen into view', async ({
+  page,
+}) => {
+  const opener = await mountOpenerOffScreen(page);
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  await expect(opener).toBeFocused();
+  await expect.poll(async () => isOpenerInViewport(page)).toBe(true);
+  // Just into view (`nearest`): the opener came from below, so it stops at the
+  // viewport's bottom edge, not at its centre or top.
+  const gapBelow = await opener.evaluate(
+    node => window.innerHeight - node.getBoundingClientRect().bottom,
+  );
+  expect(gapBelow).toBeGreaterThanOrEqual(0);
+  expect(gapBelow).toBeLessThanOrEqual(2);
 });
