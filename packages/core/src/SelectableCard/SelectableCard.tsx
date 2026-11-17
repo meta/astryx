@@ -464,6 +464,7 @@ export function SelectableCard({
           styles.interactive,
           isSelected && selectedStyleForVariant(variant),
           !isDisabled && containerPressOverlayStyles.overlay,
+          !isDisabled && containerPressOverlayStyles.rounded,
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,

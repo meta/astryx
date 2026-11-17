@@ -415,6 +415,7 @@ export function Thumbnail({
             styles.imageContainer,
             isInteractive && styles.interactive,
             isInteractive && containerPressOverlayStyles.overlay,
+            isInteractive && containerPressOverlayStyles.rounded,
             // The touch press's strength and release, on the element the
             // controller writes to; the `::after` above paints off it.
             isInteractive && interactionOverlayStyles.pressedAlpha,

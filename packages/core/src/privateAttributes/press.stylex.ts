@@ -562,7 +562,6 @@ export const containerPressOverlayStyles = stylex.create({
       content: '""',
       position: 'absolute',
       inset: 0,
-      borderRadius: 'inherit',
       pointerEvents: 'none',
       // A press the controller paints shows on its first frame and fades on
       // its strength's own animation, so the colour it replaces drops out at
@@ -611,6 +610,16 @@ export const containerPressOverlayStyles = stylex.create({
         [PRESSED_ON]: pressedOverlayImage,
         [PRESSED_FADING]: pressedOverlayImage,
       },
+    },
+  },
+  /**
+   * For a container that does not clip its content: the overlay follows the
+   * container's own corner radius. A container that clips (ClickableCard's
+   * card) keeps a square overlay, so the clip draws the corners.
+   */
+  rounded: {
+    '::after': {
+      borderRadius: 'inherit',
     },
   },
 });
