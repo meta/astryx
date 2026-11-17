@@ -5,28 +5,14 @@
 /**
  * @file useAlertActionLayout.ts
  * @input The row holding the alert's actions, their labels, the alert's
- *   title element, the document's fonts, and whether the compact touch
- *   layout applies
- * @output Exports useAlertActionLayout and resolveAlertActionLayout: whether
- *   an alert's two actions share a row or stack, and the callback ref that
- *   takes the title
+ *   title, the document's fonts, and whether the compact touch layout applies
+ * @output useAlertActionLayout and resolveAlertActionLayout: whether two
+ *   actions share a row or stack, and the callback ref that takes the title
  * @position Internal hook of AlertDialog: its compact touch action layout
  *
- * Two actions share a row, Cancel leading, when each label fits its own half
- * of the row on one line. They stack, the action above Cancel, when one does
- * not. The rule is per label, never the sum (`alertController.actions`).
- * AlertDialog applies it under a finger on a compact window only.
- *
- * The hook decides when the alert is shown, before its first frame. It reads
- * layout again when the title changes size (a rotation, a zoom) and when a web
- * font finishes loading. The action layout never changes the title's size, so
- * a decision never resizes what the hook watches. It does resize the row and
- * the dialog, which other observers watch. So a decision that a resize report
- * starts waits for the next frame. Each label's single-line width does not
- * depend on the button's width.
- *
- * SYNC: When modified, update useAlertActionLayout.test.tsx and
- * __tests__/AlertDialog.layout.interaction.browser.spec.ts
+ * A decision never resizes the watched title, but it resizes the row that
+ * other observers watch. So a decision that a resize report starts waits for
+ * the next frame.
  */
 
 import {useCallback, useEffect, useState, type RefObject} from 'react';
@@ -169,11 +155,12 @@ export function useAlertActionLayout(
       itemSelector,
       new Set(labelKey.split('\u0000')),
     );
-    if (next == null || next === layout) {
+    if (next == null) {
       return;
     }
     // React cannot commit inside its own effects. A microtask runs after them
-    // and before the frame.
+    // and before the frame. An unchanged layout commits nothing, so the row is
+    // measured once per open.
     let isActive = true;
     queueMicrotask(() => {
       if (isActive) {
@@ -186,7 +173,7 @@ export function useAlertActionLayout(
     return () => {
       isActive = false;
     };
-  }, [isCompact, isShown, itemSelector, labelKey, layout, rowRef]);
+  }, [isCompact, isShown, itemSelector, labelKey, rowRef]);
 
   return {layout: isCompact ? layout : 'row', watchRef};
 }

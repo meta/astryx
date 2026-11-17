@@ -75,8 +75,8 @@ confirmation without assembling it.
 - Released default preserved: `no` — FR6, FR7 and FR9 change the touch
   presentation and the phone width; under the touch presentation FR8 changes action activation under a slide, and a mouse press keeps the
   native button's; on a compact window under it, FR3 puts two short actions
-  in one row and stacks longer ones, where a landscape phone used a trailing
-  row
+  in one row and stacks longer ones, where a landscape phone or a small tablet
+  used a trailing row
 - Compatibility class: nonbreaking behavior change; no public API, DOM, or
   target change
 - Controlled/uncontrolled behavior: unchanged — `isOpen` with `onOpenChange` is
@@ -106,6 +106,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   It composes the theme-timed present and dismiss with the input hold. Kept
   apart, `AlertDialog.tsx` stays readable and the hook is unit-tested on its
   own.
+- The compact touch action layout (FR3, DEC-5). `useAlertActionLayout.ts`,
+  private to AlertDialog, decides row or stack. No shared engine fits it
+  (`architecture:react-component-runtime` INV19): `useOverflow` fits items by
+  their summed widths and measures hidden copies, while the alert tests each
+  label against its own half.
 
 **Does not own / non-goals**
 

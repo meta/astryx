@@ -12,8 +12,9 @@
  *   left mirrors the row. Long and German labels, large text, a 200% zoom and
  *   a 320 px screen follow the same rule. So do every action variant, a
  *   loading action and a label change while the alert is shown. The first
- *   frame paints the decision, and no resize observer loop is reported. A
- *   mouse keeps today's layout: stacked at 640px and below, a row above
+ *   frame paints the decision after one measurement of the row, and no resize
+ *   observer loop is reported. A mouse keeps today's layout: stacked at 640px
+ *   and below, a row above
  * @position Layout lane of AlertDialog, beside the touch-tracking and motion
  *   specs. Run with `pnpm test:interaction AlertDialog`.
  */
@@ -310,7 +311,7 @@ test.describe('under a finger on a compact screen', () => {
 });
 
 test.describe('the first open, under a finger', () => {
-  test('paints the row from its first frame, and reports no resize observer loop', async ({
+  test('paints the row from its first frame, measures the row once, and reports no resize observer loop', async ({
     page,
   }) => {
     // Errors the page reports from its first script on.
@@ -328,9 +329,32 @@ test.describe('the first open, under a finger', () => {
     // when the actions' layout changes.
     await page.evaluate(() => {
       const log: number[][] = [];
-      (window as unknown as {__firstFrame: number[][]}).__firstFrame = log;
+      const probe = window as unknown as {
+        __firstFrame: number[][];
+        __rowReads: number;
+      };
+      probe.__firstFrame = log;
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       const title = dialog.querySelector('h2') as HTMLElement;
+      // Counts reads of the action row's width. A read after the row changes
+      // forces a layout before paint.
+      const width = Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        'clientWidth',
+      );
+      let rowReads = 0;
+      Object.defineProperty(Element.prototype, 'clientWidth', {
+        configurable: true,
+        get(this: Element): number {
+          if (
+            dialog.contains(this) &&
+            this.querySelectorAll(':scope > button').length === 2
+          ) {
+            rowReads += 1;
+          }
+          return width?.get?.call(this) as number;
+        },
+      });
       const observer = new ResizeObserver(() => {
         if (!dialog.open || log.length > 0) {
           return;
@@ -340,6 +364,7 @@ test.describe('the first open, under a finger', () => {
             Math.round(button.getBoundingClientRect().top),
           ),
         );
+        probe.__rowReads = rowReads;
       });
       observer.observe(title);
     });
@@ -352,12 +377,15 @@ test.describe('the first open, under a finger', () => {
     await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await frames(page, 4);
-    const {first, errors} = await page.evaluate(() => ({
+    const {first, errors, rowReads} = await page.evaluate(() => ({
       first: (window as unknown as {__firstFrame: number[][]}).__firstFrame[0],
       errors: (window as unknown as {__errors: string[]}).__errors,
+      rowReads: (window as unknown as {__rowReads: number}).__rowReads,
     }));
     expect(first?.length).toBe(2);
     expect(first[0]).toBe(first[1]);
+    // One measurement before the first paint.
+    expect(rowReads).toBe(1);
     expect(errors).toEqual([]);
   });
 });

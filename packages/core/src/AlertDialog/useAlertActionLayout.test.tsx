@@ -277,6 +277,34 @@ describe('useAlertActionLayout', () => {
     expect(latest).toBe('row');
   });
 
+  it('measures the row once when its dialog opens, and not again after its own decision commits', async () => {
+    rowWidth = 0;
+    labelWidths.set('Cancel', 52);
+    labelWidths.set('Delete', 50);
+    const view = render(
+      <Actions labels={['Cancel', 'Delete']} isOpen={false} />,
+    );
+    let rowReads = 0;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        if (this.dataset.testid !== 'row') {
+          return 0;
+        }
+        rowReads += 1;
+        return rowWidth;
+      },
+    );
+    // The dialog opens and lays the row out.
+    rowWidth = ROW;
+    await act(async () => {
+      view.rerender(<Actions labels={['Cancel', 'Delete']} />);
+    });
+    expect(latest).toBe('row');
+    // A second read after the decision commits forces another layout before
+    // the first paint.
+    expect(rowReads).toBe(1);
+  });
+
   it("decides on a resize report in the next frame, never inside the observer's callback", () => {
     labelWidths.set('Cancel', 52);
     labelWidths.set('Delete', 50);
