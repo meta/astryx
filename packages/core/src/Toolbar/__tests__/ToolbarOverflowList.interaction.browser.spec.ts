@@ -273,6 +273,43 @@ test.describe('two lists in one row', () => {
       }
     });
   }
+
+  test('both fold into their own triggers at 380 px and stay folded', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      'core-toolbar--two-overflow-lists',
+      'two-lists-frame',
+    );
+    const row = await rowAt(page, 'two-lists-frame', 380);
+    await page.waitForTimeout(300);
+    const samples = [];
+    for (let frame = 0; frame < 6; frame += 1) {
+      samples.push(await lists(page));
+      await page.evaluate(
+        async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          }),
+      );
+    }
+    test.info().annotations.push({
+      type: 'two-lists-fold-380',
+      description: JSON.stringify({row, lists: samples[0]}),
+    });
+    // The end lane stays inside the toolbar, and each list folds its share.
+    expect((await rowAt(page, 'two-lists-frame', 380)).endOutside).toBe(false);
+    for (const sample of samples) {
+      expect(sample).toEqual(samples[0]);
+      for (const list of sample) {
+        expect(list.labels).toMatch(/\+\d+$/);
+        expect(list.clips).toBe(false);
+      }
+    }
+  });
 });
 
 test.describe('a list that is not the lane’s own child', () => {
