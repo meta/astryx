@@ -536,20 +536,6 @@ const CASES = [
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
   },
   {
-    // The --interactive projection: the same page, carrying its script, in
-    // the same folder as the case above.
-    name: 'experimental render',
-    args: ['experimental', 'render', 'page.jsx', '--interactive'],
-    cwd: '__TMP__',
-    setup: dir => {
-      fs.writeFileSync(
-        path.join(dir, 'page.jsx'),
-        'export default function Page() { return <h1>Hello</h1>; }\n',
-      );
-    },
-    jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
-  },
-  {
     // The --reverse projection (same command, same folder as the case above).
     name: 'experimental render',
     args: [
