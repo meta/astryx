@@ -358,11 +358,10 @@ export function OverflowList({
     ? JSON.stringify(overflowItems.map(({child, index}) => [index, child.key]))
     : '[]';
   const reportedKeyRef = useRef('[]');
-  const overflowItemsRef = useRef(overflowItems);
-  overflowItemsRef.current = overflowItems;
 
   // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
-  // drives the measurement, so no event handler can report it.
+  // drives the measurement, so no event handler can report it. The items are a
+  // new array on each render; the key comparison keeps the report to changes.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||
@@ -372,8 +371,14 @@ export function OverflowList({
       return;
     }
     reportedKeyRef.current = overflowKey;
-    onOverflowChange(overflowItemsRef.current);
-  }, [measuredKey, measurementKey, overflowKey, onOverflowChange]);
+    onOverflowChange(overflowItems);
+  }, [
+    measuredKey,
+    measurementKey,
+    overflowKey,
+    onOverflowChange,
+    overflowItems,
+  ]);
 
   return (
     <>
