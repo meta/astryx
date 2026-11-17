@@ -23,7 +23,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'useTableFilterState',
   description:
-    '表格筛选的受管状态 hook。返回当前筛选映射和 onChange 处理程序。将结果直接传递给 useTableFiltering。',
+    '表格筛选的受管状态 hook。返回 filters（当前筛选映射）、onFilterChange 和 clearAll（清除所有筛选，例如 Table emptyState 中的“清除筛选”按钮）。将 filters 和 onFilterChange 传给 useTableFiltering。',
   props: [
     {
       name: 'initialState',

@@ -85,7 +85,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'useTableFiltering',
   description:
-    '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。与 useTableFilterState 配合使用管理状态。',
+    '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。与 useTableFilterState 配合使用管理状态。插件只渲染筛选控件，不会移除行：请自行筛选数据（toSearchFilters 配合 usePowerSearchConfig 的 applyFilters），再把结果传给 Table。没有匹配的行时，Table 显示其 emptyState 属性。',
   props: [
     {
       name: 'filters',

@@ -248,7 +248,7 @@ export const docs = {
       name: 'plugins',
       type: 'Record<string, TablePlugin<T>>',
       description:
-        "Named plugins: the objects that the useTable* hooks return, or your own TablePlugin<T> (import the type from @astryxdesign/core/Table), an object of optional transform functions that Table calls in this order: transformColumns, transformTable, transformHeaderCell, transformHeaderRow, transformBodyCell, transformBodyRow, transformScrollWrapper, transformTableContext. Their arguments and results: transformColumns(columns) adds, removes, or reorders columns; transformTable(props) changes the <table> props; transformHeaderCell(props, column, columnIndex, columns) changes a <th>, with slots before, content, after, overlay, and below; transformHeaderRow(props) changes the header <tr>; transformBodyCell(props, column, item, columnIndex, columns, context) changes a <td>; transformBodyRow(props, item, index, context) changes a body <tr>, and can add afterRow content below the row; transformScrollWrapper(props, context) changes the scroll region and can add beforeTable or afterTable content; transformTableContext(children) wraps the table in providers. Each transform receives {htmlProps, xstyle, ...} and must return the same shape, with the earlier values kept. Header and body cell transforms can also append contextMenuActions for a right-click menu. A plugin that has transformBodyRow or transformBodyCell and keeps one row per data item must set rowModel: 'flat'; without it, row virtualization uses full rendering. Keep each plugin object stable (create it in useMemo): a new object on each render renders all rows again. Plugins with the first-party names columnSettings, sort, tree, selection, and pagination run in that order; other names run after them, in record order.",
+        "Named plugins: the objects that the useTable* hooks return, or your own TablePlugin<T> (import the type from @astryxdesign/core/Table), an object of optional transform functions that Table calls in this order: transformColumns, transformTable, transformHeaderCell, transformHeaderRow, transformBodyCell, transformBodyRow, transformScrollWrapper, transformTableContext. Their arguments and results: transformColumns(columns) adds, removes, or reorders columns; transformTable(props) changes the <table> props; transformHeaderCell(props, column, columnIndex, columns) changes a <th>, with slots before, content, after, overlay, and below; transformHeaderRow(props) changes the header <tr>; transformBodyCell(props, column, item, columnIndex, columns, context) changes a <td>; transformBodyRow(props, item, index, context) changes a body <tr>, and can add afterRow content below the row; transformScrollWrapper(props, context) changes the scroll region and can add beforeTable or afterTable content; transformTableContext(children) wraps the table in providers. The element transforms (table, header row, header cell, body row, body cell, scroll wrapper) receive {htmlProps, xstyle, ...} and must return the same shape, with the earlier values kept. Header and body cell transforms can also append contextMenuActions for a right-click menu. A plugin that has transformBodyRow or transformBodyCell and keeps one row per data item must set rowModel: 'flat'; without it, row virtualization uses full rendering and Table ignores plugin loading state (renderState). Keep each plugin object stable (create it in useMemo): a new object on each render renders all rows again. Plugins with the first-party names columnSettings, sort, tree, selection, and pagination run in that order; other names run after them, in record order.",
     },
     {
       name: 'rowIndexStart',
@@ -333,7 +333,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "To open a row (go to a detail page, open a side panel), put a Link or a Button in the row's main cell with renderCell. Table has no row-click prop. A click handler on the <tr> cannot be reached with the keyboard or a screen reader, so do not use it as the only way to open a row.",
+          "To open a row (go to a detail page, open a side panel), put a Link or a Button in the row's main cell with renderCell. Table has no row-click prop. A click handler on the <tr> cannot be reached with the keyboard or a screen reader, so do not use it as the only way to open a row. A renderCell column makes a windowed Table (virtualization) render every row.",
       },
       {
         guidance: true,
@@ -374,7 +374,7 @@ export const docs = {
 <Table data={users} columns={columns} idKey="id" hasHover />;`,
     },
     {
-      label: 'Open a row in a side panel and mark the open row',
+      label: 'Open a row in a side panel',
       code: `const [openId, setOpenId] = useState(null);
 
 const columns = [
@@ -388,23 +388,10 @@ const columns = [
   {key: 'role', header: 'Role'},
 ];
 
-// A custom plugin: transformBodyRow adds aria-current to the open row.
-const openRowPlugin = useMemo(
-  () => ({
-    rowModel: 'flat', // one row per item, so virtualization still works
-    transformBodyRow: (props, user) =>
-      user.id === openId
-        ? {...props, htmlProps: {...props.htmlProps, 'aria-current': 'true'}}
-        : props,
-  }),
-  [openId],
-);
-
 <Table
   data={users}
   columns={columns}
   idKey="id"
-  plugins={{openRow: openRowPlugin}}
 />;`,
     },
   ],
@@ -477,7 +464,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Row open/click: no row-click prop. Put a Link or Button in the main cell via renderCell. <tr> onClick alone is not keyboard or screen-reader reachable.',
+          'Row open/click: no row-click prop. Put a Link or Button in the main cell via renderCell. <tr> onClick alone is not keyboard or screen-reader reachable. renderCell turns windowing off (full render).',
       },
       {
         guidance: true,
