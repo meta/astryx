@@ -92,7 +92,8 @@ describe('class names and rungs', () => {
     expect(writes(await how('q0', 'rounded-md cards'))[0]).toBe(
       'set q0 border-radius 6px --on card',
     );
-    expect(writes(await how('q0', 'text-sm labels'))).toEqual([
+    // ("labels" said bare reads two parts; a form's labels are one.)
+    expect(writes(await how('q0', 'text-sm form labels'))).toEqual([
       'set q0 font-size 14px --on field-label',
     ]);
     expect(writes(await how('q0', 'very compact'))).toEqual([

@@ -13200,6 +13200,29 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
+    // ("uppercase small labels"): "labels" said bare, with no form, field
+    // or input beside it, reads two parts: a form field's label, or a
+    // badge, the small tag some kits call a label. Both are offered and
+    // neither is written.
+    if (
+      c.parts.length === 1 &&
+      c.parts[0].on === 'field-label' &&
+      /\blabels?\b/.test(c.text) &&
+      !/\b(?:field|form|input|checkbox|switch|radio|select)s?\b/.test(q) &&
+      TARGET.has('badge')
+    ) {
+      push({
+        text: `"labels" reads two parts: the form field labels (field-label), or badges, the small tags some kits call labels; nothing is written until you say which ("form labels …" or "badges …")`,
+        options: [],
+        lookup: `${HOW} field-label`,
+      });
+      push({
+        text: 'the badge reading: badges are the small tags',
+        options: [],
+        lookup: `${HOW} badge`,
+      });
+      continue;
+    }
     // The unknown-part guard: a clause whose part slot holds a word how
     // knows as no part ("from widgets") is never answered for the whole
     // theme or dropped; it says so.
@@ -21394,7 +21417,16 @@ export function draftAnswer(ctx, env, question) {
         const px = c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         // An exact amount ("double", "half") of the size there now.
-        const factor = exactFactor(c.text) ?? (c.dir === 'less' ? 1 / f2 : f2);
+        // (A size said as a look, "small labels", "tiny captions", is the
+        // way down; never bigger for want of a way.)
+        const smallSaid =
+          !c.dir &&
+          /\b(?:small|smaller|tiny|little|fine|compact)\b/.test(
+            noMode(c.text),
+          ) &&
+          !/\b(?:big|bigger|large|larger|huge)\b/.test(noMode(c.text));
+        const factor =
+          exactFactor(c.text) ?? (c.dir === 'less' || smallSaid ? 1 / f2 : f2);
         // A part whose text is all in parts inside it that set their own
         // size (a dialog's title block): each of those tokens on the part,
         // from its own size.
@@ -23477,6 +23509,30 @@ export function draftAnswer(ctx, env, question) {
               [set('background', `linear-gradient(${named.join(', ')})`, f)],
             ],
           };
+        // ("a dark gradient navbar"): a gradient said dark, with no colors,
+        // runs between the theme's own dark surfaces, and the part's text
+        // takes the dark mode's text so it reads on it.
+        if (
+          design === 'gradient' &&
+          /\b(?:dark|darker|deep|black|night)\b/.test(noMode(c.text))
+        ) {
+          const top = String(
+            current('--color-background-surface', 'dark') ?? '',
+          );
+          const low = String(current('--color-background-body', 'dark') ?? '');
+          const ink = String(current('--color-text-primary', 'dark') ?? '');
+          if (parseColor(top) && parseColor(low) && parseColor(ink))
+            return {
+              text: `a dark gradient fill${where}, from the theme's dark surface ${top} to its dark page ${low}, and the dark mode's text ${ink} on it so it reads`,
+              options: [
+                [
+                  set('background', `linear-gradient(${top}, ${low})`, f),
+                  set('color', ink, f),
+                ],
+              ],
+              sequence: true,
+            };
+        }
         if (design)
           return {
             text: `a ${design} fill${where}`,
@@ -27343,6 +27399,38 @@ export function draftAnswer(ctx, env, question) {
             d.text = `${d.text}; the app shell's frame${panel ? ` and the main panel (layout-content, which draws ${panel})` : ''} take it too, so the whole page shows it`;
         }
       }
+    // (Where the page color shows: only a part that draws the token at
+    // rest paints it, as the part data reads. A page built from none of
+    // them, a stack or layout set straight inside the theme, keeps the
+    // browser's white: said, with the two ways to paint it.)
+    const pageReaders = Object.keys(C.MAP)
+      .filter(p =>
+        (C.partReads(p, 'background') ?? []).some(
+          r =>
+            r.token === '--color-background-body' &&
+            r.when.every(w => !w.trim()),
+        ),
+      )
+      .sort();
+    const setsPage = (/** @type {Draft} */ d) =>
+      d.options.some(o =>
+        o.some(
+          st =>
+            st.thing === '--color-background-body' &&
+            !st.on &&
+            st.verb === 'set',
+        ),
+      );
+    const first = result.find(setsPage);
+    if (
+      first &&
+      !result.some(d => /shows only where a part draws it/.test(d.text))
+    )
+      result.push({
+        text: `the page color shows only where a part draws it (${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}): the theme's page color paints inside AppShell; a page without AppShell keeps the browser's white until its own CSS adds one line: body { background: var(--color-background-body) }`,
+        options: [],
+        lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
+      });
   }
   // "bold white text in the header", "white text on the primary button":
   // a text color typed for a part, with no fill asked for it, is measured
