@@ -473,6 +473,49 @@ describe('OverflowList', () => {
     });
   });
 
+  describe('gap', () => {
+    it('fits items with the gap the theme renders', async () => {
+      const readStyle = window.getComputedStyle;
+      // A theme with a larger spacing scale renders gap step 2 as 12px.
+      vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+        const style = readStyle(el, pseudo);
+        if (!el.hasAttribute('inert')) {
+          return style;
+        }
+        return new Proxy(style, {
+          get(target, key): unknown {
+            if (key === 'columnGap') {
+              return '12px';
+            }
+            const value = Reflect.get(target, key, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+      });
+      try {
+        await renderMeasured(
+          <OverflowList gap={2} data-w="316" data-testid="ov">
+            <button type="button" data-w="100">
+              A
+            </button>
+            <button type="button" data-w="100">
+              B
+            </button>
+            <button type="button" data-w="100">
+              C
+            </button>
+          </OverflowList>,
+        );
+        // 3 × 100 + 2 × 12 = 324 is wider than 316, so two items fit.
+        const vis = visibleContainer();
+        expect(within(vis).getByText('B')).toBeInTheDocument();
+        expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+  });
+
   describe('maxVisibleItems (cap)', () => {
     it('caps visible items even when they all fit', async () => {
       await renderMeasured(
