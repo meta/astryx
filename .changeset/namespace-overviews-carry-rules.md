@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[docs] `astryx docs layout` and `astryx docs tokens` state their core rules on the namespace page itself: layout gives the rule for each of its four steps (frame, structure, spacing, breakpoints), and tokens says where the token vars come from, that component props take spacing steps, never to hard-code a value a token names, and that a status color is a fill with its on- color. Each page points to the guides below it for names and examples.
+[docs] `astryx docs layout` and `astryx docs tokens` carry the core rules on the namespace page itself: layout names the frame, structure, spacing and breakpoint rules with a three-region example, and tokens shows the StyleX import and the tokens most code needs, so one read is enough to start.
 
 @josephfarina
