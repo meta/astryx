@@ -2334,6 +2334,56 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * A look set on one member of a family role ("set … background-image …
+ * --on toggle-button", "border-radius 4px --on side-nav-item --state
+ * selected"): the family's other members that draw alike but do not share
+ * it (the theme set nothing of that kind on them), named, with the one line
+ * that gives it to the family. The set itself stays on the member asked.
+ * @param {any} ctx @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @returns {Array<{note: string, run: string[]}>}
+ */
+function familyLeftOut(ctx, slug, data, s) {
+  const thing = kebab(String(s.thing));
+  const selected = /^(?:selected|active)$/.test(String(s.state ?? ''));
+  const look = selected
+    ? /^(?:background(?:-color|-image)?|border-radius|corners)$/.test(thing)
+    : !s.state &&
+      !/^(?:none|0|0px|transparent|initial|unset)$/i.test(
+        String(s.value ?? '').trim(),
+      ) &&
+      (/^(?:background-image|box-shadow|border)$/.test(thing) ||
+        (thing === 'background' && /gradient\(/.test(String(s.value))));
+  if (!look) return [];
+  const groups = groupsOf(ctx);
+  const role = (
+    selected ? ['selected-items'] : ['button-like', 'overlays', 'option-rows']
+  ).find(r => (groups[r] ?? []).includes(String(s.on)));
+  if (!role) return [];
+  const others = (groups[role] ?? []).filter(
+    m =>
+      m !== s.on &&
+      ctx.project.target.has(m) &&
+      !data.settings.some(
+        x =>
+          x.on === m &&
+          kebab(String(x.thing)) === thing &&
+          (x.state ?? '') === (s.state ?? ''),
+      ),
+  );
+  if (!others.length) return [];
+  return [
+    {
+      note: `${others.join(', ')} ${others.length > 1 ? 'are' : 'is'} of ${s.on}'s family (${role}) but ${others.length > 1 ? 'do' : 'does'} not share this look; this gives it to the family (a member set on its own keeps its own):`,
+      run: [
+        `${P} set ${slug} ${s.thing} ${quoteCommandArgument(String(s.value))} --on ${role}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+      ],
+    },
+  ];
+}
+
+/**
  * What a whole-theme change leaves out, by the census, each with the lines
  * that reach it, one per part: corners leave the parts the theme gives
  * corners of their own as they are; square corners leave the parts drawn as
@@ -2348,6 +2398,8 @@ async function loadedForCheck(cwd, slug, skip) {
  * @returns {Array<{note: string, run: string[]}>}
  */
 function leftOutParts(ctx, slug, data, sub, s) {
+  if (sub === 'set' && s.on && !s.when)
+    return familyLeftOut(ctx, slug, data, s);
   if (sub !== 'set' || s.on || s.when || s.state) return [];
   const C = ctx.C;
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
