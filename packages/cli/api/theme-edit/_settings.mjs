@@ -4882,6 +4882,8 @@ function keepShades(pal, kept) {
     /** @type {any} */
     const next = {...v};
     for (const m of /** @type {const} */ (['light', 'dark'])) {
+      // A half kept at the base theme's value stays it.
+      if (/** @type {any} */ (v)[m]?.family === 'literal') continue;
       const r = old[m];
       const color = /** @type {any} */ (pal.candidate.palette)[r.family]?.[m]?.[
         r.stop
@@ -5119,9 +5121,14 @@ export function roleReach(ctx, data, base) {
       roles.add(
         ROLE_OF_DIAL[/** @type {keyof typeof ROLE_OF_DIAL} */ (x.thing)],
       );
+    // A role's own fill set for the whole theme moves the role. Its text
+    // and icon colors (on-, text-, icon-) reach only what reads them, and a
+    // value set for one mode leaves the base theme's parts as they are in
+    // the other.
     const token =
       x.source === 'token' &&
-      /^--color-(?:on-|text-|icon-)?(accent|info|success|warning|error)(?:-[\w-]+)?$/.exec(
+      !x.mode &&
+      /^--color-(accent|info|success|warning|error)(?:-[\w-]+)?$/.exec(
         x.thing,
       )?.[1];
     if (token) roles.add(token);

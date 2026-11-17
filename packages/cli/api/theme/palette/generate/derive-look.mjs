@@ -28,6 +28,12 @@ import {perceptualDelta} from './generator.mjs';
 
 /** @typedef {'light' | 'dark'} Mode */
 /** @typedef {{stop: number, color: string, family?: string, alpha?: string}} Stop */
+
+/**
+ * The stops a category fill may take, by mode: it is also a card's tint, so
+ * it stays pale in light and deep in dark.
+ */
+const TINT_STOPS = /** @type {const} */ ({light: [70, 95], dark: [10, 35]});
 /** @typedef {{family: string, light: Stop, dark: Stop}} DerivedToken */
 
 /** Core's category hues; gray is the neutral family's. */
@@ -342,11 +348,26 @@ export function deriveLookColors({
             Math.abs(a - s0) - Math.abs(b - s0) ||
             (m === 'light' ? b - a : a - b),
         );
+        // It stays a tint: a text color it cannot carry within the tint's
+        // stops leaves the hue unreadable, never a white or black fill.
+        const [lo, hi] = TINT_STOPS[m];
         const reads = text(m);
-        const s =
-          order.find(x =>
-            reads.every(c => contrast(c, at(id, m, x).color) >= TEXT),
-          ) ?? s0;
+        const s = order
+          .filter(x => x >= lo && x <= hi)
+          .find(x => reads.every(c => contrast(c, at(id, m, x).color) >= TEXT));
+        if (s == null) {
+          const worst = Math.min(
+            ...reads.map(c => contrast(c, at(id, m, s0).color)),
+          );
+          unreadable.push({
+            token: `--color-background-${h}`,
+            mode: m,
+            stop: s0,
+            ratio: Math.round(worst * 100) / 100,
+            needs: TEXT,
+          });
+          return at(id, m, s0);
+        }
         return at(id, m, s);
       });
       const on = (/** @type {Mode} */ m) => [fill[m].color, ...grounds(m)];

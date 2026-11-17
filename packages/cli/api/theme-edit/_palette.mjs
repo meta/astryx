@@ -43,6 +43,7 @@ import {
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
 import {
+  CATEGORY_HUES,
   deriveLookColors,
   deriveStatusColors,
   isLookFamily,
@@ -315,6 +316,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {Array<{token: string, mode: Mode, pair: string, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
@@ -2171,6 +2173,180 @@ function generate(config, file = 'palette.config.json') {
   }
 }
 
+/** The text a card tint carries, as the look gives it. */
+const LOOK_TEXT = [
+  '--color-text-primary',
+  '--color-text-secondary',
+  '--color-text-accent',
+];
+/** The grounds the look's colors are read on, as the look gives them. */
+const LOOK_GROUNDS = [
+  '--color-background-body',
+  '--color-background-surface',
+  '--color-background-card',
+];
+
+/** A category or status token: the colors the look derives. @param {string} k */
+const isLookOrStatus = k =>
+  isLookToken(k) ||
+  /^--color-(?:(?:on|text|icon|border)-)?(?:info|success|warning|error)(?:-muted)?$/.test(
+    k,
+  );
+
+/** The parts whose `variant:<hue>` and `color:<hue>` rules paint a category fill. */
+const HUE_FILL_PARTS = ['card', 'clickable-card', 'selectable-card', 'token'];
+
+/** The text roles a rule block can set for what it draws. */
+const TEXT_PROPS = [
+  'color',
+  '--color-text-primary',
+  '--color-text-secondary',
+  '--color-text-accent',
+];
+
+/**
+ * A pair's name as a person reads it: "the blue card's primary text".
+ * @param {string} part @param {string} key @param {string} prop
+ */
+const pairLabel = (part, key, prop) => {
+  const which =
+    /^(?:variant|color):(.+)$/.exec(key)?.[1] ?? key.replace(':', ' ');
+  const role =
+    prop === 'color' ? 'text' : `${prop.replace(/^--color-text-/, '')} text`;
+  return `the ${which === 'base' ? '' : `${which} `}${part.replace(/-/g, ' ')}'s ${role}`;
+};
+
+/**
+ * The text/fill pairs a base theme draws: Core's own (each category's text
+ * on its fill; each status's text on its fill and on its tint) and those of
+ * the base theme's rules (a coloured card's text on its fill, a part's text
+ * color on its background), as `[label, text, fill]` values a mode resolves.
+ * @param {any} base
+ * @returns {Array<[string, string, string]>}
+ */
+function basePairs(base) {
+  /** @type {Array<[string, string, string]>} */
+  const out = [];
+  for (const hue of CATEGORY_HUES)
+    out.push([
+      `${hue} category text`,
+      `var(--color-text-${hue})`,
+      `var(--color-background-${hue})`,
+    ]);
+  for (const role of ['info', 'success', 'warning', 'error']) {
+    out.push([
+      `text on ${role}`,
+      `var(--color-on-${role})`,
+      `var(--color-${role})`,
+    ]);
+    out.push([
+      `text on the ${role} tint`,
+      `var(--color-on-${role}-muted)`,
+      `var(--color-${role}-muted)`,
+    ]);
+  }
+  for (const [part, rules] of Object.entries(
+    /** @type {Record<string, Record<string, any>>} */ (base?.components ?? {}),
+  ))
+    for (const [key, block] of Object.entries(rules ?? {})) {
+      if (!block || typeof block !== 'object') continue;
+      const hue = /^(?:variant|color):([a-z]+)$/.exec(key)?.[1];
+      const fill =
+        block.backgroundColor ??
+        (hue &&
+        HUE_FILL_PARTS.includes(part) &&
+        /** @type {readonly string[]} */ (CATEGORY_HUES).includes(hue)
+          ? `var(--color-background-${hue})`
+          : null);
+      if (typeof fill !== 'string') continue;
+      for (const prop of TEXT_PROPS) {
+        const text = block[prop];
+        if (typeof text === 'string')
+          out.push([pairLabel(part, key, prop), text, fill]);
+      }
+    }
+  return out;
+}
+
+/**
+ * Keeps the base theme's value, in a mode, for each look color (category
+ * or status) that would leave a text/fill pair the base theme draws below
+ * 4.5:1 where the base's own values read better. Pairs are checked again
+ * until none changes, so a fill kept at the base's sends its text back too.
+ * @param {Record<string, any>} tokens - written in place
+ * @param {any} base
+ * @param {Mode[]} modes
+ * @param {(k: string) => boolean} isLook
+ * @returns {Array<{token: string, mode: Mode, pair: string, ratio: number}>}
+ */
+function keepWhereBaseReads(tokens, base, modes, isLook) {
+  /** @type {Array<{token: string, mode: Mode, pair: string, ratio: number}>} */
+  const kept = [];
+  const pairs = basePairs(base);
+  /** A value's color in a mode, with the tokens it reads. @param {string} v @param {Mode} m @param {boolean} now */
+  const colorOf = (v, m, now, depth = 0) => {
+    if (depth > 6) return null;
+    let x = String(v).trim();
+    const pair = /^light-dark\((.*)\)$/is.exec(x);
+    if (pair) {
+      const halves = splitTop(pair[1], ',');
+      if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+    }
+    const ref = /^var\((--[\w-]+)\)$/.exec(x)?.[1];
+    if (ref) {
+      const own = now ? tokens[ref]?.[m]?.color : null;
+      return colorOf(own ?? base?.[m]?.[ref] ?? '', m, now, depth + 1);
+    }
+    const rgb = parseColor(x);
+    if (!rgb) return null;
+    const page = parseColor(
+      String(
+        (now ? tokens['--color-background-body']?.[m]?.color : null) ??
+          base?.[m]?.['--color-background-body'] ??
+          (m === 'light' ? '#ffffff' : '#000000'),
+      ),
+    );
+    const a = alphaOf(x);
+    return a < 1 && page ? compositeOver(rgb, a, page) : rgb;
+  };
+  /** The look tokens a value reads. @param {string} v */
+  const reads = v =>
+    [...String(v).matchAll(/var\((--[\w-]+)\)/g)]
+      .map(x => x[1])
+      .filter(k => isLook(k) && k in tokens);
+  for (let round = 0; round < 6; round++) {
+    let changed = false;
+    for (const m of modes)
+      for (const [label, text, fill] of pairs) {
+        const involved = [...reads(text), ...reads(fill)].filter(
+          k => tokens[k]?.[m]?.family !== 'literal',
+        );
+        if (!involved.length) continue;
+        const [ft, bt] = [colorOf(text, m, true), colorOf(fill, m, true)];
+        const [fb, bb] = [colorOf(text, m, false), colorOf(fill, m, false)];
+        if (!ft || !bt) continue;
+        const now = ratio(ft, bt);
+        const was = fb && bb ? ratio(fb, bb) : 0;
+        if (now >= TEXT || now >= was - 0.01) continue;
+        for (const k of involved) {
+          const value = base?.[m]?.[k];
+          if (value == null) continue;
+          tokens[k] = {
+            ...tokens[k],
+            [m]: {stop: 0, color: String(value), family: 'literal'},
+          };
+          kept.push({token: k, mode: m, pair: label, ratio: round2(now)});
+          changed = true;
+        }
+      }
+    if (!changed) break;
+  }
+  return kept;
+}
+
+/** @param {number} n */
+const round2 = n => Math.round(n * 100) / 100;
+
 /**
  * The stop of a ramp whose color is nearest a color in lightness.
  * @param {Record<string, string> | undefined} ramp
@@ -3022,6 +3198,18 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     if (Object.keys(found).length) lift = found;
   }
 
+  /**
+   * The look's own colors for tokens in a mode: what the palette gives them,
+   * else the base theme's. A color set exactly (a page fill, a link color)
+   * is not the look's: the colors the look grows never follow it.
+   * @param {string[]} ks @param {Mode} m
+   */
+  const lookColors = (ks, m) =>
+    /** @type {string[]} */ (
+      ks
+        .map(k => tokens[k]?.[m]?.color ?? t.colorIn(base?.[m]?.[k], m))
+        .filter(v => v && parseColor(v) && alphaOf(v) >= 1)
+    );
   const categories = mapCategories();
   const statuses = mapStatuses();
   /**
@@ -3042,7 +3230,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       stops,
       modes,
       roles,
-      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      grounds: m => lookColors(LOOK_GROUNDS, m),
       inks: (m, id) =>
         t.onChoices(id, m).map(r => ({
           stop: r.stop,
@@ -3064,28 +3252,13 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
    * @returns {NonNullable<PaletteMapping['categories']>}
    */
   function mapCategories() {
-    /** The theme's color for a token in a mode. @param {string} k @param {Mode} m */
-    const themeColor = (k, m) => {
-      const v =
-        exactOf(k, m) ?? tokens[k]?.[m]?.color ?? t.colorIn(base?.[m]?.[k], m);
-      return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
-    };
     const derived = deriveLookColors({
       palette: /** @type {any} */ (candidate.palette),
       stops,
       modes,
-      text: m =>
-        /** @type {string[]} */ (
-          // Card text, secondary text and links all sit on a card tint.
-          [
-            '--color-text-primary',
-            '--color-text-secondary',
-            '--color-text-accent',
-          ]
-            .map(k => themeColor(k, m))
-            .filter(Boolean)
-        ),
-      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      // Card text, secondary text and links all sit on a card tint.
+      text: m => lookColors(LOOK_TEXT, m),
+      grounds: m => lookColors(LOOK_GROUNDS, m),
       wanted: k => has(k) && !setExactly(k),
     });
     for (const [k, v] of Object.entries(derived.tokens))
@@ -3100,6 +3273,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       ),
     };
   }
+
+  const keptAtBase = keepWhereBaseReads(tokens, base, modes, isLookOrStatus);
 
   // An accent set as a token for one mode moves that mode only: every value
   // the palette gives keeps the base theme's in the other.
@@ -3131,6 +3306,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     lift,
     categories,
     statuses,
+    kept: keptAtBase,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
     unread,
@@ -3334,7 +3510,7 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   ].filter(Boolean);
   if (dial === 'accent' && derived.length)
     out.push(
-      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay pale enough for your text, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
+      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
     );
   /** The first pairs drawn alike, and how many more. @param {boolean} chart */
   const pairs = chart => {
@@ -3354,6 +3530,14 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
     out.push(
       `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
     );
+  const held = pal.kept ?? [];
+  if (held.length) {
+    const tokensHeld = [...new Set(held.map(h => h.token))];
+    const pairs = [...new Set(held.map(h => `${h.pair} (${h.mode})`))];
+    out.push(
+      `${tokensHeld.length} of the colors the look grows keep the base theme's where the base theme draws its own text with them, so it stays readable: ${pairs.slice(0, 3).join(', ')}${pairs.length > 3 ? `, and ${pairs.length - 3} more` : ''}`,
+    );
+  }
   const st = pal.statuses;
   const grown = ['info', 'success', 'warning', 'danger'].filter(
     role => st?.roles[role] === 'derived',
