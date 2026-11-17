@@ -263,7 +263,8 @@ const sheetTriggerStyles = stylex.create({
     position: 'absolute',
     inset: 0,
     minWidth: 0,
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
   },
   endSection: {
     display: 'flex',

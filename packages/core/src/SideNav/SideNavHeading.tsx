@@ -92,7 +92,8 @@ const styles = stylex.create({
   },
   rootCollapsed: {
     justifyContent: 'center',
-    paddingInline: 0,
+    paddingInlineStart: 0,
+    paddingInlineEnd: 0,
   },
   interactive: {
     cursor: {

@@ -283,7 +283,7 @@ const styles = stylex.create({
     },
   },
   withDividers: {
-    gap: 0,
+    rowGap: 0,
   },
   withCounter: {
     counterReset: 'astryx-list',
