@@ -1069,6 +1069,24 @@ render a page for an artifact name an absolute path, and retry after the
 refusal); accepting a relative path that climbs out (a path such as
 `../page.html` reads as a mistake more often than as a choice).
 
+### DEC-17 — A named scaffold path is the file the copy writes
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+`astryx build`'s start and alternative commands, and the place
+`astryx template` suggests when it refuses a path, name where a template goes.
+Outside a Next App Router, that path is the file the copy writes
+(`src/pages/<id>.tsx`, or `<id>.tsx` in the project's components folder), so
+an import of the named path finds the scaffold. A Next App Router page keeps
+its route folder, because Next serves the folder's `page.tsx`. A name that an
+import already resolves to (a folder's index, or a file with another
+extension) counts as taken, so the new file neither shadows a module nor is
+shadowed by one.
+
+Rejected: naming a folder that holds `page.tsx` (an import of the folder does
+not resolve without an index file); writing an index file beside each scaffold
+(a second file that the template does not own).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |

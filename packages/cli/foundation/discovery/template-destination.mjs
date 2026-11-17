@@ -41,9 +41,12 @@ import {
  * of the folder does not resolve.
  *
  * When that path exists, or another page already serves its URL (a page in
- * a route group, a Pages Router file), the id becomes `<id>-2`, `<id>-3` and
- * so on, the first one that is free, so the command runs as printed, the
- * app still builds, and nothing the app owns is written into.
+ * a route group, a Pages Router file), or, for a file outside the App Router,
+ * an import of it already resolves to a module (a folder's index, or a file
+ * with another extension), the id becomes `<id>-2`, `<id>-3` and so on, the
+ * first one that is free, so the command runs as printed, the app still
+ * builds, an import of the path finds the new file, and nothing the app owns
+ * is written into.
  *
  * @param {string} projectDir the folder the command runs in
  * @param {'page' | 'block'} type
@@ -61,7 +64,12 @@ export function templateDestination(projectDir, type, id) {
         : routes.pages === 'pages' && !routes.app
           ? 'components'
           : 'src/components';
-    return firstFree(projectDir, id, n => `${parent}/${n}.tsx`);
+    return firstFree(
+      projectDir,
+      id,
+      n => `${parent}/${n}.tsx`,
+      rel => moduleAt(projectDir, rel),
+    );
   }
   if (routes.app) {
     const app = path.join(projectDir, routes.app);
@@ -85,7 +93,41 @@ export function templateDestination(projectDir, type, id) {
       file => pagesRouterPage(projectDir, file.slice(pages.length + 1, -4)),
     );
   }
-  return firstFree(projectDir, id, n => `src/pages/${n}.tsx`);
+  return firstFree(
+    projectDir,
+    id,
+    n => `src/pages/${n}.tsx`,
+    rel => moduleAt(projectDir, rel),
+  );
+}
+
+/** The extensions a bare import of a path resolves to, besides a folder. */
+const IMPORT_EXTENSIONS = [
+  'tsx',
+  'ts',
+  'mts',
+  'cts',
+  'jsx',
+  'js',
+  'mjs',
+  'cjs',
+  'json',
+];
+
+/**
+ * The module a bare import of `rel` without its extension already resolves
+ * to, or null: a folder at that path (its index) or a file with any import
+ * extension. A new file there would shadow it, or be shadowed by it.
+ * @param {string} projectDir
+ * @param {string} rel a `.tsx` path
+ * @returns {string | null}
+ */
+function moduleAt(projectDir, rel) {
+  const stem = path.join(projectDir, rel.slice(0, -'.tsx'.length));
+  if (fs.existsSync(stem)) return stem;
+  for (const ext of IMPORT_EXTENSIONS)
+    if (fs.existsSync(`${stem}.${ext}`)) return `${stem}.${ext}`;
+  return null;
 }
 
 /**

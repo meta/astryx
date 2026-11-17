@@ -168,4 +168,23 @@ describe('templateDestination', () => {
       'src/pages/settings-2.tsx',
     );
   });
+
+  it('skips a name an import already resolves to, so the new file neither shadows nor is shadowed', () => {
+    write('src/pages/settings/index.tsx');
+    expect(templateDestination(dir, 'page', 'settings')).toBe(
+      'src/pages/settings-2.tsx',
+    );
+    write('src/pages/reports.ts');
+    expect(templateDestination(dir, 'page', 'reports')).toBe(
+      'src/pages/reports-2.tsx',
+    );
+    write('src/components/CardShowcase/index.tsx');
+    expect(templateDestination(dir, 'block', 'CardShowcase')).toBe(
+      'src/components/CardShowcase-2.tsx',
+    );
+    write('src/components/ButtonShowcase.js');
+    expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
+      'src/components/ButtonShowcase-2.tsx',
+    );
+  });
 });
