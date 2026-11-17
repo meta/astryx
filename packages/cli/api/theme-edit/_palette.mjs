@@ -491,6 +491,8 @@ const NEUTRAL_STOPS = wordTable(
 );
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
 const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
+/** Neutral tokens a tinted gray draws inside its ramp too: primary ink. */
+const TINTED_INK = new Set(['--color-text-primary', '--color-icon-primary']);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
 const NEUTRAL_TINTS = wordTable(
   Object.fromEntries(
@@ -2646,7 +2648,13 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         token === '--color-icon-secondary'
       )
         continue;
-      const shade = NEUTRAL_INSIDE.has(token) ? atInside : at;
+      // Primary text and icons of a tinted gray carry its tint: the shade
+      // inside the ramp's black and white ends, which always reads.
+      const shade =
+        NEUTRAL_INSIDE.has(token) ||
+        (TINTED_INK.has(token) && !isGray(neutral.seed))
+          ? atInside
+          : at;
       put(
         token,
         'neutral',
