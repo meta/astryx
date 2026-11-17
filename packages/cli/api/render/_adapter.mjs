@@ -53,6 +53,7 @@ import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
+import {component} from '../component/component.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -489,6 +490,54 @@ function servedSet(input) {
   }
 }
 
+/** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
+const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
+
+/**
+ * A warning for each string a page gives a Core component's prop that the
+ * prop's closed union does not hold (`<Button variant="danger">`): the
+ * component draws its default look, and nothing else says so. The union
+ * comes from the component's docs, the props `astryx component <Name>`
+ * reads; a component or prop with no doc entry, or a prop whose type is not
+ * a closed union, is not checked.
+ * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
+ * @param {string} dir the page's folder, whose Core the docs come from
+ * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
+ */
+async function propValueWarnings(values, dir) {
+  /** @type {Map<string, any[] | null>} */
+  const docs = new Map();
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  const seen = new Set();
+  for (const v of values) {
+    if (!docs.has(v.component)) {
+      /** @type {any[] | null} */
+      let props = null;
+      try {
+        const answer = /** @type {any} */ (await component(v.component, {cwd: dir, props: true}));
+        props = Array.isArray(answer?.data) ? answer.data : null;
+      } catch {
+        // A component the docs do not describe is not checked.
+      }
+      docs.set(v.component, props);
+    }
+    const prop = docs.get(v.component)?.find(p => p?.name === v.prop);
+    if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
+    const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
+    if (allowed.includes(v.value)) continue;
+    const key = `${v.file}:${v.line}:${v.component}:${v.prop}:${v.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const kinds = v.prop.endsWith('s') ? `${v.prop} values` : `${v.prop}s`;
+    warnings.push({
+      code: 'unknown-prop-value',
+      message: `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${v.value}"; its ${kinds} are ${allowed.join(', ')}.`,
+    });
+  }
+  return warnings;
+}
+
 /**
  * Render a page module to one HTML file and write it.
  * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
@@ -522,6 +571,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   } catch (e) {
     throw asAstryxError(e, path.dirname(input), cwd);
   }
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], path.dirname(input))));
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {
