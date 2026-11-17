@@ -9,18 +9,32 @@
  * @output watchOutsidePress, and useOutsidePress, one watch per component.
  *   noteOutsideDismissal and outsideDismissalCount keep a per-document count
  *   of layers that an outside press or focus move closed. The inside tests
- *   are isPressInsideOwnedLayer and isFocusInsideOwnedLayer
+ *   are isPressInsideOwnedLayer and isFocusInsideOwnedLayer. hasPanBegun is
+ *   the pan test that the watch and an anchored menu's outside hold share
  * @position Internal to Layer: the outside-press dismissal for a manual
  *   popover whose owner decides what counts as inside. Not exported.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
 import {touchActionAllowsPan} from '../utils/scrollView';
 import {sharedWeakMap} from '../utils/sharedRealm';
-import {hasPanBegun} from './panStart';
+
+/** Whether a press that went down at `start` has begun to pan at `point`. */
+export function hasPanBegun(
+  start: {readonly x: number; readonly y: number},
+  point: {readonly clientX: number; readonly clientY: number},
+): boolean {
+  return (
+    Math.max(
+      Math.abs(point.clientX - start.x),
+      Math.abs(point.clientY - start.y),
+    ) >= UIKIT_PAN.hysteresis.value
+  );
+}
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */

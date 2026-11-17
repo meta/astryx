@@ -21,7 +21,7 @@ import {
   type InputHoldScope,
 } from './inputHold';
 import {subscribeModalOutlets, type ModalOutletChange} from './modalOutlet';
-import {hasPanBegun} from './panStart';
+import {hasPanBegun} from './outsidePress';
 
 function deferred() {
   let resolve: () => void = () => {};

@@ -51,8 +51,7 @@ import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {holdInput} from '../Layer/inputHold';
-import {noteOutsideDismissal} from '../Layer/outsidePress';
-import {hasPanBegun} from '../Layer/panStart';
+import {hasPanBegun, noteOutsideDismissal} from '../Layer/outsidePress';
 import {usePopoverSurfaceMotion} from '../Popover/usePopoverSurfaceMotion';
 import {
   claimPress,
