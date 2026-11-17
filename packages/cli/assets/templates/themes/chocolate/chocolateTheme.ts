@@ -66,6 +66,16 @@ const SECONDARY_SELECTOR = {
 } as const;
 
 /**
+ * Secondary text on a coloured card, where a selected row or a numbered
+ * citation adds the accent tint: light is stop 35 of the astryx-oklch-v1 ramp
+ * grown from #B88859 (anchored at its own stop, 60), one stop deeper than the
+ * page's. On the yellow card, dark is that ramp's stop 75, the nearest
+ * lighter stop that reads there.
+ */
+const SECONDARY_ON_TINT = 'light-dark(#7b4200, #c4a882)';
+const SECONDARY_ON_YELLOW = 'light-dark(#894d0e, #e4ad77)';
+
+/**
  * Link text on a cool tinted card. Light: stop 40 of the astryx-oklch-v1
  * ramp grown from the accent #8C5927 (anchored at its own stop, 45), the
  * nearest stop that reads at 4.5:1 on those cards. Dark keeps the accent.
@@ -292,6 +302,7 @@ export const chocolateTheme = defineTheme({
       },
       'variant:blue': {
         '--color-text-accent': LINK_ON_TINT,
+        '--color-text-secondary': SECONDARY_ON_TINT,
       },
       'variant:cyan': {
         '--color-text-accent': LINK_ON_TINT,
@@ -301,12 +312,18 @@ export const chocolateTheme = defineTheme({
       },
       'variant:purple': {
         '--color-text-accent': LINK_ON_TINT,
+        '--color-text-secondary': SECONDARY_ON_TINT,
       },
       'variant:red': {
         '--color-text-accent': LINK_ON_TINT,
+        '--color-text-secondary': SECONDARY_ON_TINT,
       },
       'variant:teal': {
         '--color-text-accent': LINK_ON_TINT,
+        '--color-text-secondary': SECONDARY_ON_TINT,
+      },
+      'variant:yellow': {
+        '--color-text-secondary': SECONDARY_ON_YELLOW,
       },
     },
 

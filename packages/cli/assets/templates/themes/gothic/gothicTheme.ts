@@ -61,6 +61,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
   ['table-row', 'base', STRIPED_ROW],
+  ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
   ['text-area', 'base'],
@@ -98,8 +99,11 @@ function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
       [key]: selector
         ? {
             ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
             [selector]: {
               ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
               ...((rule as Record<string, object>)[selector] ?? {}),
             },
           }
@@ -418,6 +422,10 @@ export const gothicTheme = defineTheme({
         padding: 'var(--spacing-3)',
         borderRadius: 'var(--radius-container)',
       },
+      // On the accent tint of a selected row or a numbered citation over the
+      // card's fill, secondary text needs the next stop.
+      'variant:default': {'--color-text-secondary': neutral.dark[80]},
+      'variant:muted': {'--color-text-secondary': neutral.dark[80]},
       // Categorical variants — flip --color-text-primary so child
       // XDSText labels stay readable against the dusty pastel bg.
       'variant:blue': {

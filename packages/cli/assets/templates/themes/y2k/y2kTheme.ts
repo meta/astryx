@@ -31,10 +31,20 @@ const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
 // The theme's own text and link colours, which a part that paints a fill
 // of its own sets again (OWN_FILL_RULES).
+/**
+ * Secondary text on the accent tint (a selected row, a dropzone's hint, a
+ * numbered citation). A coloured card sets its own, dark like the rest of
+ * its ink; the parts that paint a fill of their own set it back.
+ */
+const LIFTED_SECONDARY = '--astryx-theme-y2k-lifted-secondary';
+const LIFTED_ON_PAGE = `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`;
+const LIFTED_ON_COLOURED_CARD = `light-dark(${neutral.light[30]}, ${neutral.dark[35]})`;
+
 const SURFACE_TEXT = {
   '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
   '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[70]})`,
   '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
+  [LIFTED_SECONDARY]: LIFTED_ON_PAGE,
 };
 
 /** Core's selector for a striped table's painted rows. */
@@ -68,6 +78,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
   ['table-row', 'base', STRIPED_ROW],
+  ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
   ['text-area', 'base'],
@@ -105,8 +116,11 @@ function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
       [key]: selector
         ? {
             ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
             [selector]: {
               ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
               ...((rule as Record<string, object>)[selector] ?? {}),
             },
           }
@@ -192,6 +206,7 @@ const SECONDARY_COMPLEX_SELECTOR = {
 } as const;
 
 export const y2kTheme = defineTheme({
+  localTokens: {[LIFTED_SECONDARY]: LIFTED_ON_PAGE},
   name: 'y2k',
 
   typography: {
@@ -408,22 +423,22 @@ export const y2kTheme = defineTheme({
     // both.
     item: {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     'tree-list-item': {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     citation: {
       'variant:number': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     'file-input': {
       'mode:dropzone': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     // Display sizes use a Crimson Text serif, distinct from the Poppins
@@ -552,51 +567,61 @@ export const y2kTheme = defineTheme({
         padding: 'var(--spacing-3)',
       },
       'variant:blue': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:cyan': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:gray': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:green': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:orange': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:pink': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:purple': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:red': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:teal': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:yellow': {
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,

@@ -12,8 +12,11 @@
  *   popover, the muted fill and every card fill (with the card variant's own
  *   token overrides), and on the surfaces that repaint inside a card: a
  *   nested default card, a transparent card, a text field, inline code, an
- *   open menu, a selected segment, an input group addon, a step number and a
- *   striped table row;
+ *   open menu, a selected segment, an input group addon, a step number, a
+ *   banner and a striped table row (whose cell color the table root fixes);
+ * - secondary text on a selected row, a dropzone and a numbered citation on
+ *   the page, and on a selected row and a numbered citation inside every
+ *   card;
  * - selected-item and numbered-citation text on the accent tint, with the
  *   theme's own rules for those parts;
  * - status text on its pale status fill (a field status, a banner);
@@ -134,6 +137,11 @@ const NESTED = {
       ...rule(theme, 'table-row'),
       ...(rule(theme, 'table-row')[STRIPED_ROW] ?? {}),
     }),
+    color: 'the table root sets the cell text color',
+  },
+  banner: {
+    fill: '--color-background-card',
+    own: theme => rule(theme, 'banner-content'),
   },
 };
 
@@ -145,6 +153,7 @@ const ON_ACCENT_TINT = {
   'selected item': ['item', 'selected'],
   'selected tree item': ['tree-list-item', 'selected'],
   'numbered citation': ['citation', 'variant:number'],
+  dropzone: ['file-input', 'mode:dropzone'],
 };
 
 function rows() {
@@ -185,7 +194,9 @@ function rows() {
         if (cardFill == null) continue;
         const cardLayers = [cardFill, body];
         roles(`${variant} card`, card, cardLayers);
-        for (const [name, {fill: inner, own}] of Object.entries(NESTED)) {
+        for (const [name, {fill: inner, own, color}] of Object.entries(
+          NESTED,
+        )) {
           const nested = themeTokens(theme, {
             ...cardOverrides(theme, variant),
             ...own(theme),
@@ -194,6 +205,41 @@ function rows() {
             ? [at(nested, inner), ...cardLayers]
             : cardLayers;
           roles(`${name} in a ${variant} card`, nested, layers);
+          // Text whose color an ancestor fixes (a table sets it on its
+          // root) reads the card's ink, unless the part sets `color` again.
+          if (color) {
+            const set = own(theme).color;
+            push({
+              ...base,
+              where: `${name} in a ${variant} card (${color})`,
+              role: 'color',
+              text: set
+                ? resolveColor(set, nested, modeIndex)
+                : at(card, '--color-text-primary'),
+              layers,
+            });
+          }
+        }
+        // Selected rows and a numbered citation inside the card: the accent
+        // tint over the card fill. (A dropzone paints its own field fill;
+        // while a file is dragged over it, Core replaces that fill with the
+        // tint and gives themes no rule for the state.)
+        for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
+          if (part === 'file-input') continue;
+          const tokens = themeTokens(theme, {
+            ...cardOverrides(theme, variant),
+            ...rule(theme, part),
+            ...rule(theme, part, key),
+          });
+          const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
+          for (const role of ['--color-text-primary', '--color-text-secondary'])
+            push({
+              ...base,
+              where: `${where} in a ${variant} card`,
+              role,
+              text: at(tokens, role),
+              layers,
+            });
         }
       }
       for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {

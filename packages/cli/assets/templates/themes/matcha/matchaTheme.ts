@@ -314,7 +314,7 @@ export const matchaTheme = defineTheme({
         padding: 'var(--spacing-3)',
       },
       'variant:blue': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
       },
       'variant:cyan': {
         '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
@@ -332,19 +332,20 @@ export const matchaTheme = defineTheme({
         '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:purple': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
       },
       'variant:red': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
       },
       'variant:teal': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
       },
       'variant:yellow': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[75]})`,
       },
       'variant:muted': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-primary': `light-dark(${neutral.light[20]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
     },
     section: {

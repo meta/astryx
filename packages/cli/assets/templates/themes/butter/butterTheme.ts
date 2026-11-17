@@ -35,10 +35,22 @@ const lightDark = (light: string, dark: string): string =>
 
 // The theme's own text and link colours, which a part that paints a fill
 // of its own sets again (OWN_FILL_RULES).
+/**
+ * Secondary text on the accent tint (a selected row, a dropzone's hint, a
+ * numbered citation): the nearest stop that reads at 4.5:1 on the tint over
+ * the page, a card and the muted fill. A coloured card sets its own, dark
+ * like the rest of its ink; the parts that paint a fill of their own set it
+ * back.
+ */
+const LIFTED_SECONDARY = '--astryx-theme-butter-lifted-secondary';
+const LIFTED_ON_PAGE = lightDark(neutral.light[40], neutral.dark[85]);
+const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[40]);
+
 const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
   '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+  [LIFTED_SECONDARY]: LIFTED_ON_PAGE,
 };
 
 /** Core's selector for a striped table's painted rows. */
@@ -72,6 +84,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
   ['table-row', 'base', STRIPED_ROW],
+  ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
   ['text-area', 'base'],
@@ -109,8 +122,11 @@ function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
       [key]: selector
         ? {
             ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
             [selector]: {
               ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
               ...((rule as Record<string, object>)[selector] ?? {}),
             },
           }
@@ -215,6 +231,7 @@ const INPUT_STATUS_VARS = {
 } as const;
 
 export const butterTheme = defineTheme({
+  localTokens: {[LIFTED_SECONDARY]: LIFTED_ON_PAGE},
   name: 'butter',
 
   typography: {
@@ -455,22 +472,22 @@ export const butterTheme = defineTheme({
     // both.
     item: {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     'tree-list-item': {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     citation: {
       'variant:number': {
-        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     'file-input': {
       'mode:dropzone': {
-        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `var(${LIFTED_SECONDARY})`,
       },
     },
     // TopNav uses Butter's blue accent: the heading and the selected item are
@@ -597,51 +614,61 @@ export const butterTheme = defineTheme({
       },
       'variant:blue': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:cyan': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:gray': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:green': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:orange': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:pink': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:purple': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:red': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:teal': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:yellow': {
         '--color-text-accent': accent.light[35],
+        [LIFTED_SECONDARY]: LIFTED_ON_COLOURED_CARD,
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
