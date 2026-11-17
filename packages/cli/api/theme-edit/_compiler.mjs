@@ -39,6 +39,13 @@ const SOFT =
 /** @typedef {import('./_parts.mjs').PartData} PartData */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
+/** The aspect group each property belongs to, the first group that lists it. */
+const GROUP_OF_PROP = new Map(
+  Object.entries(GROUPS)
+    .flatMap(([g, ps]) => ps.map(p => /** @type {[string, string]} */ ([p, g])))
+    .reverse(),
+);
+
 /**
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {PartData} parts
@@ -90,8 +97,7 @@ export function makeCompiler(project, parts) {
   const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
-  const groupOfProp = p =>
-    Object.entries(GROUPS).find(([, ps]) => ps.includes(p))?.[0] ?? null;
+  const groupOfProp = p => GROUP_OF_PROP.get(p) ?? null;
 
   /** @param {string} t @returns {string | null} */
   function groupOfToken(t) {
