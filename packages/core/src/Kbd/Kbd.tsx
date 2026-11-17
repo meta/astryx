@@ -96,9 +96,14 @@ const MODIFIER_SHORT_TEXT = new Map<string, string>([
   ['meta', '@astryx.kbd.key.windowsShort'],
 ]);
 
+/** The key names `useHotkeys` also accepts, read as the names Kbd shows. */
 const KBD_KEY_ALIASES = new Map<string, string>([
   ['esc', 'escape'],
   ['return', 'enter'],
+  ['arrowup', 'up'],
+  ['arrowdown', 'down'],
+  ['arrowleft', 'left'],
+  ['arrowright', 'right'],
 ]);
 
 /** The server render has no platform, so it uses the non-Apple text. */
@@ -113,6 +118,9 @@ function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
   }
   if (key === 'escape') {
     return t('@astryx.kbd.key.escapeShort');
+  }
+  if (key === 'space') {
+    return t('@astryx.kbd.key.space');
   }
   return KEY_DISPLAY.get(key) ?? key.toUpperCase();
 }
@@ -135,6 +143,7 @@ const KEY_LABEL = new Map<string, string>([
   ['left', '@astryx.kbd.key.left'],
   ['right', '@astryx.kbd.key.right'],
   ['plus', '@astryx.kbd.key.plus'],
+  ['space', '@astryx.kbd.key.space'],
 ]);
 
 function getKeyLabel(key: string, isMac: boolean, t: TranslatorFn): string {
@@ -160,7 +169,9 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
    * Special keys: mod, ctrl, alt and shift (Apple symbols on Apple platforms,
    * short text such as "Ctrl" elsewhere and before hydration), meta (⌘ on
    * Apple platforms, "Win" text elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, and right.
-   * Aliases: "esc" for "escape" and "return" for "enter".
+   * Aliases, the names `useHotkeys` also accepts: "esc" for "escape",
+   * "return" for "enter", and "arrowup", "arrowdown", "arrowleft" and
+   * "arrowright" for the arrows. "space" shows the Space key.
    * Use "plus" to render a literal "+" key (e.g. "shift+plus").
    *
    * @example

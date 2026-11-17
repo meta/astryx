@@ -233,9 +233,31 @@ describe('Kbd', () => {
     expect(screen.getByRole('img')).toHaveAttribute('aria-label', label);
   });
 
+  // The names useHotkeys accepts for a combo's key: its aliases and the
+  // `event.key` names of the arrows.
+  it.each([
+    {alias: 'space', display: 'Space', label: 'Space'},
+    {alias: 'arrowup', display: '\u2191', label: 'Up arrow'},
+    {alias: 'arrowdown', display: '\u2193', label: 'Down arrow'},
+    {alias: 'arrowleft', display: '\u2190', label: 'Left arrow'},
+    {alias: 'arrowright', display: '\u2192', label: 'Right arrow'},
+    {alias: 'ArrowUp', display: '\u2191', label: 'Up arrow'},
+  ])(
+    'shows the $alias key a useHotkeys combo accepts by its name',
+    ({alias, display, label}) => {
+      render(<Kbd keys={alias} />);
+      expect(screen.getByText(display)).toBeInTheDocument();
+      expect(screen.getByRole('img')).toHaveAttribute('aria-label', label);
+    },
+  );
+
   it.each([
     {alias: 'esc', canonical: 'escape'},
     {alias: 'return', canonical: 'enter'},
+    {alias: 'arrowup', canonical: 'up'},
+    {alias: 'arrowdown', canonical: 'down'},
+    {alias: 'arrowleft', canonical: 'left'},
+    {alias: 'arrowright', canonical: 'right'},
   ])('$alias renders identically to $canonical', ({alias, canonical}) => {
     const {container, rerender} = render(<Kbd keys={canonical} />);
     const text = container.textContent;

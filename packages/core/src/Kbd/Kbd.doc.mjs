@@ -21,7 +21,7 @@ const bestPractices = [
   {
     guidance: true,
     description:
-      'Place shortcuts near the action they trigger: in a tooltip, menu item, or inline instruction.',
+      'Place shortcuts near the action they trigger: in a menu item or an inline instruction. In a Tooltip, write the shortcut in the tooltip\'s own text (for example "Search (/)"): Kbd keeps its light-surface colors on the tooltip\'s dark surface, where its keys are hard to read.',
   },
   {
     guidance: true,
@@ -67,7 +67,7 @@ export const docs = {
       name: 'keys',
       type: 'string',
       description:
-        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (⌘ on Apple platforms, Ctrl elsewhere), ctrl, alt and shift (Apple symbols on Apple platforms, Ctrl, Alt and Shift text elsewhere), meta (⌘ on Apple platforms, Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
+        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (⌘ on Apple platforms, Ctrl elsewhere), ctrl, alt and shift (Apple symbols on Apple platforms, Ctrl, Alt and Shift text elsewhere), meta (⌘ on Apple platforms, Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases (the names useHotkeys also accepts): esc for escape, return for enter, and arrowup, arrowdown, arrowleft and arrowright for the arrows. space shows the Space key.',
       required: true,
     },
     {
@@ -100,7 +100,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
 };
@@ -114,7 +114,7 @@ export const docsZh = {
       name: 'keys',
       type: 'string',
       description:
-        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Apple 平台上为 ⌘，其他平台为 Ctrl）、ctrl、alt 和 shift（Apple 平台上为符号，其他平台为 Ctrl、Alt、Shift 文字）、meta（Apple 平台上为 ⌘，其他平台及水合前为 Win）、enter、backspace、escape、tab、up、down、left、right、plus。别名：esc 等同于 escape，return 等同于 enter。',
+        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Apple 平台上为 ⌘，其他平台为 Ctrl）、ctrl、alt 和 shift（Apple 平台上为符号，其他平台为 Ctrl、Alt、Shift 文字）、meta（Apple 平台上为 ⌘，其他平台及水合前为 Win）、enter、backspace、escape、tab、up、down、left、right、plus。别名（useHotkeys 也接受的名称）：esc 等同于 escape，return 等同于 enter，arrowup、arrowdown、arrowleft、arrowright 等同于方向键。space 显示空格键。',
       required: true,
     },
     {
@@ -147,7 +147,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
 };
@@ -155,15 +155,15 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Renders keyboard shortcut as styled key badges. Use in tooltips, menus + help text to show key combinations.',
+    'Renders keyboard shortcut as styled key badges. Use in menus + help text; in a Tooltip, write the shortcut as text.',
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
   propDescriptions: {
-    keys: 'Shortcut string. "+" separates keys. Special: mod (⌘ on Apple, Ctrl elsewhere), ctrl, alt, shift (Apple symbols on Apple, text elsewhere), meta (⌘ on Apple platforms, Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape, return for enter.',
+    keys: 'Shortcut string. "+" separates keys. Special: mod (⌘ on Apple, Ctrl elsewhere), ctrl, alt, shift (Apple symbols on Apple, text elsewhere), meta (⌘ on Apple platforms, Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases (the names useHotkeys also accepts): esc for escape, return for enter, arrowup/arrowdown/arrowleft/arrowright for the arrows. space shows the Space key.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value.',
     className:
