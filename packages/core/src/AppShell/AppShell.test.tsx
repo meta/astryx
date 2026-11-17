@@ -750,6 +750,139 @@ describe('AppShell', () => {
         }
       },
     );
+
+    describe('top nav', () => {
+      const UNREAD_REGION = 'TopNav__unreadRegionStyles.';
+
+      function topNavWithAllRegions() {
+        return (
+          <TopNav
+            heading={<TopNavHeading heading="App" />}
+            centerContent={<TopNavItem label="Docs" href="/docs" />}
+            endContent={<button type="button">Sign in</button>}>
+            <TopNavItem label="Home" href="/" />
+          </TopNav>
+        );
+      }
+
+      it("hides the full bar's start and center content below the breakpoint in the server HTML", () => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        const hidden = host.querySelectorAll(`[class*="${UNREAD_REGION}md"]`);
+        expect(hidden).toHaveLength(2);
+        expect(hidden[0].textContent).toBe('Home');
+        expect(hidden[1].textContent).toBe('Docs');
+        // The heading and the end content keep painting, as in the mobile bar.
+        expect(
+          host
+            .querySelector('.astryx-top-nav-heading')
+            ?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+        expect(
+          host.querySelector('button')?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+      });
+
+      it('uses the rule of the selected width point', () => {
+        const host = serverHost(
+          <AppShell
+            topNav={topNavWithAllRegions()}
+            mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(
+          host.querySelectorAll(`[class*="${UNREAD_REGION}lg"]`),
+        ).toHaveLength(2);
+      });
+
+      it.each([
+        ['mobileNav false, which keeps the full bar', false as const],
+        [
+          'a mobileNav node, which keeps the full bar',
+          <MobileNav key="n">Menu</MobileNav>,
+        ],
+        ['an SSR hint that renders the mobile bar', {defaultIsMobile: true}],
+        ['breakpoint none', {breakpoint: 'none' as const}],
+      ])('adds no rule for %s', (_case, mobileNav) => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()} mobileNav={mobileNav}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule for a theme that moves the width point', () => {
+        const theme = defineTheme({
+          name: 'unread-top-nav-width-theme',
+          adaptations: {widthBreakpoints: {md: 900}},
+        });
+        const host = serverHost(
+          <Theme theme={theme}>
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          </Theme>,
+        );
+
+        expect(host.textContent).toContain('Home');
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule to a TopNav outside AppShell', () => {
+        const host = serverHost(topNavWithAllRegions());
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it.each([
+        ['below the breakpoint', true],
+        ['at or above the breakpoint', false],
+      ])(
+        'drops the rule once hydration reads the window %s',
+        async (_case, isBelow) => {
+          const app = (
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          );
+          const host = document.createElement('div');
+          let root: ReturnType<typeof hydrateRoot> | undefined;
+          try {
+            document.body.appendChild(host);
+            host.innerHTML = renderToString(app);
+            const serverNav = host.querySelector('nav.astryx-top-nav');
+            expect(host.innerHTML).toContain(UNREAD_REGION);
+
+            mockMql = createMockMatchMedia(isBelow);
+            vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+            await act(async () => {
+              root = hydrateRoot(host, app);
+            });
+
+            expect(host.innerHTML).not.toContain(UNREAD_REGION);
+            const nav = host.querySelector('nav.astryx-top-nav');
+            expect(nav?.getAttribute('data-mode')).toBe(
+              isBelow ? 'mobile-bar' : null,
+            );
+            // Above the breakpoint the full bar stays the server's element.
+            if (!isBelow) {
+              expect(nav).toBe(serverNav);
+            }
+          } finally {
+            act(() => root?.unmount());
+            host.remove();
+          }
+        },
+      );
+    });
   });
 
   // ===========================================================================
