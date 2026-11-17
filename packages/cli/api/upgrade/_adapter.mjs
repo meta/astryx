@@ -793,7 +793,8 @@ export async function runCoreCodemods(
  * @param {string} cwd
  * @param {string[]} [extraIntegrationSpecs] explicit `--integration` specs
  * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger, iconSets: boolean}>}
- *   `iconSets`: the project sets `experimental.iconSet`
+ *   `iconSets`: icon features are on (an installed icon-set package or
+ *   `experimental.iconSet`)
  */
 export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   // The CLI debug preflight may already have imported this config before core

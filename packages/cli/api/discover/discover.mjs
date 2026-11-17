@@ -177,7 +177,7 @@ export function answersQueries(project) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
-  // An experimental kind is read only in a project that opts in (spec:AST-017
+  // An experimental kind is read only in a project where it is on (spec:AST-017
   // FR27); only then does `--type` take it, or an error name it.
   const kinds =
     options.type != null &&

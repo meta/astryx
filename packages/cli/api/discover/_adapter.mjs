@@ -870,8 +870,10 @@ export async function callSources(project, request = {}, options = {}) {
     ],
     // Source order: the first entry per integration is the one discover
     // keeps. Official packages are put first only where discover shows them.
-    // An experimental kind is a kind this project does not read unless it
-    // opts in, so its items are ignored like any unknown kind (FR7).
+    // An experimental kind is a kind this project does not read unless that
+    // kind is on here (for icon sets: an installed icon-set package or
+    // `experimental.iconSet`), so its items are ignored like any unknown kind
+    // (FR7).
     packages: withoutUnreadKinds(project, [...own.packages, ...added]),
   };
 }

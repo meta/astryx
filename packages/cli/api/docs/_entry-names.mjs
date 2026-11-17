@@ -67,7 +67,8 @@ export async function cliDocsRoutesNow() {
  * The project's routes, worked out now from its docs tree. Without icon sets
  * the tree's inputs are the CLI's own docs and the integrations' doc files,
  * so only those are read: each doc of exported literals as data, any other
- * imported. Icon sets join the tree only where the project's config opts in,
+ * imported. Icon sets join the tree only where icon features are on (an
+ * installed icon-set package or `experimental.iconSet`),
  * so with one the project is loaded and its whole catalog read.
  * @param {string} cwd
  * @param {Array<{docs?: unknown, iconSets?: unknown, name?: string} | null | undefined>} integrations
