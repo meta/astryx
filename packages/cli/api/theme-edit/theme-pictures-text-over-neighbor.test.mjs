@@ -15,6 +15,10 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// Its assertions read what the browser measures on the drawn sheets.
+realRenders(true);
 
 const T = 300_000;
 /** @type {string} */
