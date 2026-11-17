@@ -39,18 +39,22 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
     return test.skip();
   }
   await themeEditNew('t', {cwd, like: 'neutral'});
-  // A media surface restates the root's scheme-dependent values; those
-  // copies are not lifts of their own.
+  // The lifted rules, not the base theme's own coloured-card secondary
+  // text, which its card rule sets for each card colour. A media surface
+  // restates the root's scheme-dependent values; those copies are not lifts
+  // of their own.
   const MEDIA_BLOCK = /\[data-astryx-media="(?:dark|light)"\] \{[^}]*\}/g;
   /** @param {string} css */
   const lifts = css =>
     [
       ...css
         .replace(MEDIA_BLOCK, '')
-        .matchAll(/--color-text-secondary: (light-dark\([^;]*\));/g),
+        .matchAll(
+          /\n {2}([^{\n]+) \{\s*--color-text-secondary: (light-dark\([^;]*\));/g,
+        ),
     ]
-      .slice(1)
-      .map(m => m[1]);
+      .filter(m => !/^\.astryx-card\[data-variant=/.test(m[1]))
+      .map(m => m[2]);
   /** @param {string} css */
   const mediaCopies = css =>
     (css.match(MEDIA_BLOCK) ?? []).filter(block =>

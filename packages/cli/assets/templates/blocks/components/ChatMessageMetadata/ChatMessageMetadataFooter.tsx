@@ -19,8 +19,15 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
 } from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useClipboard} from '@astryxdesign/core/hooks';
+
+const MESSAGE =
+  'Q1 revenue reached $2.4B, up 18% year-over-year. Enterprise subscriptions drove 62% of the growth, while ad revenue held steady at $890M.';
 
 export default function ChatMessageMetadataFooter() {
+  const showToast = useToast();
+  const {copy} = useClipboard();
   return (
     <ChatMessageList style={{maxWidth: 500}}>
       <ChatMessage sender="user">
@@ -51,7 +58,11 @@ export default function ChatMessageMetadataFooter() {
                     size="sm"
                     icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
                     isIconOnly
-                    onClick={() => {}}
+                    onClick={() =>
+                      void copy(MESSAGE).then(copied =>
+                        showToast({body: copied ? 'Copied' : 'Could not copy'}),
+                      )
+                    }
                   />
                   <Button
                     label="Retry"
@@ -59,7 +70,11 @@ export default function ChatMessageMetadataFooter() {
                     size="sm"
                     icon={<Icon icon={ArrowPathIcon} size="sm" />}
                     isIconOnly
-                    onClick={() => {}}
+                    onClick={() =>
+                      showToast({
+                        body: 'Demo: the answer would be generated again here',
+                      })
+                    }
                   />
                   <Button
                     label="Good response"
@@ -67,7 +82,11 @@ export default function ChatMessageMetadataFooter() {
                     size="sm"
                     icon={<Icon icon={HandThumbUpIcon} size="sm" />}
                     isIconOnly
-                    onClick={() => {}}
+                    onClick={() =>
+                      showToast({
+                        body: 'Demo: your thumbs-up would be sent here',
+                      })
+                    }
                   />
                   <Button
                     label="Bad response"
@@ -75,7 +94,11 @@ export default function ChatMessageMetadataFooter() {
                     size="sm"
                     icon={<Icon icon={HandThumbDownIcon} size="sm" />}
                     isIconOnly
-                    onClick={() => {}}
+                    onClick={() =>
+                      showToast({
+                        body: 'Demo: your thumbs-down would be sent here',
+                      })
+                    }
                   />
                   <Text type="supporting" color="secondary">
                     GPT-4o
@@ -84,9 +107,7 @@ export default function ChatMessageMetadataFooter() {
               }
             />
           }>
-          Q1 revenue reached $2.4B, up 18% year-over-year. Enterprise
-          subscriptions drove 62% of the growth, while ad revenue held steady at
-          $890M.
+          {MESSAGE}
         </ChatMessageBubble>
       </ChatMessage>
     </ChatMessageList>

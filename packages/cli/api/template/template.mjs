@@ -22,6 +22,11 @@ import {
   pkgOf,
   templateLookupIds,
 } from '../../foundation/discovery/template-adapter.mjs';
+import {
+  docPackageManager,
+  quoteCommandArgument,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {orderByAffinity} from '../../foundation/text/suggest-order.mjs';
@@ -53,6 +58,41 @@ export {
 } from '../../foundation/discovery/template-adapter.mjs';
 
 /**
+ * The runs a refused combination splits into: the mode alone (`template
+ * <name> --skeleton`, `template --list`), and the template scaffolded to the
+ * path, when a name and a path were given.
+ * @param {string[]} mode the mode's own words
+ * @param {string | undefined} name
+ * @param {string | undefined} targetPath
+ * @param {string | undefined} packageFilter
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function eachAlone(mode, name, targetPath, packageFilter) {
+  const scope = packageFilter
+    ? ` --package ${quoteCommandArgument(packageFilter)}`
+    : '';
+  const quoted = name ? ` ${quoteCommandArgument(name)}` : '';
+  const alone =
+    mode[0] === '--list'
+      ? {name: `astryx template --list${scope}`, reason: 'list the templates'}
+      : {
+          name: `astryx template${quoted} ${mode.join(' ')}${scope}`,
+          reason: 'print it',
+        };
+  return [
+    alone,
+    ...(name && targetPath
+      ? [
+          {
+            name: `astryx template${quoted} ${quoteCommandArgument(targetPath)}${scope}`,
+            reason: 'scaffold the template there',
+          },
+        ]
+      : []),
+  ];
+}
+
+/**
  * @typedef {import('../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} DiscoveredTemplate
  */
 /**
@@ -77,6 +117,20 @@ export {
  * @returns {Promise<{type: string, data: unknown}>}
  */
 export async function template(name, options = {}) {
+  // Doc `{@pm}` steps in a description render for the project the call
+  // names, as search's do.
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => templateRead(name, options),
+  );
+}
+
+/**
+ * The template call itself, inside its project's package-manager scope.
+ * @param {string | undefined} name
+ * @param {Parameters<typeof template>[1]} options
+ */
+async function templateRead(name, options = {}) {
   const {
     list = false,
     skeleton = false,
@@ -115,7 +169,7 @@ export async function template(name, options = {}) {
     if (ignored.length > 0) {
       throw new AstryxError(
         `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists templates and does not scaffold.`,
-        undefined,
+        eachAlone(['--list'], name, targetPath, packageFilter),
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
@@ -128,7 +182,7 @@ export async function template(name, options = {}) {
     if (ignored.length > 0) {
       throw new AstryxError(
         `\`--skeleton\` cannot be combined with ${ignored.join(', ')}: it prints the skeleton and does not write files.`,
-        undefined,
+        eachAlone(['--skeleton'], name, targetPath, packageFilter),
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }

@@ -3,8 +3,8 @@
 /**
  * @file Read and write a file in the CLI's cache of kept gathers as one
  *   object. A gather's entry holds two lines, what it is and stands for, then
- *   its value (foundation/fs/gather-cache.mjs); a derived value's entry and a
- *   summary are one JSON object.
+ *   its value (foundation/fs/gather-cache.mjs); a derived value's entry, a
+ *   value kept by its key alone and a summary are one JSON object.
  * @input A file in the cache folder.
  * @output The entry as one object, its value as `value`.
  * @position test-utils — the kept-catalog tests.

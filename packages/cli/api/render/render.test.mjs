@@ -1774,6 +1774,50 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'a-folder.html'}))).toBe('ERR_WRITE_FAILED');
   }, 60_000);
 
+  it('writes to an absolute --out in another folder, and never replaces a file there that a render did not write', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'share', 'page.html');
+      const result = /** @type {any} */ (await render('page.tsx', {cwd: dir, out}));
+      expect(result.data.output).toBe(out);
+      expect(fs.readFileSync(out, 'utf8')).toContain('<meta name="generator" content="Astryx');
+      // A render again replaces the file a render wrote.
+      await render('page.tsx', {cwd: dir, out});
+      const other = path.join(elsewhere, 'notes.html');
+      fs.writeFileSync(other, '<p>mine</p>');
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: other}))).toBe('ERR_FILE_EXISTS');
+      expect(fs.readFileSync(other, 'utf8')).toBe('<p>mine</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a symbolic link at an absolute --out, and leaves the file it points to', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const target = path.join(elsewhere, 'precious.html');
+      fs.writeFileSync(target, '<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+      const link = path.join(elsewhere, 'page.html');
+      fs.symlinkSync(target, link);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: link}))).toBe('ERR_PATH_TRAVERSAL');
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe('<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a relative --out outside the current folder, saying an absolute path works', async () => {
+    let error;
+    try {
+      await render('page.tsx', {cwd: dir, out: '../escaped.html'});
+    } catch (e) {
+      error = /** @type {any} */ (e);
+    }
+    expect(error?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(error?.message).toContain('or name an absolute path');
+  });
+
   it('refuses --out outside the current folder, and a write through a symlink that leaves it', async () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: '../escaped.html'}))).toBe('ERR_PATH_TRAVERSAL');
     expect(await codeOf(() => render('page.html', {cwd: dir, reverse: true, out: '../escaped.tsx'}))).toBe(
@@ -2001,6 +2045,34 @@ describe('astryx experimental render (CLI)', () => {
     expect(fs.readFileSync(path.join(dir, 'cli.html'), 'utf8')).toContain('<title>From the CLI</title>');
   }, 60_000);
 
+  it('prints a command to give back a file rendered to another folder that runs from here', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'shared report.html');
+      // Twice: the second round trip names the next free folder.
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
+        expect(rendered.status, rendered.stderr).toBe(0);
+        const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
+        expect(line).toBeDefined();
+        // The printed command, run as printed after the CLI's own name.
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
+        const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
+        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'render', ...args], dir);
+        expect(back.status, back.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
+          fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
+        );
+      }
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        fs.rmSync(path.join(dir, folder), {recursive: true, force: true});
+      }
+    }
+  }, 120_000);
+
   it('fails with exit 1 and a JSON error envelope', async () => {
     const r = await runCli(['--json', 'experimental', 'render', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
@@ -2026,6 +2098,87 @@ describe('render(): refusals', () => {
   ])('%s', async (_, name, source, code) => {
     put(name, source);
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
+  }, 30_000);
+
+  it('names the file and the line a compile error points at', async () => {
+    put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
+    put('broken/page.tsx', "import {Card} from './Card';\nexport default function Page() { return <Card />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('broken/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(/^The page does not compile \((?:broken\/)?Card\.tsx, line 1\): Unterminated JSX contents/);
+    // No machine path: the file is named from the project.
+    expect(error.message).not.toContain(dir);
+  }, 30_000);
+
+  it('names the value and the import when StyleX cannot read an imported value at build time', async () => {
+    put('sx/tokens.ts', 'export const gap = 8;\n');
+    put(
+      'sx/Row.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {\n  gap,\n} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap}});\nexport function Row() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+    );
+    put('sx/page.tsx', "import {Row} from './Row';\nexport default function Page() { return <Row />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?Row\.tsx, line 3\): StyleX could not read `gap` from \.\/tokens at build time\. A value a style uses must be written in the style, or come from a \.stylex\.ts or \.stylex\.js file that defines it with stylex\.defineVars or stylex\.defineConsts\.$/,
+    );
+  }, 30_000);
+
+  it('reads the error the same with colour forced on, and names an aliased import by its local name', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      put(
+        'sx/AliasRow.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {gap as space} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap: space}});\nexport function AliasRow() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+      );
+      put('sx/alias.tsx', "import {AliasRow} from './AliasRow';\nexport default function Page() { return <AliasRow />; }\n");
+      /** @type {any} */
+      let error;
+      try {
+        await render('sx/alias.tsx', {cwd: dir});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_COMPILE');
+      expect(error.message).toMatch(
+        /^The page does not compile \((?:sx\/)?AliasRow\.tsx, line 2\): StyleX could not read `space` from \.\/tokens at build time\./,
+      );
+      expect(error.message).not.toContain('\u001b[');
+    } finally {
+      if (previous === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previous;
+    }
+  }, 30_000);
+
+  it('says which .stylex file StyleX could not find', async () => {
+    put(
+      'sx/missing.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {tones} from './gone.stylex';\nconst styles = stylex.create({text: {color: tones.ink}});\nexport default function Page() {\n  return <p {...stylex.props(styles.text)}>Hi</p>;\n}\n",
+    );
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/missing.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?missing\.tsx, line 2\): StyleX could not find \.\/gone\.stylex, which `tones` comes from, at build time\. Check that the file exists, or that its package is installed where the page is\.$/,
+    );
   }, 30_000);
 
   it('refuses wrong inputs and flags', async () => {

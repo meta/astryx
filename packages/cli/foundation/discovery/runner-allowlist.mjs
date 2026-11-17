@@ -53,5 +53,7 @@ export const RUNNER_COMMAND_ALLOWLIST = Object.freeze({
       'shows what a reader sees for a command token, with their runner',
     'packages/cli/clients/cli/commands/upgrade.doc.mjs':
       'quotes the command upgrade prints when the CLI is older than Core, pinned to the matching release',
+    'packages/cli/assets/docs/working-with-ai.doc.mjs':
+      'shows the MCP client entries, which start the CLI server with `npx @astryxdesign/cli mcp`',
   }),
 });

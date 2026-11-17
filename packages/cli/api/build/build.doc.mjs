@@ -65,7 +65,7 @@ export const doc = {
     {
       type: 'build.kit',
       description:
-        'The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it, whether the start is also search\'s direct match, the closest page, or the fallback app shell, the next two `alternatives` in the order the start is chosen from, and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search\'s closest page templates (≤3), drop-in block patterns (≤5), idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as "the package has nothing".',
+        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it and names where it goes in the project (`<path>` stays a placeholder outside a project), whether the start is also search's direct match, the closest page, or the fallback app shell, the next two `alternatives` in the order the start is chosen from, `fit` on a page-template start (the page-pick model's probability for it among the ready page templates, 0 to 1; 0.4 or more is a clear choice; absent for a template the word tables do not list), and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates that build could start from (≤3), drop-in block patterns (≤5) — each template, the start and its alternatives included, with `isReady` — idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
     },
   ],
   throws: [
@@ -86,7 +86,7 @@ export const doc = {
     {label: 'Get the playbook', code: 'const r = await build();'},
     {
       label: 'Find the template to start from',
-      code: "const {data} = await build('analytics dashboard');\n// data.start.command: 'astryx template dashboard --type page <path>'",
+      code: "const {data} = await build('analytics dashboard');\n// in a Next app: data.start.command: 'astryx template dashboard --type page app/dashboard'",
     },
     {
       label: 'Restrict + limit',

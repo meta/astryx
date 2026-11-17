@@ -19,6 +19,7 @@
 
 import * as crypto from 'node:crypto';
 import {isCliOneOff, detectPackageManager} from '../env/package-manager.mjs';
+import {intlNow} from '../env/intl-now.mjs';
 
 /**
  * Version of the recorded event shape. Bump on any breaking field change,
@@ -187,10 +188,12 @@ function detectInvocationSource({agentIdentity, agentSessionId, ci}) {
  * session values come only from explicit environment signals supplied by the
  * invoking tool.
  *
- * @param {{cliVersion?: string}} [options]
+ * @param {{cliVersion?: string, intl?: () => {locale: string | null, timezone: string | null}}} [options] -
+ *   `intl`: what gives the default locale and time zone (env/intl-now.mjs,
+ *   or the CLI's kept copy, env/intl-defaults.mjs).
  * @returns {import('../../authoring/debug/type').DebugEventEnv}
  */
-export function captureEnv({cliVersion} = {}) {
+export function captureEnv({cliVersion, intl = intlNow} = {}) {
   const {ci, ciName} = detectCi();
   const agentIdentity = detectAgentIdentity();
   const agentSession = detectAgentSession();
@@ -220,11 +223,7 @@ export function captureEnv({cliVersion} = {}) {
     oneOff: safe(() => isCliOneOff(), false),
     packageManager: safe(() => detectPackageManager(), null),
     tty: Boolean(process.stdout.isTTY),
-    locale: safe(() => Intl.DateTimeFormat().resolvedOptions().locale, null),
-    timezone: safe(
-      () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-      null,
-    ),
+    ...safe(intl, {locale: null, timezone: null}),
   };
 }
 
