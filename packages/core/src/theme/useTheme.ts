@@ -233,11 +233,18 @@ const rootScheme = sharedState(
 
 const STYLE_NODES = 'style, link[rel~="stylesheet"]';
 
-/** `light` or `dark` when the page root names only that scheme, else null. */
+/**
+ * `light` or `dark` when the page root names only that scheme, `light` when it
+ * names none (`normal`: the page draws light), and null when it names both,
+ * so the reader's preference decides, or when the engine reports no scheme.
+ */
 function getRootSchemeSnapshot(): 'light' | 'dark' | null {
   const declared: string | undefined = window.getComputedStyle(
     document.documentElement,
   ).colorScheme;
+  if (declared === 'normal') {
+    return 'light';
+  }
   const names = (declared ?? '').split(/\s+/);
   const light = names.includes('light');
   const dark = names.includes('dark');

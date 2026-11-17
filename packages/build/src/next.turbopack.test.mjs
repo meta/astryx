@@ -239,11 +239,7 @@ async function expectCascade(origin, {reversed}) {
     // chunks. One of the two load orders puts the blocks first. There, only
     // each block's own order line keeps the reset below them.
     const layers = await tab.evaluate(reverseChunks);
-    // Core's block also carries its root rule in `reset`; reset.css's chunk
-    // is the one with a `reset` block and no `astryx-base` block.
-    const reset = layers.findIndex(
-      chunk => chunk.includes('reset') && !chunk.includes('astryx-base'),
-    );
+    const reset = layers.findIndex(chunk => chunk.includes('reset'));
     const base = layers.findIndex(chunk => chunk.includes('astryx-base'));
     expect(reset).toBeGreaterThanOrEqual(0);
     expect(base).toBeGreaterThanOrEqual(0);

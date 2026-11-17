@@ -391,9 +391,19 @@ describe('useTheme system follows the page root', () => {
     expect(result.current.token('--color-accent')).toBe('#FF5555');
   });
 
-  it('leaves the preference to decide when the root names both schemes or none', () => {
+  it('resolves system to light when the root names no scheme, as the page draws', () => {
+    rootScheme = 'normal';
     stubRootScheme();
-    for (const scheme of ['light dark', 'normal', '']) {
+    vi.mocked(useMediaQuery).mockReturnValue(true);
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    expect(result.current.mode).toBe('light');
+  });
+
+  it('leaves the preference to decide when the root names both schemes, or the engine reports none', () => {
+    stubRootScheme();
+    for (const scheme of ['light dark', '']) {
       rootScheme = scheme;
       vi.mocked(useMediaQuery).mockReturnValue(true);
       const dark = renderHook(() => useTheme(), {
