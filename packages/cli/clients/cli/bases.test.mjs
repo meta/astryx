@@ -592,7 +592,7 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
-    'names in template help only what the base serves',
+    'names in option help only what the base serves',
     () => {
       const dir = project({'@acme/native-ui': CONTENT_BASE});
       const help = astryx(['template', '--help'], dir);
@@ -610,6 +610,10 @@ describe('a project whose only base is not Core', () => {
       );
       expect(json).not.toContain('--skeleton');
       expect(json).not.toContain('@astryxdesign/core');
+      const mcp = astryx(['mcp', '--help'], dir);
+      expect(mcp.status).toBe(0);
+      expect(mcp.stdout).toContain('discover, theme list), one message at a time');
+      expect(mcp.stdout).not.toContain('theme targets');
     },
     SLOW,
   );
