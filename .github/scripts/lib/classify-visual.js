@@ -10,15 +10,20 @@
  *   classify-visual-pr.js for calibration.
  * @input Unified diff text (git diff <base>...<head>)
  * @output classifyVisualDiff: { score, bucket, signals, styleSurfacePaths, evidence,
- *   appearanceOnly, appearanceReasons }
+ *   appearanceOnly, appearanceReasons }; styleContextPaths: the file
+ *   revisions the style-context test needs; styleContextLines
  *
  * SYNC: review-signal.yml loads this file with new Function(module, exports,
  * require) — keep it dependency-free CJS with a plain module.exports object.
  *
  * Signals and weights:
  *   1. CSS-property edit (×3)   — added/removed line starting with a known CSS
- *      property + `:`. In this codebase such lines essentially only occur inside
- *      `stylex.create({...})` blocks, so one means a pixel moved.
+ *      property + `:` that sits in a style context of its file at that line's
+ *      revision (styleContextLines: stylex style calls, themes, Web Animations,
+ *      `Object.assign(el.style, …)`, style attributes and properties, and the
+ *      named objects and functions they read). Given the file's bytes
+ *      (`styleSources`), a data object such as a route's `{content: […]}`
+ *      moves no pixel; without them the line counts as before.
  *   2. Design-token reference (×2) — `colorVars.accent`, `radiusVars.lg`, … —
  *      matched generically as `<something>Vars.<key>` so every token group
  *      (shadowVars, borderVars, durationVars, …) counts without a hardcoded list.
@@ -545,6 +550,670 @@ function sourceProofFor(sources, file, side) {
   };
 }
 
+// Calls whose arguments are style. `stylex.<name>(...)`: style objects, theme
+// and variable values, keyframes, position fallbacks, view transitions.
+const STYLEX_STYLE_CALLS = new Set([
+  'create',
+  'createTheme',
+  'defineConsts',
+  'defineVars',
+  'keyframes',
+  'positionTry',
+  'viewTransitionClass',
+]);
+// A bare call: an Astryx theme and its code-syntax colors.
+const THEME_CALLS = new Set(['defineTheme', 'defineSyntaxTheme']);
+// A method call whose arguments are motion values: Web Animations keyframes
+// and timing (`element.animate(...)`), and the motion system's targets
+// (`handle.play({opacity: ...})`).
+const STYLE_METHOD_CALLS = new Set(['animate', 'play']);
+// A JSX attribute or an object property whose value is style: `style`,
+// `xstyle`, and a named style slot such as `contentStyle` or `labelStyle`.
+const STYLE_NAME = /^(?:x?style|[a-z][A-Za-z0-9]*Style)$/;
+// A type that marks an object as style, in an annotation, `as` or `satisfies`.
+const STYLE_TYPE =
+  /\b(?:CSSProperties|StyleXStyles|StyleXStylesWithout|StyleXArray|CSSStyleDeclaration)\b/;
+// After one of these tokens, `/` starts a regular expression and `<` may open
+// JSX; after any other token they are operators.
+const EXPRESSION_START = new Set([
+  '',
+  '(',
+  ',',
+  '=',
+  ':',
+  '[',
+  '!',
+  '&',
+  '|',
+  '?',
+  '{',
+  '}',
+  ';',
+  '+',
+  '-',
+  '*',
+  '%',
+  '<',
+  '>',
+  '~',
+  '^',
+  '=>',
+  'return',
+  'typeof',
+  'case',
+  'do',
+  'else',
+  'in',
+  'of',
+  'new',
+  'delete',
+  'void',
+  'throw',
+  'yield',
+  'await',
+]);
+
+/**
+ * The 1-based lines of `source` that sit in a style context, decided by
+ * reading the file's syntax, never a value's shape:
+ *
+ * - the arguments of `stylex.create(...)` and the other stylex style calls,
+ *   of `defineTheme(...)` and `defineSyntaxTheme(...)`, of
+ *   `element.animate(...)` and the motion system's `handle.play(...)`, and of
+ *   a `stylex.create` dynamic style (`sheet.size(width)`);
+ * - the objects after the first argument of `Object.assign(<x>.style, ...)`;
+ * - a spread onto an intrinsic JSX element (`<svg {...svgProps}>`);
+ * - the value of a JSX `style`, `xstyle` or `<name>Style` attribute, and of
+ *   an object property with such a name;
+ * - an object or function body bound to a name whose type, `as` or
+ *   `satisfies` names a style type (`CSSProperties`, `StyleXStyles`, ...), or
+ *   whose name is read inside another style context of the file; a name
+ *   bound to a call's result passes that on to the function it calls.
+ *
+ * Not a style context: an object, named or inline, on a component prop whose
+ * name is not style-named (a chart's `tick={...}`), and style values a helper
+ * returns to another file.
+ *
+ * A small lexer reads the file, comments, strings, template literals, regular
+ * expressions, type parameters and JSX text included, so a quote in JSX text
+ * or a brace in a string moves no boundary. Returns null when the file does
+ * not lex cleanly (an unclosed string, comment, bracket or tag), so the caller
+ * can fall back.
+ *
+ * @param {string} source
+ * @param {boolean} jsx whether the file may hold JSX (any file but .ts)
+ * @returns {Set<number> | null}
+ */
+function styleContextLines(source, jsx) {
+  const covered = new Set();
+  const length = source.length;
+  let line = 1;
+  // Each frame: {kind, close, ...}. kind is 'code' (a bracket in code),
+  // 'template' (`${` inside a template literal), 'tag' (inside a JSX tag),
+  // 'children' (between a JSX tag and its close).
+  const stack = [];
+  // Open style contexts, each ending with the frame at its depth.
+  const contexts = [];
+  // Objects and function bodies bound to a name: {name, from, to, typed}.
+  const bindings = [];
+  // Names bound to a call's result (`const sizing = resolveSizing(...)`):
+  // using the name as style uses what that function returns.
+  const callResults = [];
+  // Names bound to `stylex.create(...)`: calling one of its dynamic styles
+  // (`sheet.size(width)`) takes style values.
+  const styleSheets = new Set();
+  // Each identifier read in code, with its line.
+  const references = [];
+  // Lines where a style-named property takes a bare value (`style: base`):
+  // a name read there is used as style.
+  const styleValueLines = new Set();
+  // The tokens read so far: the last one, and the words before a `(`.
+  let last = '';
+  const words = [];
+  let pendingAttribute = false;
+  let pendingProperty = false;
+  // A declaration in progress: `const <name> [: type] = {`.
+  let declaration = null;
+  // A function in progress, `function <name>(...)` or
+  // `const <name> = (...) =>`, until its body opens.
+  let pendingFunction = null;
+
+  // The words a call's style test reads: the last few are enough.
+  const pushWord = word => {
+    words.push(word);
+    if (words.length > 4) words.shift();
+  };
+  // Covered lines are skipped in one step: `nextOpen` points from a covered
+  // line to the next line that may not be, compressed as it is followed, so
+  // marking a range costs its uncovered lines and nothing for lines already
+  // covered, however ranges nest or repeat.
+  const nextOpen = new Map();
+  const firstOpen = at => {
+    let end = at;
+    while (nextOpen.has(end)) end = nextOpen.get(end);
+    while (nextOpen.has(at) && nextOpen.get(at) !== end) {
+      const after = nextOpen.get(at);
+      nextOpen.set(at, end);
+      at = after;
+    }
+    return end;
+  };
+  const markLines = (from, to, onLine) => {
+    for (let at = firstOpen(from); at <= to; at = firstOpen(at)) {
+      covered.add(at);
+      nextOpen.set(at, at + 1);
+      if (onLine) onLine(at);
+    }
+  };
+  const top = () => stack[stack.length - 1];
+  const countLines = (from, to) => {
+    for (let at = from; at < to; at += 1) {
+      if (source[at] === '\n') line += 1;
+    }
+  };
+
+  // Skips a quoted string starting at `index`; returns the index after it.
+  // A template literal stops at `${`, with a frame for its expression.
+  const skipString = (index, quote) => {
+    for (let at = index + 1; at < length; at += 1) {
+      const character = source[at];
+      if (character === '\\') {
+        at += 1;
+        if (source[at] === '\n') line += 1;
+        continue;
+      }
+      if (character === '\n') {
+        if (quote !== '`') return -1;
+        line += 1;
+      }
+      if (character === quote) return at + 1;
+      if (quote === '`' && character === '$' && source[at + 1] === '{') {
+        stack.push({kind: 'template', close: '}'});
+        last = '{';
+        return at + 2;
+      }
+    }
+    return -1;
+  };
+  const skipRegex = index => {
+    let inClass = false;
+    for (let at = index + 1; at < length; at += 1) {
+      const character = source[at];
+      if (character === '\n') return -1;
+      if (character === '\\') {
+        at += 1;
+        continue;
+      }
+      if (character === '[') inClass = true;
+      else if (character === ']') inClass = false;
+      else if (character === '/' && !inClass) {
+        at += 1;
+        while (at < length && /[a-z]/i.test(source[at])) at += 1;
+        return at;
+      }
+    }
+    return -1;
+  };
+  // Skips an angle-bracketed type list from `index`; returns the index after
+  // its `>`, or -1.
+  const skipAngles = index => {
+    let depth = 0;
+    for (let at = index; at < length; at += 1) {
+      const character = source[at];
+      if (character === '\n') line += 1;
+      if (character === '<') depth += 1;
+      if (character === '>' && source[at - 1] !== '=') depth -= 1;
+      if (depth === 0) return at + 1;
+    }
+    return -1;
+  };
+
+  const startContext = () => contexts.push({depth: stack.length - 1, line});
+  const open = (frame, startsStyle) => {
+    stack.push(frame);
+    if (startsStyle) startContext();
+  };
+  const close = closer => {
+    const frame = stack.pop();
+    if (frame == null || frame.close !== closer) return false;
+    const context = contexts[contexts.length - 1];
+    if (context != null && context.depth === stack.length) {
+      contexts.pop();
+      markLines(context.line, line);
+    }
+    if (frame.binding != null) {
+      bindings.push({...frame.binding, to: line});
+    }
+    return true;
+  };
+  // Whether the call about to open takes style arguments, from the words
+  // read before its `(`.
+  const styleCall = () => {
+    const [a, b, c] = words.slice(-3);
+    if (b === '.' && a === 'stylex' && STYLEX_STYLE_CALLS.has(c)) return 'all';
+    if (THEME_CALLS.has(c) && b !== '.') return 'all';
+    if (b === '.' && STYLE_METHOD_CALLS.has(c)) return 'all';
+    if (a === 'Object' && b === '.' && c === 'assign') return 'assign';
+    if (b === '.' && styleSheets.has(a)) return 'all';
+    return null;
+  };
+
+  let index = 0;
+  while (index < length) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (character === '\n') {
+      line += 1;
+      index += 1;
+      continue;
+    }
+
+    // JSX text: only `{`, `<` and newlines matter; quotes are text.
+    if (top()?.kind === 'children') {
+      if (character === '{') {
+        open({kind: 'code', close: '}'}, false);
+        last = '{';
+        index += 1;
+      } else if (character === '<' && next === '/') {
+        // A closing tag ends these children.
+        const end = source.indexOf('>', index);
+        if (end === -1) return null;
+        countLines(index, end);
+        stack.pop();
+        last = ')';
+        index = end + 1;
+      } else if (character === '<') {
+        open(
+          {kind: 'tag', close: '>', intrinsic: /[a-z]/.test(next ?? '')},
+          false,
+        );
+        index += 1;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (/\s/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      const end = source.indexOf('\n', index);
+      index = end === -1 ? length : end;
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      const end = source.indexOf('*/', index + 2);
+      if (end === -1) return null;
+      countLines(index, end);
+      index = end + 2;
+      continue;
+    }
+
+    // Inside a JSX tag: names, type arguments, strings, `{...}`, `>`, `/>`.
+    if (top()?.kind === 'tag') {
+      if (character === '"' || character === "'") {
+        const end = skipString(index, character);
+        if (end === -1) return null;
+        index = end;
+      } else if (character === '{') {
+        // A spread onto an intrinsic element (`<svg {...svgProps}>`) sets
+        // its presentation attributes.
+        const spread =
+          top().intrinsic &&
+          /^\{\s*\.\.\./.test(source.slice(index, index + 8));
+        open({kind: 'code', close: '}'}, pendingAttribute || spread);
+        pendingAttribute = false;
+        last = '{';
+        index += 1;
+      } else if (character === '<') {
+        // Type arguments of a generic component, `<Table<Row> ...>`.
+        const end = skipAngles(index);
+        if (end === -1) return null;
+        index = end;
+      } else if (character === '/' && next === '>') {
+        stack.pop();
+        last = ')';
+        index += 2;
+      } else if (character === '>') {
+        stack.pop();
+        stack.push({kind: 'children', close: '<'});
+        index += 1;
+      } else if (/[A-Za-z_$]/.test(character)) {
+        let end = index + 1;
+        while (end < length && /[\w$.:-]/.test(source[end])) end += 1;
+        let at = end;
+        while (at < length && /[ \t]/.test(source[at])) at += 1;
+        pendingAttribute =
+          STYLE_NAME.test(source.slice(index, end)) && source[at] === '=';
+        index = end;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'" || character === '`') {
+      const depth = stack.length;
+      const end = skipString(index, character);
+      if (end === -1) return null;
+      index = end;
+      // A template literal that stopped at `${` goes on as code.
+      if (stack.length === depth) last = 'value';
+      pushWord('value');
+      continue;
+    }
+    if (character === '/' && EXPRESSION_START.has(last)) {
+      const end = skipRegex(index);
+      if (end === -1) return null;
+      index = end;
+      last = 'value';
+      pushWord('value');
+      continue;
+    }
+    // A generic arrow's type parameters (`<T,>(` or `<T extends U>(`), as
+    // TypeScript tells them from a tag.
+    if (
+      character === '<' &&
+      EXPRESSION_START.has(last) &&
+      /^<\s*[A-Za-z_$][\w$]*\s*(?:,|extends\b)/.test(
+        source.slice(index, index + 80),
+      )
+    ) {
+      const end = skipAngles(index);
+      if (end === -1) return null;
+      index = end;
+      continue;
+    }
+    if (
+      jsx &&
+      character === '<' &&
+      EXPRESSION_START.has(last) &&
+      (/[A-Za-z_$]/.test(next ?? '') || next === '>')
+    ) {
+      if (next === '>') {
+        // A fragment: its children start at once.
+        stack.push({kind: 'children', close: '<'});
+        index += 2;
+      } else {
+        open({kind: 'tag', close: '>', intrinsic: /[a-z]/.test(next)}, false);
+        index += 1;
+      }
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(character)) {
+      let end = index + 1;
+      while (end < length && /[\w$]/.test(source[end])) end += 1;
+      const word = source.slice(index, end);
+      let after = end;
+      while (after < length && /[ \t]/.test(source[after])) after += 1;
+      if (last !== '.') references.push({name: word, line});
+      // A style-named property: `style: {...}` or `labelStyle: base`.
+      if (STYLE_NAME.test(word) && source[after] === ':' && last !== '.') {
+        pendingProperty = true;
+        styleValueLines.add(line);
+      }
+      // `as` or `satisfies` a style type marks the object just closed.
+      if ((word === 'as' || word === 'satisfies') && bindings.length > 0) {
+        const typed = source.slice(end, end + 120).match(/^\s*([\w$.<>]+)/);
+        const binding = bindings[bindings.length - 1];
+        if (typed && STYLE_TYPE.test(typed[1]) && binding.to === line) {
+          binding.typed = true;
+        }
+      }
+      if (word === 'const' || word === 'let' || word === 'var') {
+        const named = source
+          .slice(end, end + 400)
+          .match(/^\s+([A-Za-z_$][\w$]*)\s*(?::([^=;]*))?=\s*\{/);
+        declaration = named
+          ? {name: named[1], typed: STYLE_TYPE.test(named[2] ?? '')}
+          : null;
+        const result = source.slice(end, end + 400).match(
+          // The window is at most 400 characters and the pattern has no
+          // nested repetition, so a declaration costs a bounded amount
+          // whatever the match tries.
+          /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^\s;=?][^;=?]*\?[^;:]*:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
+        );
+        if (result && /^stylex/.test(result[2])) styleSheets.add(result[1]);
+        else if (result)
+          callResults.push({name: result[1], calls: result[2], line});
+        const arrow = source
+          .slice(end, end + 400)
+          .match(/^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:async\s*)?\(/);
+        if (arrow) {
+          pendingFunction = {name: arrow[1], depth: stack.length, arrow: true};
+        }
+      }
+      if (word === 'function') {
+        const named = source
+          .slice(end, end + 200)
+          .match(/^\s*\*?\s*([A-Za-z_$][\w$]*)/);
+        if (named) {
+          pendingFunction = {name: named[1], depth: stack.length, arrow: false};
+        }
+      }
+      pushWord(word);
+      last = EXPRESSION_START.has(word) ? word : 'value';
+      index = end;
+      continue;
+    }
+    if (/[0-9]/.test(character)) {
+      let end = index + 1;
+      while (end < length && /[\w.]/.test(source[end])) end += 1;
+      index = end;
+      last = 'value';
+      pushWord('value');
+      continue;
+    }
+    if (character === '(') {
+      const kind = styleCall();
+      const frame = {kind: 'code', close: ')', assign: kind === 'assign'};
+      if (pendingFunction?.ready && pendingFunction.depth === stack.length) {
+        // An arrow whose body is a parenthesized expression, `=> ({...})`.
+        frame.binding = {name: pendingFunction.name, from: line, typed: false};
+        pendingFunction = null;
+      }
+      open(frame, kind === 'all');
+      last = '(';
+      pushWord('(');
+      index += 1;
+      continue;
+    }
+    if (character === '{' || character === '[') {
+      const frame = {kind: 'code', close: character === '{' ? '}' : ']'};
+      if (character === '{' && declaration != null && last === '=') {
+        frame.binding = {
+          name: declaration.name,
+          from: line,
+          typed: declaration.typed,
+        };
+      } else if (
+        character === '{' &&
+        pendingFunction?.ready &&
+        pendingFunction.depth === stack.length
+      ) {
+        // A function's body: what it returns is read where it is called.
+        frame.binding = {name: pendingFunction.name, from: line, typed: false};
+        pendingFunction = null;
+      }
+      declaration = null;
+      open(frame, pendingProperty && (last === ':' || last === '('));
+      pendingProperty = false;
+      last = character;
+      pushWord(character);
+      index += 1;
+      continue;
+    }
+    if (character === ')' || character === ']' || character === '}') {
+      if (top()?.kind === 'template' && character === '}') {
+        stack.pop();
+        // The template literal goes on after its `${...}`.
+        const depth = stack.length;
+        const end = skipString(index, '`');
+        if (end === -1) return null;
+        index = end;
+        if (stack.length === depth) last = 'value';
+        continue;
+      }
+      if (!close(character)) return null;
+      if (
+        character === ')' &&
+        pendingFunction != null &&
+        !pendingFunction.arrow &&
+        pendingFunction.depth === stack.length
+      ) {
+        pendingFunction.ready = true;
+      }
+      last = character === '}' ? '}' : 'value';
+      pushWord('value');
+      index += 1;
+      continue;
+    }
+    // `Object.assign(<x>.style, ...)`: the arguments after the first.
+    if (
+      character === ',' &&
+      top()?.assign &&
+      !top().assigned &&
+      /\.style$/.test(words.slice(-3).join(''))
+    ) {
+      top().assigned = true;
+      startContext();
+    }
+    // A spread starts an expression; its name is read, not a member.
+    if (source.startsWith('...', index)) {
+      last = ',';
+      pushWord(',');
+      index += 3;
+      continue;
+    }
+    if (character === ';' && pendingFunction?.depth === stack.length) {
+      pendingFunction = null;
+    }
+    if (character === '=' && next === '>') {
+      if (pendingFunction?.arrow && pendingFunction.depth === stack.length) {
+        pendingFunction.ready = true;
+      }
+      last = '=>';
+      index += 2;
+      continue;
+    }
+    if (character !== ':' && character !== ' ') pendingProperty = false;
+    last = character;
+    pushWord(character);
+    index += 1;
+  }
+  if (stack.length > 0 || contexts.length > 0) return null;
+
+  // A named object or function is style when its type says so, or when its
+  // name is read as style outside its own lines (inside another style
+  // context, or as a style property's value); a name bound to a call's
+  // result passes that on to the function it calls. Marking one can mark
+  // another that it reads. Per name, the lowest and highest line it is read
+  // as style decide every binding of it at once (`min < from || max > to`),
+  // and its unmarked bindings wait in two lists sorted by `from` and by
+  // `to`, so each binding is marked or passed over once, and a line is
+  // marked once however many ranges hold it (markLines): the marking takes
+  // time near linear in the file.
+  const namesAt = new Map();
+  const byName = new Map();
+  const stateOf = name => {
+    let state = byName.get(name);
+    if (state == null) {
+      state = {
+        min: Infinity,
+        max: -Infinity,
+        waiting: [],
+        byFrom: [],
+        byTo: [],
+      };
+      byName.set(name, state);
+    }
+    return state;
+  };
+  for (const {name, line: at} of references) {
+    if (!namesAt.has(at)) namesAt.set(at, new Set());
+    namesAt.get(at).add(name);
+    if (covered.has(at) || styleValueLines.has(at)) {
+      const state = stateOf(name);
+      state.min = Math.min(state.min, at);
+      state.max = Math.max(state.max, at);
+    }
+  }
+  const bindingsOf = new Map();
+  for (const binding of bindings) {
+    if (!bindingsOf.has(binding.name)) bindingsOf.set(binding.name, []);
+    bindingsOf.get(binding.name).push(binding);
+    stateOf(binding.name).waiting.push(binding);
+  }
+  // A call result waits like a binding of its name over its own line; when
+  // it is used as style, the function it calls is marked.
+  for (const result of callResults) {
+    stateOf(result.name).waiting.push({
+      from: result.line,
+      to: result.line,
+      calls: result.calls,
+    });
+  }
+  for (const state of byName.values()) {
+    // Popped from the end: the largest `from` first, the smallest `to` first.
+    state.byFrom = [...state.waiting].sort((x, y) => x.from - y.from);
+    state.byTo = [...state.waiting].sort((x, y) => y.to - x.to);
+  }
+  const done = new Set();
+  const pending = [];
+  const readsAt = at => {
+    for (const name of namesAt.get(at) ?? []) {
+      const state = stateOf(name);
+      if (at < state.min || at > state.max) {
+        state.min = Math.min(state.min, at);
+        state.max = Math.max(state.max, at);
+        pending.push(name);
+      }
+    }
+  };
+  // Each called function is expanded once, however many results read it.
+  const expanded = new Set();
+  const settle = entry => {
+    if (done.has(entry)) return;
+    done.add(entry);
+    if (entry.calls != null) {
+      if (expanded.has(entry.calls)) return;
+      expanded.add(entry.calls);
+      for (const binding of bindingsOf.get(entry.calls) ?? []) {
+        if (done.has(binding)) continue;
+        done.add(binding);
+        markLines(binding.from, binding.to, readsAt);
+      }
+      return;
+    }
+    markLines(entry.from, entry.to, readsAt);
+  };
+  for (const binding of bindings) if (binding.typed) settle(binding);
+  for (const name of byName.keys()) pending.push(name);
+  while (pending.length > 0) {
+    const state = byName.get(pending.pop());
+    const {byFrom, byTo} = state;
+    while (byFrom.length > 0 && byFrom[byFrom.length - 1].from > state.min) {
+      settle(byFrom.pop());
+    }
+    while (byTo.length > 0 && byTo[byTo.length - 1].to < state.max) {
+      settle(byTo.pop());
+    }
+  }
+  return covered;
+}
+
+// A file the style-context test cannot finish reading counts as one that does
+// not lex: its CSS-named keys count as before.
+function styleContextsOrNull(source, jsx) {
+  try {
+    return styleContextLines(source, jsx);
+  } catch {
+    return null;
+  }
+}
+
 function isVisualEvidenceFile(file) {
   return /\.(?:png|jpe?g|gif|webp|svg)$/.test(file);
 }
@@ -603,10 +1272,14 @@ function advanceBlockComment(content, inside) {
  * Classify a unified diff as visual / likely-visual / maybe-visual / non-visual.
  *
  * @param {string} diffText - output of `git diff <base>...<head>`
- * @param {{ignorePath?: (file: string) => boolean, sources?: Record<string, {base: string, head: string}>}} [opts] - `ignorePath`
+ * @param {{ignorePath?: (file: string) => boolean, sources?: Record<string, {base: string, head: string}>, styleSources?: Record<string, {base?: string, head?: string}>}} [opts] - `ignorePath`
  *   excludes additional paths beyond the built-in rules (e.g. review-signal
  *   passes its safe-space predicate so lab/sandbox/storybook never count).
  *   `sources` provides trusted base/head bytes used for appearance-only proof.
+ *   `styleSources` provides each file's bytes at the revision a changed line
+ *   comes from (base for a removed line, head for an added one, by that
+ *   side's path), so a CSS-named key scores only in a style context; the
+ *   paths styleContextPaths lists need them.
  * @returns {{
  *   score: number,
  *   bucket: 'visual'|'likely-visual'|'maybe-visual'|'non-visual',
@@ -623,6 +1296,10 @@ function classifyVisualDiff(diffText, opts = {}) {
   const sources =
     opts.sources != null && typeof opts.sources === 'object'
       ? opts.sources
+      : {};
+  const styleSources =
+    opts.styleSources != null && typeof opts.styleSources === 'object'
+      ? opts.styleSources
       : {};
   const signals = {
     cssProperties: 0,
@@ -657,6 +1334,32 @@ function classifyVisualDiff(diffText, opts = {}) {
   let newLineNumber = null;
   let sawHunk = false;
   const sourceProofCache = new Map();
+  // A CSS-named key scores only in a style context of its file at its own
+  // revision (styleContextLines). A style-surface file is style throughout.
+  // Without that file's bytes, or when they do not lex or do not hold the
+  // diff's line, the key scores as a style edit.
+  const styleContextCache = new Map();
+  const inStyleContext = (path, side, lineNumber, rawContent) => {
+    if (isStyleSurfaceFile(currentFile)) return true;
+    const key = `${path}\0${side}`;
+    if (!styleContextCache.has(key)) {
+      const source = styleSources?.[path]?.[side];
+      styleContextCache.set(
+        key,
+        typeof source === 'string'
+          ? {
+              lines: source.split(/\r?\n/),
+              style: styleContextsOrNull(source, !/\.ts$/.test(path)),
+            }
+          : null,
+      );
+    }
+    const proof = styleContextCache.get(key);
+    if (proof === null || proof.style === null) return true;
+    if (!Number.isInteger(lineNumber)) return true;
+    if (proof.lines[lineNumber - 1] !== rawContent) return true;
+    return proof.style.has(lineNumber);
+  };
   // Block-comment state per diff side: a `-` line opening a comment must not
   // silence subsequent `+` lines. Context lines advance both sides. State
   // resets at file and hunk boundaries — a hunk can start mid-comment we never
@@ -813,7 +1516,10 @@ function classifyVisualDiff(diffText, opts = {}) {
       signals.styleSurfaceFiles++;
     }
 
-    if (isCssPropertyLine(content, currentFile)) {
+    if (
+      isCssPropertyLine(content, currentFile) &&
+      inStyleContext(sourcePath, sourceSide, lineNumber, rawContent)
+    ) {
       signals.cssProperties++;
       addEvidence('cssProperties', content);
     }
@@ -871,4 +1577,49 @@ function classifyVisualDiff(diffText, opts = {}) {
   };
 }
 
-module.exports = {classifyVisualDiff, WEIGHTS, JSX_CAP};
+/**
+ * The file revisions a diff's CSS-named keys need for the style-context test:
+ * for each changed line that names a CSS property in a scanned product file
+ * that is not a style surface, its path at that side (`base` for a removed
+ * line, `head` for an added one).
+ *
+ * @param {string} diffText
+ * @param {{ignorePath?: (file: string) => boolean}} [opts]
+ * @returns {Record<string, {base?: boolean, head?: boolean}>}
+ */
+function styleContextPaths(diffText, opts = {}) {
+  const ignorePath =
+    typeof opts.ignorePath === 'function' ? opts.ignorePath : null;
+  const needed = {};
+  let oldPath = null;
+  let newPath = null;
+  let scanned = false;
+  for (const line of (diffText || '').split('\n')) {
+    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+    if (fileMatch) {
+      [, oldPath, newPath] = fileMatch;
+      scanned =
+        isProductFile(newPath) &&
+        !(ignorePath && ignorePath(newPath)) &&
+        !isIgnoredFile(newPath) &&
+        isScannableFile(newPath) &&
+        !isStyleSurfaceFile(newPath);
+      continue;
+    }
+    if (!scanned || /^(?:\+\+\+|---) /.test(line)) continue;
+    if (line[0] !== '+' && line[0] !== '-') continue;
+    if (!isCssPropertyLine(line.slice(1).trim(), newPath)) continue;
+    const side = line[0] === '+' ? 'head' : 'base';
+    const path = side === 'head' ? newPath : oldPath;
+    needed[path] = {...needed[path], [side]: true};
+  }
+  return needed;
+}
+
+module.exports = {
+  classifyVisualDiff,
+  styleContextLines,
+  styleContextPaths,
+  WEIGHTS,
+  JSX_CAP,
+};

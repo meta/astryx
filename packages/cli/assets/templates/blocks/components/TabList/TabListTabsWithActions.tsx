@@ -5,6 +5,7 @@
 import {useState} from 'react';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const FilterIcon = (
   <svg
@@ -39,6 +40,7 @@ const PlusIcon = (
 );
 
 export default function TabListTabsWithActions() {
+  const showToast = useToast();
   const [value, setValue] = useState('all');
   return (
     <TabList value={value} onChange={setValue} size="lg" hasDivider>
@@ -53,13 +55,22 @@ export default function TabListTabsWithActions() {
           gap: 4,
         }}>
         <Button
+          onClick={() => showToast({body: 'Demo: filters would open here'})}
           label="Filter"
           variant="ghost"
           size="lg"
           icon={FilterIcon}
           isIconOnly
         />
-        <Button label="New item" variant="primary" size="lg" icon={PlusIcon} />
+        <Button
+          onClick={() =>
+            showToast({body: 'Demo: a new item form would open here'})
+          }
+          label="New item"
+          variant="primary"
+          size="lg"
+          icon={PlusIcon}
+        />
       </div>
     </TabList>
   );

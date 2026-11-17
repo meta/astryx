@@ -20,6 +20,7 @@ import {
 } from './package-manager.mjs';
 import {recordDeclaredCliCommands, runWithCliDoor} from './cli-command.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {usePnpApi} from '../../test-utils/pnp-fixtures.mjs';
 
 let tmpDir;
 const ORIGINAL_ARGV1 = process.argv[1];
@@ -50,6 +51,7 @@ afterEach(() => {
   }
   vi.restoreAllMocks();
   delete process.env.npm_config_user_agent;
+  delete process.versions.pnp;
   process.argv[1] = ORIGINAL_ARGV1;
 });
 
@@ -509,6 +511,22 @@ describe('cliBinResolves', () => {
   it('is false when no bin link exists up the tree', () => {
     const dir = makeTmpDir();
     fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), {recursive: true});
+    expect(cliBinResolves(dir)).toBe(false);
+  });
+
+  it("under Yarn Plug'n'Play, is true when the folder's workspace depends on the CLI", () => {
+    const dir = usePnpApi(makeTmpDir(), {
+      '@astryxdesign/cli': path.join(os.tmpdir(), 'store', 'cli'),
+    });
+    const src = path.join(dir, 'src');
+    fs.mkdirSync(src);
+    expect(cliBinResolves(src)).toBe(true);
+  });
+
+  it("under Yarn Plug'n'Play, is false when the folder's workspace does not depend on it", () => {
+    const dir = usePnpApi(makeTmpDir(), {
+      '@astryxdesign/core': path.join(os.tmpdir(), 'store', 'core'),
+    });
     expect(cliBinResolves(dir)).toBe(false);
   });
 });

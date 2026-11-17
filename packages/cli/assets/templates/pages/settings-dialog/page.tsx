@@ -55,12 +55,16 @@
  * preview per `SelectableCard`; many choices use one `Selector` and one live
  * preview below it. Prefer the real component being configured so the sample
  * cannot drift. For detail most readers do not need, expand a `Collapsible`
- * inside the row. Never open a dialog from this dialog: nested focus traps and
- * two overlapping dismiss paths are not progressive disclosure. If the detail
- * is too large to expand in place, it belongs on a page.
+ * inside the row. Never open a dialog from this dialog to show more detail:
+ * nested focus traps and two overlapping dismiss paths are not progressive
+ * disclosure. If the detail is too large to expand in place, it belongs on a
+ * page. The one exception is an `AlertDialog` that confirms a destructive
+ * action, such as deleting the account: it asks one question, and Escape
+ * closes only the alert, never this dialog.
  */
 
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
@@ -71,6 +75,7 @@ import {HStack} from '@astryxdesign/core/HStack';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Kbd} from '@astryxdesign/core/Kbd';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {ListItem} from '@astryxdesign/core/List';
@@ -90,6 +95,7 @@ import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {Token} from '@astryxdesign/core/Token';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VStack} from '@astryxdesign/core/VStack';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowDownOnSquareIcon,
   ArrowDownTrayIcon,
@@ -917,6 +923,7 @@ function ProfilePanel({settings, update}: PanelProps) {
 }
 
 function SecurityPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
   return (
     <VStack gap={5}>
       <SettingsCard title="Sign-in">
@@ -924,7 +931,20 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="Password"
           description="Last changed 4 months ago."
           icon={KeyIcon}
-          control={<Button label="Change" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Change"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: changing the password would start here',
+                  uniqueID: 'change-password',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Two-factor authentication"
@@ -944,7 +964,20 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="Passkeys"
           icon={FingerPrintIcon}
           description="No passkeys yet."
-          control={<Button label="Add passkey" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Add passkey"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: adding a passkey would start here',
+                  uniqueID: 'add-passkey',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
 
@@ -959,13 +992,39 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="iPhone 15 · Safari"
           description="San Francisco, California · 2 hours ago"
           icon={DevicePhoneMobileIcon}
-          control={<Button label="Sign out" variant="ghost" size="sm" />}
+          control={
+            <Button
+              label="Sign out"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: iPhone 15 · Safari would be signed out here',
+                  uniqueID: 'sign-out-iphone',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Windows · Edge"
           description="Austin, Texas · March 30 at 19:31"
           icon={ComputerDesktopIcon}
-          control={<Button label="Sign out" variant="ghost" size="sm" />}
+          control={
+            <Button
+              label="Sign out"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: Windows · Edge would be signed out here',
+                  uniqueID: 'sign-out-windows',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
     </VStack>
@@ -973,6 +1032,7 @@ function SecurityPanel({settings, update}: PanelProps) {
 }
 
 function BillingPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
   return (
     <VStack gap={5}>
       <SettingsCard title="Plan">
@@ -981,14 +1041,38 @@ function BillingPanel({settings, update}: PanelProps) {
           icon={CubeIcon}
           titleAccessory={<Token label="Team" size="sm" color="blue" />}
           description="$12 per seat, per month. Renews on April 1."
-          control={<Button label="Upgrade" variant="primary" size="sm" />}
+          control={
+            <Button
+              label="Upgrade"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: the plan upgrade would start here',
+                  uniqueID: 'upgrade',
+                })
+              }
+            />
+          }
         />
         <SettingsRow
           title="Seats"
           icon={UsersIcon}
           description="18 of 25 seats in use."
           control={
-            <Button label="Manage seats" variant="secondary" size="sm" />
+            <Button
+              label="Manage seats"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: seat management would open here',
+                  uniqueID: 'manage-seats',
+                })
+              }
+            />
           }
         />
       </SettingsCard>
@@ -1027,7 +1111,20 @@ function BillingPanel({settings, update}: PanelProps) {
           title="Payment method"
           description="Visa ending 4242 · Expires 09/28"
           icon={CreditCardIcon}
-          control={<Button label="Update" variant="secondary" size="sm" />}
+          control={
+            <Button
+              label="Update"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: updating the payment method would start here',
+                  uniqueID: 'update-payment',
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
     </VStack>
@@ -1885,6 +1982,8 @@ function LanguagePanel({settings, update}: PanelProps) {
 }
 
 function PrivacyPanel({settings, update}: PanelProps) {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <VStack gap={5}>
       <SettingsCard title="Visibility">
@@ -1948,40 +2047,114 @@ function PrivacyPanel({settings, update}: PanelProps) {
           description="We will email a download link within 24 hours."
           icon={ArrowDownTrayIcon}
           control={
-            <Button label="Request export" variant="secondary" size="sm" />
+            <Button
+              label="Request export"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a data export request would be sent here',
+                  uniqueID: 'request-export',
+                })
+              }
+            />
           }
         />
         <SettingsRow
           title="Delete my account"
           description="Permanent, and it takes the workspace with it."
           icon={TrashIcon}
-          control={<Button label="Delete" variant="destructive" size="sm" />}
+          control={
+            <Button
+              label="Delete"
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                confirm.show({
+                  title: 'Delete your account?',
+                  description:
+                    "This demo won't delete anything. In your app, this would permanently delete your account and the workspace with it.",
+                  actionLabel: 'Delete account',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: your account would be deleted here',
+                      uniqueID: 'delete-account',
+                    });
+                  },
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
+      {confirm.element}
     </VStack>
   );
 }
 
 function IntegrationsPanel() {
+  const showToast = useToast();
   return (
     <SettingsCard title="Connected apps">
       <SettingsRow
         title="Calendar"
         description="Connected as alex@example.com"
         icon={CalendarDaysIcon}
-        control={<Button label="Disconnect" variant="ghost" size="sm" />}
+        control={
+          <Button
+            label="Disconnect"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: Calendar would be disconnected here',
+                uniqueID: 'disconnect-calendar',
+              })
+            }
+          />
+        }
       />
       <SettingsRow
         title="File storage"
         description="Attach files straight from your drive."
         icon={FolderIcon}
-        control={<Button label="Connect" variant="secondary" size="sm" />}
+        control={
+          <Button
+            label="Connect"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: File storage would be connected here',
+                uniqueID: 'connect-file-storage',
+              })
+            }
+          />
+        }
       />
       <SettingsRow
         title="Chat"
         description="Post updates to a channel when work ships."
         icon={ChatBubbleLeftRightIcon}
-        control={<Button label="Connect" variant="secondary" size="sm" />}
+        control={
+          <Button
+            label="Connect"
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: Chat would be connected here',
+                uniqueID: 'connect-chat',
+              })
+            }
+          />
+        }
       />
     </SettingsCard>
   );
@@ -2215,7 +2388,12 @@ function SettingsSearchResults({
             <Icon icon={setting.icon} size="sm" color="secondary" />
           }
           endContent={
-            <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+            <Icon
+              icon={ChevronRightIcon}
+              size="sm"
+              color="secondary"
+              xstyle={rtlStyles.mirror}
+            />
           }
           isSelected={index === activeIndex}
           onMouseEnter={() => onActiveIndexChange(index)}
@@ -2549,7 +2727,8 @@ export default function SettingsDialogTemplate() {
         // transform or `overflow: hidden` can clip — an open one inside a scaled
         // preview tile paints over the whole gallery instead of inside its tile.
         // The docsite's own preview is also a Dialog, which a modal here would
-        // then nest inside, and Astryx forbids nesting dialogs.
+        // then nest inside, and Astryx does not nest dialogs, apart from an
+        // AlertDialog that confirms a destructive action.
         //
         // Everything else on this page is the composition you want: drop
         // `isInline`, drive `isOpen` from state, hand `onOpenChange` the setter,

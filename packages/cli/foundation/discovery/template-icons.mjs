@@ -58,7 +58,12 @@ import {
   walk,
   writtenNames,
 } from './template-source-tree.mjs';
-import {definitionsByIcon, iconUseCommand} from './icon-set-discovery.mjs';
+import {
+  definitionsByIcon,
+  iconLookExport,
+  iconUseCommand,
+  missingIconLook,
+} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
 import {compareText} from '../text/compare-text.mjs';
@@ -448,45 +453,6 @@ export function matchIcon(source, target) {
     if (icon) return {icon, by: 'definition'};
   }
   return null;
-}
-
-/**
- * The export a mapped icon uses: the target's variant of the name asked for
- * (the project's variant, else the source's) when it has one, else the
- * default.
- * @param {IconSetIcon} icon
- * @param {DiscoveredIconSet} set
- * @param {string | undefined} variant
- */
-function targetExport(icon, set, variant) {
-  const module = icon.module ?? set.data.module;
-  if (variant && variant !== set.data.default?.variant) {
-    const entry = (icon.variants ?? []).find(each => each.variant === variant);
-    if (entry) {
-      return {module: entry.module ?? module, export: entry.export};
-    }
-  }
-  return {module, export: icon.export};
-}
-
-/**
- * The look a mapped icon draws when the look asked for (the project's
- * variant, else the source's) is one the target's icon does not have: what
- * was asked for and the target's default look. Undefined when the look is
- * kept, or when no look is asked for.
- * @param {IconSetIcon} icon
- * @param {DiscoveredIconSet} set
- * @param {string | undefined} variant
- * @returns {{asked: string, used: string | null} | undefined}
- */
-function lookChange(icon, set, variant) {
-  if (!variant) return undefined;
-  const fallback = set.data.default?.variant ?? null;
-  if (variant === fallback) return undefined;
-  if ((icon.variants ?? []).some(each => each.variant === variant)) {
-    return undefined;
-  }
-  return {asked: variant, used: fallback};
 }
 
 /**
@@ -1135,7 +1101,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, askedLook(record)),
+                  ...iconLookExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1160,7 +1126,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, askedLook(record)),
+                  ...iconLookExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1168,8 +1134,8 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         });
         continue;
       }
-      const chosen = targetExport(match.icon, set, askedLook(record));
-      const look = lookChange(match.icon, set, askedLook(record));
+      const chosen = iconLookExport(match.icon, set, askedLook(record));
+      const look = missingIconLook(match.icon, set, askedLook(record));
       const key = `${chosen.module}\0${chosen.export}`;
       let entry = added.get(key);
       if (!entry) {

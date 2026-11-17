@@ -473,6 +473,7 @@ describe('Node-tooling CI routing', () => {
       'pr-interaction',
       'pr-interaction-webkit',
       'pr-component-a11y-contracts',
+      'a11y-dependent-audits-plan',
       'pr-a11y-dependent-audits',
     ]);
     expect(ci.jobs.build.needs).toEqual([

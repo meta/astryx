@@ -1378,7 +1378,7 @@ export default function ConnectedAccountsTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent padding={4}>
+          <LayoutContent role="main" padding={4}>
             <VStack gap={4} ref={contentRef}>
               <AccountGroup
                 icon={BuildingLibraryIcon}

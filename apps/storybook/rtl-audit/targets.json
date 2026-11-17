@@ -551,6 +551,11 @@
     }
   },
   {
+    "component": "MobileNavToggle",
+    "storyId": "core-mobilenav--toggle-in-app-shell",
+    "dims": []
+  },
+  {
     "component": "MoreMenu",
     "storyId": "core-moremenu--default",
     "dims": ["D4"],

@@ -95,10 +95,20 @@ const targetScans = new Map();
  * @returns {Promise<ThemingTarget[]>}
  */
 async function scanThemingTargets(coreSrc) {
+  return targetsFromDocs(await coreComponentDocs(coreSrc));
+}
+
+/**
+ * Every theming target the docs declare, sorted by key then component, as
+ * {@link collectThemingTargets} describes.
+ * @param {import('./core-component-docs.mjs').CoreComponentDoc[]} docs
+ * @returns {ThemingTarget[]}
+ */
+export function targetsFromDocs(docs) {
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
   const targets = [];
 
-  for (const read of await coreComponentDocs(coreSrc)) {
+  for (const read of docs) {
     if ('error' in read) continue;
     const {file, doc} = read;
     const component =
