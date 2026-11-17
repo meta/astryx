@@ -225,3 +225,17 @@ describe('themeUse', () => {
     });
   });
 });
+
+describe('a default the app does not show', () => {
+  it('is named while no source imports the module, and not once one does', async () => {
+    const before = await themeUse('reef', {cwd: tmpDir});
+    expect(before.data.change.notImported).toBe(true);
+    fs.mkdirSync(path.join(tmpDir, 'src', 'app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app', 'providers.tsx'),
+      "import {themes, defaultThemeSlug} from '../astryx-themes';\nexport const theme = themes[defaultThemeSlug];\n",
+    );
+    const after = await themeUse('ocean', {cwd: tmpDir});
+    expect(after.data.change.notImported).toBeUndefined();
+  });
+});
