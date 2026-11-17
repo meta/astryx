@@ -2808,7 +2808,9 @@ const QUESTIONS_H = [
   ],
   [
     'heading color red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // CSS named colors
   ['accent tomato', {top: /^set q accent '#ff6347'$/}],
@@ -3026,13 +3028,16 @@ const QUESTIONS_I = [
   [
     'heading color red',
     {
-      top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/,
+      // (Every heading element takes a heading's color.)
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
       adds: /heading\.base\.--color-text-primary=#dc2626/,
     },
   ],
   [
     'headings red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],

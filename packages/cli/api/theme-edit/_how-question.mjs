@@ -507,6 +507,12 @@ const SHADED = wordTable(
   }),
 );
 
+/**
+ * Right before a written color (a hex, a color function): a role word there
+ * names that color, "our brand color #1e3a8a", never the role's token.
+ */
+const BEFORE_WRITTEN_COLOR = String.raw`(?!\s*(?:,\s*)?(?:#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\())`;
+
 /** The color tokens a word for a color the theme uses names. */
 const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
   // "a light tint of the accent": the accent mixed with see-through, so the
@@ -519,7 +525,9 @@ const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
     'var(--color-text-accent)',
   ],
   [
-    /\b(accent|brand|primary) colou?r(ed)?\b|\bin (the )?accent\b|\baccent\b/,
+    new RegExp(
+      String.raw`\b(?:(accent|brand|primary) colou?r(ed)?\b|in (the )?accent\b|accent\b)${BEFORE_WRITTEN_COLOR}`,
+    ),
     'var(--color-accent)',
     'var(--color-text-accent)',
   ],
@@ -604,8 +612,13 @@ function roleColorsFound(c) {
   // ("primary" names a color only with "color": "primary buttons" is a
   // variant.)
   for (const m of c.matchAll(
-    /\b(?:(accent|brand|danger|error|success|warning|info)(?: colou?r)?|(primary) colou?r)\b/g,
+    new RegExp(
+      String.raw`\b(?:(accent|brand|danger|error|success|warning|info)(?: colou?r)?|(primary) colou?r)\b${BEFORE_WRITTEN_COLOR}`,
+      'g',
+    ),
   )) {
+    // (A role word right before a written color names that color, "our
+    // brand color #1e3a8a": the color written, never the role's token.)
     const word = m[1] ?? m[2];
     const role =
       word === 'brand' || word === 'primary'
@@ -2268,7 +2281,14 @@ export function partLexicon(ctx) {
     .filter(key => key.includes('-') || !other(key))
     .sort((x, y) => y.length - x.length)
     .map(key => [
-      new RegExp(`\\b${key.replace(/-/g, '[\\s-]?')}(?:e?s)?\\b`),
+      // (A catalog name's "nav" is Core's short form of "navigation":
+      // "top navigation", "side navigation" are those parts.)
+      new RegExp(
+        `\\b${key
+          .split('-')
+          .map(w => (w === 'nav' ? 'nav(?:igation)?' : w))
+          .join('[\\s-]?')}(?:e?s)?\\b`,
+      ),
       {on: key},
     ]);
   // Near misses are corrected to one-word part names and design words.
@@ -2495,7 +2515,9 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   ],
   [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
   [/\b(after i check|once checked|i check)\b/, 'checked'],
-  [/\b(picked|chosen|choose|pick)\b/, 'selected'],
+  // ("Blue selection" said of a part: its selected items. The text
+  // highlight, said with no part, is read before states are.)
+  [/\b(picked|chosen|choose|pick|selections?)\b/, 'selected'],
   [
     /\b(invalid|errors? state|has an error|with an error|with errors|in (?:an )?error(?: state)?|erroring|errored)\b/,
     'invalid',
@@ -6660,6 +6682,43 @@ export function draftAnswer(ctx, env, question) {
           .join(' and '),
     );
   }
+  // "white sidebar blue selection", "teal column headers gold
+  // selections": a color and the thing it is for, said right after another
+  // color and its part, is an item of its own, as if a comma stood between
+  // them.
+  {
+    const isColor = (/** @type {string} */ w) =>
+      Boolean(w) && colorsIn(w).length > 0 && !knownPart(w);
+    /** @param {string} w */
+    function knownPart(w) {
+      return lex.parts.some(([re]) => re.test(` ${w} `));
+    }
+    const words = q.split(/(\s+)/);
+    /** @type {number[]} */
+    const cuts = [];
+    let sawColor = false;
+    let sawPart = false;
+    for (let i = 0; i < words.length; i += 2) {
+      const w = words[i].toLowerCase();
+      if (/[,;.:!?]$/.test(w) || /^(?:and|or|with|but)$/.test(w)) {
+        sawColor = sawPart = false;
+        continue;
+      }
+      if (isColor(w)) {
+        if (
+          sawColor &&
+          sawPart &&
+          i + 2 < words.length &&
+          !isColor(words[i + 2])
+        )
+          cuts.push(i);
+        sawColor = true;
+        sawPart = false;
+      } else if (sawColor && knownPart(w)) sawPart = true;
+    }
+    for (const i of cuts.reverse()) words[i - 2] = `${words[i - 2]},`;
+    if (cuts.length) q = words.join('');
+  }
   const clauses0 = clausesOf(q, lex.parts, {
     known: knownWord,
     ask: askWord,
@@ -9959,6 +10018,113 @@ export function draftAnswer(ctx, env, question) {
       ];
       if (rows.length) c.parts = rows.map(on => ({on}));
     }
+  }
+  // "Headings red": every part Core draws as a heading element (h1 to h6,
+  // from the census: an empty state's title, a markdown heading) is a
+  // heading too, for its text color. (The headings dial and a heading font
+  // reach them in the build.) Not in a question, nor beside an except
+  // ("all headings red except h1" keeps its levels).
+  const asking = /\?\s*$/.test(question);
+  const excepting = clauses.some(o => o.except);
+  {
+    const headingTags = Object.entries(C.MAP)
+      .filter(
+        ([t, rec]) =>
+          t !== 'heading' &&
+          TARGET.has(t) &&
+          [...(rec?.tags ?? [])].some((/** @type {string} */ g) =>
+            /^h[1-6]$/.test(g),
+          ),
+      )
+      .map(([t]) => t);
+    // (Each its own item after the headings', so the answer runs them
+    // together.)
+    for (let i = clauses.length - 1; i >= 0; i--) {
+      const c = clauses[i];
+      if (
+        !asking &&
+        !excepting &&
+        !c.state &&
+        c.parts.length === 1 &&
+        c.parts[0].on === 'heading' &&
+        Object.keys(c.parts[0]).length === 1 &&
+        c.aspects.length === 1 &&
+        c.aspects[0] === 'text' &&
+        (c.colors.length > 0 || /\bcolou?r\b/.test(c.text))
+      )
+        clauses.splice(
+          i + 1,
+          0,
+          ...headingTags
+            .filter(on => !clauses.some(o => o.parts.some(p => p.on === on)))
+            .map(on => ({...c, parts: [{on}]})),
+        );
+    }
+  }
+  // "The top bar with white text": a bar said in two words that Core's docs
+  // give, run together, as another bar component's own name ("topbar":
+  // TopNav's) is that component too, for its text color, so the text
+  // reaches its items wherever it sits.
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const c = clauses[i];
+    if (
+      asking ||
+      c.except ||
+      c.state ||
+      c.parts.length !== 1 ||
+      !c.aspects.includes('text') ||
+      // (Only a bar whose text is its items', drawing no text color of its
+      // own: a label or a mark is itself.)
+      C.MAP[c.parts[0].on]?.at?.color
+    )
+      continue;
+    // (The words the part was named with, in this item or an earlier one
+    // on the same part: "the top bar navy, with white text".)
+    const said = new Set(
+      clauses
+        .slice(0, i + 1)
+        .filter(o => o.parts.some(p => p.on === c.parts[0].on))
+        .flatMap(o => [...o.text.matchAll(/\b([a-z]+)\s+(?=([a-z]+)\b)/g)])
+        .map(m => m[1] + m[2]),
+    );
+    // (Never the component the part already belongs to: "the top nav
+    // heading", "the empty state title" name their own component.)
+    const comps = Object.entries(ctx.project.components);
+    const owners = new Set(
+      comps
+        .filter(([, info]) =>
+          (info.targets ?? []).some(
+            t => t.className === `astryx-${c.parts[0].on}`,
+          ),
+        )
+        .flatMap(([name, info]) => [name, info.subComponentOf ?? name]),
+    );
+    const also = comps
+      .filter(
+        ([name, info]) =>
+          !owners.has(name) && (info.keywords ?? []).some(k => said.has(k)),
+      )
+      .map(([, info]) => info)
+      .map(info =>
+        String(info.targets?.[0]?.className ?? '').replace(/^astryx-/, ''),
+      )
+      .filter(
+        on =>
+          on &&
+          TARGET.has(on) &&
+          !C.MAP[on]?.at?.color &&
+          !clauses.some(o => o.parts.some(p => p.on === on)),
+      );
+    // (Its text alone: the bar's own fill stays the bar's.)
+    clauses.splice(
+      i + 1,
+      0,
+      ...[...new Set(also)].map(on => ({
+        ...c,
+        parts: [{on}],
+        aspects: ['text'],
+      })),
+    );
   }
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
@@ -15628,6 +15794,16 @@ export function draftAnswer(ctx, env, question) {
     if (
       // (A select's caret is its indicator icon, read as that part.)
       !c.parts.some(x => /-(indicator|toggle)-icon$/.test(x.on)) &&
+      // (A selection said with a part that holds selectable items, "white
+      // sidebar, blue selection", is its selected items, read below.)
+      !(
+        /\bselection\b/.test(c.text) &&
+        !/\b(?:placeholders?|caret|cursor|text highlight|selected text)\b/.test(
+          c.text,
+        ) &&
+        c.state === 'selected' &&
+        c.parts.length > 0
+      ) &&
       /\b(placeholders?|caret|cursor colou?r|colou?r (of )?the cursor|selection|selected text highlight|text highlight)\b/.test(
         c.text,
       ) &&
