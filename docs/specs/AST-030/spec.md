@@ -311,7 +311,7 @@ they are separately named.
   module it imports; a computed `import()`, a child process, or a library that
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
-  by the package's name or a path into its `dist/`. A pull request's test run, scoped or full, leaves out the swizzle proof, which runs on `main` after merge and in full at release (`spec:AST-110` FR7, DEC-3). When a pull request runs
+  by the package's name or a path into its `dist/`. A pull request's test run, scoped or full, leaves out the swizzle proof unless the pull request carries `ci:run-swizzle` (FR12); the proof runs on `main` after merge and in full at release (`spec:AST-110` FR7, DEC-3). When a pull request runs
   them at their opted-in scope (FR12: only with their `ci:run-visual` or
   `ci:run-rtl` label), the visual and RTL owners audit one affected set of
   component folders: the changed components
