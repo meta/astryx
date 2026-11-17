@@ -134,8 +134,11 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
   message, and while the list opens, the last item is the anchor. A size
   change of any item above it and a change of keys keep the last item's top
   at the same distance from the scrollport's bottom, in the frame of the
-  change. A change of the scrollport's height keeps that distance too. The
-  last item's own growth and appended items are new content (FR10).
+  change. A change of the scrollport's height keeps that distance too: in
+  the frame of the change when ChatLayout's own element scrolls, and once
+  the window's resize settles, 150 ms after its last `resize` event, when
+  ChatLayout scrolls the page. The last item's own growth and appended items
+  are new content (FR10).
 - **FR8 — Row anchoring.** Otherwise the anchor is the item at the
   scrollport's top, at the position of the last scroll event (FR9). A size change of an item above
   it, items that load above it, and a removal keep its top at the same
@@ -217,7 +220,9 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
 
 - **PR1 — Layout reads.** On the scroll path the list reads no layout: it
   takes the position the stream scroll reads for each scroll event, and
-  writes nothing then. A correction pass reads the scroll container's position and
+  writes nothing then. On a window resize, when ChatLayout scrolls the page,
+  it reads nothing until the resize settles (FR7), then makes one correction
+  pass. A correction pass reads the scroll container's position and
   size, the list's offset and the rows that mounted, in one batch before any
   write (`architecture:react-component-runtime` INV18). A commit that mounts
   no row, changes no key, and holds no reveal or correction reads and writes
@@ -272,19 +277,19 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
 
 ## Verification
 
-| Contract  | Verification                                                                                           | Representative states                                                                                               | Mutation or failure expectation                                                                                      |
-| --------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| FR1       | ChatMessageList item-model tests                                                                       | items without virtualization; an empty array with `emptyState`                                                      | An item that does not render, renders out of order, or an empty state that does not show, fails.                     |
-| FR2, FR3  | Windowing tests; the hook's example-block test                                                         | the capability inside and outside ChatLayout                                                                        | Windowing without the capability, every row mounted inside ChatLayout, or no warning outside it, fails.              |
-| FR4, FR5  | Windowing tests over a scripted layout; measured-window math tests                                     | a 5,000-message conversation at open; a 2,000-message example block                                                 | More than about one screen of rows, a first window away from the end, or a scroll range off the sizes, fails.        |
-| FR6, FR7  | End-anchor tests; the Chromium spec                                                                    | a row above the last one grows, or gets shorter and the position clamps; the last row streams; a shorter scrollport | The last row's top moving, or a distance from the end other than zero, fails.                                        |
-| FR8, FR13 | Row-anchor tests; the sentinel test                                                                    | a row above the reader resizes; 100 items load above; the reader's item is removed; the sentinel intersects         | The reader's row moving, a scroll position that does not grow by the loaded items' sizes, or no action, fails.       |
-| FR9, FR10 | Stream-scroll shift and position tests; windowing growth and new-message tests; the Chromium spec      | a correction upward while following; a clamp; a shift during a follow; a streamed reply; an append in history       | Following that stops after a correction or a clamp, an append that is not followed, or no New messages, fails.       |
-| FR11      | `scrollToItem` tests; the Chromium spec                                                                | an unmounted item at `'start'`, with rows shorter than their estimates; `'center'` and `'end'`; an unknown key      | The item away from its place, a follow that continues, or true for an unknown key, fails.                            |
-| FR12      | Scroll-in-motion tests                                                                                 | a row above the reader grows during a scroll, also at the top of loaded history; `scrollend`; 150 ms; after it ends | A write during the scroll, no write when it ends, or a held change after it ended, fails.                            |
-| FR14      | Review of the scroll-anchoring writer's callers                                                        | the windowed list mounted and unmounted                                                                             | A write of the anchoring attribute outside its owner module fails review.                                            |
-| AR1–AR3   | Log-semantics, busy and focus tests                                                                    | item mode at rest; the window moving over history; a new message; a focused row scrolled away, then removed         | A lost log attribute, history unmarked, an append marked busy, a focused row unmounted, or focus off the log, fails. |
-| PR1–PR3   | Review; a first-load size comparison of ChatMessageList and ChatLayout with and without the capability | a parent render with the same rows; a page without the capability                                                   | A pass that reads layout for an unchanged commit, or more than the wiring allowance where unused, fails.             |
+| Contract  | Verification                                                                                               | Representative states                                                                                               | Mutation or failure expectation                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| FR1       | ChatMessageList item-model tests                                                                           | items without virtualization; an empty array with `emptyState`                                                      | An item that does not render, renders out of order, or an empty state that does not show, fails.                            |
+| FR2, FR3  | Windowing tests; the hook's example-block test                                                             | the capability inside and outside ChatLayout                                                                        | Windowing without the capability, every row mounted inside ChatLayout, or no warning outside it, fails.                     |
+| FR4, FR5  | Windowing tests over a scripted layout; measured-window math tests                                         | a 5,000-message conversation at open; a 2,000-message example block                                                 | More than about one screen of rows, a first window away from the end, or a scroll range off the sizes, fails.               |
+| FR6, FR7  | End-anchor tests; the Chromium spec                                                                        | a row above the last one grows, or gets shorter and the position clamps; the last row streams; a shorter scrollport | The last row's top moving, or a distance from the end other than zero, fails.                                               |
+| FR8, FR13 | Row-anchor tests; the sentinel test                                                                        | a row above the reader resizes; 100 items load above; the reader's item is removed; the sentinel intersects         | The reader's row moving, a scroll position that does not grow by the loaded items' sizes, or no action, fails.              |
+| FR9, FR10 | Stream-scroll shift and position tests; windowing growth and new-message tests; the Chromium spec          | a correction upward while following; a clamp; a shift during a follow; a streamed reply; an append in history       | Following that stops after a correction or a clamp, an append that is not followed, or no New messages, fails.              |
+| FR11      | `scrollToItem` tests; the Chromium spec                                                                    | an unmounted item at `'start'`, with rows shorter than their estimates; `'center'` and `'end'`; an unknown key      | The item away from its place, a follow that continues, or true for an unknown key, fails.                                   |
+| FR12      | Scroll-in-motion tests                                                                                     | a row above the reader grows during a scroll, also at the top of loaded history; `scrollend`; 150 ms; after it ends | A write during the scroll, no write when it ends, or a held change after it ended, fails.                                   |
+| FR14      | Review of the scroll-anchoring writer's callers                                                            | the windowed list mounted and unmounted                                                                             | A write of the anchoring attribute outside its owner module fails review.                                                   |
+| AR1–AR3   | Log-semantics, busy and focus tests                                                                        | item mode at rest; the window moving over history; a new message; a focused row scrolled away, then removed         | A lost log attribute, history unmarked, an append marked busy, a focused row unmounted, or focus off the log, fails.        |
+| PR1–PR3   | Review; a page-scroll test that counts reads; a first-load size comparison with and without the capability | a parent render with the same rows; ten window resizes of a page-scrolling layout; a page without the capability    | A pass that reads layout for an unchanged commit or during a resize, or more than the wiring allowance where unused, fails. |
 
 Evidence gap: neither the scripted layout nor the Chromium checks show a
 painted frame. Frame traces in Chromium and in Safari on iOS, with a finger's
