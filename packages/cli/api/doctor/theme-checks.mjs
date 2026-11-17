@@ -461,6 +461,46 @@ function themeImportPairEvidence(root, generatedModule, themes) {
   return {unpaired, unproven};
 }
 
+/** The app's page files a font `<link>` goes in, in the order frameworks keep them. */
+const PAGE_HEAD_FILES = [
+  'index.html',
+  'public/index.html',
+  'src/index.html',
+  'app/layout.tsx',
+  'app/layout.jsx',
+  'src/app/layout.tsx',
+  'src/app/layout.jsx',
+  'pages/_document.tsx',
+  'pages/_document.jsx',
+  'src/pages/_document.tsx',
+];
+
+/**
+ * The font families the app's page head loads through a font service
+ * `<link>`, and the page file that holds its head (the first of the page
+ * files that exists), relative to the project.
+ * @param {string} projectDir
+ * @returns {{families: Set<string>, head: string | null}}
+ */
+function pageFontLinks(projectDir) {
+  /** @type {Set<string>} */
+  const families = new Set();
+  /** @type {string | null} */
+  let head = null;
+  for (const name of PAGE_HEAD_FILES) {
+    const file = path.join(projectDir, name);
+    const source = readTextFileIfExists(file);
+    if (source == null) continue;
+    head ??= name;
+    for (const m of source.matchAll(/<link\b[^>]*>/gi)) {
+      const href = /\bhref\s*=\s*\{?\s*["'`]([^"'`]+)["'`]/i.exec(m[0])?.[1];
+      if (!href || !/\bstylesheet\b/i.test(m[0])) continue;
+      for (const family of fontServiceFamilies(href)) families.add(family);
+    }
+  }
+  return {families, head};
+}
+
 /** @param {string} value */
 function normalizeFontName(value) {
   return value
@@ -1973,6 +2013,10 @@ export async function checkAppThemes(cwd) {
       importedEvidence.set(theme, null);
     }
   }
+  // A font service stylesheet the app links in its page head (the setup a
+  // theme's README gives) loads its families for every added theme.
+  const pageFonts = pageFontLinks(state.projectDir);
+  for (const family of pageFonts.families) moduleLoaded.add(family);
   for (const theme of resolved) {
     const availableTheme = available.find(
       candidate =>
@@ -2049,7 +2093,7 @@ export async function checkAppThemes(cwd) {
     }
     if (packageWarnings.length > 0) {
       fontWarningFixes.push(
-        'Load the named package fonts in app HTML, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).',
+        `Add the theme's font <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=…"> to the <head> of ${pageFonts.head ?? "the app's HTML page (index.html, or the root layout)"}, as the theme's README gives it, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).`,
       );
     }
   }

@@ -1726,6 +1726,28 @@ describe('app-theme doctor checks', () => {
     expect(checks.some(item => item.status === 'fail')).toBe(false);
   });
 
+  it('check 9 passes when the page head links a font service stylesheet for the family, as a theme README gives it', async () => {
+    const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head><link rel="preconnect" href="https://fonts.googleapis.com" /><link\n  rel="stylesheet"\n  href="https://fonts.googleapis.com/css2?family=Ocean+Sans:wght@400;700&display=swap" /></head><body><div id="root"></div></body></html>\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('check 9 names the page file its font link goes in', async () => {
+    const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head></head></html>\n',
+    );
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'warn'});
+    expect(result.fix).toContain('to the <head> of index.html');
+  });
+
   it('check 9 warns when a local theme has no font stylesheet', async () => {
     const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
