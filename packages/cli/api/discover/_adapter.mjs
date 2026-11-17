@@ -872,7 +872,9 @@ export async function keptSavedSearch(build, valid) {
     persistedGather(
       [
         'discover-saved-search',
-        realDir(projectRoot(project)),
+        // The run folder, not the project root: what discover counts as
+        // declared is read from the folder the command runs in.
+        realDir(project.cwd),
         optedIntoIconSets(project),
       ],
       () => build(project),

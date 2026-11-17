@@ -90,6 +90,23 @@ function docNameEntries(tmp) {
   });
 }
 
+/**
+ * The folders the kept saved-search records were kept for.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function savedSearchEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  return fs.readdirSync(dir).flatMap(name => {
+    try {
+      const key = JSON.parse(readKept(path.join(dir, name)).key);
+      return key[5] === 'discover-saved-search' ? [key[6]] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 describe.skipIf(process.platform !== 'linux')(
   'kept installed doc names',
   () => {
@@ -192,6 +209,75 @@ describe.skipIf(process.platform !== 'linux')(
         expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
         expect(hint()).toBe(false);
         expect(hint()).toBe(false);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    }, 240_000);
+
+    it("keeps search's discover line per folder, as discover counts what each folder declares", () => {
+      const other = makeProject();
+      const src = path.join(other.dir, 'src');
+      fs.mkdirSync(src, {recursive: true});
+      // The root declares @acme/kit without installing it; src declares
+      // nothing.
+      fs.writeFileSync(
+        path.join(other.dir, 'package.json'),
+        JSON.stringify({
+          name: 'consumer',
+          dependencies: {'@acme/kit': '^1.0.0'},
+        }),
+      );
+      fs.writeFileSync(
+        path.join(other.dir, 'astryx.config.mjs'),
+        `export default {
+  integrations: ['@acme/widgets'],
+  async discover() {
+    return {
+      schemaVersion: 1,
+      source: {name: 'Test catalog', generatedAt: '2026-09-30T00:00:00.000Z', complete: true},
+      packages: [{
+        package: '@acme/kit',
+        integration: 'acme-kit',
+        aliases: [],
+        latest: '1.0.0',
+        description: 'Parts for apps.',
+        versions: [{version: '1.0.0', publishedAt: '2026-09-20T00:00:00.000Z', prerelease: false, status: 'ok'}],
+        contributions: [{kind: 'component', name: 'BarChart', summary: 'Compare values.'}],
+      }],
+    };
+  },
+};
+`,
+      );
+      /** @param {string} tmp @param {string} cwd */
+      const hint = (tmp, cwd) =>
+        run(['search', 'bar', 'chart'], {
+          tmp,
+          cwd,
+          json: false,
+        }).stdout.includes('More in packages you could add');
+      /** @param {string} tmp @param {string} cwd */
+      const answers = (tmp, cwd) =>
+        JSON.parse(run(['discover', 'bar', 'chart'], {tmp, cwd}).stdout)
+          .type === 'discover.search';
+      try {
+        for (const order of [
+          [other.dir, src],
+          [src, other.dir],
+        ]) {
+          const tmp = keptTmp(`declared-${path.basename(order[0])}`);
+          expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
+          for (const cwd of [...order, ...order]) {
+            expect(hint(tmp, cwd)).toBe(answers(tmp, cwd));
+          }
+          // The two folders answer differently, and each keeps a record of
+          // its own: a record one folder kept never answers for the other.
+          expect(answers(tmp, other.dir)).toBe(false);
+          expect(answers(tmp, src)).toBe(true);
+          expect(savedSearchEntries(tmp).sort()).toEqual(
+            [fs.realpathSync(other.dir), fs.realpathSync(src)].sort(),
+          );
+        }
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
       }
