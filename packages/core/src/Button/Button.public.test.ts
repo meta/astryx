@@ -13,9 +13,9 @@ import {describe, expectTypeOf, it} from 'vitest';
 import type {ButtonProps} from './index';
 
 describe('Button public types', () => {
-  it('types the ref as the button element, also with href (Button FR17 gap)', () => {
-    // With `href` the ref receives the anchor at runtime; the type names
-    // the button. A change to this type is a public API change.
+  it('types the ref as the button element, also in link mode (Button FR17 gap)', () => {
+    // In link mode (FR11) the ref receives the link element at runtime; the
+    // type names the button. A change to this type is a public API change.
     expectTypeOf<ButtonProps['ref']>().toEqualTypeOf<
       React.Ref<HTMLButtonElement> | undefined
     >();
