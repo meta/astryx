@@ -34,6 +34,7 @@ const STORIES = [
   'core-multiselector--ghost-variant',
   'core-multiselector--secondary-variant',
   'core-complexselector--secondary-variant',
+  'core-complexselector--controlled-toolbar-trigger',
 ];
 
 /** The transforms on the trigger and its three nearest ancestors. */
