@@ -779,3 +779,28 @@ describe('CircularProgress disabled treatment', () => {
     expect(getComputedStyle(ringOf(live)).opacity).not.toBe('0.5');
   });
 });
+
+describe('CircularProgress track', () => {
+  // A theme's status muted roles can be opaque tints of the status color, so
+  // every variant draws on the one muted track, as ProgressBar does.
+  it.each(['accent', 'success', 'warning', 'error'] as const)(
+    'draws a %s ring on the muted track',
+    variant => {
+      const {container} = render(
+        <CircularProgress value={60} label="Progress" variant={variant} />,
+      );
+      const strokes = Array.from(container.querySelectorAll('*')).map(
+        element => getComputedStyle(element).stroke,
+      );
+      expect(
+        strokes.some(stroke => stroke.includes('--color-background-muted')),
+      ).toBe(true);
+      expect(
+        strokes.some(
+          stroke =>
+            stroke.includes(`-muted)`) && !stroke.includes('background-muted'),
+        ),
+      ).toBe(false);
+    },
+  );
+});

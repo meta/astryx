@@ -168,9 +168,12 @@ const styles = stylex.create({
   svgIndeterminate: {
     display: 'block',
   },
+  // One muted track for every variant, as ProgressBar has. A theme's status
+  // muted roles can be opaque tints of the status color, so a status-tinted
+  // track reads at about 1:1 against its own fill in some themes.
   track: {
     fill: 'none',
-    stroke: colorVars['--color-track'],
+    stroke: colorVars['--color-background-muted'],
   },
   // The determinate fill moves on the compositor so a value change keeps
   // moving while a script runs (a `stroke-dashoffset` transition repaints on
@@ -313,24 +316,6 @@ const variantStyles = stylex.create({
   },
   disabled: {
     stroke: colorVars['--color-text-secondary'],
-  },
-});
-
-const trackVariantStyles = stylex.create({
-  accent: {
-    stroke: colorVars['--color-accent-muted'],
-  },
-  success: {
-    stroke: colorVars['--color-success-muted'],
-  },
-  warning: {
-    stroke: colorVars['--color-warning-muted'],
-  },
-  error: {
-    stroke: colorVars['--color-error-muted'],
-  },
-  neutral: {
-    stroke: colorVars['--color-background-muted'],
   },
 });
 
@@ -524,7 +509,6 @@ export function CircularProgress({
     children != null ? children : showValueLabel ? valueText : null;
 
   const fillVariant = isDisabled ? 'disabled' : variant;
-  const trackVariant = isDisabled ? 'neutral' : variant;
 
   // A value change turns the fill's layers with Web Animations on the
   // compositor, from wherever the arc is drawn now (mid-change, the running
@@ -673,7 +657,7 @@ export function CircularProgress({
           <circle
             {...mergeProps(
               themeProps('circular-progress-track'),
-              stylex.props(styles.track, trackVariantStyles[trackVariant]),
+              stylex.props(styles.track),
             )}
             cx={center}
             cy={center}

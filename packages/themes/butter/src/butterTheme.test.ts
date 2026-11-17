@@ -179,3 +179,28 @@ describe('butter color token mapping completeness', () => {
     });
   });
 });
+
+describe('butter progress fills', () => {
+  // The banner stops read at 1.2:1 to 2.6:1 on the progress track, so each
+  // fill takes the stop in the banner family that reaches 3:1 on it.
+  const {green, neutral, red, yellow} = butterModePalettes;
+  const track = {light: neutral.light[85], dark: neutral.dark[40]};
+  const fills = {
+    success: {light: green.light[45], dark: green.dark[80]},
+    warning: {light: yellow.light[45], dark: yellow.dark[80]},
+    error: {light: red.light[50], dark: red.dark[85]},
+  };
+
+  it.each(Object.entries(fills))(
+    'keeps a %s fill at 3:1 on the track',
+    (variant, fill) => {
+      expect(
+        butterTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+      ).toMatchObject({
+        backgroundColor: `light-dark(${fill.light}, ${fill.dark})`,
+      });
+      expect(contrast(fill.light, track.light)).toBeGreaterThanOrEqual(3);
+      expect(contrast(fill.dark, track.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
+});

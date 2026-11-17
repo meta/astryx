@@ -388,9 +388,12 @@ export const neutralTheme = defineTheme({
       },
     },
 
+    // The track is the emphasized border in light mode. In dark mode it is one
+    // stop darker, so the secondary-text fill of a neutral or disabled bar
+    // reads at 3:1 on it.
     'progress-bar': {
       base: {
-        '--color-background-muted': 'var(--color-border-emphasized)',
+        '--color-background-muted': `light-dark(${neutral.light[85]}, ${neutral.dark[30]})`,
       },
     },
 

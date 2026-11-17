@@ -106,12 +106,37 @@ describe('stone strong status contrast', () => {
     }
   });
 
-  it('uses dark ink for marks on Stone’s pale progress fills', () => {
+  it('uses light ink on light-mode progress fills and dark ink on dark-mode ones', () => {
     const mark = stoneTheme.components!['progress-bar-mark'];
     for (const variant of ['accent', 'success', 'warning', 'error']) {
       expect(mark[`placement:fill+variant:${variant}`]).toMatchObject({
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: `light-dark(${stoneModePalettes.neutral.light[100]}, var(--color-on-light))`,
       });
+    }
+  });
+
+  it('keeps every progress fill at 3:1 on the skeleton track', () => {
+    const fill = stoneTheme.components!['progress-bar-fill'];
+    const families = {
+      accent: 'blue',
+      success: 'green',
+      warning: 'yellow',
+      error: 'red',
+    } as const;
+    for (const [variant, family] of Object.entries(families)) {
+      const palette = stoneModePalettes[family];
+      expect(fill[`variant:${variant}`]).toMatchObject({
+        backgroundColor: `light-dark(${palette.light[40]}, ${palette.dark[80]})`,
+      });
+      expect(
+        contrast(palette.light[40], stoneModePalettes.neutral.light[85]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(palette.dark[80], stoneModePalettes.neutral.dark[40]),
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrast(stoneModePalettes.neutral.light[100], palette.light[40]),
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 });

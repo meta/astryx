@@ -372,35 +372,50 @@ export const stoneTheme = defineTheme({
       },
     },
 
-    // Progress fills use the same family as their matching status surface;
-    // the darker stop in dark mode keeps the channel visible on dark tracks.
+    // Progress fills use the same family as their matching status surface,
+    // at the stops that reach 3:1 on the skeleton track in each mode.
     'progress-bar-fill': {
       'variant:accent': {
-        backgroundColor: lightDark(blue.light[90], blue.dark[70]),
+        backgroundColor: lightDark(blue.light[40], blue.dark[80]),
       },
       'variant:success': {
-        backgroundColor: lightDark(green.light[90], green.dark[70]),
+        backgroundColor: lightDark(green.light[40], green.dark[80]),
       },
       'variant:warning': {
-        backgroundColor: lightDark(yellow.light[90], yellow.dark[70]),
+        backgroundColor: lightDark(yellow.light[40], yellow.dark[80]),
       },
       'variant:error': {
-        backgroundColor: lightDark(red.light[90], red.dark[70]),
+        backgroundColor: lightDark(red.light[40], red.dark[80]),
+      }, // The secondary text color reads under 3:1 on the dark track, so a
+      // neutral or disabled fill steps one stop lighter there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
       },
     },
 
+    // A mark on a fill is light ink on the mid-tone light fills and dark ink
+    // on the pale dark fills.
     'progress-bar-mark': {
       'placement:fill+variant:accent': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
       'placement:fill+variant:success': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
       'placement:fill+variant:warning': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
       'placement:fill+variant:error': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
     },
 
