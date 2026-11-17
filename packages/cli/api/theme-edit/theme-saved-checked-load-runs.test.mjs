@@ -213,12 +213,12 @@ describe('undo', () => {
 });
 
 describe('set', () => {
-  it('refuses a color on text, naming the text color token', async () => {
+  it('refuses a color on text that is no color', async () => {
     const r = await refusal(() =>
-      themeEditSet('h', 'color', '#ff0000', {cwd, on: 'text'}),
+      themeEditSet('h', 'color', '12px', {cwd, on: 'text'}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000' --on text$/);
+    expect(r.run.join('\n')).not.toContain('12px');
   });
 
   it('refuses blank scope flags', async () => {

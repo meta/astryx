@@ -119,6 +119,8 @@ import {
   focusStateOf,
   valueProblem,
   partComponentDocs,
+  colorPropTokens,
+  innerPropTokens,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -3781,24 +3783,6 @@ export function coveredPaints(ctx, part, prop) {
 }
 
 /**
- * The colors a part's color prop may show when none is given: its default
- * as its doc gives it; with none (Text's depends on its type), each value
- * of the prop whose text token the part's own color reads, in the order
- * the prop lists them. Empty with no color prop.
- * @param {{type?: string, default?: string | null} | undefined} prop
- * @param {Record<string, unknown> | undefined} reads the tokens the part's color reads (its part data)
- * @returns {string[]}
- */
-function colorPropDefaults(prop, reads) {
-  if (!prop) return [];
-  const own = /^'([\w-]+)'$/.exec(String(prop.default ?? '').trim())?.[1];
-  if (own) return [own];
-  return [...String(prop.type ?? '').matchAll(/'([\w-]+)'/g)]
-    .map(m => m[1])
-    .filter(v => Object.hasOwn(reads ?? {}, `--color-text-${v}`));
-}
-
-/**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
  * so a saved setting never blocks the theme.
@@ -5165,6 +5149,28 @@ function checkOne(
             run: [setLine(slug, thing, v, {...s, on: named}, unset)],
           },
         );
+      // A name that is a part's name with a piece of it after (a top nav
+      // heading's title, `top-nav-heading-title`) means that part: the
+      // longest part name it starts with. A text property its inner
+      // elements read from tokens is offered as those tokens there.
+      const holder = [...TARGET.keys()]
+        .filter(n => dashed.startsWith(`${n}-`))
+        .sort((a, b) => b.length - a.length)[0];
+      if (holder) {
+        const toks = innerPropTokens(ctx.C, holder, kebab(thing));
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
+          {
+            didYouMean: [holder],
+            run: toks.length
+              ? toks.map(tok =>
+                  setLine(slug, tok, v, {...s, on: holder}, unset),
+                )
+              : [setLine(slug, thing, v, {...s, on: holder}, unset)],
+          },
+        );
+      }
       // A plural or another case names the part it means; a typo of one
       // part leads with the same command on that part.
       const near = nearest(s.on.toLowerCase().replace(/s$/, ''), [
@@ -7531,7 +7537,13 @@ function checkOne(
           );
         }) &&
         (splitTop(v.trim(), ' ').filter(Boolean).length > 1 || v.includes('/'));
-      if (hit && !oneLength(v) && !corners) {
+      // A bare 0 is a length everywhere in CSS but inside calc(), where it
+      // is a number: it is saved as 0px, the length it means.
+      if (hit && /^[+-]?0*\.?0+$/.test(v.trim())) {
+        s.value = '0px';
+        const said = `${v.trim()} is saved as 0px: ${hit} reads ${prop} inside calc(), where a bare 0 is not a length`;
+        s.note = s.note ? `${s.note}; ${said}` : said;
+      } else if (hit && !oneLength(v) && !corners) {
         const first = splitTop(v.trim(), ' ')[0] ?? '';
         const n = cssNumber(first);
         const fix = oneLength(first)
@@ -7692,38 +7704,23 @@ function checkOne(
       ].includes(prop)
     ) {
       const inner = partsOf(ctx, s)
-        .map(t => {
-          const rec = ctx.C.MAP[t];
-          // (A color only through the parts inside it: elements inside a
-          // part that read a color token are answered with the tokens on
-          // the part by how.)
-          let toks =
-            prop === 'color'
-              ? []
-              : Object.entries(rec?.inside ?? {})
-                  .filter(([, props]) => props.includes(prop))
-                  .map(([tok]) => tok);
-          const held = (rec?.contains ?? []).map(x => ctx.C.MAP[x]);
-          if (
-            !toks.length &&
-            !Object.keys(rec?.inside ?? {}).length &&
-            held.length &&
-            held.every(x => x?.own?.[prop])
-          )
-            toks = [
-              ...new Set(
-                held.flatMap(x => Object.keys(x.own[prop].tokens ?? {})),
-              ),
-            ]
-              .filter(tok => !/disabled|placeholder|accent/.test(tok))
-              .slice(0, 4);
-          return /** @type {const} */ ([
-            t,
-            rec && !rec.own?.[prop] ? toks : [],
-          ]);
-        })
+        .map(t => /** @type {const} */ ([t, innerPropTokens(ctx.C, t, prop)]))
         .filter(([, toks]) => toks.length);
-      if (inner.length && inner.length === partsOf(ctx, s).length) {
+      // One token for each part (a banner's text size, --text-label-size):
+      // the value goes into it on the part (compileTheme), and the result
+      // says so. With several (a top nav heading's title and subtitle
+      // sizes), which one is meant is not known: the refusal names each.
+      const oneEach =
+        prop !== 'color' && inner.every(([, toks]) => toks.length === 1);
+      if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
+        const said = inner
+          .map(
+            ([part, [tok]]) =>
+              `${part}'s text is drawn by elements inside it that set their own ${prop} from ${tok}, so the value goes into ${tok} on ${part}`,
+          )
+          .join('; ');
+        s.note = s.note ? `${s.note}; ${said}` : said;
+      } else if (inner.length && inner.length === partsOf(ctx, s).length) {
         const [part, toks] = inner[0];
         refuse(
           E.ERR_THEME_NO_EFFECT,
@@ -7742,18 +7739,26 @@ function checkOne(
     // says which.
     if (!unset) {
       const reach = inheritedReach(ctx, s, prop);
-      if (reach) s.note = reach;
+      if (reach) s.note = s.note ? `${s.note}; ${reach}` : reach;
     }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
-    // A heading's color is written as the text color tokens its color prop
-    // reads, on the heading alone (compileTheme), so it shows.
-    const headingColor =
+    // A text, heading or link color is written as the text color tokens
+    // its color prop reads, on that part alone (compileTheme), so it shows.
+    const propTokens = partsOf(ctx, s).map(t => colorPropTokens(ctx, t, s.when));
+    // (A value that is no color is refused below, with the nearest color.)
+    const propColor =
       prop === 'color' &&
-      partsOf(ctx, s).length > 0 &&
-      partsOf(ctx, s).every(t => t === 'heading');
+      isColorValue(v) &&
+      propTokens.length > 0 &&
+      propTokens.every(k => k.length);
+    if (propColor && partsOf(ctx, s).some(t => t !== 'heading')) {
+      const toks = [...new Set(propTokens.flat())];
+      const said = `the color goes into ${toks.join(' and ')} on ${s.on}, the ${toks.length > 1 ? 'tokens' : 'token'} its color prop reads (Core sets that prop after part styles)`;
+      s.note = s.note ? `${s.note}; ${said}` : said;
+    }
     if (
-      !headingColor &&
+      !propColor &&
       (prop === 'color' || prop === '-webkit-text-fill-color') &&
       partsOf(ctx, s).some(t => textParts.includes(t))
     ) {
@@ -7765,18 +7770,13 @@ function checkOne(
           v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
             ? v
             : (nearestColorName(v) ?? '#1f2937');
-        // The tokens the part's color prop reads: the one named, else the
-        // prop's default as its doc gives it (a link's accent), else each
-        // color whose token the part reads (Text's depends on its type),
-        // set on the part alone.
-        const colors = named
-          ? [named]
-          : colorPropDefaults(
-              partComponentDocs(ctx, /** @type {string} */ (s.on))
-                .map(d => d.doc.props?.color)
-                .find(Boolean),
-              ctx.C.MAP[/** @type {string} */ (s.on)]?.own?.color?.tokens,
-            );
+        // The tokens the part's color prop reads (colorPropTokens), set on
+        // the part alone.
+        const colors = colorPropTokens(
+          ctx,
+          /** @type {string} */ (s.on),
+          s.when,
+        ).map(t => t.replace(/^--color-text-/, ''));
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colors.map(c => `${c}: --color-text-${c}`).join('; ')}) on ${s.on} instead.`,
