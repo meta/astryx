@@ -527,7 +527,8 @@ describe('useMenuPress — the row a held press lights (spec:AST-094 FR27, FR43)
       'DropdownMenuItem',
       'DropdownMenuCheckboxItem',
       'DropdownMenuRadioItem',
-      'DropdownMenuSubMenu',
+      // A sub-menu's row and its styles live in the row module.
+      'DropdownMenuSubMenuRow',
     ]) {
       const source = readFileSync(
         resolve(__dirname, `../DropdownMenu/${family}.tsx`),
