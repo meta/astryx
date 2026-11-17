@@ -10,6 +10,9 @@ import {NavHeadingMenuItem} from './NavHeadingMenuItem';
 import {NavHeadingCloseContext} from './NavMenuContext';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
+import {contrastRatio} from '../theme/contrast';
+import {resolveThemeToken} from '../theme/tokens';
 
 describe('NavHeadingMenu', () => {
   it('renders with role="menu"', () => {
@@ -729,4 +732,60 @@ describe('NavHeadingMenu as an action group (family:action-groups)', () => {
     expect(onDashboard).not.toHaveBeenCalled();
     expect(onSettings).not.toHaveBeenCalled();
   });
+});
+
+/**
+ * The declarations the item's own classes apply, joined into one string: on
+ * `:focus-visible` (the ring), or unconditionally.
+ */
+function itemDeclarations(
+  item: HTMLElement,
+  condition: ':focus-visible' | '' = ':focus-visible',
+): string {
+  const css = getAllInjectedCss();
+  const declarations: string[] = [];
+  for (const className of Array.from(item.classList)) {
+    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+      condition === ''
+        ? `\\.${escaped}(?::not\\(#\\\\#\\))*\\s*\\{([^}]*)\\}`
+        : `\\.${escaped}:focus-visible[^{,]*\\{([^}]*)\\}`,
+      'g',
+    );
+    for (const match of css.matchAll(pattern)) {
+      declarations.push(match[1] ?? '');
+    }
+  }
+  return declarations.join(' ');
+}
+
+describe('NavHeadingMenu focus ring', () => {
+  it('draws the standard focus ring on a keyboard-focused item, inset by its own width', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Documents" href="/docs" />
+        <NavHeadingMenuItem label="Settings" onClick={() => {}} />
+      </NavHeadingMenu>,
+    );
+    for (const item of screen.getAllByRole('menuitem')) {
+      const ring = itemDeclarations(item);
+      expect(ring).toContain('outline-width: var(--focus-outline-width)');
+      expect(ring).toContain('outline-style: var(--focus-outline-style)');
+      expect(ring).toContain('outline-color: var(--focus-outline-color)');
+      expect(itemDeclarations(item, '').replace(/\s+/g, '')).toContain(
+        'outline-offset:calc(-1*var(--focus-outline-width))',
+      );
+    }
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'draws a ring at 3:1 or more against the menu in %s mode',
+    mode => {
+      const ring = resolveThemeToken(null, '--focus-outline-color', {mode});
+      const menu = resolveThemeToken(null, '--color-background-popover', {
+        mode,
+      });
+      expect(contrastRatio(ring, menu)).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
