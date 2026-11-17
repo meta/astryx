@@ -21,6 +21,7 @@ export const doc = {
       name: 'slug',
       param: 'slug',
       required: true,
+      names: 'theme',
     },
   ],
   examples: [
@@ -30,6 +31,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {
       code: 0,

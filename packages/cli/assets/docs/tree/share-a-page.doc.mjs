@@ -37,7 +37,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A shareable page is one HTML file. It opens in a browser, as an attachment, or in an artifact viewer that shows HTML in a sandboxed frame. It runs no script and loads nothing from the network. It also carries its own source, so anyone who has the file can turn it back into code, change it, and render it again. The render command is experimental: its options and its output can change in a patch release.',
+          text: 'A shareable page is one HTML file. It opens in a browser, as an attachment, or in an artifact viewer that shows HTML in a sandboxed frame. It loads nothing from the network, and it carries the page\u2019s own script, so its controls work as in the app. It also carries its own source, so anyone who has the file can turn it back into code, change it, and render it again. The render command is experimental: its options and its output can change in a patch release.',
         },
         {
           type: 'list',
@@ -62,7 +62,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'tsx',
-          code: "import {VStack} from '@astryxdesign/core/VStack';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function Page() {\n  return (\n    <VStack gap={5} padding={6}>\n      <HStack gap={2} vAlign=\"center\">\n        <Heading level={1}>Project Atlas</Heading>\n        <Badge label=\"At risk\" variant=\"warning\" />\n      </HStack>\n      <Card padding={5}>\n        <Text type=\"body\">38% of traffic is on the new stack.</Text>\n      </Card>\n    </VStack>\n  );\n}",
+          code: "import {VStack} from '@astryxdesign/core/VStack';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {StackItem} from '@astryxdesign/core/Stack';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function Page() {\n  return (\n    <VStack gap={5} padding={6}>\n      <HStack gap={2} vAlign=\"center\">\n        <StackItem size=\"fill\">\n          <Heading level={1}>Project Atlas</Heading>\n        </StackItem>\n        <StackItem size=\"static\">\n          <Badge label=\"At risk\" variant=\"warning\" />\n        </StackItem>\n      </HStack>\n      <Card padding={5}>\n        <Text type=\"body\">38% of traffic is on the new stack.</Text>\n      </Card>\n    </VStack>\n  );\n}",
         },
         {
           type: 'prose',
@@ -72,10 +72,15 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: the file runs no script, so every reader, on any screen, gets the one layout that the query\u2019s server answer (false) picks.',
-            'Each Table column keeps its share of the width at every size, so the column with the smallest share sets the table\u2019s minimum width: a column with 1 of 11 shares and the default 120 px floor makes the table at least 1,320 px wide, and a narrower screen scrolls it sideways. Give small columns a small floor: `width: proportional(1, {minWidth: 80})`.',
+            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: every reader, on any screen, first sees the one layout that the query\u2019s server answer (false) picks, and keeps it in a viewer that blocks scripts; elsewhere it changes once the script runs.',
+            'A row runs out of room first. In an HStack, a Badge beside a long heading or text shrinks and cuts off its label. Wrap the badge in `<StackItem size="static">` so it keeps its size, and the text in `<StackItem size="fill">` so the text wraps, as the example does. StackItem comes from `@astryxdesign/core/Stack`.',
+            'A VStack stretches each child to its full width, so a Badge or Token on a line of its own becomes a bar across the page. Wrap that one item in `<StackItem crossAlignSelf="start">`. Do not give the VStack `hAlign="start"`: it shrinks every child, Cards and Grids too.',
+            'A ListItem `label` or `description` that is a string stays on one line and ends in an ellipsis, and the file cannot show the rest. When readers need the whole text, pass an element: `label={<Text type="body">\u2026</Text>}`.',
+            'The file cannot scroll a table sideways, because that needs script: a table wider than the screen is cut off at its edge. Inside the example\u2019s `padding={6}`, a 375 px phone leaves about 327 px, so keep a table that phones must show within about 310 px, and put the other columns in a second table or in Cards. A table is as wide as its `pixel()` columns plus, for its `proportional()` columns, the largest floor divided by that column\u2019s share of all the shares: four `proportional(1)` columns at the default 120 px floor need 480 px. So make each share equal its floor, as in `proportional(148, {minWidth: 148})`, or give the columns `pixel()` widths; then the floors add up. A column with no `width` counts as `proportional(1, {minWidth: 60})`, so give every column of a phone table a width.',
+            'A column\u2019s floor includes its cells\u2019 24 px of padding. It must fit the column\u2019s longest word, because wrapped text breaks inside a word that does not fit, and its header, which stays on one line and is cut off with an ellipsis: `width: pixel(64)` holds a short number under a one-word header such as \u201cp95\u201d, and a two-word header such as \u201cError rate\u201d needs about 100 px.',
+            'Give each CodeBlock `isWrapped`, so a reader on a phone sees whole lines.',
             'Charts use recharts: install it in the page\u2019s folder first (`{@pm install recharts}`). Size a chart with `<ResponsiveContainer width="100%" aspect={2.5}>`, and color each series with a theme variable, such as `stroke="var(--color-data-categorical-blue)"`, so it follows the theme too.',
-            'Leave out controls that need a browser. Buttons, filters, tabs and menus show in the file but do nothing.',
+            'Controls that need a browser (buttons, filters, tabs, menus) work once the page\u2019s script runs, and do nothing in a viewer that blocks scripts. Keep what a reader must see in the first paint, not behind a click (see `astryx docs cli/experimental/render-pages interactive`).',
           ],
         },
       ],
@@ -101,7 +106,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network and no script shows it as it is. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
+          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network shows it as it is; one that also blocks scripts shows its first paint. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
         },
         {
           type: 'prose',
@@ -130,7 +135,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Run each command from the folder that holds the file: the command writes only inside the folder you run it from, so the page and `--out` must both be inside it. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
+          text: 'Run each command from the folder that holds the file: a relative `--out` stays inside the folder you run it from, and `--reverse` writes only there. An absolute `--out` can name any folder. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
         },
       ],
     },
@@ -143,7 +148,7 @@ export const docs = {
           style: 'unordered',
           items: [
             '`ERR_RENDER_BROWSER_API`: the page reads `window` or `document` while it renders. Move that into an effect, or remove it.',
-            'The page looks wrong on a phone: a layout picked by script, or a table with large column floors. See step 1.',
+            'The page looks wrong on a phone: a layout picked by script, a badge stretched across the page or cut off, a list label cut off, or a table cut off or with words broken in the middle. See step 1.',
             'The render refuses to write the output: it replaces only a file a render wrote. Choose another `--out` name.',
           ],
         },

@@ -33,10 +33,17 @@ const BROWSER_STEP = process.env.ASTRYX_TEMPLATE_NOSCRIPT_BROWSER === '1';
 const {chromium} = createRequire(import.meta.url)('playwright');
 
 /**
- * The content templates build starts most often for a page someone writes
- * once and sends to others: an article or a documentation landing.
+ * The content templates build starts for a page someone writes once and sends
+ * to others: an article, a documentation landing or reference, and a record's
+ * detail page.
  */
-const SHARED_TEMPLATES = ['documentation-technical', 'documentation'];
+const SHARED_TEMPLATES = [
+  'documentation-technical',
+  'documentation',
+  'documentation-design',
+  'detail-page',
+  'work-item-detail',
+];
 
 /** A phone and a desktop, in CSS pixels. */
 const WIDTHS = [
