@@ -58,7 +58,7 @@ const answer = async q => {
 };
 
 /**
- * @typedef {{q: string, has?: string[], says?: RegExp, never?: RegExp}} Row
+ * @typedef {{q: string, has?: string[], says?: RegExp, saysNot?: RegExp, saysOrHas?: RegExp[], never?: RegExp}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -90,7 +90,7 @@ const ROWS = [
     {
       q: 'inputs: 1px bottom border that turns accent and 2px when focused',
       has: [
-        "border-color 'var(--color-accent)' --on inputs --state focus-within",
+        "border-bottom '2px solid var(--color-accent)' --on inputs --state focus-within",
       ],
       never: /^border-bottom '1px solid var\(--color-accent\)'/,
     },
@@ -212,6 +212,101 @@ const ROWS = [
       has: ["box-shadow 'var(--shadow-low)' --on card"],
     },
   ],
+  [
+    'hover and pressed colors are written or named, never dropped',
+    {
+      q: 'primary buttons #0C66E4, hover #0055CC, pressed #09326C',
+      saysOrHas: [/#0055cc/i, /#09326c/i],
+    },
+  ],
+  [
+    'an off color is written or named, never dropped',
+    {
+      q: 'switches #34C759 when on, #E9E9EA when off',
+      saysOrHas: [/#e9e9ea/i],
+    },
+  ],
+  [
+    'a mode the other lines carry is never named',
+    {
+      q: 'in dark mode, cards #2D2D2D and text #FFFFFF',
+      saysNot: /not used: .*in dark mode/,
+    },
+  ],
+  [
+    'a side the look turns on is the side its state takes',
+    {
+      q: 'inputs with a 1px bottom border that turns accent and 2px when focused',
+      has: [
+        "border-bottom '1px solid var(--color-border)' --on inputs",
+        "border-bottom '2px solid var(--color-accent)' --on inputs --state focus-within",
+      ],
+      never: /^border-(?:color|width) /,
+    },
+  ],
+  [
+    'a part that sizes itself, then its corners, in the comma form',
+    {
+      q: 'checkboxes 18px, 4px corners',
+      has: [
+        'width 18px --on checkbox-indicator --only',
+        'border-radius 4px --on checkbox-indicator --only',
+      ],
+      never: /border-radius 18px/,
+    },
+  ],
+  [
+    'translucent said of a part with a fill',
+    {
+      q: 'nav bar translucent white',
+      has: [
+        "background-color 'color-mix(in srgb, #ffffff 80%, transparent)' --on app-shell-header --mode light",
+      ],
+    },
+  ],
+  [
+    'a bare length said of a text style is its size',
+    {q: 'footnotes 13px', has: ['--text-supporting-size 13px']},
+  ],
+  [
+    'text after several parts is the theme’s',
+    {
+      q: 'page #202020, cards #2D2D2D and text #FFFFFF',
+      has: ["--color-text-primary '#ffffff' --mode dark"],
+      never: /--color-text-primary .* --on card/,
+    },
+  ],
+  [
+    'a status color after part clauses is the theme’s role',
+    {
+      q: 'softer shadows on cards, bolder headings, and a green success color',
+      has: ["success '#16a34a'"],
+      never: /^color .* --on heading/,
+    },
+  ],
+  [
+    'a danger color after part clauses never fills the part',
+    {
+      q: 'smaller badges, rounder avatars, and a red danger color',
+      has: ["danger '#dc2626'"],
+      never: /background-color '#dc2626' --on avatar/,
+    },
+  ],
+  [
+    'a color said for a theme kept to one mode is that color',
+    {
+      q: 'esports page: black background, square corners, dark mode only',
+      has: ["--color-background-body '#000000'", 'mode dark-only'],
+      never: /'#1b1b1b'/,
+    },
+  ],
+  [
+    'a lone color after a part item never fills that part',
+    {
+      q: 'big buttons, a sky blue, high contrast',
+      never: /background-color .* --on button/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
@@ -225,6 +320,12 @@ describe('every clause answered', () => {
       const r = await answer(row.q);
       for (const line of row.has ?? []) expect(r.all, row.q).toContain(line);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
+      if (row.saysNot) expect(r.text, row.q).not.toMatch(row.saysNot);
+      for (const re of row.saysOrHas ?? [])
+        expect(
+          re.test(r.text) || r.all.some(line => re.test(line)),
+          `${row.q}: ${re}`,
+        ).toBe(true);
       if (row.never)
         for (const line of r.all) expect(line, row.q).not.toMatch(row.never);
     },

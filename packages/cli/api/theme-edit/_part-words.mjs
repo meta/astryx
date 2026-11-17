@@ -174,13 +174,15 @@ export const OVERRIDES = [
   [/\bkey badges?\b/, {on: 'kbd-key'}],
   [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
+  // (A large title, the biggest title a screen has, is its top heading.)
+  [/\blarge titles?\b/, {on: 'heading', level: '1'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   // Small, secondary and supporting text, captions and fine print: the
   // supporting text style, not the base size.
   [
-    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?)\b/,
+    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?|footnotes?)\b/,
     {on: 'body', role: 'supporting'},
   ],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
