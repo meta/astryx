@@ -377,14 +377,18 @@ export default function Page() {
     await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
     const settle = (/** @type {any} */ dom) =>
       new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    /** @param {boolean} works */
-    const open = works => {
+    /**
+     * @param {boolean} works
+     * @param {(window: any) => void} [frame] what the frame gives the page
+     */
+    const open = (works, frame) => {
       /** @type {string[]} */
       const copied = [];
       const dom = new JSDOM(read('copy.html'), {
         runScripts: 'dangerously',
         pretendToBeVisual: true,
         beforeParse(window) {
+          frame?.(window);
           // JSDOM has no copy command: this one fires the copy event, as a browser does.
           window.document.execCommand = () => {
             const event = new window.Event('copy', {cancelable: true});
@@ -426,6 +430,48 @@ export default function Page() {
       refused.dom.window.document.getElementById('status')?.textContent,
     ).toBe('NotAllowedError');
     refused.dom.window.close();
+    // Where the Clipboard API is there but refuses the write, or the frame's
+    // policy refuses clipboard-write, the copy command copies, as Core's hook does.
+    /** @type {string[]} */
+    const asked = [];
+    for (const frame of [
+      (/** @type {any} */ window) => {
+        Object.defineProperty(window.navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (/** @type {string} */ text) => {
+              asked.push(text);
+              return Promise.reject(
+                new window.DOMException('Write refused.', 'NotAllowedError'),
+              );
+            },
+          },
+        });
+      },
+      (/** @type {any} */ window) => {
+        Object.defineProperty(window.navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (/** @type {string} */ text) =>
+              asked.push(`policy ${text}`),
+          },
+        });
+        window.document.permissionsPolicy = {
+          allowsFeature: (/** @type {string} */ f) => f !== 'clipboard-write',
+        };
+      },
+    ]) {
+      const page = open(true, frame);
+      await settle(page.dom);
+      page.dom.window.document.querySelector('button')?.click();
+      await settle(page.dom);
+      expect(page.copied).toEqual(['a,b\n1,2']);
+      expect(
+        page.dom.window.document.getElementById('status')?.textContent,
+      ).toBe('copied');
+      page.dom.window.close();
+    }
+    expect(asked).toEqual(['a,b\n1,2']);
   }, 120_000);
 
   it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
@@ -464,6 +510,16 @@ export default function Page() {
     expect(doc.getElementById('filter')?.textContent).toBe('open');
     expect(blocked.window.localStorage.getItem('filter')).toBe('open');
     expect(blocked.window.sessionStorage.getItem('seen')).toBe('1');
+    // Items read, write, list and delete as properties, as in the browser's storage.
+    const stored = /** @type {any} */ (blocked.window.localStorage);
+    stored.theme = 'dark';
+    expect(stored.getItem('theme')).toBe('dark');
+    expect(stored.filter).toBe('open');
+    expect(Object.keys(stored).sort()).toEqual(['filter', 'theme']);
+    expect('theme' in stored).toBe(true);
+    delete stored.theme;
+    expect(stored.getItem('theme')).toBeNull();
+    expect(stored.length).toBe(1);
     blocked.window.close();
     // A real origin keeps the browser's own storage.
     const open = new JSDOM(read('filter.html'), {

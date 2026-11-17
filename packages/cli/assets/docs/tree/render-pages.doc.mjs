@@ -84,7 +84,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'esbuild builds the script. It is a dependency of the CLI that only this command loads, so no other command starts slower for it. A page whose script cannot be built for the browser (it imports `fs` or `path`, say) stops with ERR_RENDER_SCRIPT, which names the module, and nothing is written. A sandboxed frame can still block what the page itself does on load or on a click, such as a remote image, storage (`localStorage`, `sessionStorage`, cookies), an `alert()`, or moving focus before the reader acts. When the page\u2019s script throws, in its render or in an effect (a frame that blocks storage, say), the file keeps showing its first paint.',
+          text: 'esbuild builds the script. It is a dependency of the CLI that only this command loads, so no other command starts slower for it. A page whose script cannot be built for the browser (it imports `fs` or `path`, say) stops with ERR_RENDER_SCRIPT, which names the module, and nothing is written. A sandboxed frame can still block what the page itself does on load or on a click, such as a remote image, storage (`localStorage`, `sessionStorage`, cookies), an `alert()`, or moving focus before the reader acts. When the page\u2019s script throws, in its render or in an effect (a cookie write in a frame that blocks cookies, say), the file keeps showing its first paint. Storage works there in memory, so a page that saves to it keeps working.',
         },
       ],
     },

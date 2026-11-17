@@ -106,7 +106,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network shows it as it is; one that also blocks scripts shows its first paint. In a viewer\u2019s frame, links, forms, storage and copying work, and what the page saves lasts until the page closes; fullscreen and printing do not work there. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
+          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network shows it as it is; one that also blocks scripts shows its first paint. In a viewer\u2019s frame that allows scripts, forms work, storage works in memory (what the page saves lasts until the page closes), and copying works through the browser\u2019s copy command. A cookie write throws there, fullscreen and printing do not work, and a link opens only when the viewer allows pop-ups. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
         },
         {
           type: 'prose',
