@@ -120,7 +120,7 @@ describe('a look named for the whole theme, said bare', () => {
     if (unbuilt) return ctx.skip();
     const a = await answer('whatsapp theme');
     expect(a.text).toMatch(
-      /how does not know what "whatsapp" looks like and never guesses a brand's colors: give them as hex/,
+      /how does not know what "whatsapp" looks like and never guesses a brand's colors: say its colors \(the accent, the page, the text, as hex\)/,
     );
     expect(a.sets).toEqual([]);
   }, 240_000);
