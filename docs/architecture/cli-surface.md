@@ -773,6 +773,7 @@ non-interactive guarantee.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
+- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental render` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
