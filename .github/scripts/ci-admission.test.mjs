@@ -41,9 +41,12 @@ const COUNT_MODULE = path.join(root, '.github/actions/ci-admission/count.mjs');
 const counter = fs.readFileSync(COUNT_MODULE, 'utf8');
 // Loaded once: under fake timers a fresh import inside the script would
 // resolve after the timers have run.
+// The release-critical label check, run for real against a stub GitHub.
+const RUN_LABELS_MODULE = path.join(root, '.github/scripts/run-labels.cjs');
 const preloaded = {
   'node:url': await import('node:url'),
   count: await import(COUNT_MODULE),
+  runLabels: await import(RUN_LABELS_MODULE),
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
@@ -158,7 +161,12 @@ describe('where runs wait', () => {
     // It cancels the run when its token can, and fails either way.
     expect(stop.run).toContain('gh run cancel "$GITHUB_RUN_ID"');
     expect(stop.run.trim().split('\n').at(-1)).toBe('exit 1');
-    expect(admission.permissions).toEqual({actions: 'read', contents: 'read'});
+    // It reads who applied a release-critical label.
+    expect(admission.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     expect(String(ci.jobs['build-storybook'].if)).toContain(
       "needs.room.outputs.full != 'true'",
     );
@@ -850,17 +858,40 @@ describe('ci admission', () => {
     next = '',
     legWidths = '{}',
     wide = '',
+    labelers = {},
+    permissions = {},
   } = {}) {
     vi.useFakeTimers({now: NOW});
     vi.spyOn(Math, 'random').mockReturnValue(random);
     const lookTimes = [];
     let looks = 0;
     let calls = 0;
-    const logs = {info: [], warning: []};
+    const logs = {info: [], warning: [], notice: []};
     const outputs = {};
     const runs = () => (typeof active === 'function' ? active(looks) : active);
     const github = {
+      // Who applied each label, newest last, as the pull request's timeline
+      // reads it.
+      graphql: async () => ({
+        repository: {
+          pullRequest: {
+            timelineItems: {
+              nodes: Object.entries(labelers).map(([name, login]) => ({
+                actor: {login},
+                label: {name},
+              })),
+            },
+          },
+        },
+      }),
       rest: {
+        repos: {
+          getCollaboratorPermissionLevel: async ({username}) => {
+            const permission = permissions[username];
+            if (permission instanceof Error) throw permission;
+            return {data: {permission: permission ?? 'none'}};
+          },
+        },
         actions: {
           listWorkflowRunsForRepo: async ({status, event, per_page}) => {
             if (error) throw error;
@@ -896,9 +927,11 @@ describe('ci admission', () => {
     const core = {
       info: message => logs.info.push(message),
       warning: message => logs.warning.push(message),
+      notice: message => logs.notice.push(message),
       setOutput: (name, value) => (outputs[name] = value),
     };
     const context = {
+      eventName: isMain || merge ? 'workflow_dispatch' : 'pull_request',
       repo: {owner: 'o', repo: 'r'},
       runId: OWN,
       payload:
@@ -915,6 +948,7 @@ describe('ci admission', () => {
     };
     Object.assign(process.env, {
       COUNT_MODULE,
+      RUN_LABELS_MODULE,
       PEAK: String(peak),
       MAIN: String(isMain),
       LABEL_LEGS: '{"ci:run-visual": 6}',
@@ -936,9 +970,12 @@ describe('ci admission', () => {
       'core',
       'importModule',
       script.replaceAll('await import(', 'await importModule('),
-    )(github, context, core, async specifier =>
-      specifier === 'node:url' ? preloaded['node:url'] : preloaded.count,
-    );
+    )(github, context, core, async specifier => {
+      if (specifier === 'node:url') return preloaded['node:url'];
+      return specifier.includes('run-labels')
+        ? preloaded.runLabels
+        : preloaded.count;
+    });
     // Observed here; `await done` below still rethrows a failure.
     done.catch(() => {});
     await vi.advanceTimersByTimeAsync(20 * 60_000);
@@ -1446,6 +1483,124 @@ describe('ci admission', () => {
         phase: 'room',
       });
       expect(mainRun.outputs.full).toBeUndefined();
+    });
+  });
+
+  describe('release-critical', () => {
+    const waiting = count =>
+      Array.from({length: count}, (_, i) => waitingRun(400 + i));
+    // CI over its ceiling (7 x 12 + 10 waiting + 18 = 112), ten pull-request
+    // runs and a main check waiting: no room for a run of 16 on any look.
+    const full = () => [
+      ...prs(7),
+      ...waiting(10),
+      waitingRun(499, {event: 'push', path: '.github/workflows/deploy.yml'}),
+    ];
+
+    it('starts a pull request labelled by someone with write access at once, on a full CI', async () => {
+      for (const phase of ['room', 'rest', 'whole']) {
+        const result = await admit({
+          active: full(),
+          peak: 16,
+          phase,
+          fits: phase === 'rest' ? 'false' : '',
+          maxWait: 12,
+          maxLooks: 2,
+          labels: ['release-critical'],
+          labelers: {'release-critical': 'maintainer'},
+          permissions: {maintainer: 'write'},
+        });
+        expect(result.outputs).toMatchObject({
+          fits: 'true',
+          looks: '1',
+          wide: 'false',
+        });
+        expect(result.outputs.full).toBeUndefined();
+        // One look, to pick its legs' width; no wait.
+        expect(result.looks).toBe(1);
+        expect(result.lookTimes[0]).toBeLessThan(60_000);
+        expect(result.notice.join('\n')).toContain(
+          'release-critical: this run starts at once',
+        );
+      }
+    });
+
+    it('runs its legs at full width when its look finds room for them, and at tight width when CI is full', async () => {
+      const trusted = {
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+        labels: ['release-critical'],
+        labelers: {'release-critical': 'maintainer'},
+        permissions: {maintainer: 'write'},
+        legWidths: '{"test-node": {"tight": 2, "full": 8}}',
+      };
+      const empty = await admit({...trusted, active: []});
+      expect(empty.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      expect(empty.notice.join('\n')).toContain('legs at full width');
+      // An unlabelled run on the same empty CI gets the same width.
+      const unlabelled = await admit({
+        ...trusted,
+        active: [],
+        labels: [],
+        labelers: {},
+      });
+      expect(unlabelled.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      const busy = await admit({...trusted, active: full()});
+      expect(busy.outputs).toMatchObject({fits: 'true', wide: 'false'});
+      expect(busy.notice.join('\n')).toContain('legs at tight width');
+    });
+
+    it('ignores the label when someone without write access applied it last, or the lookup fails', async () => {
+      const unlabelled = await admit({
+        active: full(),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      // Without the label the run waits for room: it looks.
+      expect(unlabelled.looks).toBeGreaterThan(0);
+      const cases = [
+        {
+          labelers: {'release-critical': 'reader'},
+          permissions: {reader: 'read'},
+        },
+        {labelers: {}, permissions: {}},
+        {
+          labelers: {'release-critical': 'maintainer'},
+          permissions: {maintainer: new Error('lookup failed')},
+        },
+      ];
+      for (const trust of cases) {
+        const result = await admit({
+          active: full(),
+          peak: 16,
+          phase: 'room',
+          maxWait: 12,
+          maxLooks: 2,
+          labels: ['release-critical'],
+          ...trust,
+        });
+        expect(result.outputs).toEqual(unlabelled.outputs);
+        expect(result.looks).toBe(unlabelled.looks);
+      }
+    });
+
+    it('changes nothing for a pull request without the label', async () => {
+      const result = await admit({
+        active: full(),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+        labels: ['ci:run-visual'],
+        labelers: {'ci:run-visual': 'maintainer'},
+        permissions: {maintainer: 'write'},
+      });
+      expect(result.looks).toBeGreaterThan(0);
+      expect(result.notice).toEqual([]);
     });
   });
 
