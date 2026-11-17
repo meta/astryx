@@ -23,6 +23,7 @@ import {
   PICTURE_TAKEN,
   PICTURE_WINDOW,
   SETTLE_ANIMATIONS,
+  AWAIT_QUIET,
   eachAtOnce,
 } from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
@@ -63,6 +64,16 @@ try {
         // frame a person sees (SETTLE_ANIMATIONS), before the picture.
         // Playwright's own animations: 'disabled' would put a looping one
         // back at its first frame, where a skeleton is faint.
+        // A whole-page picture of a taller page resizes the window, and a
+        // part that redraws when its size changes (a responsive chart)
+        // starts over and is pictured empty: the window opens as tall as the
+        // page, and the picture waits until the page is quiet.
+        const height = await page.evaluate(() => document.documentElement.scrollHeight);
+        await page.setViewportSize({
+          width: PICTURE_WINDOW.width,
+          height: Math.max(PICTURE_WINDOW.height, Math.ceil(height)),
+        });
+        await page.evaluate(AWAIT_QUIET);
         await page.evaluate(SETTLE_ANIMATIONS);
         await page.screenshot({path: png, fullPage: true, animations: 'allow'});
         // The fonts the picture drew its text in, for the editor's note.

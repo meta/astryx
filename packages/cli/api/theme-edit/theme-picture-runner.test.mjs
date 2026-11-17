@@ -16,6 +16,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {newPictureRun, runBrowser, screenshot} from './_preview.mjs';
+import {decodePng} from './_png.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +64,54 @@ describe('the picture run', () => {
         );
         expect(r.ok).toBe(true);
         expect(pngSize(png)).toEqual({width: 1280, height: 4321});
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    90_000,
+  );
+
+  it.skipIf(!chrome)(
+    'a part that redraws when its size changes (a responsive chart) is pictured drawn, not started over',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-redraw-'));
+      try {
+        const html = path.join(dir, 'p.html');
+        // A stand-in for a responsive chart: each size change clears its
+        // red bar and grows it again over 600 ms, frame by frame. The page
+        // is taller than the window, so the whole-page picture needs it all.
+        fs.writeFileSync(
+          html,
+          `<html><body style="margin:0"><div id="chart" style="height:100px"><div id="bar" style="height:100px;width:0;background:#ff0000"></div></div><div style="height:3000px"></div>
+<script>
+const bar = document.getElementById('bar');
+new ResizeObserver(() => {
+  const start = performance.now();
+  const grow = now => {
+    const t = Math.min(1, (now - start) / 600);
+    bar.style.width = (t * 400) + 'px';
+    if (t < 1) requestAnimationFrame(grow);
+  };
+  bar.style.width = '0px';
+  requestAnimationFrame(grow);
+}).observe(document.documentElement);
+</script></body></html>`,
+        );
+        const png = path.join(dir, 'p.png');
+        const r = await screenshot(
+          {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+          html,
+          png,
+          'light',
+        );
+        expect(r.ok).toBe(true);
+        const pic = decodePng(fs.readFileSync(png));
+        let red = 0;
+        for (let x = 0; x < 400; x += 1) {
+          const i = (50 * pic.width + x) * 4;
+          if (pic.rgba[i] > 200 && pic.rgba[i + 1] < 60 && pic.rgba[i + 2] < 60) red += 1;
+        }
+        expect(red).toBeGreaterThan(390);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }

@@ -28,6 +28,7 @@ import {
   PICTURE_TAKEN,
   PICTURE_WINDOW,
   SETTLE_ANIMATIONS,
+  AWAIT_QUIET,
   eachAtOnce,
 } from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
@@ -191,6 +192,23 @@ async function picture({html, png, mode}, i) {
   // An overlay drawn open plays its opening animation (a fade-in) as the
   // page loads: it is run to its end, and a looping one held at a frame a
   // person sees (SETTLE_ANIMATIONS), before the picture.
+  // A picture taken beyond the window resizes it, and a part that redraws
+  // when its size changes (a responsive chart) starts over and is pictured
+  // empty: the window opens as tall as the page, and the picture waits until
+  // the page is quiet.
+  const loadedMetrics = await send('Page.getLayoutMetrics', {}, sessionId);
+  const loadedSize = loadedMetrics.cssContentSize ?? loadedMetrics.contentSize;
+  await send(
+    'Emulation.setDeviceMetricsOverride',
+    {
+      width: PICTURE_WINDOW.width,
+      height: Math.max(PICTURE_WINDOW.height, Math.ceil(loadedSize.height)),
+      deviceScaleFactor: 1,
+      mobile: false,
+    },
+    sessionId,
+  );
+  await send('Runtime.evaluate', {expression: AWAIT_QUIET, awaitPromise: true}, sessionId);
   await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
@@ -198,7 +216,7 @@ async function picture({html, png, mode}, i) {
     'Page.captureScreenshot',
     {
       format: 'png',
-      captureBeyondViewport: true,
+      captureBeyondViewport: false,
       clip: {
         x: 0,
         y: 0,
