@@ -1139,7 +1139,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
       const v = blocks[t]?.base?.[token];
       const to =
         typeof v === 'string'
-          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          ? /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1]
           : null;
       if (to) return {token: to, on: t};
     }
