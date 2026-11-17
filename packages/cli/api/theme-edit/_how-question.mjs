@@ -4484,6 +4484,12 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
     // ("slate blue-gray": the tinted gray reader takes blue-gray.)
     .replace(/\bslate\s+(?=blue[- ]gr[ae]y\b)/gi, '')
+    // ("…, 13px text, light and dark": the two modes said as a clause of
+    // their own are the theme's modes, never a light and a dark color.)
+    .replace(
+      /\b(?:light|dark)\s+(?:and|&)\s+(?:light|dark)(?:\s+(?:modes?|themes?))?(?=\s*(?:[,.;!]|$))/gi,
+      'both modes',
+    )
     // ("pure white", "true black": that exact color, never a shade.)
     .replace(
       /(?<!\bnot\s)\b(?:pure|true|plain|solid)\s+(white|black)\b/gi,
@@ -5798,7 +5804,14 @@ export function draftAnswer(ctx, env, question) {
       ) &&
       (aspectsOf(t).length > 0 ||
         lex.parts.some(([re]) => re.test(t)) ||
-        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|error|danger|success|warning|info|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(
+        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|error|danger|success|warning|info)\b/.test(
+          t,
+        ) ||
+        // (Any color the hue table names, a palette name too: "a cool
+        // slate palette", "sage and cream".)
+        colorsIn(t).length > 0 ||
+        // (The two modes asked for together, "light and dark".)
+        /\b(?:light|dark)\s+(?:and|&)\s+(?:light|dark)\s*[.!]?\s*$|\bboth modes\b/.test(
           t,
         ))
     )
@@ -7313,10 +7326,17 @@ export function draftAnswer(ctx, env, question) {
     /\b(?:theme|look|feel|vibe|style|palette|brand|branding)\b/.test(q) ||
     lookList;
   const namesAPart = clauses.some(c => c.parts.length > 0);
-  for (let i = clauses.length - 1; i >= 0 && !paintsAPart && !namesAPart; i--) {
+  for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
     if (c.parts.length || !c.colors.length || c.colors.length > 2 || c.except)
       continue;
+    // (With a part painted or named elsewhere in the ask, a color is the
+    // theme's only where its own clause says it as a look, "a cool slate
+    // palette", never a color in a part's list, "the buttons red, green
+    // and blue".)
+    const ownLook =
+      /\b(?:theme|look|feel|vibe|style|palette|scheme|branding)\b/.test(c.text);
+    if ((paintsAPart || namesAPart) && !ownLook) continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
         c.text,
@@ -7331,10 +7351,12 @@ export function draftAnswer(ctx, env, question) {
         ))
     )
       continue;
-    const paints = c.aspects.some(a =>
-      ['background', 'text', 'border', 'colors', 'shadow', 'gradient'].includes(
-        a,
-      ),
+    // (A look's own colors, "a sand palette", paint no part: only a part's
+    // paint keeps the color off the dials.)
+    const paints = c.aspects.some(
+      a =>
+        ['background', 'text', 'border', 'shadow', 'gradient'].includes(a) ||
+        (a === 'colors' && !ownLook),
     );
     if (paints) continue;
     // (Each color by what it is: a light, quiet one, sand or a warm
@@ -23733,14 +23755,18 @@ export function draftAnswer(ctx, env, question) {
       )
       .replace(/[^a-z]+/g, ' ')
       .trim();
+    // ("light and dark", "both modes": the two modes asked for together.)
     if (
-      /\b(support|add|enable|want|need)\b.*\bdark\b|\bdark mode\b/.test(t) &&
+      /\b(support|add|enable|want|need)\b.*\bdark\b|\bdark mode\b|\b(?:light|dark) (?:and|&) (?:light|dark)\b|\bboth (?:modes|light and dark)\b/.test(
+        t,
+      ) &&
       modeAsk &&
       !c.colors.length &&
       !/\b(accent|text|background|colou?rs?)\b/.test(t) &&
       // An ask about the theme's modes, never "in dark mode" scoping
-      // another change.
+      // another change. ("Both modes", a clause of its own, scopes none.)
       (/\b(theme|app)\b/.test(t) ||
+        /^\s*both modes\s*[.!]?\s*$/.test(c.text) ||
         !clauses.some(
           o =>
             o.text !== c.text &&
@@ -27259,12 +27285,13 @@ export function draftAnswer(ctx, env, question) {
   // "a calm, Linear-like dark theme with a violet accent": a look said as
   // a list of words takes each word a setting reads; the words none reads
   // are named, never dropped without a word.
-  if (
-    !gateAll &&
-    (/\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
-      (!partsSeen.length &&
-        q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3))
-  ) {
+  // (A list of three asks or more names the words none reads the same
+  // way, parts among them or not: "page loud and fast: black background,
+  // …, heavy condensed headings" names "fast".)
+  const lookAsk =
+    /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
+    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
+  if (!gateAll && lookAsk) {
     const STOP =
       /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses)$/;
     const notTaken = [
