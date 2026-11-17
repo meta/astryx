@@ -21,6 +21,7 @@
 import {entryOf} from './_entries.mjs';
 import {fold, nameWords, words} from './_query-words.mjs';
 import {searchedComponentsOf} from './_result.mjs';
+import {sameWord} from './_words.mjs';
 
 /** @typedef {import('./_entries.mjs').EntryTable} EntryTable */
 
@@ -250,10 +251,11 @@ function answered(it) {
  * A family's root leads a part of its own family in their run (same band,
  * same domain) when the part adds nothing the reader asked for: the root
  * answers every query word the part answers, and no query word is a word of
- * the part's name that does not start a word of the root's name. `tabs`
- * puts TabList before its Tab; a query holding "item" keeps ListItem before
- * List, since "item" is only the part's. The root moves just ahead of the
- * part; nothing else moves, and nothing crosses a run.
+ * the part's name, in any plural or stem form, that does not start a word
+ * of the root's name. `tabs` puts TabList before its Tab; a query holding
+ * "item" keeps ListItem before List, since "item" is only the part's. The
+ * root moves just ahead of the part; nothing else moves, and nothing crosses
+ * a run.
  * @param {Item[]} ranked
  * @param {Map<string, string>} families each member's `domain:name`, mapped
  *   to its family's name
@@ -261,7 +263,7 @@ function answered(it) {
  * @returns {Item[]}
  */
 export function rootsFirst(ranked, families, query) {
-  const asked = new Set(nameWords(query).map(fold));
+  const asked = nameWords(query);
   const out = [...ranked];
   for (let a = 0; a < out.length; a++) {
     const part = out[a];
@@ -278,11 +280,13 @@ export function rootsFirst(ranked, families, query) {
     const ofPart = answered(part);
     const ofRoot = answered(out[b]);
     if (ofRoot && (!ofPart || [...ofPart].some(w => !ofRoot.has(w)))) continue;
-    const rootWords = nameWords(family).map(fold);
-    const own = nameWords(String(part.res.name))
-      .map(fold)
-      .filter(w => !rootWords.some(r => r.startsWith(w)));
-    if (own.some(w => asked.has(w))) continue;
+    const rootWords = nameWords(family);
+    const own = nameWords(String(part.res.name)).filter(
+      w => !rootWords.some(r => r.startsWith(w)),
+    );
+    // A query word is a part word in any plural or stem form, as search
+    // reads words: `statuses` is the Status in FieldStatus.
+    if (own.some(w => asked.some(q => sameWord(q, w)))) continue;
     out.splice(a, 0, ...out.splice(b, 1));
   }
   return out;

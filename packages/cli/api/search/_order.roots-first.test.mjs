@@ -3,8 +3,8 @@
 /**
  * @file A family's root leads a part of its own family in their run when the
  * part adds nothing the query asked for (rootsFirst in _order.mjs). Made-up
- * entries: the Zorb family (root ZorbList, parts ZorbItem and Zorb) and the
- * Quill family (root QuillBox, part QuillMark).
+ * entries: the Zorb family (root ZorbList; parts ZorbItem, ZorbStatus and
+ * Zorb) and the Quill family (root QuillBox, part QuillMark).
  */
 
 import {describe, expect, it} from 'vitest';
@@ -18,6 +18,7 @@ const FAMILIES = new Map([
   ['component:ZorbItem', 'ZorbList'],
   ['component:Zorb', 'ZorbList'],
   ['component:QuillMark', 'QuillBox'],
+  ['component:ZorbStatus', 'ZorbList'],
 ]);
 
 /**
@@ -84,6 +85,21 @@ describe('rootsFirst', () => {
     // A typed identifier counts by its words.
     expect(names(rootsFirst(rows, FAMILIES, 'ZorbItem wide'))).toEqual([
       'ZorbItem',
+      'ZorbList',
+    ]);
+  });
+
+  it('reads a part word in any plural form, as search reads words', () => {
+    const rows = items([
+      ['ZorbStatus', 120, 'matches 2/2 terms: zorb, statuses'],
+      ['ZorbList', 110, 'matches 2/2 terms: zorb, statuses'],
+    ]);
+    expect(names(rootsFirst(rows, FAMILIES, 'zorb statuses'))).toEqual([
+      'ZorbStatus',
+      'ZorbList',
+    ]);
+    expect(names(rootsFirst(rows, FAMILIES, 'zorb status'))).toEqual([
+      'ZorbStatus',
       'ZorbList',
     ]);
   });

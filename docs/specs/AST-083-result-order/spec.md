@@ -58,8 +58,9 @@ owns response fields and compatibility.
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind; between runs, the lexical order holds,
   including its domain priority. Inside a run, a family's root leads a part of
-  its own family when the part answers no query word the root does not and the
-  query holds no word that only the part's name has.
+  its own family when the part answers no query word the root does not, and no
+  query word, in any plural or stem form, is a word of the part's name that
+  does not start a word of the root's name.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
   ranker's answer unchanged.
