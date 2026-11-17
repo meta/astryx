@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {PowerSearch} from './PowerSearch';
 import type {PowerSearchConfig} from './types';
@@ -59,7 +59,7 @@ beforeEach(() => {
 describe('PowerSearch status icon', () => {
   for (const presentation of ['popover', 'bottom-sheet'] as const) {
     for (const statusVariant of ['attached', 'detached'] as const) {
-      it(`describes the ${presentation} field's control by the message box for statusVariant="${statusVariant}"`, () => {
+      it(`describes the ${presentation} field's control by the message box for statusVariant="${statusVariant}"`, async () => {
         render(
           <Field presentation={presentation} statusVariant={statusVariant} />,
         );
@@ -79,19 +79,35 @@ describe('PowerSearch status icon', () => {
     }
   }
 
-  it('draws one info-tip whose tooltip holds the message in the popover presentation', () => {
+  it('draws one info-tip whose tooltip holds the message in the popover presentation', async () => {
     const {container} = render(<Field presentation="popover" />);
     expect(
       container.querySelector('.astryx-field-status'),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', {name: 'Error details'})).toHaveLength(
-      1,
-    );
-    const tooltip = screen.getByRole('tooltip', h);
+    expect(
+      await screen.findAllByRole('button', {name: 'Error details'}),
+    ).toHaveLength(1);
+    const tooltip = await screen.findByRole('tooltip', h);
     expect(tooltip).toHaveTextContent(MESSAGE);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('moves focus to the input when the plain attached icon is clicked', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <Field presentation="popover" statusVariant="attached" />,
+    );
+    const icon = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>(
+        '.astryx-input-status-icon',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    await user.click(icon);
+    expect(screen.getByRole('combobox')).toHaveFocus();
   });
 
   it('draws the info-tip on the sheet trigger field, and a click on it opens no sheet', async () => {
@@ -99,8 +115,8 @@ describe('PowerSearch status icon', () => {
     render(<Field presentation="bottom-sheet" />);
     const trigger = screen.getByRole('button', {name: /Search issues/});
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-    const button = screen.getByRole('button', {name: 'Error details'});
-    const tooltip = screen.getByRole('tooltip', h);
+    const button = await screen.findByRole('button', {name: 'Error details'});
+    const tooltip = await screen.findByRole('tooltip', h);
     expect(tooltip).toHaveTextContent(MESSAGE);
     const describedBy = (trigger.getAttribute('aria-describedby') ?? '').split(
       ' ',

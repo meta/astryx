@@ -52,6 +52,8 @@ async function open(page: Page, story: string): Promise<void> {
     {waitUntil: 'load'},
   );
   await page.getByRole('combobox', {name: 'Tooltip'}).waitFor();
+  // The icon's code loads after the field renders.
+  await page.getByRole('button', {name: 'Error details'}).waitFor();
 }
 
 for (const {story, message} of CASES) {

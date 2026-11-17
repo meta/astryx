@@ -81,6 +81,7 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {isStatusButtonPress} from '../hooks/statusButtonPress';
 import {isRenderable} from '../utils/isRenderable';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
@@ -276,10 +277,6 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-1'],
     marginInlineStart: 'auto',
   },
-  // Lays the status info-tip out as a direct item of the end lane.
-  statusSlot: {
-    display: 'contents',
-  },
   // The field's content lane: the input, and the token painted over it.
   //
   // This is the box the value is allowed to occupy, and it is what makes the
@@ -392,14 +389,12 @@ function EndLane({
   anchorRef,
   clear,
   statusIcon,
-  statusSlotRef,
 }: {
   lane: BusyIndicatorLane;
   loadingLabel: string;
   anchorRef: RefObject<Element | null>;
   clear: ReactNode;
   statusIcon: ReactNode;
-  statusSlotRef: RefObject<HTMLSpanElement | null>;
 }) {
   const isBusy = useIsBusy(lane);
   // The search Spinner stays named (family:input-fields FR7) but is not a
@@ -418,11 +413,7 @@ function EndLane({
         </SpinnerOwnerContext>
       )}
       {clear}
-      {isRenderable(statusIcon) && (
-        <span ref={statusSlotRef} {...stylex.props(styles.statusSlot)}>
-          {statusIcon}
-        </span>
-      )}
+      {statusIcon}
     </div>
   );
 }
@@ -491,8 +482,6 @@ export function Typeahead<T extends SearchableItem>({
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Holds the status info-tip, so a click on it keeps the focus it gives.
-  const statusSlotRef = useRef<HTMLSpanElement | null>(null);
   const tokenRef = useRef<HTMLElement>(null);
 
   // Disabled-reason tooltip. The tooltip listeners attach to the input wrapper
@@ -693,14 +682,20 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, focusTokenNextFrame],
   );
 
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status,
+      statusVariant,
+      isInGroup: !!inputGroup,
+    });
+
   // Click wrapper to focus input or enter edit mode. A click on the status
   // info-tip leaves focus on it.
   const handleWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (
         isDisabled ||
-        (event.target instanceof Node &&
-          statusSlotRef.current?.contains(event.target) === true)
+        isStatusButtonPress(event.target, statusTooltipDescribedBy)
       ) {
         return;
       }
@@ -710,15 +705,8 @@ export function Typeahead<T extends SearchableItem>({
         inputRef.current?.focus();
       }
     },
-    [isDisabled, showToken, handleEnterEditMode],
+    [isDisabled, showToken, handleEnterEditMode, statusTooltipDescribedBy],
   );
-
-  const {statusIcon, describedBy: statusTooltipDescribedBy} =
-    useInputStatusIcon({
-      status,
-      statusVariant,
-      isInGroup: !!inputGroup,
-    });
 
   const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
     inputLabelId,
@@ -889,7 +877,6 @@ export function Typeahead<T extends SearchableItem>({
             ) : null
           }
           statusIcon={statusIcon}
-          statusSlotRef={statusSlotRef}
         />
       </div>
       {showsDisabledMessage &&

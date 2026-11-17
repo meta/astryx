@@ -73,6 +73,7 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {isStatusButtonPress} from '../hooks/statusButtonPress';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {warnOnce} from '../utils/devWarning';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
@@ -652,10 +653,6 @@ const styles = stylex.create({
     // tokenizer looks like an in-place expansion, overlapping the
     // placeholder from its top edge.
     width: 'anchor-size(width)',
-  },
-  // Lays the status info-tip out as a direct item of the end lane.
-  statusSlot: {
-    display: 'contents',
   },
   overflowText: {
     flexShrink: 0,
@@ -1465,9 +1462,6 @@ export function Tokenizer<T extends SearchableItem>({
   // `endContent`, a clear button, or all three — so its width is measured
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
-  // Holds the status info-tip, so a press on it keeps the focus it gives,
-  // unlike a press elsewhere in the inline field.
-  const statusSlotRef = useRef<HTMLSpanElement | null>(null);
   // `laneRef` publishes the lane's width, so token rows and the placeholder
   // stop short of it. `sheetLaneRef` tells a tap in the lane from a tap on the
   // field.
@@ -1569,8 +1563,8 @@ export function Tokenizer<T extends SearchableItem>({
             readModality() === 'pointer' &&
             (findTokenControl(e.target) != null ||
               (e.target instanceof Node &&
-                (trackRef.current?.contains(e.target) === true ||
-                  statusSlotRef.current?.contains(e.target) === true)))
+                trackRef.current?.contains(e.target) === true) ||
+              isStatusButtonPress(e.target, statusTooltipDescribedBy))
           ) &&
           !isMenuFocusReturnRef.current &&
           !(removeControlOf(e.target) != null && wasKeyboardDown())
@@ -1587,6 +1581,7 @@ export function Tokenizer<T extends SearchableItem>({
       readModality,
       findTokenControl,
       wasKeyboardDown,
+      statusTooltipDescribedBy,
     ],
   );
 
@@ -1864,8 +1859,7 @@ export function Tokenizer<T extends SearchableItem>({
       // leaves focus on that control.
       if (
         findTokenControl(event.target) != null ||
-        (event.target instanceof Node &&
-          statusSlotRef.current?.contains(event.target) === true)
+        isStatusButtonPress(event.target, statusTooltipDescribedBy)
       ) {
         return;
       }
@@ -1882,7 +1876,13 @@ export function Tokenizer<T extends SearchableItem>({
         }
       }
     },
-    [isDisabled, isLayerMode, layer, findTokenControl],
+    [
+      isDisabled,
+      isLayerMode,
+      layer,
+      findTokenControl,
+      statusTooltipDescribedBy,
+    ],
   );
 
   // Inside an InputGroup no Field renders the local description or status —
@@ -2165,11 +2165,7 @@ export function Tokenizer<T extends SearchableItem>({
             }}
           />
         )}
-        {isRenderable(statusIcon) && (
-          <span ref={statusSlotRef} {...stylex.props(styles.statusSlot)}>
-            {statusIcon}
-          </span>
-        )}
+        {statusIcon}
       </EndLane>
     </div>
   );
