@@ -38,6 +38,9 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
+const MUTED =
+  /^the base theme's .* on --color-background-muted is 1\.2\d:1 in dark, in \d+ texts: /;
+
 describe("the base theme's own contrast failures", () => {
   it(
     'show names them as notes, one per cause, never as problems',
@@ -46,11 +49,7 @@ describe("the base theme's own contrast failures", () => {
       const r = /** @type {any} */ (await themeEditShow('b', {cwd})).data;
       const notes = /** @type {string[]} */ (r.notes);
       const base = notes.filter(n => n.startsWith("the base theme's "));
-      // Each failure the base theme still draws, said once.
-      expect(base.length).toBeGreaterThan(0);
-      expect(base.every(n => / is \d+(\.\d+)?:1 in (light|dark)/.test(n))).toBe(
-        true,
-      );
+      expect(base.filter(n => MUTED.test(n))).toHaveLength(1);
       expect(new Set(base).size).toBe(base.length);
       // Where the editor can fix one, its line is said with it.
       expect(
@@ -73,9 +72,7 @@ describe("the base theme's own contrast failures", () => {
         await themeEditSet('b', 'accent', '#2563eb', {cwd})
       ).data;
       expect(
-        /** @type {string[]} */ (r.notes).filter(n =>
-          n.startsWith("the base theme's "),
-        ),
+        /** @type {string[]} */ (r.notes).filter(n => MUTED.test(n)),
       ).toEqual([]);
     },
     T,

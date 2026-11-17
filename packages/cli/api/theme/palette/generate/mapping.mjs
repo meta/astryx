@@ -535,12 +535,13 @@ export function ratio(a, b) {
   return (x + 0.05) / (y + 0.05);
 }
 /** A ratio to two decimals. */
+/** A ratio cut down to two decimals, never rounded up past a need. */
 export const round =
   /**
    * @param {number} r
    * @returns {number}
    */
-  r => Math.round(r * 100) / 100;
+  r => Math.floor(r * 100 + 1e-9) / 100;
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade =
   /**
