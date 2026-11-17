@@ -271,12 +271,34 @@ describe('withUncarriedImages', () => {
 });
 
 describe('a name that reads as configuration', () => {
-  it('is left out, and the name its warning suggests is carried', () => {
-    for (const name of ['chart.config.json', 'package.json', 'tsconfig.app.json', 'yarn-lock.json', 'vite.config.ts']) {
-      expect(embeddedPathProblem(`data/${name}`)?.toolConfig).toBe(true);
-      expect(embeddedPathProblem(`data/${carriedNameFor(name)}`)).toBeNull();
+  it('is left out, and the name its warning offers is carried', () => {
+    for (const name of [
+      'chart.config.json',
+      'test.config.json',
+      'package.json',
+      'tsconfig.app.json',
+      'yarn-lock.json',
+      'vite.config.ts',
+      'test.config.ts',
+    ]) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig, name).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(`data/${name}`).name}`), name).toBeNull();
     }
-    expect(carriedNameFor('chart.config.json')).toBe('chart-data.json');
+  });
+
+  it('offers a rename for a *.config.json, and a file of its own for a tool\'s file', () => {
+    expect(carriedNameFor('chart.config.json')).toEqual({action: 'rename', name: 'chart-data.json'});
+    expect(carriedNameFor('data/a.b.config.json')).toEqual({action: 'rename', name: 'a-b-data.json'});
+    for (const name of ['package.json', 'tsconfig.json', 'package-lock.json', 'vite.config.ts']) {
+      expect(carriedNameFor(name).action, name).toBe('move');
+    }
+    expect(carriedNameFor('package.json').name).toBe('page-data.json');
+    expect(carriedNameFor('vite.config.ts').name).toBe('page-data.ts');
+  });
+
+  it('never offers a name a runner picks up: test.config.ts gets page-data.ts, not test-data.ts', () => {
+    expect(embeddedPathProblem('test-data.ts')).not.toBeNull();
+    expect(carriedNameFor('test.config.ts')).toEqual({action: 'move', name: 'page-data.ts'});
   });
 
   it('is not the reason a runner file or a dotfile is left out', () => {

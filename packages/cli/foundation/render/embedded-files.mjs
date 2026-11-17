@@ -93,14 +93,29 @@ export function readsAsToolConfig(base) {
 }
 
 /**
- * A name a render carries for a file whose name reads as configuration:
- * `chart.config.json` becomes `chart-data.json`.
- * @param {string} base the file's name, without its folder
+ * What to do with a file a render leaves out because its name reads as
+ * configuration, so that it is carried. A `*.config.json` holds the page's
+ * data under a tool's kind of name: rename it (`chart.config.json` becomes
+ * `chart-data.json`). Any other such file is a tool's own (`package.json`,
+ * `tsconfig.json`, a lockfile, `vite.config.ts`): the page moves the values it
+ * reads into a file of its own (`page-data.json`). Each name offered is one a
+ * render carries where the file is.
+ * @param {string} p the file's `/`-separated path among the carried files
+ * @returns {{action: 'rename' | 'move', name: string}}
  */
-export function carriedNameFor(base) {
+export function carriedNameFor(p) {
+  const slash = p.lastIndexOf('/');
+  const dir = slash < 0 ? '' : p.slice(0, slash + 1);
+  const base = p.slice(slash + 1);
   const ext = extOf(base);
-  const stem = base.slice(0, base.length - ext.length).replace(/\.config$/i, '').replace(/\./g, '-');
-  return `${stem}-data${ext}`;
+  const carries = (/** @type {string} */ name) => embeddedPathProblem(dir + name) === null;
+  const data = /^(.+)\.config\.jsonc?$/i.exec(base);
+  if (data) {
+    const name = `${data[1].replace(/\./g, '-')}-data${ext}`;
+    if (carries(name)) return {action: 'rename', name};
+  }
+  const own = `page-data${ext === '.jsonc' ? '.json' : ext}`;
+  return {action: 'move', name: carries(own) ? own : 'page-data.json'};
 }
 
 /**

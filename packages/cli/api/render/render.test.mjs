@@ -2013,7 +2013,11 @@ describe('render --reverse: a received file may carry only what a render embeds'
     const r = /** @type {any} */ (await render('cfg/page.tsx', {cwd: dir}));
     expect(r.data.files).toEqual(['page.tsx']);
     expect(r.data.notCarried).toEqual(['package.json']);
-    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-carried');
+    expect(r.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "package.json is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
+    });
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
     const back = /** @type {any} */ (await render('cfg/page.html', {cwd: dir, reverse: true}));
@@ -2447,6 +2451,22 @@ describe('render(): a page outside a project', () => {
       'rows.test.ts',
     ]);
     expect(note).not.toContain('come back exactly');
+  }, 60_000);
+
+  it('lists notCarried in the text output, as the reverse view lists missing', () => {
+    const tree = path.join(away, 'config-named-text');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(run.status).toBe(0);
+    expect(run.stdout).toMatch(/notCarried\W+chart\.config\.json/);
+    fs.renameSync(path.join(tree, 'chart.config.json'), path.join(tree, 'chart-data.json'));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const renamed = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(renamed.status).toBe(0);
+    expect(renamed.stdout).not.toContain('notCarried');
   }, 60_000);
 
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
