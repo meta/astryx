@@ -2411,7 +2411,7 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-carried',
       message:
-        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. Rename it, such as chart-data.json, to carry it.",
+        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
     });
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');

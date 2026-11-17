@@ -1430,7 +1430,7 @@ export async function renderPage(entry, options = {}) {
         code: 'not-carried',
         message:
           fix.action === 'rename'
-            ? `${rel} is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. Rename it, such as ${fix.name}, to carry it.`
+            ? `${rel} is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as ${fix.name}, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.`
             : `${rel} is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as ${fix.name}, to carry them.`,
       });
       continue;
