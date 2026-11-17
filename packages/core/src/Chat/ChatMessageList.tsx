@@ -6,8 +6,10 @@
  * @file ChatMessageList.tsx
  * @input Uses React, StyleX, ChatListContext, theme tokens, spacing step utilities,
  *   and isRenderable to preserve accepted empty-state content
- * @output Exports ChatMessageList component and ChatMessageListProps
- * @position Presentational message container — holds ChatMessage children
+ * @output Exports ChatMessageList component, ChatMessageListProps and
+ *   ChatMessageListItemsProps
+ * @position Presentational message container — holds ChatMessage children,
+ *   or renders an item model that a virtualization capability can window
  *
  * Renders a container with role="log" for chat message histories.
  * Handles density context, configurable gap, empty state,
@@ -24,7 +26,14 @@
  * - /packages/cli/assets/templates/blocks/components/ChatMessageList/ (block examples)
  */
 
-import {type ReactNode, useEffect, useMemo, useRef, useTransition} from 'react';
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useTransition,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -44,6 +53,20 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatMessageList.generated';
+import {
+  VIRTUALIZATION_CAPABILITY,
+  type ChatMessageListHandle,
+  type ChatMessageListVirtualizationCapability,
+  type ChatMessageListWindowing,
+  type ChatMessageListWindowProps,
+} from './chatMessageListVirtualization';
+
+export type {
+  ChatMessageListHandle,
+  ChatMessageListItemAlign,
+  ChatMessageListScrollToItemOptions,
+  ChatMessageListVirtualizationCapability,
+} from './chatMessageListVirtualization';
 
 registerEnglishFallback(english);
 
@@ -116,6 +139,58 @@ export interface ChatMessageListProps extends BaseProps<HTMLDivElement> {
    */
   isStreaming?: boolean;
 }
+
+/**
+ * Props for an item list: ChatMessageList renders one row per item instead of
+ * caller children, and can window long conversations.
+ */
+export interface ChatMessageListItemsProps<T> extends Omit<
+  ChatMessageListProps,
+  'children'
+> {
+  children?: never;
+
+  /**
+   * The conversation's items, oldest first. Replace the array to change
+   * them: the list reads its order and length on each render.
+   */
+  items: ReadonlyArray<T>;
+
+  /**
+   * A stable key for each item, unique as a string. The list keys rows, sizes
+   * and its scroll anchor by it, so an index-based key breaks the anchor when
+   * older items load above.
+   */
+  getItemKey: (item: T, index: number) => string | number;
+
+  /** Renders one item, typically as a ChatMessage. */
+  renderItem: (item: T, index: number) => ReactNode;
+
+  /**
+   * The height in CSS px of an item that has not rendered yet. The list
+   * uses it while `virtualization` windows the list, until the item mounts
+   * and measures. A function can estimate each item by its kind.
+   * @default 96
+   */
+  estimateItemSize?: number | ((item: T, index: number) => number);
+
+  /**
+   * Windows the items: inside ChatLayout, only the rows near the scrollport
+   * mount. Pass the value of `useChatMessageListVirtualization()`.
+   */
+  virtualization?: ChatMessageListVirtualizationCapability;
+
+  /**
+   * Imperative handle with `scrollToItem`. Set while `virtualization`
+   * windows the list.
+   */
+  handleRef?: React.Ref<ChatMessageListHandle>;
+}
+
+type ChatMessageListAnyProps<T> = Omit<ChatMessageListProps, 'children'> &
+  Partial<Omit<ChatMessageListItemsProps<T>, 'children'>> & {
+    children?: ReactNode;
+  };
 
 // =============================================================================
 // Styles
@@ -227,6 +302,10 @@ const gapStyles = stylex.create({
  * Auto-scroll and the scroll-to-bottom button are owned by
  * ChatLayout. Use useChatStreamScroll for standalone scroll control.
  *
+ * Pass `items`, `getItemKey` and `renderItem` instead of children to render
+ * an item model. Add `virtualization` to window a long conversation inside
+ * ChatLayout.
+ *
  * @example
  * ```
  * <ChatMessageList>
@@ -235,22 +314,52 @@ const gapStyles = stylex.create({
  *   </ChatMessage>
  * </ChatMessageList>
  * ```
+ *
+ * @example
+ * ```
+ * const virtualization = useChatMessageListVirtualization();
+ * <ChatMessageList
+ *   items={messages}
+ *   getItemKey={message => message.id}
+ *   renderItem={message => <Message message={message} />}
+ *   virtualization={virtualization}
+ * />
+ * ```
  */
-export function ChatMessageList({
-  children,
-  emptyState,
-  scrollToTopAction,
-  density = 'balanced',
-  gap,
-  align = 'bottom',
-  isStreaming = false,
-  xstyle,
-  className,
-  style,
-  'data-testid': testId,
-  ref,
-  ...rest
-}: ChatMessageListProps) {
+export function ChatMessageList<T>(
+  props: ChatMessageListProps | ChatMessageListItemsProps<T>,
+) {
+  const {
+    children,
+    items,
+    getItemKey,
+    renderItem,
+    // The windowed renderer reads these from the props.
+    estimateItemSize: _estimateItemSize,
+    virtualization,
+    handleRef: _handleRef,
+    emptyState,
+    scrollToTopAction,
+    density = 'balanced',
+    gap,
+    align = 'bottom',
+    isStreaming = false,
+    xstyle,
+    className,
+    style,
+    'data-testid': testId,
+    ref,
+    ...rest
+  } = props as ChatMessageListAnyProps<T>;
+  // Only the hook makes a capability, and it carries the windowed renderer.
+  const windowing =
+    items === undefined
+      ? undefined
+      : (
+          virtualization as
+            | {readonly [VIRTUALIZATION_CAPABILITY]?: ChatMessageListWindowing}
+            | undefined
+        )?.[VIRTUALIZATION_CAPABILITY];
   const layoutContext = useChatLayoutContext();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -260,19 +369,43 @@ export function ChatMessageList({
   // announces its loading through the channel (spec:AST-086 FR4, FR8).
   useBusyAnnouncement(isLoadingTop, t('@astryx.spinner.loading'), innerRef);
 
-  // Register inner content element with the layout for height observation
+  const isWindowed = windowing !== undefined;
+  // Syncs the layout's content observer with the inner content element. A
+  // windowed list registers its newest row instead: its other rows change
+  // size as they measure, with no new content.
   useEffect(() => {
-    if (layoutContext?.contentRef && innerRef.current) {
+    if (layoutContext?.contentRef && innerRef.current && !isWindowed) {
       layoutContext.contentRef(innerRef.current);
       return () => layoutContext.contentRef(null);
     }
-  }, [layoutContext]);
+  }, [layoutContext, isWindowed]);
 
   const hasChildren =
-    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
-    children != null &&
-    children !== false &&
-    !(Array.isArray(children) && children.length === 0);
+    items !== undefined
+      ? items.length > 0
+      : // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
+        children != null &&
+        children !== false &&
+        !(Array.isArray(children) && children.length === 0);
+
+  let content: ReactNode = children;
+  if (items !== undefined && getItemKey !== undefined && renderItem) {
+    if (windowing) {
+      // The renderer reads its own props, with callbacks of unknown items.
+      content = (
+        <windowing.Window
+          {...(props as ChatMessageListWindowProps)}
+          density={density}
+        />
+      );
+    } else {
+      content = items.map((item, index) => (
+        <Fragment key={getItemKey(item, index)}>
+          {renderItem(item, index)}
+        </Fragment>
+      ));
+    }
+  }
 
   // Syncs an IntersectionObserver on the top sentinel with `scrollToTopAction`.
   // The action runs when the sentinel comes into view.
@@ -351,7 +484,7 @@ export function ChatMessageList({
 
           {/* Messages or empty state */}
           {hasChildren ? (
-            children
+            content
           ) : isRenderable(emptyState) ? (
             <div {...stylex.props(styles.emptyState)}>{emptyState}</div>
           ) : null}

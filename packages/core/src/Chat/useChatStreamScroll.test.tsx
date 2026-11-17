@@ -4,6 +4,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {
+  getStreamScrollShift,
   useChatStreamScroll,
   type UseChatStreamScrollOptions,
   type UseChatStreamScrollReturn,
@@ -522,5 +523,47 @@ describe('useChatStreamScroll — scrollToMessage in a scrolling element', () =>
     api.current!.scrollToMessage(message);
     expect(scrollTo).toHaveBeenCalledWith({top: 350, behavior: 'instant'});
     vi.restoreAllMocks();
+  });
+});
+
+describe('useChatStreamScroll — the shift a windowed list makes through it', () => {
+  it('a shift up is not the reader: following continues after its scroll event', () => {
+    const {api, el} = renderHook();
+    setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
+    flushRaf();
+    expect(el.scrollTop).toBe(600);
+    // A row above the end measured 100 px smaller.
+    setGeometry(el, {scrollHeight: 900, clientHeight: 400});
+    act(() => getStreamScrollShift(el)!.shiftBy(-100));
+    expect(el.scrollTop).toBe(500);
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+    expect(api.current!.isLocked).toBe(true);
+  });
+
+  it('a follow in flight moves with a shift', () => {
+    const {api, el} = renderHook();
+    setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
+    flushRaf();
+    el.scrollTop = 0;
+    act(() => api.current!.scrollToBottom());
+    flushRaf();
+    const afterFrame = el.scrollTop;
+    act(() => getStreamScrollShift(el)!.shiftBy(50));
+    expect(el.scrollTop).toBe(afterFrame + 50);
+    flushRaf();
+    // The spring's next frame starts from the shifted position.
+    expect(el.scrollTop).toBeGreaterThan(afterFrame + 50);
+  });
+
+  it('stops following through the shift, and ends with the hook', () => {
+    const {api, el, unmount} = renderHook();
+    setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
+    flushRaf();
+    act(() => getStreamScrollShift(el)!.unlock());
+    expect(api.current!.isLocked).toBe(false);
+    unmount();
+    expect(getStreamScrollShift(el)).toBeUndefined();
   });
 });
