@@ -84,14 +84,20 @@ astryx experimental icon use heroicons`,
           type: 'code',
           lang: 'tsx',
           code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {themeIcons} from 'app'; // your app's package name
 import {themes, defaultThemeSlug} from './astryx-themes';
 
-export const appTheme = defineTheme({
+const appTheme = defineTheme({
   name: 'app',
   extends: themes[defaultThemeSlug],
   icons: themeIcons,
-});`,
+});
+
+// Where the app renders its root:
+<Theme theme={appTheme}>
+  <App />
+</Theme>;`,
         },
         {
           type: 'prose',
