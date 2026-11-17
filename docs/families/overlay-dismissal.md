@@ -221,9 +221,10 @@ this record's current membership snapshot must be updated with it.
   target, in the opener's document, with the ring the last input in that
   document calls for (`architecture:interaction-modality` INV1); a BottomSheet,
   BottomSheetSwitcher, or Lightbox does the same in a Picture-in-Picture window.
-  When the return target is a Tab stop and sits outside the visible area of
-  its scrollers, the return scrolls it just into view (the nearest edge), so a
-  keyboard user keeps their place. A return target that is not a Tab stop is
+  When the return target is a Tab stop and is not wholly inside the visible
+  area of its scrollers, the return scrolls it just into view (the nearest
+  edge), after any input: the person keeps their place at the control they
+  return to. A return target that is not a Tab stop is
   never scrolled to: a browser may record a focusable ancestor of the pressed
   control as the return target (WebKit focuses the nearest focusable ancestor
   of a tapped button, such as a `tabindex="-1"` main region), and a reveal of
@@ -299,6 +300,10 @@ this record's current membership snapshot must be updated with it.
 | List's reorder-mode hint                                                                                                                                                                                                                                                             | shared owner, registered while reorder mode is on             | none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | DropdownMenuSubMenu, PowerSearchEditPopover                                                                                                                                                                                                                                          | local only                                                    | Must migrate from component-specific listeners or registries to the shared owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
+FR9 gap: Dialog, BottomSheet, Lightbox and DropdownMenu return focus with
+`preventScroll: true`, so a Tab-stop return target outside the visible area is
+not revealed.
+
 The rows marked partial or local are current adoption gaps against FR1, and the
 rows naming an implementation gap are gaps against FR8 or FR9. They are not
 approved exceptions. The implementation gaps listed are the known ones, not a
@@ -319,7 +324,8 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR8                | `DropdownMenuSecondDocument.a11y.chromium.spec.ts`                                                              | a DropdownMenu in an iframe, in a Picture-in-Picture window and in a window that `window.open` opens: a mouse press opens it, and the menu stays open through that press's release                                                                                                                                                                                                                                                                        | A press in the second document goes uncounted, so its release light-dismisses the menu it opened                                                                    |
 | FR8                | `PopoverSecondDocument.a11y.chromium.spec.ts`                                                                   | a Popover in an iframe and in a Picture-in-Picture window, alone and with one open in the page                                                                                                                                                                                                                                                                                                                                                            | A press in the second document misses its own layer or dismisses the page's                                                                                         |
 | FR9                | `DialogSecondDocument.a11y.browser.spec.ts`                                                                     | a Dialog in an iframe and in a Picture-in-Picture window, closed by Escape or a control inside it, and a Dialog in an iframe opened from the page                                                                                                                                                                                                                                                                                                         | Focus lands outside the opener's document, or its ring does not follow the closing input                                                                            |
-| FR9                | `BottomSheetCloseScroll.a11y.browser.spec.ts`; `DialogCloseScroll.a11y.browser.spec.ts`                         | a BottomSheet and a Dialog whose trigger sits in a tall focusable region of a scrolled page, closed by a control inside, by the backdrop, and by Escape, in Chromium and WebKit; a Dialog whose Tab-stop opener the page scrolled out of view, closed by Escape, reveals it at the nearest edge                                                                                                                                                           | The page's scroll offset or the trigger's place on screen changes across the close                                                                                  |
+| FR9                | `BottomSheetCloseScroll.a11y.browser.spec.ts`; `DialogCloseScroll.a11y.browser.spec.ts`                         | a BottomSheet and a Dialog whose trigger sits in a tall focusable region of a scrolled page, closed by a control inside, by the backdrop, and by Escape, in Chromium and WebKit                                                                                                                                                                                                                                                                           | The page's scroll offset or the trigger's place on screen changes across the close                                                                                  |
+| FR9 reveal         | Real-browser reveal checks; implementation gap: none has them                                                   | a Dialog, a BottomSheet and a DropdownMenu whose Tab-stop opener the page scrolled out of view or partly out of view, closed by Escape, by a control inside, and by a pointer press outside; and a return target that is not a Tab stop, in Chromium and WebKit                                                                                                                                                                                           | a Tab-stop return target left wholly or partly out of view, scrolled past its nearest edge, or a non-Tab-stop target scrolled to                                    |
 | FR8, FR9           | Real-browser second-document checks; implementation gap: only Dialog, Popover and HoverCard have them           | Dialog, Popover, DropdownMenu, MoreMenu, ContextMenu, Selector, MultiSelector, TopNavHeading, TopNavMenu, TopNavMegaMenu, SideNavHeading, SideNavItem, Tooltip and HoverCard, each in a same-origin iframe and in a Picture-in-Picture window: opens and takes Escape in the document it renders in (an unpinned Tooltip only when no other member is present; a pinned Tooltip before the member beneath it), and returns focus in the opener's document | The member opens or ranks in another document, a pinned Tooltip lets Escape reach the member beneath it, or focus lands on the frame element, the page, or the body |
 | FR8, FR9           | Real-browser second-document checks; implementation gap: none has them                                          | BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its return target there                                                                                                                                                                                                                                                                                                          | The surface ranks in the page, or focus lands on the page or the body                                                                                               |
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                                                                                                                                                                                                                                                                         | A page-level surface moves into the second document                                                                                                                 |
@@ -361,13 +367,14 @@ where the person acted.
 
 Rejected: one order across documents, where a press in one window dismisses a surface in another.
 
-### DEC-3 — A returning focus reveals a hidden Tab stop, never a region
+### DEC-3 — A returning focus reveals a hidden Tab stop, never another target
 
 **Decider:** `cixzhang`, `2026-11-17 08:02 PT`
 
-When a surface closes after the page behind it scrolled, a keyboard user whose
-focus returns to an opener now off screen loses their place. A Tab-stop opener
-is therefore scrolled just into view. A return target that is not a Tab stop
+When a surface closes after the page behind it scrolled, focus returns to an
+opener now off screen, and the person loses their place: a keyboard user's next
+key acts out of view, and a pointer or touch user cannot see where focus went.
+A Tab-stop opener is therefore scrolled just into view after any input. A return target that is not a Tab stop
 is most often a region WebKit recorded in place of the pressed control, and
 revealing it jumps the page to that region's top edge, so it is never scrolled
 to.
@@ -379,7 +386,7 @@ cannot see), and revealing every return target (WebKit's region jump).
 
 None. Focus entry, containment, movement, and the return target, modality,
 positioning, outside dismissal, and open-state APIs are outside this family
-contract; FR9 fixes only the document focus returns in and that the return does not scroll. The mapped tests do not render a nested
+contract; FR9 fixes only the document focus returns in and when the return scrolls. The mapped tests do not render a nested
 layer through a real portal; a real portal fixture is required before this
 contract can claim verified portal coverage.
 
