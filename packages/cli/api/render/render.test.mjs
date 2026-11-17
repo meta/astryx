@@ -2512,6 +2512,21 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
+  it('names every package the page and its own modules need in one refusal, with one install line', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed');
+    expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {

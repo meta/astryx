@@ -414,11 +414,15 @@ function asAstryxError(e) {
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
       // The install command in the project's package manager, when the
-      // render named one.
+      // render named one; else one npm line for every package it found.
+      const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
       suggestions.push(
         typeof e.detail.install === 'string'
           ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
-          : {name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'},
+          : {
+              name: `npm install ${packages.join(' ')}`,
+              reason: packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports',
+            },
       );
     }
     return new AstryxError(e.message, suggestions, code);
