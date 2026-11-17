@@ -112,3 +112,17 @@ export const BusyIndicatorLaneProvider = BusyIndicatorLaneContext.Provider;
 export function useBusyIndicatorLane(): BusyIndicatorLane | null {
   return use(BusyIndicatorLaneContext);
 }
+
+const InputBusyContext = createSharedContext<boolean>(
+  'InputBusyContext',
+  1,
+  false,
+);
+InputBusyContext.displayName = 'InputBusyContext';
+
+export const InputBusyProvider = InputBusyContext.Provider;
+
+/** Whether the wrapper's field value is loading or being saved. */
+export function useIsInputBusy(): boolean {
+  return use(InputBusyContext);
+}
