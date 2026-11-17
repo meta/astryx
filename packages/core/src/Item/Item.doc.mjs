@@ -57,6 +57,13 @@ export const docs = {
         default: 'var(--spacing-2) (var(--spacing-3) for density="spacious")',
         private: true,
       },
+      {
+        name: '--_item-marker-room',
+        description:
+          "Room a row keeps after its list marker, before its content, for a control its neighbours put there: a reorderable List row that stays put keeps its neighbours' handle room. Every row resets it, so a nested row never takes its parent's room.",
+        default: '0px',
+        private: true,
+      },
     ],
     derived: [{property: 'paddingInline', vars: ['--_item-inset-inline']}],
   },
