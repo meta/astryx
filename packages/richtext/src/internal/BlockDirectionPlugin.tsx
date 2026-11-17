@@ -17,9 +17,7 @@
 
 import {useEffect} from 'react';
 import {firstStrongDirection} from './firstStrongDirection';
-import {useDirection} from '@astryxdesign/core/i18n';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {DOCUMENT_DIRECTION_VAR} from '../editorTheme';
 import {mergeRegister} from '@lexical/utils';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
 import {
@@ -70,9 +68,10 @@ const PROSE_NODES: ReadonlyArray<Klass<ElementNode>> = [
  * pasted HTML (`$setDirectionFromDOM`) or an older stored document; clearing
  * it keeps the stored state saying what the document shows.
  *
- * A fenced code block is the one place this surface and core `Markdown`
- * disagree: the theme gives it `unicode-bidi: plaintext` so each line reads
- * its own way, where core reorders the whole block to the document's.
+ * A fenced code block has no per-line node to carry a direction, so the
+ * theme gives it `unicode-bidi: plaintext` and each line reads its own way.
+ * Core `Markdown` reaches the same rule through CodeBlock, which puts each
+ * line in its own `dir="auto"` element; `pnpm specs:for` finds the record.
  */
 const CONTAINER_NODES: ReadonlyArray<Klass<ElementNode>> = [
   ListNode,
@@ -294,22 +293,8 @@ export function registerBlockDirection(editor: LexicalEditor): () => void {
  */
 export function BlockDirectionPlugin(): null {
   const [editor] = useLexicalComposerContext();
-  const documentDirection = useDirection();
   // Registers the direction transforms and listener on the Lexical editor.
   // The teardown removes them.
   useEffect(() => registerBlockDirection(editor), [editor]);
-  // Hands the document's own direction to the theme. A block with no
-  // strongly directional text reads this rather than its container's
-  // direction, so a neutral item inside a list that reads the other way
-  // still follows the document, as `Markdown` does. Registering for root
-  // changes covers the editor swapping its content element.
-  useEffect(
-    () =>
-      editor.registerRootListener((root, previousRoot) => {
-        previousRoot?.style.removeProperty(DOCUMENT_DIRECTION_VAR);
-        root?.style.setProperty(DOCUMENT_DIRECTION_VAR, documentDirection);
-      }),
-    [editor, documentDirection],
-  );
   return null;
 }

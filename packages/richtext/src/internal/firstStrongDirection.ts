@@ -40,8 +40,10 @@ const STRONG_RTL = new RegExp(
 );
 
 /**
- * The characters the scan passes over inside the right-to-left scripts:
- * Bidi_Class `AN`, `EN`, `ET` and `ON`, none of which decides a direction.
+ * The characters the scan passes over: Bidi_Class `AN`, `EN`, `ET` and
+ * `ON`, none of which decides a direction. Most are the right-to-left
+ * scripts' own, and the digits that are weak everywhere are here too: the
+ * ASCII, fullwidth and mathematical ones are `EN`.
  *
  * The first group is the Arabic script's own: its digits, the number signs
  * before them, and the currency and per-cent marks beside them.

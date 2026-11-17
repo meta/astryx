@@ -76,20 +76,17 @@ const editorTheme = stylex.create({
   // right-to-left document's start edge.
   blockDirection: {
     direction: {
-      // A block with no direction of its own reads the way the document
-      // reads, at any depth, as `Markdown` resolves one against the
-      // provider. Lexical leaves such a block at `dir="auto"` at the top
-      // level and writes no attribute at all below it, so the rule is the
-      // default here and the written directions are the exception. The
-      // fallback covers a root the plugin has not set yet.
       default: null,
-      // Lexical leaves a block at `dir="auto"` at the top level and writes
-      // no attribute at all below it, so both spellings mean the same thing:
-      // this block's own text decided nothing. A block that did decide
-      // carries `ltr` or `rtl` and is left alone, so its attribute drives
-      // the layout, and the caret and insets with it.
-      ':is([dir="auto"])': `var(${DOCUMENT_DIRECTION_VAR}, inherit)`,
-      ':not([dir])': `var(${DOCUMENT_DIRECTION_VAR}, inherit)`,
+      // A block whose own text decided nothing reads the way the document
+      // reads, at any depth, as `Markdown` resolves one against the
+      // provider. The surface root sets that direction from `:dir()`, so it
+      // arrives through a list or table that reads the other way, where
+      // `inherit` would hand the block its container's direction. Lexical
+      // leaves such a block at `dir="auto"` at the top level and writes no
+      // attribute below it, so both spellings mean the same thing; a block
+      // that did decide carries `ltr` or `rtl` and is left alone.
+      ':is([dir="auto"])': 'var(--_richtext-document-direction, inherit)',
+      ':not([dir])': 'var(--_richtext-document-direction, inherit)',
     },
   },
   // A container orders its contents in its parent's direction whatever they
@@ -106,8 +103,9 @@ const editorTheme = stylex.create({
   // own first strong character, so a Hebrew comment line reads
   // right-to-left while `const x = 1;` keeps its semicolon at the end.
   //
-  // This is the one place the two surfaces differ: core Markdown takes the
-  // document's direction for a whole code block and reorders every line.
+  // Core Markdown reaches the same rule a different way: it renders fences
+  // through CodeBlock, which puts each line's code in its own `dir="auto"`
+  // element. RichText has no per-line node to carry one.
   codeDirection: {
     direction: 'inherit',
     unicodeBidi: 'plaintext',

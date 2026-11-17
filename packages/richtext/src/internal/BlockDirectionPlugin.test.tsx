@@ -133,8 +133,8 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     // The list and the code block take no direction of their own. A fenced
     // code block has no per-line node to carry one, so the block keeps the
     // document's direction and `unicode-bidi: plaintext` gives each line
-    // its own. Core Markdown reorders the whole block instead, so the two
-    // surfaces differ here (see editorTheme.ts, codeDirection).
+    // its own. Core Markdown reaches the same rule through CodeBlock's
+    // per-line `dir="auto"` element (see editorTheme.ts, codeDirection).
     expect(blockDirections(container)).toEqual(['auto', 'auto']);
     expect(
       [...container.querySelectorAll('li')].map(item => [

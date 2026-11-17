@@ -198,6 +198,10 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   editorRoot: {
+    // The document's own direction, read where the surface sits. A block
+    // whose text decides nothing reads this rather than inheriting, so a
+    // list or table that reads the other way cannot change it.
+    '--_richtext-document-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     position: 'relative',
     width: '100%',
     // ContentEditable and Lexical's sibling placeholder inherit one shared
