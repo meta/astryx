@@ -97,6 +97,7 @@ describe('route resolution', () => {
     // `cli-experimental-render-pages` is the experimental render guide and
     // `cli-experimental-share-a-page` the task guide that uses it;
     // `calendars` is the calendar systems page.
+    // `visualization` is the data visualization namespace page.
     // `styling` shows under `styling-overview`, and
     // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
     // under Icons in Foundations.
@@ -124,8 +125,23 @@ describe('route resolution', () => {
         'styling-overview',
         'theme',
         'use-integrations',
+        'visualization',
         'working-with-ai',
       ].sort(),
+    );
+  });
+
+  it('shows data visualization as one guide page, with each guide slug redirecting into it', () => {
+    const page = pageBySlug.get('visualization');
+    expect(page?.category).toBe('guide');
+    expect(page?.sections.map(section => section.title)).toContain(
+      'Choose how your chart renderer reads data colors',
+    );
+    expect(pageBySlug.has('visualization-data-colors-in-renderers')).toBe(
+      false,
+    );
+    expect(docRedirects['visualization-data-colors-in-renderers']).toMatch(
+      /^\/docs\/visualization#/,
     );
   });
 
