@@ -32,6 +32,7 @@ import {
   checkIntegrationCoreRange,
   checkVersionAlignment,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
 } from './doctor.mjs';
@@ -333,6 +334,60 @@ describe('the core-installed check in a fresh clone', () => {
     ).toBe(
       'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
     );
+  });
+});
+
+describe("the check that the app imports Core's component styles", () => {
+  const ctx = (/** @type {string} */ cwd) => ({
+    cwd,
+    nodeVersion: '',
+    coreDir: path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+    configPath: null,
+  });
+  const app = (/** @type {Record<string, string>} */ files) =>
+    mkProject({
+      'package.json': JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16'},
+      }),
+      'src/App.tsx':
+        'import {Button} from \'@astryxdesign/core/Button\';\nexport default () => <Button label="Hi" />;\n',
+      ...files,
+    });
+
+  it('passes for a global stylesheet that @imports it, or a module that imports it', () => {
+    const css = app({
+      'src/index.css':
+        "@import '@astryxdesign/core/reset.css';\n@import url('@astryxdesign/core/astryx.css');\n",
+    });
+    expect(checkCoreStylesheets(ctx(css))).toMatchObject({
+      id: 'core-stylesheets',
+      status: 'pass',
+      message: `${path.join('src', 'index.css')} imports @astryxdesign/core/astryx.css, Core's component styles.`,
+    });
+    const entry = app({
+      'src/main.tsx':
+        "import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(entry))?.status).toBe('pass');
+  });
+
+  it('warns when no source imports it, a commented-out import included, and names the imports to add', () => {
+    const missing = app({
+      'src/index.css':
+        "/* @import '@astryxdesign/core/astryx.css'; */\nbody { margin: 0; }\n",
+      'src/main.tsx':
+        "// import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(missing))).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('render unstyled'),
+      fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
+    });
+  });
+
+  it('is left out when Core is not installed', () => {
+    expect(checkCoreStylesheets({...ctx(app({})), coreDir: null})).toBeNull();
   });
 });
 

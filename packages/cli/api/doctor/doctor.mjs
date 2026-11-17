@@ -88,6 +88,7 @@ import {
 import {
   checkAppThemes,
   checkThemes,
+  moduleSpecifiers,
   themeImportWiring,
   withProviderWiring,
 } from './theme-checks.mjs';
@@ -127,6 +128,8 @@ import {
   isLocalThemeOwner,
   readThemeState,
   builtTargetOf,
+  listProjectSourceFiles,
+  readTextFile,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
@@ -358,6 +361,76 @@ export function checkCoreInstalled(ctx) {
             ? `Install the project's dependencies: \`${install}\`.`
             : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
+  };
+}
+
+/** Core's component styles, the stylesheet an Astryx app imports once. */
+const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
+
+/** A stylesheet `@import` of Core's component styles. */
+const CORE_STYLESHEET_IMPORT =
+  /@import\s+(?:url\(\s*)?(['"]?)@astryxdesign\/core\/astryx\.css\1/u;
+
+/**
+ * The first project file that imports Core's component styles: a stylesheet
+ * that `@import`s them, or a module that imports them, read as a syntax
+ * tree. Comments never count.
+ * @param {string} root
+ * @returns {{file: string | null, unparsed: number}}
+ */
+function coreStylesheetImport(root) {
+  let unparsed = 0;
+  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!source.includes(CORE_STYLESHEET)) continue;
+    if (file.endsWith('.css')) {
+      if (
+        CORE_STYLESHEET_IMPORT.test(source.replace(/\/\*[\s\S]*?\*\//gu, ' '))
+      ) {
+        return {file, unparsed};
+      }
+      continue;
+    }
+    try {
+      if (moduleSpecifiers(source).has(CORE_STYLESHEET))
+        return {file, unparsed};
+    } catch {
+      unparsed += 1;
+    }
+  }
+  return {file: null, unparsed};
+}
+
+/**
+ * The app imports Core's component styles. Without them, Astryx components
+ * render unstyled, and nothing else fails: the build passes and the page
+ * loads. Read from the project's own source and stylesheets, never run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreStylesheets(ctx) {
+  if (!ctx.coreDir) return null;
+  const root = projectRootOf(ctx);
+  const {file, unparsed} = coreStylesheetImport(root);
+  if (file) {
+    return {
+      id: 'core-stylesheets',
+      label: "Core's component styles imported",
+      status: 'pass',
+      message: `${path.relative(root, file) || file} imports ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  return {
+    id: 'core-stylesheets',
+    label: "Core's component styles imported",
+    status: 'warn',
+    message: `Found no import of ${CORE_STYLESHEET}, Core's component styles, in project source. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
+    fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first.",
   };
 }
 
@@ -2418,6 +2491,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
@@ -2442,6 +2516,7 @@ export const SYNC_CHECKS = [
  */
 const CORE_CHECKS = new Set([
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkVersionAlignment,
   checkPeerDeps,
 ]);

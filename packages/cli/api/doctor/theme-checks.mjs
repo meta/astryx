@@ -182,11 +182,14 @@ function walkAst(value, visit) {
 }
 
 /**
+ * The module specifiers a source file imports, re-exports, or loads with
+ * `import()` or `require()`, read from its syntax tree, so a commented-out
+ * or quoted copy never counts.
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
  */
-function moduleSpecifiers(source, options = {}) {
+export function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (

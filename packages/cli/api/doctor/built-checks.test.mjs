@@ -30,8 +30,13 @@ function write(files) {
  * @param {{fileLimit?: number}} [options]
  */
 function check(target, packages = [], options = {}) {
-  const [usage, purity] = checkBuilt(target, {cwd: dir, packages, ...options});
-  return {usage, purity};
+  const checks = checkBuilt(target, {cwd: dir, packages, ...options});
+  const byId = (/** @type {string} */ id) => checks.find(c => c.id === id);
+  return {
+    usage: byId('built-astryx-usage'),
+    styles: byId('built-astryx-styles'),
+    purity: byId('built-astryx-purity'),
+  };
 }
 
 beforeEach(() => {
@@ -116,6 +121,76 @@ describe('built-astryx-usage', () => {
     expect(usage.status).toBe('fail');
     expect(usage.message).toContain('does not exist');
     expect(rest).toEqual([]);
+  });
+});
+
+describe('built-astryx-styles', () => {
+  // A theme's built stylesheet, which names the base layer in its layer order
+  // only, and Core's component styles in their layer.
+  const THEME_CSS =
+    '@layer reset,astryx-base,astryx-theme;@layer astryx-theme{:root{--astryx-color-text:black}}';
+  const CORE_CSS =
+    '@layer astryx-base{@property --x---_gap{syntax:"*";inherits:false}.x1a{display:flex}}';
+  // Core's script holds a base-layer rule as text it writes at run time.
+  const CORE_JS =
+    'function v(n){return`@layer astryx-base {\\n:root {\\n${n}\\n}\\n}`}var c="--astryx-space-1";';
+
+  it('fails a build whose Astryx components have no Core stylesheet, with the imports to add', () => {
+    write({
+      'dist/index.html':
+        '<!doctype html><link rel="stylesheet" href="/assets/index.css"><script type="module" src="/assets/index.js"></script>',
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    const {usage, styles, purity} = check('dist');
+    expect(usage?.status).toBe('pass');
+    expect(styles).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('render unstyled'),
+      fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
+    });
+    expect(purity?.status).toBe('info');
+  });
+
+  it("passes a build that carries Core's component styles, in a stylesheet or a page", () => {
+    write({
+      'dist/assets/index.css': THEME_CSS + CORE_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(check('dist').styles).toMatchObject({
+      status: 'pass',
+      message: "Core's component styles are in assets/index.css.",
+    });
+    write({
+      'page/index.html': `<!doctype html><style>${CORE_CSS}</style><div>Hi</div>`,
+      'page/app.js': CORE_JS,
+    });
+    expect(check('page').styles?.status).toBe('pass');
+  });
+
+  it("counts a source file or stylesheet that imports Core's stylesheet before any build", () => {
+    write({
+      'app/src/index.css':
+        "@import '@astryxdesign/core/reset.css';\n@import '@astryxdesign/core/astryx.css';\n",
+      'app/src/App.tsx':
+        'import {Button} from \'@astryxdesign/core/Button\';\nexport default () => <Button label="Hi" />;\n',
+      'entry/src/main.tsx':
+        "import '@astryxdesign/core/astryx.css';\nimport {Button} from '@astryxdesign/core/Button';\nexport default () => <Button label=\"Hi\" />;\n",
+    });
+    expect(check('app').styles).toMatchObject({
+      status: 'pass',
+      message: expect.stringContaining(
+        'src/index.css imports @astryxdesign/core/astryx.css',
+      ),
+    });
+    expect(check('entry').styles?.message).toContain('src/main.tsx imports');
+  });
+
+  it('says it did not check output with no built stylesheet or page, and is left out when the output uses no Astryx', () => {
+    write({'dist/app.js': CORE_JS});
+    expect(check('dist').styles?.status).toBe('info');
+    write({'plain/index.html': '<div>no astryx</div>'});
+    expect(check('plain').styles).toBeUndefined();
   });
 });
 
