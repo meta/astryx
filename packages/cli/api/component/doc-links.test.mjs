@@ -199,6 +199,7 @@ describe("a link in a component doc's text", () => {
       const text = await runCli(['component', 'AcmeButton'], tmpDir);
       expect(text.status).toBe(0);
       expect(text.stdout).toMatch(/`[^`\n]*astryx[^`\n]* docs acme-setup`/);
+      expect(text.stdout).not.toContain('`astryx docs acme-setup`');
       expect(text.stdout).not.toContain('{@link generic:acme-setup} says');
     },
     SLOW,
