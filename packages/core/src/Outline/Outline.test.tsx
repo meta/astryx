@@ -1155,7 +1155,7 @@ describe('Outline under reduced motion', () => {
 
       expect(
         document.getElementById('install')!.scrollIntoView,
-      ).toHaveBeenCalledWith({behavior: 'auto', block: 'start'});
+      ).toHaveBeenCalledWith({behavior: 'instant', block: 'start'});
       cleanup();
     },
   );
@@ -1172,7 +1172,10 @@ describe('Outline under reduced motion', () => {
 
     await user.click(screen.getByRole('link', {name: 'Installation'}));
 
-    expect(window.scrollBy).toHaveBeenCalledWith({top: 436, behavior: 'auto'});
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 436,
+      behavior: 'instant',
+    });
     cleanup();
   });
 });

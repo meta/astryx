@@ -139,7 +139,7 @@ export const docs = {
           name: 'hasScrollOnClick',
           type: 'boolean',
           description:
-            'Whether activating an item smooth-scrolls to it. Set to false to own the scrolling yourself (virtualized content, a router): the Outline still updates the active item, the hash, and the navigate callbacks, but performs no scroll.',
+            'Whether activating an item scrolls to it: smoothly, or at once under reduced motion. Set to false to own the scrolling yourself (virtualized content, a router): the Outline still updates the active item, the hash, and the navigate callbacks, but performs no scroll.',
           default: 'true',
         },
         {
@@ -416,7 +416,7 @@ export const docsZh = {
           name: 'hasScrollOnClick',
           type: 'boolean',
           description:
-            '激活项目时是否平滑滚动。设为 false 可自行接管滚动（虚拟列表、路由）：Outline 仍会更新激活项、hash 和导航回调，但不执行滚动。',
+            '激活项目时是否滚动到该项（减弱动效时立即到达）。设为 false 可自行接管滚动（虚拟列表、路由）：Outline 仍会更新激活项、hash 和导航回调，但不执行滚动。',
           default: 'true',
         },
         {
@@ -551,7 +551,7 @@ export const docsDense = {
     scrollContainerRef:
       'RefObject of the scroll container to track, instead of the nearest scrollable ancestor. For split panes, modals, panels.',
     hasScrollOnClick:
-      'Whether activating an item smooth-scrolls to it. false = you own scrolling; active id, hash and callbacks still update. Default: true.',
+      'Whether activating an item scrolls to it (at once under reduced motion). false = you own scrolling; active id, hash and callbacks still update. Default: true.',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },
   components: [
@@ -578,7 +578,7 @@ export const docsDense = {
         scrollContainerRef:
           'RefObject of the scroll container to track, instead of the nearest scrollable ancestor.',
         hasScrollOnClick:
-          'Whether activating an item smooth-scrolls to it. Default: true.',
+          'Whether activating an item scrolls to it (at once under reduced motion). Default: true.',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },
     },

@@ -106,9 +106,10 @@ function scrollToTarget(
   scrollTarget: HTMLElement | Window,
   offset: number,
 ): void {
-  // Under reduced motion the scroll does not travel: it lands at once.
+  // Under reduced motion the scroll does not travel: it lands at once, even
+  // on a page that sets a smooth scroll-behavior.
   const behavior: ScrollBehavior =
-    reducedMotionFade(target) == null ? 'smooth' : 'auto';
+    reducedMotionFade(target) == null ? 'smooth' : 'instant';
   if (offset === 0) {
     target.scrollIntoView({behavior, block: 'start'});
     return;
@@ -180,7 +181,7 @@ interface UseScrollSpyOptions {
   offset?: number;
   /** Scroll container to track, instead of the nearest scrollable ancestor. */
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
-  /** Whether {@link UseScrollSpyResult.scrollTo} performs the smooth scroll. */
+  /** Whether {@link UseScrollSpyResult.scrollTo} performs the scroll. */
   hasScrollOnClick?: boolean;
   /** Called when a navigation begins, before the scroll starts. */
   onNavigateStart?: (id: string) => void;

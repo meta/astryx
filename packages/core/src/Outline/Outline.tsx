@@ -122,7 +122,8 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
 
   /**
-   * Whether activating an item smooth-scrolls to it. Set to false to own the
+   * Whether activating an item scrolls to it: smoothly, or at once under
+   * reduced motion. Set to false to own the
    * scrolling yourself (virtualized content, a router) — the Outline still
    * updates the active item, the hash, and the navigate callbacks, but performs
    * no scroll and suppresses the anchor's default jump.

@@ -213,6 +213,7 @@ async function outline(page: Page) {
           paddingInlineStart: style.paddingInlineStart,
           fontWeight: style.fontWeight,
           transition: `${style.transitionProperty} ${style.transitionDuration}`,
+          transitionDuration: style.transitionDuration,
           truncates:
             labelStyle != null &&
             labelStyle.textOverflow === 'ellipsis' &&
@@ -468,8 +469,9 @@ for (const mode of ['light', 'dark'] as const) {
 }
 
 /**
- * Under reduced motion nothing travels (design:reduced-motion DR1): on a fine
- * pointer the indicator and the navigation scroll land at once (DR3).
+ * Under reduced motion nothing travels: on any pointer the indicator and the
+ * navigation scroll land at once, and link colors change at once. With no
+ * preference, the scroll and the indicator still move.
  */
 for (const pointer of ['fine', 'coarse'] as const) {
   cases.push({
@@ -498,9 +500,7 @@ for (const pointer of ['fine', 'coarse'] as const) {
         `the indicator slides under reduced motion: ${JSON.stringify(transition)}`,
       );
       const colorTransitions = (before?.links ?? []).filter(link =>
-        link.transition
-          .split(' ')
-          .slice(-1)[0]
+        link.transitionDuration
           .split(',')
           .some(value => Number.parseFloat(value) > 0),
       );
@@ -522,6 +522,42 @@ for (const pointer of ['fine', 'coarse'] as const) {
     },
   });
 }
+
+cases.push({
+  key: 'motion-default-fine',
+  group: 'motion-default',
+  story: 'core-outline--navigate-callbacks',
+  theme: 'neutral',
+  mode: 'light',
+  direction: 'ltr',
+  viewport: DESKTOP,
+  motion: 'no-preference',
+  pointer: 'fine',
+  count: 6,
+  current: 'Overview',
+  run: async (page, check, frame) => {
+    const before = await outline(page);
+    const transition = before?.indicatorTransition ?? null;
+    check(
+      transition != null &&
+        transition.duration
+          .split(',')
+          .some(value => Number.parseFloat(value) > 0),
+      `the indicator does not move with no preference: ${JSON.stringify(transition)}`,
+    );
+    await page.locator(`${NAV} a`, {hasText: 'Accessibility'}).click();
+    await nextFrames(page);
+    const early = await page.evaluate(() => Math.round(scrollY));
+    await page.waitForTimeout(1500);
+    const settled = await page.evaluate(() => Math.round(scrollY));
+    const landing = {early, settled};
+    check(
+      settled > 0 && early < settled,
+      `with no preference the scroll did not travel: ${JSON.stringify(landing)}`,
+    );
+    await frame('scrolled', {transition, landing});
+  },
+});
 
 for (const direction of ['ltr', 'rtl'] as const) {
   cases.push({
