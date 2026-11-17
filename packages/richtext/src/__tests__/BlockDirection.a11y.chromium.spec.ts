@@ -4,8 +4,9 @@
  * @file BlockDirection.a11y.chromium.spec.ts
  * @input The RichTextEditor "Default" story in a built Storybook.
  * @output Real-Chromium proof that writing a block's direction does not cost
- *   an undo step, and that typing a strong character flips the block it is
- *   typed into.
+ *   an undo step, that typing a strong character flips the block it is
+ *   typed into, and that a seeded document shows every block on its own side
+ *   on the first frame the browser paints.
  * @position Guards BlockDirectionPlugin against the regression its first
  *   draft had: sweeping the direction from an update listener landed as its
  *   own history entry, so undo bounced off it and never got past the
@@ -131,3 +132,57 @@ for (const direction of ['ltr', 'rtl'] as const) {
     );
   });
 }
+
+test('a seeded document paints every block on its own side on the first frame (rtl page)', async ({
+  page,
+}) => {
+  // Before any page script runs, watch every frame. A requestAnimationFrame
+  // callback runs after script and layout effects and before that frame
+  // paints, so the first frame that holds the seeded blocks is recorded
+  // exactly as it is painted.
+  await page.addInitScript(() => {
+    const record = (): void => {
+      const blocks = Array.from(
+        document.querySelectorAll('[data-lexical-editor] > p'),
+      );
+      if (blocks.length >= 2) {
+        const editor = document.querySelector('[data-lexical-editor]');
+        (window as unknown as {firstFrame: unknown}).firstFrame = {
+          // The wrapper the story's direction global sets beside the
+          // provider's own `dir`.
+          pageDir: editor?.parentElement?.closest('[dir]')?.getAttribute('dir'),
+          editorDirection:
+            editor == null ? null : getComputedStyle(editor).direction,
+          blocks: blocks.map(block => ({
+            text: block.textContent,
+            direction: getComputedStyle(block).direction,
+          })),
+        };
+        return;
+      }
+      requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  });
+  await page.setViewportSize({width: 1024, height: 768});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=richtext-richtexteditor--mixed-direction-seed&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:rtl`,
+    {waitUntil: 'load'},
+  );
+  await expect(page.locator(`${EDITOR} > p`)).toHaveCount(2);
+  const firstFrame = await page.waitForFunction(
+    () => (window as unknown as {firstFrame?: unknown}).firstFrame,
+  );
+  const recorded = (await firstFrame.jsonValue()) as {
+    pageDir: string;
+    editorDirection: string;
+    blocks: Array<{text: string; direction: string}>;
+  };
+  // The provider and the page around the editor both read right to left.
+  expect(recorded.pageDir).toBe('rtl');
+  expect(recorded.editorDirection).toBe('rtl');
+  expect(recorded.blocks).toEqual([
+    {text: 'An English paragraph.', direction: 'ltr'},
+    {text: '123 — 456', direction: 'rtl'},
+  ]);
+});

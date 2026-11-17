@@ -12,7 +12,7 @@
  *   MarkdownParitySandbox.a11y.chromium.spec.ts.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {
   createEditor,
   $getRoot,
@@ -30,11 +30,18 @@ import {
 import {$createQuoteNode, HeadingNode, QuoteNode} from '@lexical/rich-text';
 import {CodeNode} from '@lexical/code';
 import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
-import {render, waitFor} from '@testing-library/react';
+import {act, render, waitFor} from '@testing-library/react';
 import {RichTextEditor} from '../RichTextEditor';
 import {RichTextView} from '../RichTextView';
 import {markdownToEditorStateJSON} from '../markdownSerializers';
-import {registerBlockDirection} from './BlockDirectionPlugin';
+import {
+  BlockDirectionPlugin,
+  registerBlockDirection,
+} from './BlockDirectionPlugin';
+import {LexicalComposer} from '@lexical/react/LexicalComposer';
+import {ContentEditable} from '@lexical/react/LexicalContentEditable';
+import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin';
+import {DEFAULT_NODES} from '../editorNodes';
 
 const HEBREW = 'פסקה בעברית לבדיקת כיוון הטקסט.';
 const ENGLISH = 'An English paragraph.';
@@ -465,5 +472,97 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     // Fails before the fix with 'ltr': the emoji is a surrogate pair, which
     // Lexical's left-to-right class matches.
     expect(container.querySelector('p')?.getAttribute('dir')).toBe('rtl');
+  });
+});
+
+/**
+ * A stored document whose blocks carry no direction yet, as a value saved
+ * before this plugin existed: the mount-time sweep has to write every one.
+ */
+function unsettledDocument(): string {
+  const editor = createEditor({
+    nodes: [...DEFAULT_NODES],
+    onError: e => {
+      throw e;
+    },
+  });
+  editor.update(
+    () => {
+      const english = $createParagraphNode();
+      english.append($createTextNode(ENGLISH));
+      // Lexical writes a top-level block's direction itself when it renders
+      // it, but none below the top level, so a list item's direction is
+      // written by this plugin alone.
+      const item = $createListItemNode();
+      item.append($createTextNode(HEBREW));
+      const list = $createListNode('bullet');
+      list.append(item);
+      $getRoot().append(english, list);
+    },
+    {discrete: true},
+  );
+  const json = JSON.stringify(editor.getEditorState().toJSON());
+  // The seed really does arrive without directions.
+  expect(json).not.toContain('"direction":"ltr"');
+  expect(json).not.toContain('"direction":"rtl"');
+  return json;
+}
+
+describe('writing the seeded directions is not an edit', () => {
+  it('fires no onChange when the editor mounts with a seeded document', async () => {
+    const onChange = vi.fn();
+    const {container} = render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={unsettledDocument()}
+        onChange={onChange}
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector('li')).toHaveAttribute('dir', 'rtl'),
+    );
+    // Let any update the mount scheduled land before reading the spy.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps the mount-time write out of onChange when the plugin mounts on a document already shown', async () => {
+    // Mounted on a document the editor already shows, the plugin writes the
+    // missing directions in an update of its own after the first paint. That
+    // update is tagged as a history merge, so it is not reported as an edit.
+    const onChange = vi.fn();
+    const seed = unsettledDocument();
+    function Harness({hasPlugin}: {hasPlugin: boolean}) {
+      return (
+        <LexicalComposer
+          initialConfig={{
+            namespace: 'block-direction-mount',
+            nodes: [...DEFAULT_NODES],
+            editorState: seed,
+            onError: error => {
+              throw error;
+            },
+          }}>
+          <ContentEditable aria-label="Notes" />
+          <OnChangePlugin onChange={onChange} ignoreSelectionChange />
+          {hasPlugin ? <BlockDirectionPlugin /> : null}
+        </LexicalComposer>
+      );
+    }
+    const {container, rerender} = render(<Harness hasPlugin={false} />);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(container.querySelector('li')).not.toHaveAttribute('dir', 'rtl');
+    rerender(<Harness hasPlugin />);
+    await waitFor(() =>
+      expect(container.querySelector('li')).toHaveAttribute('dir', 'rtl'),
+    );
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
