@@ -217,7 +217,10 @@ they are separately named.
   suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
-  confirm that runs nothing. A label runs only its own suite. A Lab-only pull
+  confirm that runs nothing. A label runs only its own suite. The swizzle
+  proof (`swizzle-proof`, `spec:AST-110` FR7) follows the same rule under
+  `ci:run-swizzle`: a pull request runs it only with that label, and no
+  default check replaces it. A Lab-only pull
   request (FR26) runs no default touched-components check and no contract
   job; its labels still
   run their suites. Without a label, a pull request update
