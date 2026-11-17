@@ -12,7 +12,6 @@
 
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, expect} from 'vitest';
@@ -519,8 +518,7 @@ export async function expectSameAsFresh(tmp, options = {}) {
 // keeps none and gathers fresh each run. The cases that need a kept catalog or
 // kept check results skip there, and packed-gather-cache.records.test.mjs
 // proves the fresh gather.
-export const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+export {hasModuleHooks} from './module-hooks.mjs';
 
 /** Packs and installs the CLI and makes the project before this file's cases. */
 export function usePackedCli() {
