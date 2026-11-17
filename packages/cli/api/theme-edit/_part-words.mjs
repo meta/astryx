@@ -16,6 +16,8 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
+  // (A page's title is its top heading, never the page.)
+  [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
   // (The page's main panel, the area its content sits in.)
   [

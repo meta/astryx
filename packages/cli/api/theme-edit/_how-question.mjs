@@ -1747,9 +1747,16 @@ function shadowWay(text) {
   // Comparatives only: "a soft shadow" names a shadow, not a way.
   const less =
     /\b(softer|subtler|lighter|gentler|less|weaker|fainter|smaller)\b/.test(t);
-  const more = /\b(stronger|deeper|heavier|bigger|darker|harder|more)\b/.test(
-    t,
-  );
+  const more =
+    /\b(stronger|deeper|heavier|bigger|larger|darker|harder|more)\b/.test(t);
+  // ("softer, larger card shadows": a bigger shadow is a softer one, its
+  // blur spread wider: the way is up.)
+  if (
+    /\b(?:bigger|larger)\b/.test(t) &&
+    /\b(?:softer|gentler)\b/.test(t) &&
+    !/\b(?:smaller|weaker|fainter|less|lighter|subtler)\b/.test(t)
+  )
+    return 'more';
   if (less && !more) return 'less';
   if (more && !less) return 'more';
   return null;
@@ -6820,7 +6827,9 @@ export function draftAnswer(ctx, env, question) {
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
     const subject =
-      /^(?:the\s+|my\s+|our\s+)?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(c.text);
+      /^(?:the\s+|my\s+|our\s+|an?\s+)?(?:(?:[a-z]+\s+)?(?=(?:accent|neutral|brand|primary)\b))?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
+        c.text,
+      );
     const bare =
       !subject?.[2] ||
       /^colou?r$/.test(subject[2]) ||
@@ -6843,6 +6852,14 @@ export function draftAnswer(ctx, env, question) {
     // after a clause that only sets where or when ("when I tab to a link,
     // show a thick outline", "only in dark mode and only on cards, darker
     // background", "buttons only, a bit rounder").
+    // ("big buttons, light mode only": the theme's one mode, never the
+    // part's.)
+    if (
+      /^\s*(?:(?:dark|light)(?:[- ]mode)?[- ]only|no (?:dark|light) mode|without (?:a )?(?:dark|light) mode)\s*[.!]?\s*$/i.test(
+        c.text,
+      )
+    )
+      return 'theme';
     if (c.state) return 'inherit';
     // ("…, never use pure black for text": a rule of its own, said with
     // its own verb, about no part: the theme's; "never make them bold"
@@ -7011,6 +7028,28 @@ export function draftAnswer(ctx, env, question) {
               ?.index === 0,
         ) &&
         !own.includes('family') &&
+        // (A list of several parts, "dark cards #1c1c1e, popovers #2c2c2e,
+        // and subtle borders": an item with no subject is the theme's.)
+        !clauses
+          .slice(0, clauses.indexOf(head))
+          .reverse()
+          .slice(
+            0,
+            Math.max(
+              0,
+              clauses
+                .slice(0, clauses.indexOf(head))
+                .reverse()
+                .findIndex(x =>
+                  ['none', 'break'].includes(String(joinOf.get(x)?.sep)),
+                ) + 1,
+            ),
+          )
+          .some(
+            x =>
+              lex.parts.some(([re]) => re.test(x.text)) &&
+              !x.parts.some(p => head.parts.some(h => h.on === p.on)),
+          ) &&
         // (A token list item said subject first, "text #111827", is the
         // theme's, as below.)
         !/^(?:text|muted text|secondary text|borders?|background|links?|accent)\s+(?:#|rgb|hsl|oklch|var\()/.test(
@@ -7057,6 +7096,22 @@ export function draftAnswer(ctx, env, question) {
       return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
         ? 'inherit'
         : 'theme';
+    // ("dark cards #1c1c1e, popovers #2c2c2e, and subtle borders": after a
+    // list of several parts, a look with no subject of its own is the
+    // theme's, never the last part's.)
+    // (An except's run, "… taller except the large ones, and bolder",
+    // keeps its own reading below.)
+    if (j.sep === 'and' && j.list !== 'with' && !clauses.some(x => x.except)) {
+      /** @type {Set<string>} */
+      const named = new Set();
+      for (let k = clauses.indexOf(c) - 1; k >= 0; k--) {
+        const x = clauses[k];
+        if (lex.parts.some(([re]) => re.test(x.text)))
+          for (const p of x.parts) named.add(p.on);
+        if (['none', 'break'].includes(String(joinOf.get(x)?.sep))) break;
+      }
+      if (named.size > 1) return 'theme';
+    }
     if (j.list === 'with' || j.sep === 'and') return 'inherit';
     return 'theme';
   };
@@ -7360,11 +7415,15 @@ export function draftAnswer(ctx, env, question) {
       /^\s*(?:(?:only|just)\s+)?(?:in\s+)?(?:the\s+)?(light|dark)(?:\s+mode)?\s+only\s*$|^\s*(?:only|just)\s+(?:in\s+)?(?:the\s+)?(light|dark)(?:\s+mode)?\s*$/.exec(
         b.text,
       );
+    // (Only a color, which differs by mode; "big buttons, light mode only"
+    // is the theme's mode.)
     if (
       m &&
       a.parts.length &&
       !a.mode &&
       !a.except &&
+      (a.colors.length > 0 ||
+        a.aspects.some(x => ['background', 'text', 'border'].includes(x))) &&
       joinOf.get(b)?.sep !== 'break'
     ) {
       a.mode = /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
@@ -8774,9 +8833,21 @@ export function draftAnswer(ctx, env, question) {
         k--;
       const head = k >= 0 ? clauses[k] : null;
       const holder = head?.parts[0]?.on;
+      // (A with-list holds what is said with it, "with white text and an
+      // action"; an item after a comma is an ask of its own, "dark sidebar
+      // with white text, rounder cards".)
+      const inWith =
+        joinOf.get(c)?.list !== 'with' ||
+        clauses
+          .slice(k + 1, clauses.indexOf(c) + 1)
+          .every(
+            x =>
+              ['with', 'and'].includes(String(joinOf.get(x)?.sep)) &&
+              !/,/.test(x.joint ?? ''),
+          );
       // ("progress bar: #0d6efd fill and #e9ecef track": a word naming a
       // piece of the head's own part, its track, is that piece.)
-      if (holder && head !== c) {
+      if (holder && head !== c && inWith) {
         const segs = holder.split('-');
         const piece = c.text
           .toLowerCase()
@@ -8795,6 +8866,7 @@ export function draftAnswer(ctx, env, question) {
       if (
         holder &&
         head !== c &&
+        inWith &&
         C.MAP[holder] &&
         !c.parts.some(
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
@@ -9730,7 +9802,23 @@ export function draftAnswer(ctx, env, question) {
       // (The mode the app opens in is the theme's, scoping nothing.)
       !/\bby default\b|\bopens? in\b|\bstarts? in\b/.test(c.text) &&
       !prev.mode &&
-      (prev.parts.length || prev.aspects.length)
+      (prev.parts.length || prev.aspects.length) &&
+      // ("big buttons, light mode only": a look the same in both modes
+      // takes no mode; "…only" there is the theme's one mode.)
+      !(
+        /\bonly\b/.test(c.text) &&
+        !prev.colors.length &&
+        !prev.aspects.some(x =>
+          [
+            'background',
+            'text',
+            'border',
+            'shadow',
+            'colors',
+            'contrast',
+          ].includes(x),
+        )
+      )
     ) {
       prev.mode = c.mode;
       clauses.splice(i, 1);
@@ -11687,10 +11775,13 @@ export function draftAnswer(ctx, env, question) {
       if (ink && other)
         return themeShade(c, other, use === 'fill' && onSurfaces(c));
     }
+    // (A color typed beside a theme color's word, "accent buttons
+    // #0F6CBD", is the color asked: the word names the variant.)
     if (
       kind === 'fill' &&
       c.colors.length &&
-      !THEME_COLOR_WORDS.some(([re]) => re.test(c.text))
+      (!THEME_COLOR_WORDS.some(([re]) => re.test(c.text)) ||
+        /#[0-9a-f]{3,8}\b/i.test(c.text))
     )
       return themeShade(c, c.colors[0], use === 'fill' && onSurfaces(c));
     for (const [re, fill, text] of THEME_COLOR_WORDS)
@@ -12241,11 +12332,125 @@ export function draftAnswer(ctx, env, question) {
     )
       c.parts = [{...c.parts[0], when: prevC.parts[0].when}];
   }
+  // ("status badges: green, amber, red": hues said of a part's statuses
+  // are those statuses, green success, amber warning, red error, blue
+  // info; never one hue's own variant or every badge.)
+  {
+    const HUE_STATUS = /** @type {Record<string, string[]>} */ ({
+      green: ['success'],
+      emerald: ['success'],
+      amber: ['warning'],
+      yellow: ['warning'],
+      orange: ['warning'],
+      red: ['error', 'danger'],
+      crimson: ['error', 'danger'],
+      blue: ['info'],
+    });
+    let statusHead = false;
+    for (const c of clauses) {
+      const sep = joinOf.get(c)?.sep;
+      if (sep === 'none' || sep === 'break')
+        statusHead = /\bstatus(?:es)?\b/.test(c.text);
+      if (!statusHead || c.parts.length !== 1) continue;
+      const on = c.parts[0].on;
+      const vals = (C.variantValues(FAMILIES[on]?.[0] ?? on).variant ?? []).map(
+        String,
+      );
+      const hue = Object.keys(HUE_STATUS).find(h =>
+        new RegExp(`\\b${h}\\b`).test(c.text),
+      );
+      const status = hue
+        ? HUE_STATUS[hue].find(v => vals.includes(v))
+        : undefined;
+      if (status) c.parts = [{...c.parts[0], when: `variant:${status}`}];
+    }
+  }
+  // ("tooltips #172B4D with 12px white text": a length beside a text
+  // color said of the text is its size, a second look of the same text.)
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const c = clauses[i];
+    if (
+      c.parts.length &&
+      c.aspects.length === 1 &&
+      c.aspects[0] === 'text' &&
+      c.colors.length &&
+      c.lengths.length === 1 &&
+      /\b\d*\.?\d+(?:px|rem|em)\s+(?:[a-z#0-9-]+\s+)?(?:text|labels?)\b/i.test(
+        c.text,
+      )
+    ) {
+      const size = {
+        ...c,
+        aspects: ['fontsize'],
+        colors: [],
+        parts: c.parts.map(p => ({...p})),
+      };
+      c.lengths = [];
+      joinOf.set(size, {sep: 'and', list: joinOf.get(c)?.list ?? null});
+      clauses.splice(i + 1, 0, size);
+    }
+  }
+  // ("selected tab text blue with a 2px underline": a part's underline,
+  // where it draws one as a part of its own, is that indicator.)
+  for (const c of clauses)
+    if (
+      c.parts.length === 1 &&
+      c.aspects.length === 1 &&
+      c.aspects[0] === 'underline' &&
+      C.MAP[`${c.parts[0].on}-indicator`]
+    ) {
+      c.parts = [{on: `${c.parts[0].on}-indicator`}];
+      // (Drawn only where the part is selected: no state of its own.)
+      c.state = null;
+      c.aspects = c.lengths.length
+        ? ['size']
+        : c.colors.length
+          ? ['background']
+          : [];
+      if (c.lengths.length && !/\b(?:tall|thick|height)\b/.test(c.text))
+        c.text = `${c.text} thick`;
+    }
+  // ("1px bottom border that turns accent and 2px when focused": what a
+  // look turns into, said with the state the next item names, is that
+  // look in that state; the look before "turns" stays at rest.)
+  for (let i = 0; i + 1 < clauses.length; i++) {
+    const c = clauses[i];
+    const next = clauses[i + 1];
+    const m =
+      /^(.*?)\s+(?:that|which)\s+(?:turns|becomes|goes|changes to)\s+(.+)$/.exec(
+        c.text,
+      );
+    if (
+      !m ||
+      c.state ||
+      !next.state ||
+      joinOf.get(next)?.sep !== 'and' ||
+      !c.parts.length
+    )
+      continue;
+    const turned = {
+      ...c,
+      text: m[2],
+      colors: colorsIn(m[2].toLowerCase()),
+      lengths: lengthsIn(m[2]),
+      state: next.state,
+      parts: c.parts.map(p => ({...p})),
+    };
+    c.text = m[1];
+    c.colors = colorsIn(m[1].toLowerCase());
+    c.lengths = lengthsIn(m[1]);
+    joinOf.set(turned, {sep: 'and', list: joinOf.get(c)?.list ?? null});
+    clauses.splice(i + 1, 0, turned);
+    i++;
+  }
   // ("side nav #08090a, items 13px text": a word naming a piece of the
   // part a list leads with, its items, its track, is that piece.)
   for (let i = 1; i < clauses.length; i++) {
     const c = clauses[i];
     if (c.parts.length || c.except) continue;
+    // (A part named in it, "bigger headings", is its own subject.)
+    if (lex.parts.some(([re]) => re.test(` ${c.text.toLowerCase()} `)))
+      continue;
     let k = i - 1;
     while (
       k > 0 &&
@@ -18079,6 +18284,29 @@ export function draftAnswer(ctx, env, question) {
           options: [[set('font', font, {on: p.role})]],
         };
       }
+      // ("lighter body text": a tone said of the text is its color, never
+      // its size.)
+      if (
+        p.role === 'body' &&
+        /\b(?:lighter|darker|fainter|paler|softer|dimmer)\b/.test(c.text) &&
+        // (Read in the words as asked: a size word a neighbor lent the
+        // clause, "bigger headings and lighter body text", is not its own.)
+        asked0
+          .split(/[,;.\n]|\band\b|\bbut\b/)
+          .filter(seg =>
+            /\b(?:lighter|darker|fainter|paler|softer|dimmer)\b/.test(seg),
+          )
+          .every(
+            seg =>
+              !/\b(?:bigger|smaller|larger|size|sized|\d+(?:px|rem|em))\b/.test(
+                seg,
+              ),
+          )
+      ) {
+        // (Its look is the text's color, measured so.)
+        c.aspects = c.aspects.map(x => (x === 'fontsize' ? 'text' : x));
+        return answerFor(c, p, 'text');
+      }
       if (p.role === 'body') {
         const px = /\b(\d+)px\b/.exec(c.text)?.[1];
         return {
@@ -21803,12 +22031,19 @@ export function draftAnswer(ctx, env, question) {
           // color that is not it; a mode where it is not keeps its value.
           if (c.neg && color) {
             const avoid = parseColor(color);
+            // (A color the same ask gives the token, "text #172B4D, never
+            // use pure black for text", is the one in effect there: the
+            // ban is kept already when that color is not the banned one.)
+            const askedHere = tops
+              .flatMap(x => x.steps)
+              .filter(st => st.thing === tok && !st.on);
             const steps = perMode(
               tok,
               tok,
               {},
-              now => {
-                const n = parseColor(now);
+              (now, m) => {
+                const mine = askedHere.find(st => !st.mode || st.mode === m);
+                const n = parseColor(mine ? String(mine.value) : now);
                 if (
                   !avoid ||
                   !n ||
@@ -23135,6 +23370,11 @@ export function draftAnswer(ctx, env, question) {
       // "in dark mode only, cards #111111": the mode scopes the other ask.
       // "dark only" with no "mode" word describes the theme's look.
       (/\balways dark\b|\b(theme|app)\b/.test(t) ||
+        (/^\s*(?:dark(?:[- ]mode)?[- ]only|no light mode|without (?:a )?light mode)\s*[.!]?\s*$/i.test(
+          c.text,
+        ) &&
+          clauses.length > 1 &&
+          clauses.indexOf(c) === clauses.length - 1) ||
         !/\bmode\b|\bin dark\b/.test(t) ||
         // "… accent and dark mode only": the last ask, scoping nothing.
         (clauses.indexOf(c) === clauses.length - 1 &&
@@ -23155,8 +23395,15 @@ export function draftAnswer(ctx, env, question) {
         t,
       ) &&
       // "light only" removes dark mode only when the ask is about the
-      // theme's modes, never beside another change.
+      // theme's modes, never beside another change. (A clause that is only
+      // that, left whole by the readers that give a color its mode, "big
+      // buttons, light mode only", is the theme's.)
       (/\b(theme|app)\b/.test(t) ||
+        (/^\s*(?:light(?:[- ]mode)?[- ]only|no dark mode|without (?:a )?dark mode)\s*[.!]?\s*$/i.test(
+          c.text,
+        ) &&
+          clauses.length > 1 &&
+          clauses.indexOf(c) === clauses.length - 1) ||
         !clauses.some(
           o =>
             o.text !== c.text &&
@@ -23845,7 +24092,7 @@ export function draftAnswer(ctx, env, question) {
       ROLE_WORDS.test(w) ||
       /^(?:scrollbars?|scroll|carets?|cursors?|selections?)$/.test(w) ||
       parseColor(w) ||
-      /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
+      /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|solid|plain|highlight|highlights|tint|tints|stripe|stripes|glow|glows|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
         w,
       ) ||
       // (A property's own name, "cards transform", and a word that is no
@@ -26736,6 +26983,60 @@ export function draftAnswer(ctx, env, question) {
     if (notTaken.length)
       result.push({
         text: `not taken: ${notTaken.map(w => `"${w}"`).join(', ')}: no setting reads ${notTaken.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
+        options: [],
+      });
+  }
+  // ("…, high contrast, light mode only": a theme kept to one mode has no
+  // other mode to write: a step for the mode it drops is left out, and
+  // said.)
+  {
+    const only = result
+      .flatMap(d => d.options.flat())
+      .find(
+        st =>
+          st.thing === 'mode' && /^(?:light|dark)-only$/.test(String(st.value)),
+      );
+    if (only) {
+      const gone = String(only.value).startsWith('light') ? 'dark' : 'light';
+      for (const d of result) {
+        const before = d.options.flat().length;
+        d.options = d.options
+          .map(o => o.filter(st => st.mode !== gone))
+          .filter(o => o.length);
+        if (
+          d.options.flat().length < before &&
+          !/has no .* mode to write/.test(d.text)
+        )
+          d.text += ` (the theme keeps only its ${gone === 'dark' ? 'light' : 'dark'} mode, so it has no ${gone} mode to write)`;
+      }
+    }
+  }
+  // Every clause ends as a command or a named line, never silence: a
+  // clause no answer took (no line drafted for it, none of its colors or
+  // lengths written, not quoted by a line that refuses it) is named.
+  if (!gateAll && clauses.length > 1) {
+    const steps = result.flatMap(d => d.options.flat());
+    const texts = result.map(d => d.text.toLowerCase()).join('\n');
+    const taken = new Set(
+      result.map(d => draftClause.get(d)).filter(x => x != null),
+    );
+    const silent = clauses.filter(c => {
+      const t = c.text.trim();
+      if (!t || c.except || taken.has(c)) return false;
+      if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
+      if (texts.includes(t.toLowerCase())) return false;
+      const vals = steps.map(st => String(st.value ?? '').toLowerCase());
+      if (
+        [...c.colors, ...c.lengths].some(v =>
+          vals.some(x => x.includes(String(v).toLowerCase())),
+        )
+      )
+        return false;
+      return true;
+    });
+    if (silent.length)
+      result.push({
+        text: `not used: ${silent.map(c => `"${c.text.trim()}"`).join(', ')}: no setting reads ${silent.length > 1 ? 'these' : 'this'} as said; say ${silent.length > 1 ? 'each' : 'it'} as a part and a look ("12px text on cards"), or look the setting up (how --list dials)`,
         options: [],
       });
   }
