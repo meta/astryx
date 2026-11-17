@@ -414,7 +414,10 @@ export function Timestamp({
   const ariaLabelText =
     fullAbsoluteSpokenText === ''
       ? ''
-      : `${displayText}, ${fullAbsoluteSpokenText}`;
+      : t('@astryx.timestamp.relativeLabel', {
+          relative: displayText,
+          date: fullAbsoluteSpokenText,
+        });
 
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {

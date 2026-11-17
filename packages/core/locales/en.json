@@ -1939,6 +1939,10 @@
     "defaultMessage": "Copied",
     "description": "Aria label on a Timestamp copy button for ~1.5s after a successful copy, and the text announced to a polite live region. Past-participle (\"has been copied\"); pairs with `timestamp.copyValue`."
   },
+  "@astryx.timestamp.relativeLabel": {
+    "defaultMessage": "{relative}, {date}",
+    "description": "Accessible name of a relative Timestamp: the words it shows, then the full date (\"2 hours ago, March 25, 2026 at 10:00:00 AM Coordinated Universal Time\"). {relative} must come first and stay unchanged, so voice control can find a control named by it. Translators may change the separator."
+  },
   "@astryx.timestamp.detailsLabel": {
     "defaultMessage": "Timestamp details",
     "description": "Accessible name for the Timestamp copyable hover card popup, which lists the instant in the configured time zones/formats with a copy button per row."
