@@ -29,7 +29,10 @@ const config: PowerSearchConfig = {
   ],
 };
 
-function Field(props: {presentation: 'popover' | 'bottom-sheet'}) {
+function Field(props: {
+  presentation: 'popover' | 'bottom-sheet';
+  statusVariant?: 'attached' | 'detached' | 'tooltip';
+}) {
   return (
     <PowerSearch
       config={config}
@@ -38,7 +41,7 @@ function Field(props: {presentation: 'popover' | 'bottom-sheet'}) {
       label="Search issues"
       presentation={props.presentation}
       status={{type: 'error', message: MESSAGE}}
-      statusVariant="tooltip"
+      statusVariant={props.statusVariant ?? 'tooltip'}
     />
   );
 }
@@ -54,6 +57,28 @@ beforeEach(() => {
 });
 
 describe('PowerSearch status icon', () => {
+  for (const presentation of ['popover', 'bottom-sheet'] as const) {
+    for (const statusVariant of ['attached', 'detached'] as const) {
+      it(`describes the ${presentation} field's control by the message box for statusVariant="${statusVariant}"`, () => {
+        render(
+          <Field presentation={presentation} statusVariant={statusVariant} />,
+        );
+        const control =
+          presentation === 'popover'
+            ? screen.getByRole('combobox')
+            : screen.getByRole('button', {name: /Search issues/});
+        const describedBy = (
+          control.getAttribute('aria-describedby') ?? ''
+        ).split(' ');
+        const box = describedBy
+          .map(id => document.getElementById(id))
+          .find(el => el?.textContent?.includes(MESSAGE));
+        expect(box).toBeDefined();
+        expect(box).not.toHaveAttribute('role', 'tooltip');
+      });
+    }
+  }
+
   it('draws one info-tip whose tooltip holds the message in the popover presentation', () => {
     const {container} = render(<Field presentation="popover" />);
     expect(

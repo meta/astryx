@@ -77,6 +77,20 @@ describe('Tokenizer status icon', () => {
     }
   });
 
+  for (const statusVariant of ['attached', 'detached'] as const) {
+    it(`describes the input by the message box for statusVariant="${statusVariant}"`, () => {
+      render(<Field statusVariant={statusVariant} />);
+      const describedBy = (
+        screen.getByRole('combobox').getAttribute('aria-describedby') ?? ''
+      ).split(' ');
+      const box = describedBy
+        .map(id => document.getElementById(id))
+        .find(el => el?.textContent?.includes(MESSAGE));
+      expect(box).toBeDefined();
+      expect(box).not.toHaveAttribute('role', 'tooltip');
+    });
+  }
+
   it('reveals the message on keyboard focus', async () => {
     const user = userEvent.setup();
     render(<Field statusVariant="tooltip" />);
