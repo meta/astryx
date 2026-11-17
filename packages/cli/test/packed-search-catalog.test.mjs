@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {userCacheDir} from '../foundation/env/user-dirs.mjs';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {
@@ -22,6 +23,7 @@ import {
   recyclePlacedCopies,
 } from '../test-utils/global-local-fixtures.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
+import {hasModuleHooks} from '../test-utils/packed-gather-cache-fixture.mjs';
 
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -215,6 +217,8 @@ const ASKS = [
   ['search', 'dashboard', '--type', 'doc'],
   ['search', 'neutral', '--type', 'theme', '--json'],
   ['search', 'table', '--type', 'component'],
+  ['search', 'incident console'],
+  ['search', 'incident console', '--json'],
   ['build', BUILD_IDEA],
   ['build', BUILD_IDEA, '--json'],
   ['build', 'a login page', '--detail', 'compact'],
@@ -234,6 +238,55 @@ describe('the stored search catalog', () => {
     }
   }, 300_000);
 
+  it('marks an unready template from the store as a live gather does, and drops the mark once it is ready', () => {
+    expect(storeAnswers()).toBe(true);
+    // Any page template still marked not ready, found from its own doc, so the
+    // test does not depend on which real template is ready.
+    const pagesDir = path.join(packed, 'assets', 'templates', 'pages');
+    const name = fs
+      .readdirSync(pagesDir)
+      .sort()
+      .find(dir => {
+        const file = path.join(pagesDir, dir, 'template.doc.mjs');
+        return (
+          fs.existsSync(file) &&
+          fs.readFileSync(file, 'utf8').includes('isReady: false,')
+        );
+      });
+    expect(name).toBeTruthy();
+    const unready = /** @type {string} */ (name);
+    const text = ['search', unready.replace(/-/g, ' '), '--type', 'template'];
+    const json = [...text, '--json'];
+    /**
+     * The template's own text record.
+     * @param {string} stdout
+     */
+    const record = stdout =>
+      stdout.split('\n\n').find(r => r.includes(`name:        ${unready}\n`)) ??
+      '';
+    /** @param {string} stdout */
+    const result = stdout =>
+      JSON.parse(stdout).data.results.find(
+        (/** @type {any} */ r) => r.name === unready,
+      );
+    expect(record(run(packed, text).stdout)).toContain(
+      'kind:        page (not ready)\n',
+    );
+    expect(result(run(packed, json).stdout).isReady).toBe(false);
+    const doc = path.join(pagesDir, unready, 'template.doc.mjs');
+    withEdit(doc, 'isReady: false,', 'isReady: true, ', () => {
+      expect(storeAnswers()).toBe(false);
+      const textAnswer = run(packed, text);
+      expect(textAnswer.status, textAnswer.stderr).toBe(0);
+      expect(record(textAnswer.stdout)).toContain('kind:        page\n');
+      expect(textAnswer).toEqual(runLive(text));
+      const jsonAnswer = run(packed, json);
+      expect(result(jsonAnswer.stdout).isReady).toBe(true);
+      expect(jsonAnswer).toEqual(runLive(json));
+    });
+    expect(storeAnswers()).toBe(true);
+  }, 300_000);
+
   it("spells docs' commands for the project's package manager, as a live gather does", () => {
     for (const lockfile of ['pnpm-lock.yaml', 'yarn.lock', 'bun.lock']) {
       const lock = path.join(project, lockfile);
@@ -248,23 +301,30 @@ describe('the stored search catalog', () => {
     }
   }, 300_000);
 
-  it('keeps a reference to the store, not a copy, and reads it back byte for byte', () => {
-    // Only a copy installed in a node_modules folder keeps gathers.
-    const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
-    const cache = fs.mkdtempSync(path.join(work, 'cache-'));
-    const env = {XDG_CACHE_HOME: cache};
-    const ask = ['search', 'button', '--json'];
-    const first = run(installed, ask, env);
-    expect(first.status, first.stderr).toBe(0);
-    const kept = path.join(cache, 'astryx', 'catalogs');
-    const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
-    expect(entries).toHaveLength(1);
-    const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
-    // No candidate is copied into the kept entry.
-    expect(entry).not.toContain('"domain":"component"');
-    expect(run(installed, ask, env)).toEqual(first);
-    expect(first).toEqual(run(CLI_ROOT, ask));
-  }, 120_000);
+  it.skipIf(!hasModuleHooks)(
+    'keeps a reference to the store, not a copy, and reads it back byte for byte',
+    () => {
+      // Only a copy installed in a node_modules folder keeps gathers.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      // macOS keeps the user cache under HOME and ignores XDG_CACHE_HOME, so
+      // the run gets a home of its own too.
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home};
+      const ask = ['search', 'button', '--json'];
+      const first = run(installed, ask, env);
+      expect(first.status, first.stderr).toBe(0);
+      const kept = path.join(userCacheDir({home, env}), 'catalogs');
+      const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
+      expect(entries).toHaveLength(1);
+      const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
+      // No candidate is copied into the kept entry.
+      expect(entry).not.toContain('"domain":"component"');
+      expect(run(installed, ask, env)).toEqual(first);
+      expect(first).toEqual(run(CLI_ROOT, ask));
+    },
+    120_000,
+  );
 
   it('is not used where the project adds to a catalog', () => {
     const config = path.join(project, 'astryx.config.mjs');

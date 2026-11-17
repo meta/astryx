@@ -31,9 +31,22 @@ describe('color-mode blocks', () => {
     expect(out).toContain(
       `:is(.astryx-button):where(:scope[data-theme="dark"] *)${outsideSurfaces} {`,
     );
-    // Any mode other than light and dark follows the system preference.
+    // A system root under no forced mode draws in the scheme the root Theme
+    // names on <html>, whatever the reader prefers; while none is named, the
+    // reader's preference decides.
+    const unforcedSystem = `:is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]):not(:is([data-theme="light"], [data-theme="dark"]) *) *)${outsideSurfaces}`;
     expect(out).toContain(
-      `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
+      `\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *) {`,
+    );
+    expect(out).not.toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *)`,
+    );
+    expect(out).toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html:not([data-astryx-scheme]) *) {`,
+    );
+    // Under a forced mode, a system root follows the reader's preference.
+    expect(out).toContain(
+      `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:is([data-theme="light"], [data-theme="dark"]) :scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
     );
     // Inside media surfaces, the nearest surface decides, at the same weight
     // as the root's rule: a dark surface, or a dark one inside a light one,

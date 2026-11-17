@@ -24,6 +24,7 @@ import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Typeahead} from '@astryxdesign/core/Typeahead';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const NAV_ITEMS = [
   'Profile',
@@ -54,6 +55,7 @@ const settingsSearchSource: SearchSource<SearchableItem> = {
 };
 
 export default function SettingsTemplate() {
+  const showToast = useToast();
   const isNarrow = useMediaQuery('(max-width: 768px)');
   const [activeNav, setActiveNav] = useState('Profile');
   const [username, setUsername] = useState('nicol43');
@@ -150,7 +152,17 @@ export default function SettingsTemplate() {
                   onChange={setEmail}
                 />
                 <HStack>
-                  <Button label="Save" variant="primary" />
+                  <Button
+                    label="Save"
+                    variant="primary"
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: your basic information would be saved here',
+                        uniqueID: 'save-basic',
+                      })
+                    }
+                  />
                 </HStack>
               </VStack>
             </Grid>
@@ -184,7 +196,17 @@ export default function SettingsTemplate() {
                   onChange={setConfirmPw}
                 />
                 <HStack>
-                  <Button label="Save" variant="primary" />
+                  <Button
+                    label="Save"
+                    variant="primary"
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: your new password would be saved here',
+                        uniqueID: 'save-password',
+                      })
+                    }
+                  />
                 </HStack>
               </VStack>
             </Grid>
@@ -218,7 +240,17 @@ export default function SettingsTemplate() {
                   onChange={setTwoFactor}
                 />
                 <HStack>
-                  <Button label="Save" variant="primary" />
+                  <Button
+                    label="Save"
+                    variant="primary"
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: your advanced settings would be saved here',
+                        uniqueID: 'save-advanced',
+                      })
+                    }
+                  />
                 </HStack>
               </VStack>
             </Grid>

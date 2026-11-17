@@ -166,10 +166,11 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
- * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
- *   model: its own tables and blend numbers, used only to choose which page
- *   starts once the call model (the top-level tables and blend) has called a
- *   page. Without it, one model does both.
+ * @property {{tables?: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own blend numbers, used only to choose which page starts once
+ *   the call model (the top-level tables and blend) has called a page. It
+ *   reads the top-level tables unless it carries its own. Without it, one
+ *   model does both.
  */
 
 /**
@@ -178,19 +179,27 @@ export function weightWords(idea) {
  * @param {WeightsFile} weights
  * @returns {boolean}
  */
-const hasPickModel = weights =>
-  isWordModel(weights.pick, weights.candidates.length);
+const hasPickModel = weights => {
+  const pick = weights.pick;
+  return (
+    pick != null &&
+    isWordModel(
+      {...pick, tables: pick.tables ?? weights.tables},
+      weights.candidates.length,
+    )
+  );
+};
 
 /**
- * The pick model of a weights file: its `pick` tables and blend when present,
- * else the file's own.
+ * The pick model of a weights file: its `pick` blend, over its own tables or
+ * else the top-level ones, when present; else the file's own model.
  * @param {WeightsFile} weights
  * @returns {WeightsFile}
  */
 const pickModel = weights => {
   const pick = weights.pick;
   return pick && hasPickModel(weights)
-    ? {...weights, tables: pick.tables, blend: pick.blend}
+    ? {...weights, tables: pick.tables ?? weights.tables, blend: pick.blend}
     : weights;
 };
 
@@ -622,6 +631,39 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
     i = j;
   }
   return out;
+}
+
+/**
+ * The pick model's probability for a page template among the ready, non-shell
+ * templates: a softmax over the pick model's scores. It says how clearly the
+ * pick model prefers that template over the others, not whether the template
+ * is right. Null without weights or for a template the word tables do not
+ * list.
+ * @param {string} name
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @returns {number | null}
+ */
+export function pickFit(name, idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores, position} = blend(
+    readNames(idea, catalog),
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  // The tables cannot judge a template they do not list, so it has no fit.
+  if (!position.has(name)) return null;
+  const pages = cands.flatMap((c, i) => (c === SHELL ? [] : [scores[i]]));
+  const at = cands.filter(c => c !== SHELL).indexOf(name);
+  if (at < 0) return null;
+  const top = Math.max(...pages);
+  const sum = pages.reduce((t, s) => t + Math.exp(s - top), 0);
+  return round4(Math.exp(pages[at] - top) / sum);
 }
 
 /**

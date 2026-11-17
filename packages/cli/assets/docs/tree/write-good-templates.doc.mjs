@@ -30,7 +30,7 @@ export const docs = {
       items: [
         'Its purpose and primary task are clear before someone reads every detail.',
         'It composes Astryx components instead of rebuilding their behavior with raw HTML or custom styles.',
-        'Its hierarchy, spacing, interactions, and reading order still work at narrow widths and in every supported color mode.',
+        'Its hierarchy, spacing, interactions, and reading order still work at narrow widths and in every supported color mode. At a 390 px wide window the page has no horizontal overflow, with a mouse or with the larger touch controls of a phone: controls wrap or move into a menu instead of widening the page.',
         'Its source, imports, styles, fonts, icons, images, and media still work from the copied location.',
         'Its metadata makes the template easy to find and accurately explains when to use it.',
         'Its example content is realistic enough to expose overflow, empty-space, and hierarchy problems.',

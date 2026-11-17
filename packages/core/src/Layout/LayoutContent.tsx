@@ -32,6 +32,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   content: {
@@ -235,6 +236,7 @@ export function LayoutContent({
             hasEnd &&
             !isZeroPadding &&
             styles.constrainedSingleEndPanel,
+          containerBlockBleedStyles.publish,
           xstyle,
         ),
         className,

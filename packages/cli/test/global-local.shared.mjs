@@ -16,7 +16,7 @@
 import {afterAll, afterEach, beforeAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {
   packedCli,
   placeCli,
@@ -27,9 +27,11 @@ import {
   cleanupFixtures,
   installCore,
   project,
+  removeFixtureDirs,
   tempDir,
   writeJson,
 } from '../test-utils/release-fixtures.mjs';
+import {inFixtureScope, scopedList} from '../test-utils/fixture-scope.mjs';
 import {npmCommand} from '../foundation/release/cache.mjs';
 import {userCacheDir, userConfigDir} from '../foundation/env/user-dirs.mjs';
 
@@ -39,10 +41,57 @@ export const ROOT =
 export const OFFLINE = 'http://127.0.0.1:9/';
 
 /**
- * Every private computer the running test made, settled before cleanup.
+ * Every private computer the running test made outside an {@link ownWorld},
+ * settled before cleanup. An ownWorld keeps its own list.
  * @type {ReturnType<typeof computer>[]}
  */
 export const computers = [];
+
+/**
+ * Settle a test's background steps, then give back its CLI copies and remove
+ * its folders: by default, the fixtures made outside any fixture scope.
+ * @param {{made?: string[], placed?: any[], computers?: ReturnType<typeof computer>[]}} [lists]
+ */
+async function tearDown(lists = {}) {
+  const busy = await settleBackgroundSteps(
+    (lists.computers ?? computers).splice(0),
+  );
+  try {
+    recyclePlacedCopies({
+      keep: busy.length === 0,
+      copies: lists.placed,
+      besideOthers: lists.placed !== undefined,
+    });
+  } finally {
+    if (lists.made) removeFixtureDirs(lists.made);
+    else cleanupFixtures();
+  }
+  if (busy.length > 0) {
+    throw new Error(
+      `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
+    );
+  }
+}
+
+/**
+ * A test body that runs side by side with its neighbors: its computers,
+ * folders and CLI copies are its own, and it tears them down itself when it
+ * ends. Give it to a test marked `{concurrent: true}`, whose runs go through
+ * {@link runAsync}: a run that waits then lets the other tests go on.
+ * @param {() => Promise<void>} fn
+ * @returns {() => Promise<void>}
+ */
+export function ownWorld(fn) {
+  return async (/** @type {import('vitest').TestContext} */ context) => {
+    /** @type {{made: string[], placed: any[], computers: ReturnType<typeof computer>[]}} */
+    const lists = {made: [], placed: [], computers: []};
+    // A hook of its own, with the shared hook's limit: the wait for a stuck
+    // background step then fails with its own message, never the test's
+    // time limit.
+    context.onTestFinished(() => tearDown(lists), 90_000);
+    await inFixtureScope(lists, fn);
+  };
+}
 
 /** Registers the hooks every global-local test file needs. */
 export function useGlobalLocalHooks() {
@@ -52,19 +101,7 @@ export function useGlobalLocalHooks() {
 
   // The hook's own limit is above the wait's 60 s, so a stuck step fails with
   // the message below and its folders are still removed.
-  afterEach(async () => {
-    const busy = await settleBackgroundSteps(computers.splice(0));
-    try {
-      recyclePlacedCopies({keep: busy.length === 0});
-    } finally {
-      cleanupFixtures();
-    }
-    if (busy.length > 0) {
-      throw new Error(
-        `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
-      );
-    }
-  }, 90_000);
+  afterEach(() => tearDown(), 90_000);
   afterAll(() => {
     releasePackedCli();
   });
@@ -99,7 +136,7 @@ export function computer(options = {}) {
     }),
     path: [...(options.path ?? []), nodeBin],
   };
-  computers.push(pc);
+  scopedList('computers', computers).push(pc);
   return pc;
 }
 
@@ -165,9 +202,6 @@ export function envOf(pc, env = {}) {
     PATH: pc.path.join(path.delimiter),
     npm_config_registry: OFFLINE,
     npm_config_update_notifier: 'false',
-    // An unreachable registry fails at once instead of after npm's backoff.
-    npm_config_fetch_retry_mintimeout: '50',
-    npm_config_fetch_retry_maxtimeout: '100',
     NO_COLOR: '1',
     ...env,
   };
@@ -180,12 +214,50 @@ export function envOf(pc, env = {}) {
  * @param {{cwd: string, pc: ReturnType<typeof computer>, env?: Record<string, string | undefined>}} options
  */
 export function run(bin, args, {cwd, pc, env = {}}) {
-  const result = spawnSync(process.execPath, [bin, ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: envOf(pc, env),
-    timeout: 60_000,
+  return answer(
+    spawnSync(process.execPath, [bin, ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: envOf(pc, env),
+      timeout: 60_000,
+    }),
+  );
+}
+
+/**
+ * {@link run}, without blocking: the tests of an {@link ownWorld} wait on
+ * their runs side by side.
+ * @param {string} bin
+ * @param {string[]} args
+ * @param {{cwd: string, pc: ReturnType<typeof computer>, env?: Record<string, string | undefined>}} options
+ * @returns {Promise<ReturnType<typeof run>>}
+ */
+export function runAsync(bin, args, {cwd, pc, env = {}}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], {
+      cwd,
+      env: envOf(pc, env),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
+    // As run's time limit: the run is stopped and reports no status.
+    const timer = setTimeout(() => child.kill('SIGTERM'), 60_000);
+    child.on('error', reject);
+    child.on('close', status => {
+      clearTimeout(timer);
+      resolve(answer({status, stdout, stderr}));
+    });
   });
+}
+
+/**
+ * What a run gave back, as the tests read it.
+ * @param {{status: number | null, stdout: string, stderr: string}} result
+ */
+function answer(result) {
   return {
     status: result.status,
     stdout: result.stdout.trim(),
@@ -258,9 +330,11 @@ export const RUN_FROM_PROJECT = DOCTOR_RUN_FROM_PROJECT;
  * The once-a-day hint in a project with no CLI of its own.
  * @param {string} answered
  * @param {string} core
+ * @param {{exact?: boolean}} [options] the project pins its Core to one
+ *   version, so the command pins the CLI too
  */
-export const noCliHint = (answered, core) =>
-  `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}. To match, run: npm install @astryxdesign/cli@${core}`;
+export const noCliHint = (answered, core, {exact = false} = {}) =>
+  `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}. To match, run: npm install ${exact ? '-E ' : ''}@astryxdesign/cli@${core}`;
 
 /** @param {string} version */
 export const handedTo = version => (/** @type {string} */ from) =>

@@ -22,16 +22,16 @@ const matchaSyntax = defineSyntaxTheme({
   tokens: {
     keyword: [neutral.light[30], neutral.dark[70]],
     string: [teal.light[50], teal.dark[75]],
-    comment: [neutral.light[40], neutral.dark[40]],
+    comment: [neutral.light[30], neutral.dark[45]],
     number: [yellow.light[45], yellow.dark[75]],
     function: [blue.light[50], blue.dark[70]],
     type: [purple.light[50], purple.dark[70]],
     variable: [neutral.light[20], neutral.dark[75]],
-    operator: [neutral.light[40], neutral.dark[60]],
+    operator: [neutral.light[30], neutral.dark[60]],
     constant: [yellow.light[45], yellow.dark[75]],
     tag: [pink.light[30], pink.dark[65]],
     attribute: [orange.light[30], yellow.dark[70]],
-    property: [teal.light[55], teal.dark[75]],
+    property: [teal.light[50], teal.dark[75]],
     // Punctuation uses dedicated neutral stops that maintain WCAG AA against
     // the syntax background in both modes (issue 5386).
     punctuation: [neutral.light[30], neutral.dark[65]],
@@ -97,7 +97,7 @@ export const matchaTheme = defineTheme({
 
     // Text
     '--color-text-primary': [neutral.light[20], neutral.dark[75]],
-    '--color-text-secondary': [neutral.light[30], neutral.dark[60]],
+    '--color-text-secondary': [neutral.light[30], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[75], neutral.dark[30]],
     '--color-text-accent': [neutral.light[20], neutral.dark[75]],
     '--color-on-dark': neutral.light[100],
@@ -116,9 +116,9 @@ export const matchaTheme = defineTheme({
     '--color-text-warning': [yellow.light[45], yellow.dark[90]],
     '--color-text-error': [red.light[35], red.dark[75]],
     '--color-on-info-muted': [blue.light[35], blue.dark[75]],
-    '--color-on-success-muted': [green.light[35], green.dark[75]],
-    '--color-on-warning-muted': [yellow.light[45], yellow.dark[90]],
-    '--color-on-error-muted': [red.light[35], red.dark[75]],
+    '--color-on-success-muted': [green.light[30], green.dark[75]],
+    '--color-on-warning-muted': [yellow.light[40], yellow.dark[90]],
+    '--color-on-error-muted': [red.light[30], red.dark[75]],
 
     // Icon
     '--color-icon-accent': [neutral.light[20], neutral.dark[75]],
@@ -196,7 +196,7 @@ export const matchaTheme = defineTheme({
     ],
     '--color-border-green': [green.light[50], green.dark[70]],
     '--color-icon-green': [green.light[50], green.dark[70]],
-    '--color-text-green': [green.light[35], green.dark[75]],
+    '--color-text-green': [green.light[30], green.dark[75]],
 
     // Categorical — Orange
     '--color-background-orange': [
@@ -205,7 +205,7 @@ export const matchaTheme = defineTheme({
     ],
     '--color-border-orange': [orange.light[50], orange.dark[70]],
     '--color-icon-orange': [orange.light[50], orange.dark[70]],
-    '--color-text-orange': [orange.light[35], orange.dark[75]],
+    '--color-text-orange': [orange.light[25], orange.dark[75]],
 
     // Categorical — Pink
     '--color-background-pink': [
@@ -214,7 +214,7 @@ export const matchaTheme = defineTheme({
     ],
     '--color-border-pink': [pink.light[50], pink.dark[70]],
     '--color-icon-pink': [pink.light[50], pink.dark[70]],
-    '--color-text-pink': [pink.light[35], pink.dark[75]],
+    '--color-text-pink': [pink.light[30], pink.dark[75]],
 
     // Categorical — Purple
     '--color-background-purple': [
@@ -232,7 +232,7 @@ export const matchaTheme = defineTheme({
     ],
     '--color-border-red': [red.light[50], red.dark[70]],
     '--color-icon-red': [red.light[50], red.dark[70]],
-    '--color-text-red': [red.light[35], red.dark[75]],
+    '--color-text-red': [red.light[30], red.dark[75]],
 
     // Categorical — Teal
     '--color-background-teal': [
@@ -250,7 +250,7 @@ export const matchaTheme = defineTheme({
     ],
     '--color-border-yellow': [yellow.light[80], yellow.dark[85]],
     '--color-icon-yellow': [yellow.light[80], yellow.dark[85]],
-    '--color-text-yellow': [yellow.light[65], yellow.dark[90]],
+    '--color-text-yellow': [yellow.light[40], yellow.dark[90]],
 
     // =========================================================================
     // Spacing
@@ -307,10 +307,46 @@ export const matchaTheme = defineTheme({
         borderRadius: 'var(--radius-full)',
       },
     },
+    // Secondary text on a coloured or muted card steps to the nearest neutral
+    // stop that reads at 4.5:1 on that fill.
     card: {
       base: {
         borderRadius: 'var(--radius-page)',
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
+      },
+      'variant:cyan': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+      'variant:gray': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+      'variant:green': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[75]})`,
+      },
+      'variant:orange': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+      'variant:pink': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+      'variant:purple': {
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
+      },
+      'variant:red': {
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[70]})`,
+      },
+      'variant:teal': {
+        '--color-text-secondary': `light-dark(${neutral.light[20]}, ${neutral.dark[75]})`,
+      },
+      'variant:yellow': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[75]})`,
+      },
+      'variant:muted': {
+        '--color-text-primary': `light-dark(${neutral.light[20]}, ${neutral.dark[80]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
     },
     section: {

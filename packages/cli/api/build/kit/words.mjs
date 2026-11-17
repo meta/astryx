@@ -168,16 +168,20 @@ export function keywordUnits(keywords, read) {
 /**
  * The phrase units (two or more words) a request names: the unit's words
  * appear next to each other, in order, in the request's words as the same
- * reader reads them.
+ * reader reads them. With `oneWord`, a one-word unit the request names counts
+ * too.
  * @param {readonly string[]} words the request's words, in order
  * @param {Iterable<string>} units
+ * @param {{oneWord?: boolean}} [options]
  * @returns {Set<string>}
  */
-export function phrasesIn(words, units) {
+export function phrasesIn(words, units, {oneWord = false} = {}) {
   const text = ` ${words.join(' ')} `;
   const found = new Set();
   for (const unit of units) {
-    if (unit.includes(' ') && text.includes(` ${unit} `)) found.add(unit);
+    if ((oneWord || unit.includes(' ')) && text.includes(` ${unit} `)) {
+      found.add(unit);
+    }
   }
   return found;
 }

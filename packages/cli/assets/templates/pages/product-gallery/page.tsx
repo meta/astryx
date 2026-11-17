@@ -9,6 +9,7 @@ import {Grid} from '@astryxdesign/core/Grid';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {ArrowRightIcon} from '@heroicons/react/24/outline';
 import type {CSSProperties} from 'react';
 
@@ -39,8 +40,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 75.0,
-    image:
-      '/template-assets/illustrative-horizontal-1.png',
+    image: '/template-assets/illustrative-horizontal-1.png',
   },
   {
     id: 2,
@@ -48,8 +48,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 80.0,
-    image:
-      '/template-assets/illustrative-vertical-1.png',
+    image: '/template-assets/illustrative-vertical-1.png',
   },
   {
     id: 3,
@@ -57,8 +56,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 75.0,
-    image:
-      '/template-assets/illustrative-horizontal-3.png',
+    image: '/template-assets/illustrative-horizontal-3.png',
   },
   {
     id: 4,
@@ -66,8 +64,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 75.0,
-    image:
-      '/template-assets/illustrative-horizontal-4.png',
+    image: '/template-assets/illustrative-horizontal-4.png',
   },
   {
     id: 5,
@@ -75,8 +72,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 60.0,
-    image:
-      '/template-assets/illustrative-horizontal-5.png',
+    image: '/template-assets/illustrative-horizontal-5.png',
   },
   {
     id: 6,
@@ -84,8 +80,7 @@ const PRODUCTS: Product[] = [
     description:
       "Sometimes all it takes is one small thing to turn your whole day around. That's what good design is for.",
     price: 80.0,
-    image:
-      '/template-assets/illustrative-horizontal-2.png',
+    image: '/template-assets/illustrative-horizontal-2.png',
   },
 ];
 
@@ -125,7 +120,7 @@ export default function ProductGalleryTemplate() {
         <LayoutContent padding={6}>
           <VStack gap={6}>
             {/* Header — Grid handles responsive stacking */}
-            <Grid columns={{minWidth: 280}} gap={4} align="start">
+            <Grid columns={{minWidth: 280, max: 2}} gap={4} align="start">
               <Heading level={1}>
                 Make every day a little more delightful, one small detail at a
                 time.
@@ -140,7 +135,14 @@ export default function ProductGalleryTemplate() {
                 <Button
                   label="Get started"
                   variant="primary"
-                  endContent={<Icon icon={ArrowRightIcon} color="inherit" />}
+                  href="#"
+                  endContent={
+                    <Icon
+                      icon={ArrowRightIcon}
+                      color="inherit"
+                      xstyle={rtlStyles.mirror}
+                    />
+                  }
                 />
               </VStack>
             </Grid>
