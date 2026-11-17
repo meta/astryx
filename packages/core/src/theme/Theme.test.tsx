@@ -7,6 +7,7 @@ import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {Theme} from './Theme';
+import {useTheme} from './useTheme';
 import {defineTheme} from './defineTheme';
 import type * as GenerateThemeRulesModule from './generateThemeRules';
 import {dynamicTypeScaleRule} from './dynamicType';
@@ -807,6 +808,155 @@ describe('the runtime injection hint', () => {
       expect(message).not.toContain('@astryxdesign/theme-');
       expect(message).not.toMatch(/import \{[^}]*\}/);
       expect(message).not.toContain(`${name}Theme`);
+    }
+  });
+});
+
+describe('a theme value that is not a defined theme', () => {
+  const NOT_THEMES: ReadonlyArray<[string, unknown]> = [
+    ['the mode string "light"', 'light'],
+    ['the string "default"', 'default'],
+    ['the mode string "system"', 'system'],
+    ['an empty object', {}],
+    ['null', null],
+    ['undefined', undefined],
+  ];
+
+  /** Shows the theme name and mode a descendant reads. */
+  function Probe() {
+    const {name, mode} = useTheme();
+    return <span data-testid="probe">{`${name} ${mode}`}</span>;
+  }
+
+  beforeEach(() => {
+    __resetDevWarnings();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-astryx-theme');
+    generateThemeCSSSpy.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-astryx-theme');
+  });
+
+  for (const [label, value] of NOT_THEMES) {
+    it(`renders ${label} in the browser with Core's default tokens, compiles nothing and warns once`, () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const {getByTestId, container} = render(
+          <Theme theme={value as never} mode="dark">
+            <Probe />
+          </Theme>,
+        );
+        expect(getByTestId('probe').textContent).toBe('default dark');
+        const wrapper = container.firstElementChild as HTMLElement;
+        expect(wrapper.hasAttribute('data-astryx-theme')).toBe(false);
+        expect(wrapper.getAttribute('data-theme')).toBe('dark');
+        expect(document.documentElement.getAttribute('data-theme')).toBe(
+          'dark',
+        );
+        expect(document.documentElement.hasAttribute('data-astryx-theme')).toBe(
+          false,
+        );
+        expect(generateThemeCSSSpy).not.toHaveBeenCalled();
+        const messages = warn.mock.calls
+          .map(args => String(args[0]))
+          .filter(m => m.includes('takes a theme from defineTheme()'));
+        expect(messages).toHaveLength(1);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it(`renders ${label} the same on the server and in the browser`, () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = document.createElement('div');
+      document.body.append(host);
+      try {
+        const ui = (
+          <Theme theme={value as never} mode="light">
+            <p>content</p>
+          </Theme>
+        );
+        host.innerHTML = renderToString(ui);
+        const serverMarkup = host.innerHTML;
+        let root: Root | undefined;
+        act(() => {
+          root = hydrateRoot(host, ui);
+        });
+        expect(host.innerHTML).toBe(serverMarkup);
+        expect(host.textContent).toBe('content');
+        expect(error).not.toHaveBeenCalled();
+        act(() => root?.unmount());
+      } finally {
+        host.remove();
+        warn.mockRestore();
+        error.mockRestore();
+      }
+    });
+  }
+
+  it('names the mode prop when the value is a mode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<Theme theme={'dark' as never}>x</Theme>);
+      expect(String(warn.mock.calls[0]?.[0])).toBe(
+        'Theme: `theme` takes a theme from defineTheme(), but got the string "dark". To set the color mode, use mode="dark". Until then, this Theme applies no theme of its own.',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the theme around it when nested, and its own mode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {getByTestId} = render(
+        <Theme theme={testTheme} mode="light">
+          <Theme theme={'light' as never} mode="dark">
+            <Probe />
+          </Theme>
+        </Theme>,
+      );
+      const probe = getByTestId('probe');
+      expect(probe.textContent).toBe('test dark');
+      expect(probe.parentElement?.getAttribute('data-astryx-theme')).toBe(
+        'test',
+      );
+      expect(document.documentElement.getAttribute('data-astryx-theme')).toBe(
+        'test',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('applies a defined theme once the value becomes one, without remounting the subtree', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const {container, rerender} = render(
+        <Theme theme={{} as never}>
+          <input data-testid="kept" />
+        </Theme>,
+      );
+      const input = container.querySelector('input');
+      rerender(
+        <Theme theme={testTheme}>
+          <input data-testid="kept" />
+        </Theme>,
+      );
+      expect(container.querySelector('input')).toBe(input);
+      expect(
+        (container.firstElementChild as HTMLElement).getAttribute(
+          'data-astryx-theme',
+        ),
+      ).toBe('test');
+      expect(generateThemeCSSSpy).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
     }
   });
 });
