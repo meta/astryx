@@ -151,10 +151,10 @@ touch. The recipe styles paint from that attribute.
   fine-pointer profile.
 - Owner decision (`cixzhang`, 2026-11-16): Core's press code is one engine
   with three recipes, with no new module and no public API change.
-- Owner decision (`cixzhang`, 2026-11-16 11:40 PT), the paint rule (INV7, INV9):
-  \"so pressed representation rule is the thing getting tapped and invoking the
-  operation is what gets tinted. so if you're pressing a button, the row
-  shouldn't tint.\"
+- Owner decision (`cixzhang`, 2026-11-16), the paint rule (INV7, INV9): the
+  surface a press lands on that invokes the action paints, and nothing else;
+  a press on a control inside a row or card paints only that control, and a
+  press on the row or card paints only the row or card, for every pointer.
 
 ## Verification
 
