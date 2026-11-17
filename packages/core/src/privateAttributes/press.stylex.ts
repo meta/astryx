@@ -405,9 +405,9 @@ export const controlPressLayerStyles = stylex.create({
       default: null,
       [COARSE]: {default: null, [PRESSED_ANY]: 'opacity'},
     },
-    // The whole property, with `cellOnImage`'s conditions. Under any other
-    // pointer, a press that began on the row outside a static control is the
-    // row's (`rowTint`). The control's own tint yields to it.
+    // The whole property, with `cellOnImage`'s conditions. Under a fine
+    // primary pointer, a press that began on the row outside a static control
+    // belongs to the row (`rowTint`). The control's own tint yields to it.
     backgroundImage: {
       default: null,
       [ENABLED]: {
