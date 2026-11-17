@@ -7691,11 +7691,17 @@ export async function themeEditShow(theme, options = {}) {
   // of it now makes as they are (it was compiled since): current, as
   // `compile --check` reads it, so the editor records the source it was
   // built with instead of building again. One rule for both.
+  /** The warnings the build of the changed source gives. @type {string[]} */
+  const sourceWarnings = [];
   if (
     stale === sourceChangedReason(theme) &&
     !brokenSource &&
-    !(await outputsDrift(ctx, theme))
+    !(await outputsDrift(ctx, theme, sourceWarnings))
   ) {
+    // Recorded as built without a build: the warnings that build gives
+    // (a stylesheet the source imports that the outputs do not carry) are
+    // said here, as a build says them.
+    rebuiltNotes.push(...sourceWarnings);
     if (!readOnly) refreshSourceStamp(cwd, theme);
     stale = readOnly ? stale : staleBuild(cwd, theme, data);
   }

@@ -1379,7 +1379,10 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `ownsOutputs` says the caller made the folder the outputs go into and owns
  * every file there named like one (the theme editor's theme folder), so a
  * damaged or half-written output is replaced, never refused.
- * @typedef {{ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
+ * `warnings` takes each warning message of the build, in check mode too,
+ * where the receipt carries none (the theme editor, recording a source as
+ * built without building it, keeps the warnings that build gives).
+ * @typedef {{warnings?: string[], ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
  */
 
 /**
@@ -6245,6 +6248,7 @@ async function themeBuildInternal(
         );
     }
     warnMissingDeclarations(writes, cwd);
+    handOff.warnings?.push(...warningMessages);
     return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
