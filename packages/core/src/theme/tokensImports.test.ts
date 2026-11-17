@@ -188,8 +188,8 @@ describe('the theme tokens first load', () => {
   );
 
   it('follows a re-export when an importer uses its name', () => {
-    // Theme.tsx takes generateThemeCSS through defineTheme's re-export.
-    expect(firstLoadModules('theme/Theme.tsx')).toContain(
+    // theme/index.ts reaches the generator only through its re-exports.
+    expect(firstLoadModules('theme/index.ts')).toContain(
       'theme/generateThemeRules.ts',
     );
   });

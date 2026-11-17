@@ -264,9 +264,9 @@ export function generatedScopedStatusRoleDefaults(
   localTokens: Record<string, string> = {},
   rules: ReadonlyArray<ResolvedThemeAdaptationRule> = [],
 ): [string, string][] {
-  // Roles a theme leaves unset while setting their status source are
-  // computed against the theme's own surfaces first; the aliases below then
-  // treat them as present, so icon and border roles follow a derived text role.
+  // Roles the theme leaves unset come from its own surfaces first. The
+  // aliases below count them as set, so icon and border roles follow a
+  // derived text role.
   const entries: [string, string][] = deriveStatusRoleTokens(
     tokens,
     localTokens,
