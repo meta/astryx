@@ -27,7 +27,9 @@ export interface Hotkey {
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
-   * by a final key compared case-insensitively against event.key.
+   * by a final key compared case-insensitively against event.key. An 'alt'
+   * combo also matches on macOS, where Option changes the typed character:
+   * there the final key's physical key (event.code) is compared.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
    * Use 'plus' for a literal '+' key.
@@ -61,6 +63,35 @@ const KEY_ALIASES: Record<string, string> = {
   return: 'enter',
   plus: '+',
 };
+
+/** `event.code` of the punctuation keys, by the character they type unshifted. */
+const PUNCTUATION_CODES: Record<string, string> = {
+  ',': 'Comma',
+  '.': 'Period',
+  '/': 'Slash',
+  ';': 'Semicolon',
+  "'": 'Quote',
+  '[': 'BracketLeft',
+  ']': 'BracketRight',
+  '\\': 'Backslash',
+  '-': 'Minus',
+  '=': 'Equal',
+  '`': 'Backquote',
+};
+
+/**
+ * The physical key (`event.code`) that types `key` on a US layout, for a
+ * letter, digit or punctuation key; null for any other key.
+ */
+function physicalKeyCode(key: string): string | null {
+  if (/^[a-z]$/.test(key)) {
+    return `Key${key.toUpperCase()}`;
+  }
+  if (/^[0-9]$/.test(key)) {
+    return `Digit${key}`;
+  }
+  return PUNCTUATION_CODES[key] ?? null;
+}
 
 /**
  * Whether the event target is a typing surface where global shortcuts
@@ -119,7 +150,23 @@ function matchesCombo(
   }
 
   const expected = KEY_ALIASES[key] ?? key;
-  return event.key.toLowerCase() === expected;
+  if (event.key.toLowerCase() === expected) {
+    return true;
+  }
+  // On macOS, Option changes the character a key types: Option+A types "å",
+  // Option+1 types "¡", and some keys are dead keys. So an alt combo also
+  // matches the key's physical position, when Option rewrote the character.
+  // A key that typed a plain character keeps layout-following matching
+  // (AZERTY and other layouts).
+  const isRewrittenByOption =
+    event.key === 'Dead' ||
+    (event.key.length === 1 && event.key.charCodeAt(0) > 0x7e);
+  return (
+    wantsAlt &&
+    isRewrittenByOption &&
+    event.code !== '' &&
+    event.code === physicalKeyCode(expected)
+  );
 }
 
 /**

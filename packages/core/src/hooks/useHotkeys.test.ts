@@ -262,4 +262,79 @@ describe('useHotkeys', () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
   });
+
+  describe('alt combos when Option rewrites the typed character (macOS)', () => {
+    it('fires alt+a on Option+A, which types "å"', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+a', onPress}]));
+
+      const event = press('å', {code: 'KeyA', altKey: true});
+      expect(onPress).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('fires on the dead keys Option+N, E, U, I and backtick', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() =>
+        useHotkeys(
+          ['n', 'e', 'u', 'i', '`'].map(key => ({keys: `alt+${key}`, onPress})),
+        ),
+      );
+
+      for (const code of ['KeyN', 'KeyE', 'KeyU', 'KeyI', 'Backquote']) {
+        press('Dead', {code, altKey: true});
+      }
+      expect(onPress).toHaveBeenCalledTimes(5);
+    });
+
+    it('fires alt+1 on Option+1, which types "¡"', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+1', onPress}]));
+
+      press('¡', {code: 'Digit1', altKey: true});
+      expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fire a combo without alt on the physical key', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'a', onPress}]));
+
+      press('å', {code: 'KeyA', altKey: true});
+      press('a', {code: 'KeyA'});
+      // Only the plain key: 'a' names no alt, so Option+A does not fire it.
+      expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps layout-following matching for a key that types a plain character (AZERTY)', () => {
+      stubOtherPlatform();
+      const onA = vi.fn();
+      const onQ = vi.fn();
+      renderHook(() =>
+        useHotkeys([
+          {keys: 'alt+a', onPress: onA},
+          {keys: 'alt+q', onPress: onQ},
+        ]),
+      );
+
+      // On AZERTY the key labeled A sits where QWERTY has Q.
+      press('a', {code: 'KeyQ', altKey: true});
+      expect(onA).toHaveBeenCalledTimes(1);
+      expect(onQ).not.toHaveBeenCalled();
+    });
+
+    it('stays silent in a text field, as before', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+a', onPress}]));
+      const input = document.createElement('input');
+      document.body.append(input);
+
+      press('å', {code: 'KeyA', altKey: true, target: input});
+      expect(onPress).not.toHaveBeenCalled();
+    });
+  });
 });
