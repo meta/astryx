@@ -23356,7 +23356,18 @@ export function draftAnswer(ctx, env, question) {
             ? {
                 text: literal
                   ? `${label}, ${/\bdarker\b/.test(c.text) ? 'darker' : 'lighter'}${modesSaid(steps)}`
-                  : `${label}, ${more ? 'more' : 'less'} contrast with the page${modesSaid(steps)}`,
+                  : `${label}, ${more ? 'more' : 'less'} contrast with the page${modesSaid(steps)}${
+                      // (The way said, "darker for contrast", and the way one
+                      // mode takes are not the same: said in one line.)
+                      /\b(darker|lighter)\b/.test(c.text) &&
+                      steps.some(
+                        st =>
+                          st.mode ===
+                          (/\bdarker\b/.test(c.text) ? 'dark' : 'light'),
+                      )
+                        ? `; in ${/\bdarker\b/.test(c.text) ? 'dark' : 'light'} mode, ${more ? 'more' : 'less'} contrast means ${/\bdarker\b/.test(c.text) === more ? 'lighter' : 'darker'}`
+                        : ''
+                    }`,
                 options: [steps],
                 sequence: steps.length > 1,
               }
