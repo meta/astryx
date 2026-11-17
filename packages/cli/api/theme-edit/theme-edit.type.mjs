@@ -110,6 +110,7 @@
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
+ * @property {number} [missedNew] - How many of those misses this change brought (not there before it); the text output says the missed line only when it brought one.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures

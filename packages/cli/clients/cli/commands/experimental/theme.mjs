@@ -613,6 +613,7 @@ function changeBlocks(r) {
     missed: _missed,
     missedParts: _missedParts,
     missedOn: _missedOn,
+    missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -655,14 +656,16 @@ function changeBlocks(r) {
  * named, near the top of a change or a new theme, so a head of the
  * output keeps it; show names the first ones with their lines, and show
  * --json lists each.
- * @param {{missed?: number, missedParts?: number, missedOn?: string[]}} d
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedNew?: number}} d
  */
 function missedLine(d) {
-  const {missed = 0, missedParts = missed, missedOn = []} = d;
-  if (!missed) return [];
+  const {missed = 0, missedParts = missed, missedOn = [], missedNew} = d;
+  if (!missed || missedNew === 0) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}: show lists the first with their lines; show --json lists each`,
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} in all on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}: show lists the first with their lines; show --json lists each`,
     }),
   ];
 }

@@ -7389,7 +7389,12 @@ async function changeOnce(
         // the browser measured as keeping it whole.
         ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
       ],
-      ...(await missedSummary(ctx, slug, data, r.res)),
+      // (What it brought is told apart from the misses it found: those
+      // repeat after every change otherwise.)
+      ...(await missedSummary(ctx, slug, data, r.res, {
+        data: r.before,
+        res: r.resBefore,
+      })),
       warnings: r.warnings,
       ...p,
     },
@@ -8734,10 +8739,14 @@ async function sayNextStepClears(ctx, slug, s, r) {
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} res
  *   the theme's tokens as the change built them (a change that changed
  *   nothing comes back with none: they are read again)
- * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[]}>}
+ * @param {{data: import('./_settings.mjs').ThemeData | null | undefined, res: {light: Record<string, string>, dark: Record<string, string>} | null | undefined}} [prior]
+ *   for a change, the settings and tokens before it: the misses it brought
+ *   (`missedNew`) are told apart from the ones it found
+ * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[], missedNew?: number}>}
  */
-async function missedSummary(ctx, slug, data, res) {
+async function missedSummary(ctx, slug, data, res, prior) {
   if (!data.settings.length) return {};
+  const base = await baseResolved(ctx.project, data.like);
   const list = await missedParts(
     ctx,
     slug,
@@ -8745,13 +8754,31 @@ async function missedSummary(ctx, slug, data, res) {
     Object.keys(res?.light ?? {}).length
       ? /** @type {any} */ (res)
       : await resolvedTokens(ctx, slug),
-    await baseResolved(ctx.project, data.like),
+    base,
     {count: true},
   ).catch(() => []);
   const on = [...new Set(list.map(m => m.part))];
-  return list.length
-    ? {missed: list.length, missedParts: on.length, missedOn: on}
-    : {};
+  if (!list.length) return {};
+  /** @param {{part: string, state?: string, why: string}} m */
+  const key = m => `${m.part}|${m.state ?? ''}|${m.why}`;
+  const had =
+    prior?.data && prior.res && prior.data.settings.length
+      ? new Set(
+          (
+            await missedParts(ctx, slug, prior.data, prior.res, base, {
+              count: true,
+            }).catch(() => [])
+          ).map(key),
+        )
+      : prior
+        ? new Set()
+        : null;
+  return {
+    missed: list.length,
+    missedParts: on.length,
+    missedOn: on,
+    ...(had ? {missedNew: list.filter(m => !had.has(key(m))).length} : {}),
+  };
 }
 
 /**

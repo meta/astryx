@@ -102,7 +102,7 @@ describe('what a change says', () => {
       expect(see).toMatch(/show t --png writes themes\/t\/preview\.png/);
       expect(see).toContain('themes/t/sheet-overlays.png');
       const at = lines.findIndex(l =>
-        /^missed: +\d+ miss(es)? on \d+ parts? the theme's changes did not reach/.test(
+        /^missed: +this change left \d+ new miss(es)?; \d+ miss(es)? in all on \d+ parts? the theme's changes did not reach \(/.test(
           l,
         ),
       );

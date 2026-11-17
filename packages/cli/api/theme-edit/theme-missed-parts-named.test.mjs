@@ -60,17 +60,13 @@ describe('what the changes did not reach', () => {
         await themeEditSet('b', 'accent', '#0b5cfe', {cwd})
       ).data;
       expect(set.missedOn).toEqual(made.missedOn);
-      // The text names the first parts.
+      // It brought none of them: the text does not repeat the missed line.
+      expect(set.missedNew).toBe(0);
       const r = await runCli(
         ['experimental', 'theme', 'editor', 'set', 'b', 'accent', '#0b5cff'],
         {cwd},
       );
-      expect(r.stdout).toMatch(
-        new RegExp(
-          `^missed: \\d+ misses? on \\d+ parts? the theme's changes did not reach \\(${made.missedOn[0]}`,
-          'm',
-        ),
-      );
+      expect(r.stdout).not.toMatch(/^missed:/m);
     },
     T,
   );
