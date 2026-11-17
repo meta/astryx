@@ -2349,8 +2349,6 @@ export function layeredThemeCSS(
   componentCss: string,
   partsCss: string,
 ): string {
-  // With no shared-element part entries the theme keeps the single layer it
-  // always wrote, byte for byte.
   if (!partsCss) {
     return componentCss;
   }

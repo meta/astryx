@@ -41,6 +41,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'input-status-icon': 'icon',
   'list-item': 'item',
   'markdown-blockquote': 'blockquote',
+  'more-menu': 'dropdown-menu',
   'multi-selector-indicator-icon': 'icon',
   'multi-selector-popup': 'popover',
   'radio-list-item': 'item',
