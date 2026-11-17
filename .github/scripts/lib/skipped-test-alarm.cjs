@@ -53,7 +53,44 @@ function mergedPullRequests(messages) {
   return [...numbers];
 }
 
-async function skippedFailures({github, owner, repo, sha, results, runId}) {
+// The commit a Main run tested: a dispatch that names a commit says so in its
+// run name; any other run tests the commit it ran on.
+function testedCommit(run) {
+  const named = /^Main validation of ([0-9a-f]{40})$/.exec(
+    run.display_title ?? '',
+  );
+  return named ? named[1] : run.head_sha;
+}
+
+// The tests a pull request's CI run left out, from its artifact.
+function downloadSkipped({owner, repo, runId}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `skipped-${runId}-`));
+  execFileSync('gh', [
+    'run',
+    'download',
+    String(runId),
+    '--repo',
+    `${owner}/${repo}`,
+    '--name',
+    'node-skipped-tests',
+    '--dir',
+    dir,
+  ]);
+  return fs
+    .readFileSync(path.join(dir, 'node-skipped-tests.txt'), 'utf8')
+    .split('\n')
+    .filter(Boolean);
+}
+
+async function skippedFailures({
+  github,
+  owner,
+  repo,
+  sha,
+  results,
+  runId,
+  download = downloadSkipped,
+}) {
   const failed = failedTests(
     results,
     process.env.GITHUB_WORKSPACE ?? process.cwd(),
@@ -70,14 +107,14 @@ async function skippedFailures({github, owner, repo, sha, results, runId}) {
     per_page: 20,
   });
   const previous = runs.workflow_runs.find(
-    run => run.head_sha !== sha && run.id !== runId,
+    run => testedCommit(run) !== sha && run.id !== runId,
   );
   if (previous == null) return [];
   const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead(
     {
       owner,
       repo,
-      basehead: `${previous.head_sha}...${sha}`,
+      basehead: `${testedCommit(previous)}...${sha}`,
     },
   );
   const found = [];
@@ -108,25 +145,16 @@ async function skippedFailures({github, owner, repo, sha, results, runId}) {
         name: 'node-skipped-tests',
       });
     if (artifacts.artifacts.length === 0) continue;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `skipped-${pr}-`));
-    execFileSync('gh', [
-      'run',
-      'download',
-      String(run.id),
-      '--repo',
-      `${owner}/${repo}`,
-      '--name',
-      'node-skipped-tests',
-      '--dir',
-      dir,
-    ]);
-    const skipped = fs
-      .readFileSync(path.join(dir, 'node-skipped-tests.txt'), 'utf8')
-      .split('\n')
-      .filter(Boolean);
-    for (const test of skipped) if (failed.has(test)) found.push({test, pr});
+    for (const test of download({owner, repo, runId: run.id})) {
+      if (failed.has(test)) found.push({test, pr});
+    }
   }
   return found;
 }
 
-module.exports = {failedTests, mergedPullRequests, skippedFailures};
+module.exports = {
+  failedTests,
+  mergedPullRequests,
+  skippedFailures,
+  testedCommit,
+};

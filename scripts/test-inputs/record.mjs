@@ -203,8 +203,6 @@ if (OUT && !globalThis.__astryxTestInputs) {
   // the patched functions only after this.
   module.syncBuiltinESMExports();
 
-  // A Node child inherits this preload and records its own reads; any other
-  // program reads where this process cannot see.
   // A Node child records its own reads: it inherits this preload and its
   // owner through the environment. Any other program, a shell, or a child
   // given an environment without them reads where this process cannot see.

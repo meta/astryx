@@ -1475,7 +1475,7 @@ them (a release change needs its full checks).
 ### DEC-31 — The Node project's file-reading tests run by their recorded inputs
 
 **Reference:** `spec:AST-030/DEC-31`
-**Decider:** `cixzhang`, `2026-11-16`
+**Decider:** `cixzhang`, pending
 
 Nearly every Node test reads files, so FR13's file-system rule alone runs
 almost the whole Node suite on every pull request. The theme editor's tests

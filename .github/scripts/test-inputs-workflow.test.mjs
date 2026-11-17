@@ -30,6 +30,8 @@ const {
 const {
   failedTests,
   mergedPullRequests,
+  skippedFailures,
+  testedCommit,
 } = require('./lib/skipped-test-alarm.cjs');
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -58,6 +60,15 @@ describe("Main's record", () => {
     const after = main.jobs['node-test-inputs'];
     expect(after.needs).toEqual(['main-commit', 'test-node']);
     const merge = stepNamed(after, 'Merge the legs into the record');
+    // The record only narrows pull requests; failing to make it leaves main
+    // green.
+    for (const name of [
+      "Download every leg's recorded inputs",
+      'Merge the legs into the record',
+      'Keep the record for pull requests',
+    ]) {
+      expect(stepNamed(after, name)['continue-on-error'], name).toBe(true);
+    }
     expect(merge.if).toBe("needs.test-node.result == 'success'");
     expect(merge.run).toContain('scripts/test-inputs/merge.mjs --out');
     // Kept only for the commit the run was dispatched on, the commit pull
@@ -243,5 +254,82 @@ describe('the alarm', () => {
     );
     expect([...failedTests(dir, '/w')]).toEqual(['a.test.mjs']);
     fs.rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('names a failed test that a pull request merged since the commit the last passing run tested left out', async () => {
+    const tested = 'a'.repeat(40);
+    const dispatched = 'b'.repeat(40);
+    const now = 'c'.repeat(40);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alarm-'));
+    fs.mkdirSync(path.join(dir, 'leg-1'));
+    fs.writeFileSync(
+      path.join(dir, 'leg-1', 'node-results.json'),
+      JSON.stringify({
+        testResults: [
+          {name: '/w/a.test.mjs', status: 'failed'},
+          {name: '/w/b.test.mjs', status: 'failed'},
+        ],
+      }),
+    );
+    const bases = [];
+    const github = {
+      rest: {
+        actions: {
+          listWorkflowRuns: async () => ({
+            data: {
+              workflow_runs: [
+                {id: 9, head_sha: now, display_title: 'Main'},
+                {
+                  id: 8,
+                  head_sha: dispatched,
+                  display_title: `Main validation of ${tested}`,
+                },
+              ],
+            },
+          }),
+          listWorkflowRunsForRepo: async ({head_sha}) => ({
+            data: {
+              workflow_runs: [
+                {id: 70, path: '.github/workflows/ci.yml', head_sha},
+              ],
+            },
+          }),
+          listWorkflowRunArtifacts: async () => ({
+            data: {artifacts: [{name: 'node-skipped-tests'}]},
+          }),
+        },
+        repos: {
+          compareCommitsWithBasehead: async ({basehead}) => {
+            bases.push(basehead);
+            return {
+              data: {commits: [{commit: {message: 'fix: one thing (#5)'}}]},
+            };
+          },
+        },
+        pulls: {get: async () => ({data: {head: {sha: 'd'.repeat(40)}}})},
+      },
+    };
+    const previous = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = '/w';
+    try {
+      const found = await skippedFailures({
+        github,
+        owner: 'o',
+        repo: 'r',
+        sha: now,
+        results: dir,
+        runId: 9,
+        download: () => ['a.test.mjs', 'c.test.mjs'],
+      });
+      expect(found).toEqual([{test: 'a.test.mjs', pr: 5}]);
+      // The comparison starts at the commit that run tested, not the one it
+      // was dispatched on.
+      expect(bases).toEqual([`${tested}...${now}`]);
+    } finally {
+      if (previous == null) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = previous;
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+    expect(testedCommit({head_sha: now, display_title: 'Main'})).toBe(now);
   });
 });
