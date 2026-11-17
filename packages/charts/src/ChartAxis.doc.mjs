@@ -95,7 +95,7 @@ export const docs = {
       name: 'maxTicks',
       type: 'number',
       description:
-        'Maximum displayed label count. Labels are evenly skipped when the generated set is larger.',
+        'Maximum displayed label count. Labels are thinned to at most this many; the first and last labels stay.',
     },
     {
       name: 'tickFormat',

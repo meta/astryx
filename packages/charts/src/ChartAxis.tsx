@@ -31,7 +31,7 @@ export interface ChartAxisProps {
   position: 'top' | 'right' | 'bottom' | 'left';
   /** Number of ticks (approximate — d3 decides final count) */
   tickCount?: number;
-  /** Maximum number of tick labels to show. Labels are evenly skipped when exceeded. */
+  /** Maximum number of tick labels to show. Labels are thinned to at most this many; the first and last labels stay. */
   maxTicks?: number;
   /** Custom tick formatter */
   tickFormat?: (value: unknown) => string;
