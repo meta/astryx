@@ -21,6 +21,7 @@ import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 import {computeOverflow, countRows} from './computeOverflow';
 import {useDevWarning} from './useDevWarning';
 
@@ -89,10 +90,10 @@ export interface UseOverflowReturn {
 }
 
 /**
- * A single-row list's inline bounds, in whole pixels rounded up from the
- * measure copy: `collapsed` is the list folded as far as it can fold (the
- * minimum items and the indicator), `rendered` is every item unfolded.
- * Both are 0 until the list measures.
+ * A single-row list's inline bounds, from the measure copy. `collapsed` is
+ * the list folded as far as it can fold (the minimum items and the
+ * indicator), rounded up to a whole pixel. `rendered` is every item
+ * unfolded, exact. Both are 0 until the list measures.
  */
 export interface OverflowInlineBounds {
   collapsed: number;
@@ -382,7 +383,11 @@ function isSingleFlexRow(parent: Element): boolean {
  * Lists that may unfold into their flex row's free width. Lists that share a
  * row share its free width, so together they never claim more than it.
  */
-const freeWidthSharers = new WeakSet<Element>();
+const freeWidthSharers = realmValue(
+  sharedKey('overflow/free-width-sharers', 1),
+  () => new WeakSet<Element>(),
+  value => value instanceof WeakSet,
+);
 
 /**
  * This list's share of the free width in its single flex row. The free
