@@ -111,7 +111,15 @@ const PRESSED_FADING: string = '[data-astryx-press="fading"]';
 const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
 const hoverImage = `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`;
-const pressedImage = `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']})`;
+/**
+ * The pressed overlay a mouse or a pen paints at `:active`. A container whose
+ * press starts on a nested control sets `--_nested-press-paint` on itself
+ * (hooks/useClickableContainer.ts), so it paints its `--_nested-press-rest`
+ * instead. Each style below that reads it resets it on its own element, so a
+ * nested control keeps its press, and declares its own rest paint.
+ */
+const mousePressed = `var(--_nested-press-paint, ${colorVars['--color-overlay-pressed']})`;
+const pressedImage = `linear-gradient(${mousePressed}, ${mousePressed})`;
 const neutralImage = `linear-gradient(${colorVars['--color-neutral']}, ${colorVars['--color-neutral']})`;
 
 /**
@@ -211,18 +219,29 @@ export const interactionOverlayStyles = stylex.create({
     [PRESS_ALPHA]: pressStrength,
     ...pressReleaseAnimation,
     ...pressPaint,
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      [ENABLED]: {
+        default: null,
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     backgroundColor: {
       default: 'transparent',
       [ENABLED]: {
         default: null,
         ':active': {
-          default: colorVars['--color-overlay-pressed'],
+          default: mousePressed,
           [COARSE]: 'transparent',
         },
         [HOVER_HOVER]: {
           default: null,
           ':hover': colorVars['--color-overlay-hover'],
-          ':active': colorVars['--color-overlay-pressed'],
+          ':active': mousePressed,
         },
         // While the controller paints, the colour arms yield to the image. A
         // device with a touchscreen beside a mouse matches `:active` and the
@@ -245,6 +264,17 @@ export const interactionOverlayStyles = stylex.create({
     [PRESS_ALPHA]: pressStrength,
     ...pressReleaseAnimation,
     ...pressPaint,
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      [ENABLED]: {
+        default: null,
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     backgroundImage: {
       default: null,
       [ENABLED]: {
@@ -267,6 +297,17 @@ export const interactionOverlayStyles = stylex.create({
     [PRESS_ALPHA]: pressStrength,
     ...pressReleaseAnimation,
     ...pressPaint,
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': {
+      default: 'transparent',
+      [ENABLED]: {
+        default: null,
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': colorVars['--color-overlay-hover'],
+        },
+      },
+    },
     backgroundImage: {
       default: neutralImage,
       [ENABLED]: {
@@ -295,12 +336,14 @@ export const interactionOverlayStyles = stylex.create({
     [PRESS_ALPHA]: pressStrength,
     ...pressReleaseAnimation,
     ...pressPaint,
+    '--_nested-press-paint': 'initial',
+    '--_nested-press-rest': 'transparent',
     backgroundColor: {
       default: null,
       [ENABLED]: {
         default: null,
         ':active': {
-          default: colorVars['--color-overlay-pressed'],
+          default: mousePressed,
           [COARSE]: 'transparent',
         },
         // The mouse arm yields to the image while the controller paints; see
