@@ -29,6 +29,7 @@ import {
 import {recordAgentTextWritten} from '../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
+export {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
 
