@@ -2355,11 +2355,18 @@ function familyLeftOut(ctx, slug, data, s) {
       ) &&
       (/^(?:background-image|box-shadow|border)$/.test(thing) ||
         (thing === 'background' && /gradient\(/.test(String(s.value))));
-  if (!look) return [];
   const groups = groupsOf(ctx);
-  const role = (
-    selected ? ['selected-items'] : ['button-like', 'overlays', 'option-rows']
-  ).find(r => (groups[r] ?? []).includes(String(s.on)));
+  const rule =
+    !s.state &&
+    /^border-(?:bottom|top|block-end|block-start)$/.test(thing) &&
+    (groups['overlay-headers'] ?? []).includes(String(s.on));
+  if (!look && !rule) return [];
+  const role = rule
+    ? 'overlay-headers'
+    : (selected
+        ? ['selected-items']
+        : ['button-like', 'overlays', 'option-rows', 'status-surfaces']
+      ).find(r => (groups[r] ?? []).includes(String(s.on)));
   if (!role) return [];
   const others = (groups[role] ?? []).filter(
     m =>
