@@ -12,6 +12,7 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {readKept, writeKept} from '../../test-utils/kept-entry.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -99,22 +100,28 @@ const keptRun = (name, compute) =>
     cache.persistedValue(['value-test', name], compute, identity),
   );
 
+// A run keeps catalogs only through module.registerHooks, which Node has from
+// 22.15 and 23.5. On an older Node every value is worked out and nothing is
+// kept, so the cases that read a kept value back cannot run there.
 describe('a value kept by its key', () => {
-  it('is kept in a run that keeps catalogs, and a later run reads it back without working it out', async () => {
-    const value = {b: 2, a: [1, 'two', {c: null, d: true}]};
-    let made = 0;
-    const compute = () => {
-      made++;
-      return structuredClone(value);
-    };
-    const first = await keptRun('kept', compute);
-    const again = await keptRun('kept', compute);
-    expect(made).toBe(1);
-    expect(again).toEqual(value);
-    // The kept text keeps the value's own key order.
-    expect(JSON.stringify(again)).toBe(JSON.stringify(first));
-    expect(keptFiles('kept')).toHaveLength(1);
-  });
+  it.skipIf(!hasModuleHooks)(
+    'is kept in a run that keeps catalogs, and a later run reads it back without working it out',
+    async () => {
+      const value = {b: 2, a: [1, 'two', {c: null, d: true}]};
+      let made = 0;
+      const compute = () => {
+        made++;
+        return structuredClone(value);
+      };
+      const first = await keptRun('kept', compute);
+      const again = await keptRun('kept', compute);
+      expect(made).toBe(1);
+      expect(again).toEqual(value);
+      // The kept text keeps the value's own key order.
+      expect(JSON.stringify(again)).toBe(JSON.stringify(first));
+      expect(keptFiles('kept')).toHaveLength(1);
+    },
+  );
 
   it('is worked out, and nothing is kept, outside a run that keeps catalogs', () => {
     let made = 0;
@@ -160,26 +167,29 @@ describe('a value kept by its key', () => {
     }
   });
 
-  it('is a miss, and is stored over, when its kept value was changed', async () => {
-    const value = {name: 'Button', props: [{name: 'label'}]};
-    let made = 0;
-    const compute = () => {
-      made++;
-      return structuredClone(value);
-    };
-    await keptRun('changed', compute);
-    const [file] = keptFiles('changed');
-    const entry = readKept(file);
-    entry.value = {name: 'Button', props: []};
-    writeKept(file, entry);
-    expect(await keptRun('changed', compute)).toEqual(value);
-    expect(made).toBe(2);
-    expect(readKept(file).value).toEqual(value);
-    expect(await keptRun('changed', compute)).toEqual(value);
-    expect(made).toBe(2);
-  });
+  it.skipIf(!hasModuleHooks)(
+    'is a miss, and is stored over, when its kept value was changed',
+    async () => {
+      const value = {name: 'Button', props: [{name: 'label'}]};
+      let made = 0;
+      const compute = () => {
+        made++;
+        return structuredClone(value);
+      };
+      await keptRun('changed', compute);
+      const [file] = keptFiles('changed');
+      const entry = readKept(file);
+      entry.value = {name: 'Button', props: []};
+      writeKept(file, entry);
+      expect(await keptRun('changed', compute)).toEqual(value);
+      expect(made).toBe(2);
+      expect(readKept(file).value).toEqual(value);
+      expect(await keptRun('changed', compute)).toEqual(value);
+      expect(made).toBe(2);
+    },
+  );
 
-  it('is a miss under another CLI build', async () => {
+  it.skipIf(!hasModuleHooks)('is a miss under another CLI build', async () => {
     let made = 0;
     const compute = () => {
       made++;
