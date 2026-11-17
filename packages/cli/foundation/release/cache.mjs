@@ -367,6 +367,52 @@ export function isVersionRange(spec) {
  */
 
 /**
+ * The hosts npm is configured to reach without its proxy, its own `noproxy`
+ * setting (from its config files or `npm_config_noproxy`), as npm reports
+ * it; null when npm sets none or cannot say.
+ * @param {{command: string, prefix: string[]}} npm how npm is started
+ * @returns {string | null}
+ */
+export function readNpmNoProxy(npm) {
+  const result = spawnSync(
+    npm.command,
+    [...npm.prefix, 'config', 'get', 'noproxy'],
+    {
+      cwd: os.tmpdir(),
+      encoding: 'utf-8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 30_000,
+      windowsHide: true,
+    },
+  );
+  const value = result.status === 0 ? String(result.stdout ?? '').trim() : '';
+  return value === '' || value === 'null' || value === 'undefined'
+    ? null
+    : value;
+}
+
+/**
+ * The environment npm runs in: `env`, with `NO_PROXY` and `no_proxy` set to
+ * the `noproxy` npm is configured with, when it has one. npm documents the
+ * variable as that setting's default only, but npm 11 lets the variable win.
+ * So when a shell's `NO_PROXY` names the registry's domain while npm's own
+ * settings send it through a proxy, as on some managed machines, npm goes
+ * straight to a registry it cannot reach and waits until the time limit.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string | null} noProxy npm's own setting ({@link readNpmNoProxy})
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function npmEnvironment(env, noProxy) {
+  if (noProxy == null) return env;
+  if (env.NO_PROXY === noProxy && env.no_proxy === noProxy) return env;
+  return {...env, NO_PROXY: noProxy, no_proxy: noProxy};
+}
+
+/** @type {string | null | undefined} */
+let configuredNoProxy;
+
+/**
  * Run npm synchronously with no output on the caller's streams.
  * @param {string[]} args
  * npm runs under npm-guard.mjs, which gives it a process group of its own
@@ -375,18 +421,32 @@ export function isVersionRange(spec) {
  * outlives the run that started it.
  *
  * @param {string[]} args
- * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}}} [options]
+ * @param {{cwd?: string, timeoutMs?: number, pidFile?: string, npm?: {command: string, prefix: string[], shell?: false}, env?: NodeJS.ProcessEnv}} [options]
  *   `pidFile` receives npm's process id while it runs (the release lock's
- *   record); `npm` replaces how npm is started (tests).
+ *   record); `npm` replaces how npm is started and `env` the environment it
+ *   runs in (tests). npm runs with its own `noproxy` setting
+ *   ({@link npmEnvironment}).
  * @returns {NpmResult}
  */
 export function runNpm(args, options = {}) {
-  const {command, prefix} = options.npm ?? npmCommand();
+  const npm = options.npm ?? npmCommand();
+  const {command, prefix} = npm;
+  const env =
+    options.env ??
+    (options.npm
+      ? process.env
+      : npmEnvironment(
+          process.env,
+          configuredNoProxy === undefined
+            ? (configuredNoProxy = readNpmNoProxy(npm))
+            : configuredNoProxy,
+        ));
   const timeoutMs = options.timeoutMs ?? 300_000;
   const direct = process.platform === 'win32';
   const result = direct
     ? spawnSync(command, [...prefix, ...args], {
         cwd: options.cwd ?? os.tmpdir(),
+        env,
         encoding: 'utf-8',
         // Never a shell: a declared range must not reach one.
         shell: false,
@@ -409,6 +469,7 @@ export function runNpm(args, options = {}) {
         ],
         {
           cwd: options.cwd ?? os.tmpdir(),
+          env,
           encoding: 'utf-8',
           stdio: ['ignore', 'pipe', 'pipe'],
           // A backstop only: the guard ends npm at the limit itself.

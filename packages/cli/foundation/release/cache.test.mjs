@@ -18,6 +18,8 @@ import {
   npmCommand,
   resolveLatestRelease,
   runNpm,
+  npmEnvironment,
+  readNpmNoProxy,
   tryLock,
   endRecordedInstall,
   isReleaseInstall,
@@ -1014,6 +1016,69 @@ const waitFor = async (done, ms) => {
   }
   return done();
 };
+
+describe("npm's own noproxy setting", () => {
+  /** npm as a script that answers `config get noproxy` with `answer`. */
+  const npmAnswering = (/** @type {string} */ answer, status = 0) => ({
+    command: process.execPath,
+    prefix: [
+      '-e',
+      `process.stdout.write(${JSON.stringify(answer)}); process.exit(${status});`,
+    ],
+    shell: /** @type {const} */ (false),
+  });
+
+  it('is read from npm, and is none when npm sets none or cannot say', () => {
+    expect(readNpmNoProxy(npmAnswering('localhost,127.0.0.1,::1\n'))).toBe(
+      'localhost,127.0.0.1,::1',
+    );
+    expect(readNpmNoProxy(npmAnswering('\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('null\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('localhost', 1))).toBeNull();
+  });
+
+  it('replaces a NO_PROXY that names the registry, so npm uses the proxy it is configured with', () => {
+    const shell = {
+      PATH: '/usr/bin',
+      NO_PROXY: 'localhost,.example.net',
+      no_proxy: 'localhost,.example.net',
+      npm_config_proxy: 'http://proxy.example:8080',
+    };
+    expect(npmEnvironment(shell, 'localhost')).toEqual({
+      ...shell,
+      NO_PROXY: 'localhost',
+      no_proxy: 'localhost',
+    });
+    // Nothing set in npm, or the same list: the shell's stands.
+    expect(npmEnvironment(shell, null)).toBe(shell);
+    expect(
+      npmEnvironment(
+        {NO_PROXY: 'localhost', no_proxy: 'localhost'},
+        'localhost',
+      ),
+    ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
+  });
+
+  it('reaches npm through the guard it runs under', () => {
+    const result = runNpm(['view'], {
+      timeoutMs: 30_000,
+      env: npmEnvironment(
+        {...process.env, NO_PROXY: '.example.net', no_proxy: '.example.net'},
+        'localhost',
+      ),
+      npm: {
+        command: process.execPath,
+        prefix: [
+          '-e',
+          'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+        ],
+        shell: false,
+      },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('localhost|localhost');
+  });
+});
 
 describe('runNpm time limit', () => {
   it('ends a package manager that ignores SIGTERM, leaving no process behind', async () => {
