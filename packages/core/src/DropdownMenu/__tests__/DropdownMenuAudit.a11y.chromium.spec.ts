@@ -647,18 +647,42 @@ async function capture(page: Page, scenario: Case) {
     const isOpen = scenario.drive !== 'closed';
     const measureBox = async () =>
       isOpen ? subject.boundingBox() : page.locator(TRIGGER).boundingBox();
-    const firstBox = await measureBox();
-    await nextFrames(page);
-    const box = await measureBox();
-    if (firstBox == null || box == null) {
+    const initialBox = await measureBox();
+    if (initialBox == null) {
       throw new Error(`${scenario.state}: subject has no layout box`);
     }
-    const geometryDelta = Math.max(
-      Math.abs(box.x - firstBox.x),
-      Math.abs(box.y - firstBox.y),
-      Math.abs(box.width - firstBox.width),
-      Math.abs(box.height - firstBox.height),
-    );
+    let firstBox = initialBox;
+    let box = initialBox;
+    let geometryDelta = Infinity;
+    let missingBox = false;
+    // Opening can place the menu between frame samples. The receipt needs a
+    // settled pair, not two frames chosen before the layout stops moving.
+    await expect
+      .poll(
+        async () => {
+          await nextFrames(page);
+          const nextBox = await measureBox();
+          if (nextBox == null) {
+            // Stop sampling and fail below; do not wait for a box to reappear.
+            missingBox = true;
+            return 0;
+          }
+          firstBox = box;
+          box = nextBox;
+          geometryDelta = Math.max(
+            Math.abs(box.x - firstBox.x),
+            Math.abs(box.y - firstBox.y),
+            Math.abs(box.width - firstBox.width),
+            Math.abs(box.height - firstBox.height),
+          );
+          return geometryDelta;
+        },
+        {message: `${scenario.state}: geometry settles before capture`},
+      )
+      .toBeLessThanOrEqual(0.5);
+    if (missingBox) {
+      throw new Error(`${scenario.state}: subject has no layout box`);
+    }
 
     const observed = await page.evaluate(
       ({open}) => {
