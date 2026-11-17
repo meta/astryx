@@ -1312,6 +1312,67 @@ describeCanonical('canonical intended changes', () => {
     expect(passesAcceptance(score)).toBe(true);
   }, 120_000);
 
+  it("keeps a theme's dark component styles off a light host that loads no reset.css, for a dark reader", () => {
+    // The host names no scheme and loads Core's stylesheet alone. A root
+    // Theme in system mode around the Astryx button carries a theme whose
+    // button has a dark block. The page draws light, so once the root Theme
+    // names that scheme on <html>, the dark block applies for no reader.
+    const {root, arm} = preparePair('tailwind-v4-control');
+    applyButtonAddition(arm, installCoreStylesheetOnly);
+    fs.writeFileSync(
+      path.join(arm, 'src', 'probeTheme.ts'),
+      `// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import {defineTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral';
+
+export const probeTheme = defineTheme({
+  name: 'probe',
+  extends: neutralTheme,
+  components: {button: {base: {'@dark': {backgroundColor: 'rgb(1, 2, 3)'}}}},
+});
+`,
+    );
+    edit(path.join(arm, 'src', 'App.tsx'), source =>
+      source
+        .replace(
+          "import {Button} from '@astryxdesign/core/Button';",
+          "import {Button} from '@astryxdesign/core/Button';\nimport {Theme} from '@astryxdesign/core/theme';\nimport {probeTheme} from './probeTheme';",
+        )
+        .replace(
+          '              <Button\n                data-vibe-result="astryx-button"',
+          '              <Theme theme={probeTheme}>\n              <Button\n                data-vibe-result="astryx-button"',
+        )
+        .replace(
+          '                variant="secondary"\n              />',
+          '                variant="secondary"\n              />\n              </Theme>',
+        ),
+    );
+    const app = fs.readFileSync(path.join(arm, 'src', 'App.tsx'), 'utf8');
+    expect(app).toContain('<Theme theme={probeTheme}>');
+    expect(app).toContain('</Theme>');
+    const provenance = provenanceFor(arm, 'tailwind-v4-control', 's1');
+    const result = measure(
+      arm,
+      'tailwind-v4-control',
+      path.join(root, 'scheme-blocks-arm.json'),
+      provenance,
+    );
+    expect(
+      result.build.ok,
+      `${result.build.stdout}\n${result.build.stderr}`,
+    ).toBe(true);
+    const button = (scheme: 'light' | 'dark') =>
+      result.schemes[scheme].taskResults?.['astryx-button'];
+    expect(button('dark')).toMatchObject({count: 1, visible: true});
+    expect(result.schemes.dark.colorScheme).toBe('normal');
+    // The dark reader sees the light page's button, not the dark block.
+    expect(button('dark')?.style.backgroundColor).not.toBe('rgb(1, 2, 3)');
+    expect(button('dark')?.style.backgroundColor).toBe(
+      button('light')?.style.backgroundColor,
+    );
+  }, 180_000);
+
   it.each([
     'tailwind-v4-control',
     'shadcn-tailwind-v4-established',
