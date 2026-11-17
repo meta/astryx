@@ -4399,11 +4399,36 @@ export function draftAnswer(ctx, env, question) {
     // the same: the color under text is the page's.)
     .replace(
       /\b((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+(text|writing|type)\s+on\s+(?:(?:a|an|the)\s+((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+(page|background|surface)\b|((?:[a-z]+|#[0-9a-f]{3,8}))(?=\s*(?:[,;.!?]|$)))/gi,
-      (m, ink, _t, under, ground, bare) =>
-        colorsIn(String(ink).toLowerCase()).length &&
-        colorsIn(String(under ?? bare).toLowerCase()).length
-          ? `${under ?? bare} ${ground ?? 'page'} background, ${ink} text`
-          : m,
+      (m, ink, _t, under, ground, bare, at, whole) => {
+        if (
+          !colorsIn(String(ink).toLowerCase()).length ||
+          !colorsIn(String(under ?? bare).toLowerCase()).length
+        )
+          return m;
+        // A part that opens the clause ("code #eb5757 text on #f7f6f3"):
+        // the ground is that part's own fill, said beside its text, never
+        // the page.
+        const clauseHead = String(whole)
+          .slice(0, Number(at))
+          .split(/[,;\n]|\.(?=\s|$)/)
+          .at(-1);
+        const lead = `${clauseHead} ${ink}`.toLowerCase();
+        const namesPart = partLexicon(ctx).parts.some(
+          ([re, p]) => !p.missing && re.test(` ${lead} `),
+        );
+        if (namesPart && ground !== 'page') {
+          // (The part's word kept before the ground, its text after: "code
+          // #f7f6f3 background and #eb5757 text".)
+          const words = String(ink).split(/\s+/);
+          const firstColor = words.findIndex(
+            w => colorsIn(w.toLowerCase()).length,
+          );
+          const owner =
+            firstColor > 0 ? `${words.slice(0, firstColor).join(' ')} ` : '';
+          return `${owner}${under ?? bare} background and ${words.slice(Math.max(0, firstColor)).join(' ')} text`;
+        }
+        return `${under ?? bare} ${ground ?? 'page'} background, ${ink} text`;
+      },
     )
     // ("a frosted glass look", "glass cards", "translucent with a blur":
     // the glass rung of the surfaces dial.)
@@ -5231,6 +5256,25 @@ export function draftAnswer(ctx, env, question) {
           before,
         ) ||
         /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
+      // A list of a part's own pieces after "<part> with" ("tables with
+      // 13px text, uppercase 11px headers"): that part's header, named as
+      // the part's own (the census holds a piece of it by that name), up to
+      // the sentence's end.
+      const sentence = String(all)
+        .slice(0, at)
+        .split(/[;\n]|\.(?=\s|$)/)
+        .at(-1);
+      const lister = [...String(sentence).matchAll(/\b([a-z]+)\s+with\b/gi)]
+        .map(x =>
+          [x[1], x[1].replace(/s$/, ''), x[1].replace(/es$/, '')]
+            .map(k => k.toLowerCase())
+            .find(k =>
+              [...TARGET.keys()].some(t => t.startsWith(`${k}-${sub}`)),
+            ),
+        )
+        .filter(Boolean)
+        .at(-1);
+      if (!owned && lister) return `${lister} ${m}`;
       return text && !surface && !owned
         ? /s$/i.test(m)
           ? 'headings'
@@ -9848,14 +9892,21 @@ export function draftAnswer(ctx, env, question) {
   // two halves of a mode pair are one subject, wherever its part and its
   // aspect are said: each half takes the part and the aspect the other
   // names.
+  // (A clause is the half of one pair only: in "sidebar #f7f7f5 in light
+  // mode and #202020 in dark mode, text #37352f in light mode" the dark
+  // half is the sidebar's, and the text after it is an ask of its own.)
+  /** @type {Set<Clause>} */
+  const paired = new Set();
   for (let i = 1; i < clauses.length; i++) {
     const [a, b] = [clauses[i - 1], clauses[i]];
     if (a.except || b.except || !a.mode || !b.mode || a.mode === b.mode)
       continue;
+    if (paired.has(a)) continue;
     // (Never across a sentence: "…; secondary text #4d4d4d in light
     // mode" is a subject of its own, not the other half of the pair
     // before it.)
     if (joinOf.get(b)?.sep === 'break') continue;
+    paired.add(a).add(b);
     if (!a.parts.length !== !b.parts.length) {
       const [from, to] = a.parts.length ? [a, b] : [b, a];
       to.parts = from.parts.map(p => ({...p}));
@@ -9886,9 +9937,22 @@ export function draftAnswer(ctx, env, question) {
   }
   // "selected tab text white, unselected tabs gray": a clause naming the
   // same part in another state, with only its color, says the same thing
-  // of it as the clause before.
+  // of it as the clause before about that part (the nearest one before
+  // that names it: "… with a 2px underline, other tabs gray" skips the
+  // underline's own clause).
   for (let i = 1; i < clauses.length; i++) {
-    const [b, c] = [clauses[i - 1], clauses[i]];
+    const c = clauses[i];
+    const b =
+      clauses
+        .slice(0, i)
+        .reverse()
+        .find(
+          x =>
+            !x.except &&
+            x.parts.length &&
+            c.parts.length &&
+            c.parts.every(p => x.parts.some(y => y.on === p.on)),
+        ) ?? clauses[i - 1];
     if (
       c.except ||
       b.except ||
@@ -26704,16 +26768,23 @@ export function draftAnswer(ctx, env, question) {
               /^--color-(?:error|danger|warning|success)\b/.test(x.token),
           );
           if (!r) return false;
-          const now = parseColor(String(current(r.token, mode) ?? ''));
-          const near =
-            !!now && Math.hypot(...now.map((x, k) => x - (fill[k] ?? 0))) < 80;
+          // (The color asked is that status color already when it is near
+          // it in either mode: a red ask for buttons whose destructive is
+          // red.)
+          const near = /** @type {const} */ (['light', 'dark']).some(m => {
+            const now = parseColor(String(current(r.token, m) ?? ''));
+            return (
+              !!now && Math.hypot(...now.map((x, k) => x - (fill[k] ?? 0))) < 80
+            );
+          });
           return !near;
         });
-        // (Only once the color goes to some variants anyway, or when the
-        // ask gives the whole look, its fill and its text ("gold buttons
-        // with black text"): a bare color every button's text reads on
-        // stays every button's.)
-        if (!lost.length && !(ownInk && status.length)) continue;
+        // A variant drawn in a status color (the destructive button's red)
+        // keeps that meaning under a plain fill for every variant, as a
+        // colored or status variant keeps its own color everywhere; a bare
+        // color every button's text reads on and no status variant stays
+        // every button's.
+        if (!lost.length && !status.length) continue;
         const kept = variants.filter(
           v => !lost.includes(v) && !status.includes(v),
         );
@@ -27187,13 +27258,36 @@ export function draftAnswer(ctx, env, question) {
   // (under 4.5:1) in a mode takes a text color that does there, white or
   // black, beside the fill. A text that reads keeps the fill line alone.
   for (const [di, d] of [...result.entries()].reverse()) {
-    const o = d.options[0];
-    if (!o || o.length !== 1) continue;
-    const st = o[0];
+    // (The one fill asked, in one line or in a line for each variant it
+    // goes to: each line's look is measured, never only a lone line's.)
+    const isFill = (/** @type {Step} */ x) =>
+      Boolean(x.on) &&
+      /^background(?:-color)?$/.test(x.thing) &&
+      parseColor(String(x.value ?? '')) != null;
+    const first = d.options[0]?.[0];
+    const fillSteps =
+      first && isFill(first)
+        ? d.options
+            .flat()
+            .filter(
+              x =>
+                isFill(x) &&
+                x.on === first.on &&
+                x.thing === first.thing &&
+                x.value === first.value &&
+                x.state === first.state &&
+                x.mode === first.mode,
+            )
+        : [];
+    if (
+      !fillSteps.length ||
+      d.options.some(o => o.some(x => !fillSteps.includes(x)))
+    )
+      continue;
+    const st = fillSteps[0];
     const fill = parseColor(String(st.value ?? ''));
     if (
       !st.on ||
-      !/^background(?:-color)?$/.test(st.thing) ||
       !fill ||
       alphaOf(String(st.value)) < 1 ||
       !C.MAP[one(st.on)] ||
@@ -27202,10 +27296,12 @@ export function draftAnswer(ctx, env, question) {
     )
       continue;
     const textReads = C.partReads(one(st.on), 'text') ?? [];
-    // (Each look the fill reaches: the one named, else each variant.)
-    const variants = st.when
-      ? [String(st.when)]
-      : (C.variantValues(one(st.on))?.variant ?? []).map(v => `variant:${v}`);
+    // (Each look the fill reaches: the ones named, else each variant.)
+    const named = fillSteps.filter(x => x.when).map(x => String(x.when));
+    const variants =
+      named.length === fillSteps.length
+        ? named
+        : (C.variantValues(one(st.on))?.variant ?? []).map(v => `variant:${v}`);
     const looks = variants.length ? variants : [''];
     const modes = /** @type {Array<'light' | 'dark'>} */ (
       st.mode
@@ -27235,7 +27331,7 @@ export function draftAnswer(ctx, env, question) {
         );
       }
     }
-    if (!fixes.length || !env.check([st, ...fixes]).ok) continue;
+    if (!fixes.length || !env.check([...fillSteps, ...fixes]).ok) continue;
     // (Its own line beside the fill's, so the fill reads as asked and the
     // text as measured.)
     const where = fixes
