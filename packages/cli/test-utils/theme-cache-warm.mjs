@@ -28,17 +28,10 @@ async function warmThemeCache(dir) {
   const fixture = makeLinkedFixture('astryx-theme-cache-', FIXTURE_PACKAGES);
   try {
     writeFixtureBaseTheme(fixture, 'neutral');
-    // A new theme reads the part data and the component docs, so the
-    // editor builds both into the fixture's cache.
+    // A new theme reads the part data and the component docs, and draws the
+    // sample page from its component items, so the editor builds all three
+    // into the fixture's cache.
     await themeEditNew('warm', {cwd: fixture, like: 'neutral'});
-    // The component items of the sample page and of each sheet, with no
-    // drawing: every render of every fixture starts from them.
-    const {openProject} = await import('../api/theme-edit/_project.mjs');
-    const {showcaseItems} = await import('../api/theme-edit/_preview.mjs');
-    const {SHOWCASE_GROUPS} = await import('../api/theme-edit/_tables.mjs');
-    const project = await openProject(fixture);
-    for (const group of [undefined, ...SHOWCASE_GROUPS])
-      showcaseItems(project, group);
     const cache = cacheRoot(path.dirname(fixture));
     for (const key of fs.readdirSync(cache))
       for (const name of CACHE_FILES) {
