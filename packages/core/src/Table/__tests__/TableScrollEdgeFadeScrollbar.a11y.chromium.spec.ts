@@ -3,18 +3,14 @@
 
 /**
  * @file TableScrollEdgeFadeScrollbar.a11y.chromium.spec.ts
- * @input Built responsive Table story in real Chromium
- * @output Browser evidence that the shared edge fade leaves a classic
- *   scrollbar painted
+ * @input Built responsive Table story in real Chromium, a fine pointer, and
+ *   classic scrollbars
+ * @output Browser evidence that the edge fade never paints over a classic
+ *   scrollbar
  * @position Table integration proof for the shared scroll-edge presenter
  */
 
-import {
-  expect,
-  test,
-  type Locator,
-  type Page,
-} from '@astryxdesign/a11y-spec/playwright';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -34,54 +30,24 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function overflowingTable(page: Page): Promise<Locator> {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-table--responsive-scroll&viewMode=story`,
-  );
-  const viewport = page.locator('.astryx-table-scroll-wrapper').first();
-  await expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
-  return viewport;
-}
-
-async function maskOf(viewport: Locator): Promise<string> {
-  return viewport.evaluate(element => getComputedStyle(element).maskImage);
-}
-
-async function scrollTo(viewport: Locator, edge: 'start' | 'middle' | 'end') {
-  await viewport.evaluate((element, where) => {
-    const max = element.scrollWidth - element.clientWidth;
-    const rtl = getComputedStyle(element).direction === 'rtl';
-    const offset = where === 'start' ? 0 : where === 'end' ? max : max / 2;
-    element.scrollLeft = rtl ? -offset : offset;
-  }, edge);
-}
-
-test('a classic scrollbar keeps its paint at a faded edge', async ({page}) => {
-  const viewport = await overflowingTable(page);
-  // A black page shows through any masked paint, so a faded track darkens.
-  await page.addStyleTag({content: 'html, body { background: black; }'});
-  const bar = await viewport.evaluate(
-    element => element.offsetHeight - element.clientHeight,
-  );
-  test.skip(bar < 4, 'this platform overlays its scrollbar');
-  // At the end, the start edge fades and the thumb sits at the far end.
-  await scrollTo(viewport, 'end');
-  await expect.poll(async () => maskOf(viewport)).toContain('linear-gradient');
+async function arrowPixel(viewport: Locator): Promise<number> {
   const box = await viewport.boundingBox();
   if (box == null) {
     throw new Error('Table scroll viewport has no rendered bounds');
   }
-  // Two track pixels inside the faded band, past the arrow button: a mask
-  // would paint them apart.
-  const shot = await page.screenshot({
+  const bar = await viewport.evaluate(
+    element => element.offsetHeight - element.clientHeight,
+  );
+  // The end arrow button sits at the inline end of the scrollbar.
+  const shot = await viewport.page().screenshot({
     clip: {
-      x: box.x,
+      x: box.x + box.width - bar,
       y: box.y + box.height - bar,
-      width: box.width,
+      width: bar,
       height: bar,
     },
   });
-  const pixels = await page.evaluate(async png => {
+  return viewport.page().evaluate(async png => {
     const image = new Image();
     image.src = `data:image/png;base64,${png}`;
     await image.decode();
@@ -93,9 +59,41 @@ test('a classic scrollbar keeps its paint at a faded edge', async ({page}) => {
       throw new Error('No 2D canvas context');
     }
     context.drawImage(image, 0, 0);
-    const y = Math.floor(image.height / 2);
-    const at = (x: number) => context.getImageData(x, y, 1, 1).data[0];
-    return {edge: at(18), inner: at(30)};
+    const data = context.getImageData(0, 0, image.width, image.height).data;
+    // The darkest pixel is the arrow glyph.
+    let darkest = 255;
+    for (let i = 0; i < data.length; i += 4) {
+      darkest = Math.min(darkest, data[i]);
+    }
+    return darkest;
   }, shot.toString('base64'));
-  expect(Math.abs(pixels.edge - pixels.inner)).toBeLessThanOrEqual(3);
+}
+
+test('a fine pointer with a classic scrollbar shows the scrollbar unfaded', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-table--responsive-scroll&viewMode=story`,
+  );
+  const viewport = page.locator('.astryx-table-scroll-wrapper').first();
+  await expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
+  const bar = await viewport.evaluate(
+    element => element.offsetHeight - element.clientHeight,
+  );
+  test.skip(bar < 4, 'this platform overlays its scrollbar');
+  // In the middle both edges hide content, so a fade would cover both arrows.
+  await viewport.evaluate(element => {
+    element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
+  });
+  await expect(viewport).not.toHaveAttribute('data-scroll-inline-end', 'true');
+  expect(
+    await viewport.evaluate(element => getComputedStyle(element).maskImage),
+  ).toBe('none');
+
+  // The arrow reads the same as with every mask removed.
+  const shown = await arrowPixel(viewport);
+  await viewport.evaluate(element => {
+    element.style.setProperty('mask-image', 'none', 'important');
+  });
+  expect(await arrowPixel(viewport)).toBe(shown);
 });

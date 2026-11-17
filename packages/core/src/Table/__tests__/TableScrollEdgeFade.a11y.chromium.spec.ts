@@ -3,7 +3,7 @@
 
 /**
  * @file TableScrollEdgeFade.a11y.chromium.spec.ts
- * @input Built responsive Table story in real Chromium
+ * @input Built responsive Table story in real Chromium, with a touch pointer
  * @output Browser evidence that the shared edge fade follows the edge state
  *   and leaves the keyboard ring unmasked, in LTR and RTL
  * @position Table integration proof for the shared scroll-edge presenter
@@ -20,6 +20,9 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+
+// Phones and tablets overlay their scrollbars, so the fade applies there.
+test.use({hasTouch: true, isMobile: true});
 
 let storybook: StaticServer;
 test.beforeAll(async () => {

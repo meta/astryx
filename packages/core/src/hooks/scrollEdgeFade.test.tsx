@@ -30,7 +30,6 @@ describe('scrollEdgeFadeStyles', () => {
 
   it('fades only the end edge at the start of the content', () => {
     const lengths = fadeLengths(scrollEdgeFadeStyles(axis(true, true, false)));
-    expect(lengths.mask).toBe(true);
     expect(lengths.start).toBe('0px');
     expect(lengths.end).not.toBe('0px');
   });
@@ -45,6 +44,19 @@ describe('scrollEdgeFadeStyles', () => {
     const lengths = fadeLengths(scrollEdgeFadeStyles(axis(true, false, true)));
     expect(lengths.start).not.toBe('0px');
     expect(lengths.end).toBe('0px');
+  });
+
+  it('masks a viewport that hides its scrollbar with every pointer', () => {
+    expect(
+      fadeLengths(scrollEdgeFadeStyles(axis(true, false, false), 'hidden'))
+        .mask,
+    ).toBe(true);
+  });
+
+  it('leaves a viewport with its native scrollbar unmasked under a fine pointer', () => {
+    expect(
+      fadeLengths(scrollEdgeFadeStyles(axis(true, false, false))).mask,
+    ).toBe(false);
   });
 
   it('lets an adopter turn off the fade on an edge it marks another way', () => {

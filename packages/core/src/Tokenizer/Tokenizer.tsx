@@ -952,7 +952,7 @@ function TokenTrack({
         onFocus: revealFocusedItem,
         xstyle: [
           styles.inGroupTrack,
-          scrollEdgeFadeStyles(scrollArea.state.inline),
+          scrollEdgeFadeStyles(scrollArea.state.inline, 'hidden'),
         ],
       })}>
       <div
