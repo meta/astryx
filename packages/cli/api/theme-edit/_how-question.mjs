@@ -159,6 +159,14 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
  * one-word target names Core's catalog gives (partLexicon): design words,
  * and the words the part overrides read.
  */
+/**
+ * Words said in capitals at the start of an ask that are the ask's own
+ * grammar or a look, never a font family's name ("Make headings …",
+ * "Bold headings", "Serif headings").
+ */
+const NOT_FAMILY_WORDS =
+  /^(?:make|use|set|give|let|try|put|keep|turn|change|apply|switch|want|need|please|all|every|the|our|my|your|bold|bolder|big|bigger|small|smaller|large|tiny|light|dark|thin|heavy|serif|sans|mono|monospace|system|uppercase|lowercase|italic|tight|wide|loose|no|only|also|then|and|with)$/;
+
 const DESIGN_WORDS = [
   'leading',
   // A part's name, never a near miss of "radius".
@@ -4270,6 +4278,44 @@ export function draftAnswer(ctx, env, question) {
       const parts = name.slice(2).split('-');
       return parts.length > 1 ? parts.slice(1).join(' ') : parts.join(' ');
     });
+  }
+  // ("Fraunces headings", "use Playfair Display for headings", "headings
+  // in Lora"): a name said in capitals, that no reader knows as a word,
+  // beside the text it is for, is a font family, as "font Lora" is: set
+  // takes any family, so how names it too.
+  {
+    const asWord = (/** @type {string} */ w) => {
+      const x = w.toLowerCase();
+      return (
+        aspectsOf(x).length > 0 ||
+        Object.hasOwn(DIALS, x) ||
+        colorsIn(x).length > 0 ||
+        DESIGN_WORDS.includes(x) ||
+        NOT_FAMILY_WORDS.test(x)
+      );
+    };
+    const fam = String.raw`((?:[A-Z][a-z]+(?:\s+|$)){1,3})`;
+    const textNoun = String.raw`(?:headings?|titles?|body(?:\s+text)?|text|copy)\b`;
+    /** @param {string} run */
+    const isFamily = run => {
+      const words = run.trim().split(/\s+/);
+      return words.length > 0 && words.every(w => !asWord(w));
+    };
+    question = String(question)
+      .replace(
+        new RegExp(
+          String.raw`(^|[,;:]\s*|\buse\s+)${fam}(?=(?:for\s+(?:the\s+)?)?${textNoun})`,
+          'g',
+        ),
+        (m, lead, run) => (isFamily(run) ? `${lead}font ${run}` : m),
+      )
+      .replace(
+        new RegExp(
+          String.raw`(\b${textNoun}\s+in\s+(?:the\s+)?)${fam}(?!\s*font)`,
+          'g',
+        ),
+        (m, lead, run) => (isFamily(run) ? `${lead}font ${run}` : m),
+      );
   }
   question = String(question)
     .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
