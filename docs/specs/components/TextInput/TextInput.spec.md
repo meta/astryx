@@ -182,9 +182,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   cue other than color (WCAG 2.2 1.4.1): a glyph on the control for `attached`
   and `tooltip`, or in the message box for `detached` with a message. Outside
   InputGroup, an error MUST be identified in text (WCAG 2.2 3.3.1); inside
-  InputGroup, the group's own status carries the text. Implementation gap: TextInput
-  accepts an error status without a message, and a `detached` status without a
-  message shows only the colored border.
+  InputGroup, the group's own status carries the text. AR4 gap: an error status
+  without a message shows no visible error text, so sighted users get colour
+  and icon only (WCAG 3.3.1); the field warns in development and links a
+  hidden translated fallback ('Invalid value') for assistive technology.
+  Visible default text is pending (`family:input-fields` FR16 proposal). A
+  `detached` status without a message shows only the colored border.
 - **AR5 — Focus-zoom floor.** FR11.
 - **AR6 — Search field.** With `type="search"` the native input has the
   searchbox role, so a screen reader announces a search field.
@@ -238,9 +241,11 @@ anatomy-theming map.
 
 ## Current-state impact
 
-- **Error without text (AR4).** TextInput accepts an error status without a
-  message, so the error is shown only by color and an icon, against WCAG 2.2
-  3.3.1. The accessibility suite records this as a known failure.
+- **Error without text (AR4).** An error status without a message shows no
+  visible error text, so sighted users get colour and icon only, against WCAG
+  2.2 3.3.1. Assistive technology hears the hidden translated fallback, and
+  the field warns in development. The real-browser accessibility suite records
+  the missing visible text as a known failure.
 - **Color-only detached status (AR4).** A `detached` status without a message
   shows only the colored border, against WCAG 2.2 1.4.1.
 - **Grouped description (ORD3).** Inside InputGroup, TextInput's own

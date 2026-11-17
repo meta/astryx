@@ -50,6 +50,7 @@ import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {getInputARIA} from '../utils/inputAria';
 import {isImeKeyEvent} from '../utils/ime';
 import {
@@ -313,6 +314,9 @@ export interface TextInputProps
   hasSpellCheck?: boolean;
 }
 
+const WARN_MESSAGELESS_ERROR =
+  'an error status has no message, so only colour and an icon show the error. Give status.message the text that says what is wrong.';
+
 /**
  * A text input component for collecting user input.
  *
@@ -417,13 +421,21 @@ export function TextInput({
       isInGroup: !!inputGroup,
     });
 
+  // An error without a message gets hidden translated text in its place, so
+  // assistive technology hears the error (WCAG 2.2 3.3.1). Inside an
+  // InputGroup the group's own status carries the text.
+  const hasMessagelessError =
+    !inputGroup && status?.type === 'error' && !status.message;
+  useDevWarning('TextInput', WARN_MESSAGELESS_ERROR, hasMessagelessError);
+
   const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
       // The status message element is rendered by Field, which is skipped
       // inside an InputGroup — only reference it when it actually exists.
-      !inputGroup && statusVariant !== 'tooltip' && status?.message
+      !inputGroup &&
+      ((statusVariant !== 'tooltip' && status?.message) || hasMessagelessError)
         ? statusMessageID
         : null,
       // The tooltip variant renders no message box; describe the input by the
@@ -629,6 +641,11 @@ export function TextInput({
       labelTooltip={labelTooltip}
       width={width}>
       {inputWrapper}
+      {hasMessagelessError && (
+        <VisuallyHidden id={statusMessageID}>
+          {t('@astryx.field.errorFallback')}
+        </VisuallyHidden>
+      )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>
