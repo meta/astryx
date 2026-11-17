@@ -321,6 +321,12 @@ describe('stable build typography values', () => {
       ],
       ['{multiplier: 2}', /given no base/],
       ["{base: 'x', multiplier: 1}", /radius\.base .*is a number/],
+      // A falsy radius Core skips: the base's corners stay.
+      [
+        '0',
+        /Core skips a radius of 0 .*keeps its base theme's corners.*radius: \{base: 0, multiplier: 1\}/,
+      ],
+      ["''", /Core skips a radius of "" .*keeps its base theme's corners/],
     ]) {
       const r = await buildSource(
         `import {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({\n  name: 'p',\n  radius: ${radius},\n});\n`,

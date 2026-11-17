@@ -4,11 +4,9 @@
  * @file `editor how` gives the same answer to the same ask on the same
  * theme and Core, run after run, with its part-data cache fresh or warm.
  *
- * The asks run as one round each time: the part data a round builds is
- * the project's, the same whichever ask builds it, so a cache cleared
- * before a round is fresh for that whole round. The rounds run in
- * different orders, so each end of the list is asked first on a fresh
- * cache once.
+ * Each ask runs first on its own fresh cache (cleared just before it),
+ * then again once every ask has warmed the cache, then fresh again in the
+ * other order, so no ask is ever compared warm with warm.
  *
  * @position api/theme-edit — tests
  */
