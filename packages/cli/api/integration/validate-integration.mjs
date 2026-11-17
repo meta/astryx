@@ -35,7 +35,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-import {integrationDocTypes} from '../docs/_adapter.mjs';
+import {
+  integrationDocTypes,
+  packageTemplateLinkProblems,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {
   iconSetCoverage,
   iconSetIssues,
@@ -1028,6 +1032,22 @@ async function validateIntegrationOnce(pkg, options) {
       ...(await docTargetNotes(integration)).map(note => ({
         ...note,
         next: true,
+      })),
+    );
+  }
+  // A link in a template's description that names no doc prints as written,
+  // as one in a component doc does: a `next` note until the next minor
+  // release makes it a warning (spec:AST-047 FR9).
+  if (integration?.templates) {
+    const ownDocs = integration.docs
+      ? await discoverIntegrationDocs(integration)
+      : null;
+    const links = await packageTemplateLinkProblems(integration, ownDocs);
+    notes.push(
+      ...links.map(message => ({
+        code: 'invalid_doc_graph',
+        message,
+        next: /** @type {const} */ (true),
       })),
     );
   }
