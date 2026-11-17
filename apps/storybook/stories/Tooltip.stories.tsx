@@ -5,6 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {Tooltip, useTooltip} from '@astryxdesign/core/Tooltip';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack} from '@astryxdesign/core/Layout';
+import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof Tooltip> = {
   title: 'Core/Tooltip',
@@ -411,6 +412,37 @@ export const TouchTriggers: Story = {
           <Button label="What is this?" variant="secondary">
             ?
           </Button>
+        </Tooltip>
+      </HStack>
+    </div>
+  ),
+};
+
+/**
+ * Rich content on the inverted surface: `Text` in each type, a plain string
+ * and `Text type="inherit"` stay readable in light and dark.
+ */
+export const RichContent: Story = {
+  render: () => (
+    <div style={{padding: '80px 24px'}}>
+      <HStack gap={12}>
+        <Tooltip content="Plain string" isDefaultOpen>
+          <Button label="Plain string" />
+        </Tooltip>
+        <Tooltip content={<Text type="body">Body text</Text>} isDefaultOpen>
+          <Button label="Text body" />
+        </Tooltip>
+        <Tooltip content={<Text>Default text</Text>} isDefaultOpen>
+          <Button label="Text default" />
+        </Tooltip>
+        <Tooltip
+          content={
+            <Text type="supporting" color="secondary">
+              Secondary text
+            </Text>
+          }
+          isDefaultOpen>
+          <Button label="Text secondary" />
         </Tooltip>
       </HStack>
     </div>

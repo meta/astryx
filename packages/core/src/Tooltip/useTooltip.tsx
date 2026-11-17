@@ -44,6 +44,8 @@ import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
+import {MediaTheme} from '../theme/MediaTheme';
+import {useTooltipMediaMode} from './tooltipMediaMode';
 import {
   colorVars,
   radiusVars,
@@ -471,6 +473,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     contentRef,
     registerLayerSurface,
   );
+  const mediaMode = useTooltipMediaMode(contentRef, isLayerOpen);
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
@@ -975,7 +978,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
+          <MediaTheme mode={mediaMode}>{children}</MediaTheme>
         </div>,
         renderProps,
       );
@@ -988,6 +991,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       cancelHide,
       scheduleHide,
       contentRefs,
+      mediaMode,
     ],
   );
 
