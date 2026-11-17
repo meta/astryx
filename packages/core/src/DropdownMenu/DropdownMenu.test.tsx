@@ -2474,6 +2474,40 @@ describe('DropdownMenu compound mode', () => {
     });
   });
 
+  it('keeps the row mounted when its disabled reason changes', () => {
+    const {rerender} = render(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem
+          label="Export CSV"
+          onClick={() => {}}
+          isDisabled
+          disabledMessage="There is nothing to export"
+        />
+      </DropdownMenu>,
+    );
+
+    const item = screen.getByRole('menuitem', {
+      name: 'Export CSV',
+      hidden: true,
+    });
+    item.focus();
+
+    rerender(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem
+          label="Export CSV"
+          onClick={() => {}}
+          isDisabled={false}
+        />
+      </DropdownMenu>,
+    );
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Export CSV', hidden: true}),
+    ).toBe(item);
+    expect(item).toHaveFocus();
+  });
+
   it('supports mixed static and dynamic compound children', () => {
     const showExtra = true;
     render(

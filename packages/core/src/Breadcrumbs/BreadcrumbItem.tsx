@@ -30,6 +30,7 @@ import React, {
   useId,
   useMemo,
   useRef,
+  useState,
   useEffect,
   type ReactNode,
   type MouseEvent,
@@ -48,6 +49,10 @@ import type {LinkComponentType} from '../Link/types';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {
+  submenuHostProps,
+  submenuHostStyles,
+} from '../privateAttributes/submenuHost.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {Icon} from '../Icon';
 import {usePopoverInternal} from '../Popover/usePopover';
@@ -63,8 +68,11 @@ import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
   DropdownMenuContext,
   DropdownMenuRootOpenContext,
+  DropdownMenuSurfaceContext,
   type DropdownMenuContextValue,
   type DropdownMenuSize,
+  type DropdownMenuSurfaceHost,
+  type DropdownMenuSurfaceValue,
 } from '../DropdownMenu/DropdownMenuContext';
 import {
   MENU_ITEM_ROLES,
@@ -124,8 +132,7 @@ export interface BreadcrumbItemProps extends Omit<
   startIcon?: ReactNode;
   /**
    * Menu opened when the item is activated. Accepts the same menu-item shape as
-   * DropdownMenu / MoreMenu / ContextMenu. The breadcrumb data contract keeps
-   * `disabledMessage` scoped to DropdownMenu in this change:
+   * DropdownMenu / MoreMenu / ContextMenu, including disabled reasons:
    * - a `BreadcrumbMenuOption[]` data array (items, sections, dividers), or
    * - composed `DropdownMenuItem` / `DropdownMenuCheckboxItem` /
    *   `DropdownMenuRadioGroup` children.
@@ -546,6 +553,20 @@ function BreadcrumbMenuTrigger({
   const menuId = useId();
   const triggerId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const surfaceHostRef = useRef<HTMLDivElement | null>(null);
+  const [surfaceHostKey, setSurfaceHostKey] = useState(0);
+  const attachSurfaceHost = useCallback((node: HTMLDivElement | null) => {
+    surfaceHostRef.current = node;
+    if (node != null) {
+      setSurfaceHostKey(key => key + 1);
+    }
+  }, []);
+  const surfaceHost = useMemo<DropdownMenuSurfaceHost>(
+    () => ({
+      getElement: () => (surfaceHostKey > 0 ? surfaceHostRef.current : null),
+    }),
+    [surfaceHostKey],
+  );
   const isSupporting = variant === 'supporting';
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
@@ -669,6 +690,10 @@ function BreadcrumbMenuTrigger({
     () => ({closeMenu, menuSize}),
     [closeMenu, menuSize],
   );
+  const surfaceValue = useMemo<DropdownMenuSurfaceValue>(
+    () => ({host: surfaceHost, ownerId: menuId}),
+    [surfaceHost, menuId],
+  );
 
   const menuContent = Array.isArray(menu) ? renderDropdownItems(menu) : menu;
   const hasOverflow = useMenuOverflow(listRef, menuContent, popover.isOpen);
@@ -716,32 +741,39 @@ function BreadcrumbMenuTrigger({
       </button>
 
       {popover.render(
-        <div
-          ref={listRef}
-          id={menuId}
-          role="menu"
-          aria-labelledby={triggerId}
-          {...menuPress.menuProps}
-          onPointerDown={pressOnItemsOnly(
-            menuPress.menuProps.onPointerDown,
-            MENU_ITEM_SELECTOR,
-          )}
-          onKeyDown={listKeyDown}
-          {...mergeProps(
-            themeProps('breadcrumb-menu'),
-            stylex.props(
-              menuStyles.menu,
-              hasOverflow
-                ? menuTouchActionStyles.scrolls
-                : menuTouchActionStyles.fits,
-            ),
-          )}>
-          <DropdownMenuContext value={contextValue}>
+        <DropdownMenuContext value={contextValue}>
+          <DropdownMenuSurfaceContext value={surfaceValue}>
             <DropdownMenuRootOpenContext value={popover.isOpen}>
-              {menuContent}
+              <div
+                ref={listRef}
+                id={menuId}
+                role="menu"
+                aria-labelledby={triggerId}
+                {...menuPress.menuProps}
+                onPointerDown={pressOnItemsOnly(
+                  menuPress.menuProps.onPointerDown,
+                  MENU_ITEM_SELECTOR,
+                )}
+                onKeyDown={listKeyDown}
+                {...mergeProps(
+                  themeProps('breadcrumb-menu'),
+                  stylex.props(
+                    menuStyles.menu,
+                    hasOverflow
+                      ? menuTouchActionStyles.scrolls
+                      : menuTouchActionStyles.fits,
+                  ),
+                )}>
+                {menuContent}
+              </div>
+              <div
+                ref={attachSurfaceHost}
+                {...submenuHostProps}
+                {...stylex.props(submenuHostStyles)}
+              />
             </DropdownMenuRootOpenContext>
-          </DropdownMenuContext>
-        </div>,
+          </DropdownMenuSurfaceContext>
+        </DropdownMenuContext>,
         {
           placement: 'below',
           alignment: 'start',

@@ -668,6 +668,38 @@ describe('BreadcrumbItem menu', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a disabled reason for data items outside the menu element', async () => {
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {
+              label: 'Export CSV',
+              isDisabled: true,
+              disabledMessage: 'There is nothing to export',
+            },
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const item = screen.getByRole('menuitem', {
+      name: 'Export CSV',
+      hidden: true,
+    });
+    fireEvent.mouseEnter(item);
+
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(tooltip.closest('[role="menu"]')).toBeNull();
+    });
+  });
+
   it('after a pointer open, a row the mouse rests on takes focus without :focus-visible', async () => {
     // Nothing else in this file activates the shared modality tracking, so
     // the menu crumb must activate it for its rows to follow the last input

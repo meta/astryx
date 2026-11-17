@@ -47,7 +47,8 @@ import {
   typeScaleVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {composeEventHandlers, mergeIds, mergeProps} from '../utils';
+import {composeEventHandlers, mergeProps} from '../utils';
+import {mergeIds} from '../utils/mergeIds';
 import type {BaseProps} from '../BaseProps';
 import {
   DropdownMenuSurfaceContext,
@@ -187,6 +188,11 @@ export interface DropdownMenuItemProps extends Omit<
   ref?: React.Ref<HTMLElement>;
 }
 
+interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
+  disabledMessageTooltip?: TooltipReturn;
+  isDisabledMessageShown?: boolean;
+}
+
 /**
  * An interactive dropdown menu item with icon, label, and optional description.
  *
@@ -201,29 +207,19 @@ export interface DropdownMenuItemProps extends Omit<
  * </DropdownMenu>
  * ```
  */
-interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
-  disabledMessageTooltip?: TooltipReturn;
-}
-
 export function DropdownMenuItem(props: DropdownMenuItemProps) {
-  return props.isDisabled && !!props.disabledMessage ? (
-    <DropdownMenuItemWithDisabledMessage {...props} />
-  ) : (
-    <DropdownMenuItemRow {...props} />
-  );
-}
-
-function DropdownMenuItemWithDisabledMessage(props: DropdownMenuItemProps) {
+  const isDisabledMessageShown = props.isDisabled && !!props.disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     focusTrigger: 'always',
-    isEnabled: true,
+    isEnabled: isDisabledMessageShown,
   });
 
   return (
     <DropdownMenuItemRow
       {...props}
       disabledMessageTooltip={disabledMessageTooltip}
+      isDisabledMessageShown={isDisabledMessageShown}
     />
   );
 }
@@ -249,6 +245,7 @@ function DropdownMenuItemRow({
   onPointerMove,
   onAuxClick,
   disabledMessageTooltip,
+  isDisabledMessageShown = false,
   ...rest
 }: DropdownMenuItemRowProps) {
   const ctx = useDropdownMenuContext();
@@ -379,7 +376,8 @@ function DropdownMenuItemRow({
           },
         )}
       />
-      {disabledMessageTooltip != null &&
+      {isDisabledMessageShown &&
+        disabledMessageTooltip != null &&
         disabledMessage != null &&
         surfaceHost != null &&
         createPortal(

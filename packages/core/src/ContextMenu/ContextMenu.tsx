@@ -69,7 +69,10 @@ import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
   DropdownMenuContext,
   DropdownMenuRootOpenContext,
+  DropdownMenuSurfaceContext,
   type DropdownMenuContextValue,
+  type DropdownMenuSurfaceHost,
+  type DropdownMenuSurfaceValue,
 } from '../DropdownMenu/DropdownMenuContext';
 import {
   MENU_ITEM_ROLES,
@@ -98,10 +101,15 @@ import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
+import {
+  submenuHostProps,
+  submenuHostStyles,
+} from '../privateAttributes/submenuHost.stylex';
 import type {
   DropdownMenuItemData,
   DropdownMenuDividerData,
   DropdownMenuSection,
+  DropdownMenuOption,
 } from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -251,21 +259,10 @@ function keepAnchorInside(offset: number, size: number): number {
 // Types
 // =============================================================================
 
-export type ContextMenuItemData = Omit<
-  DropdownMenuItemData,
-  'disabledMessage' | 'items'
-> & {
-  items?: ContextMenuOption[];
-};
-
+export type ContextMenuItemData = DropdownMenuItemData;
 export type ContextMenuDividerData = DropdownMenuDividerData;
-
-export type ContextMenuSection = Omit<DropdownMenuSection, 'items'> & {
-  items: ContextMenuItemData[];
-};
-
-export type ContextMenuOption =
-  ContextMenuItemData | ContextMenuDividerData | ContextMenuSection;
+export type ContextMenuSection = DropdownMenuSection;
+export type ContextMenuOption = DropdownMenuOption;
 
 // =============================================================================
 // Props
@@ -408,6 +405,20 @@ export function ContextMenu({
   }, [usesSheetActionList]);
 
   const menuId = useId();
+  const surfaceHostRef = useRef<HTMLDivElement | null>(null);
+  const [surfaceHostKey, setSurfaceHostKey] = useState(0);
+  const attachSurfaceHost = useCallback((node: HTMLDivElement | null) => {
+    surfaceHostRef.current = node;
+    if (node != null) {
+      setSurfaceHostKey(key => key + 1);
+    }
+  }, []);
+  const surfaceHost = useMemo<DropdownMenuSurfaceHost>(
+    () => ({
+      getElement: () => (surfaceHostKey > 0 ? surfaceHostRef.current : null),
+    }),
+    [surfaceHostKey],
+  );
   // Cursor point in the trigger's local coordinate space (offset from the
   // trigger's top-left, in-flow). Stored here and written to the cursor
   // anchor element so the menu is positioned relative to the trigger context
@@ -792,6 +803,10 @@ export function ContextMenu({
     () => ({closeMenu, menuSize: size, drillIn, menuLabel: label}),
     [closeMenu, size, drillIn, label],
   );
+  const surfaceValue = useMemo<DropdownMenuSurfaceValue>(
+    () => ({host: surfaceHost, ownerId: menuId}),
+    [surfaceHost, menuId],
+  );
 
   const resolvedMenuContent = wrapContent(
     itemsProp !== undefined ? renderDropdownItems(items) : menuContent,
@@ -814,39 +829,48 @@ export function ContextMenu({
   });
 
   const renderedMenu = (
-    <div
-      ref={listRef}
-      id={menuId}
-      role="menu"
-      data-autofocus={usesBottomSheet ? '' : undefined}
-      tabIndex={usesBottomSheet ? 0 : -1}
-      aria-label={label}
-      onKeyDown={listKeyDown}
-      onContextMenu={e => e.preventDefault()}
-      {...menuPress.menuProps}
-      {...mergeProps(
-        themeProps('context-menu'),
-        stylex.props(
-          usesBottomSheet
-            ? [
-                styles.sheetMenu,
-                menuBottomSheetStyles.content,
-                styles.sheetMenuInset,
-              ]
-            : styles.menu,
-          !usesBottomSheet &&
-            (hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom),
-          xstyle,
-        ),
-        className,
-        style,
-      )}>
-      <DropdownMenuContext value={contextValue}>
+    <DropdownMenuContext value={contextValue}>
+      <DropdownMenuSurfaceContext value={surfaceValue}>
         <DropdownMenuRootOpenContext value={isOpen}>
-          {resolvedMenuContent}
+          <div
+            ref={listRef}
+            id={menuId}
+            role="menu"
+            data-autofocus={usesBottomSheet ? '' : undefined}
+            tabIndex={usesBottomSheet ? 0 : -1}
+            aria-label={label}
+            onKeyDown={listKeyDown}
+            onContextMenu={e => e.preventDefault()}
+            {...menuPress.menuProps}
+            {...mergeProps(
+              themeProps('context-menu'),
+              stylex.props(
+                usesBottomSheet
+                  ? [
+                      styles.sheetMenu,
+                      menuBottomSheetStyles.content,
+                      styles.sheetMenuInset,
+                    ]
+                  : styles.menu,
+                !usesBottomSheet &&
+                  (hasOverflow
+                    ? styles.touchPanYPinchZoom
+                    : styles.touchPinchZoom),
+                xstyle,
+              ),
+              className,
+              style,
+            )}>
+            {resolvedMenuContent}
+          </div>
+          <div
+            ref={attachSurfaceHost}
+            {...submenuHostProps}
+            {...stylex.props(submenuHostStyles)}
+          />
         </DropdownMenuRootOpenContext>
-      </DropdownMenuContext>
-    </div>
+      </DropdownMenuSurfaceContext>
+    </DropdownMenuContext>
   );
 
   // The root view's heading stands alone; a sub-menu's sits in a row with its

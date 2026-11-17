@@ -6,13 +6,10 @@
  * @output Breadcrumb menu item prop type
  * @position Public type alias for the BreadcrumbMenu item component
  *
- * Breadcrumb menus reuse the DropdownMenu row implementation, but this
- * change keeps the new disabled-message API scoped to DropdownMenu.
+ * Breadcrumb menus reuse the DropdownMenu row implementation, so this stays
+ * an exact alias and keeps disabled reasons available in composed menus.
  */
 
 import type {DropdownMenuItemProps} from '../DropdownMenu/DropdownMenuItem';
 
-export type BreadcrumbMenuItemProps = Omit<
-  DropdownMenuItemProps,
-  'disabledMessage'
->;
+export type BreadcrumbMenuItemProps = DropdownMenuItemProps;

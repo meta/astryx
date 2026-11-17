@@ -922,44 +922,37 @@ describe('ContextMenu dividers', () => {
 });
 
 describe('ContextMenu compound mode', () => {
-  it('shows a sub-menu with a header or footer as its rows alone, and says why in development', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      render(
-        <ContextMenu
-          menuContent={
-            <>
-              <DropdownMenuItem label="Rename" onClick={() => {}} />
-              <DropdownMenuSubMenu
-                label="Labels"
-                header={<input aria-label="Filter labels" />}
-                footer={<button type="button">Create label</button>}>
-                <DropdownMenuItem label="Bug" onClick={() => {}} />
-              </DropdownMenuSubMenu>
-            </>
-          }>
-          <div>Right-click me</div>
-        </ContextMenu>,
-      );
-      fireEvent.contextMenu(screen.getByText('Right-click me'));
-      const row = screen.getByRole('menuitem', {name: /Labels/, hidden: true});
-      // No region can sit outside this menu, so none renders inside it.
-      expect(row).toHaveAttribute('aria-haspopup', 'menu');
-      fireEvent.click(row, {detail: 1});
-      await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'));
-      expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
-      expect(
-        screen.queryByRole('textbox', {name: 'Filter labels', hidden: true}),
-      ).toBeNull();
-      expect(
-        screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
-      ).toBeInTheDocument();
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('DropdownMenuSubMenu: header and footer'),
-      );
-    } finally {
-      warn.mockRestore();
-    }
+  it('shows a sub-menu header and footer outside the menu element', async () => {
+    render(
+      <ContextMenu
+        menuContent={
+          <>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+            <DropdownMenuSubMenu
+              label="Labels"
+              header={<input aria-label="Filter labels" />}
+              footer={<button type="button">Create label</button>}>
+              <DropdownMenuItem label="Bug" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </>
+        }>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const row = screen.getByRole('menuitem', {name: /Labels/, hidden: true});
+    expect(row).toHaveAttribute('aria-haspopup', 'dialog');
+    fireEvent.click(row, {detail: 1});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'));
+    expect(
+      screen.getByRole('textbox', {name: 'Filter labels', hidden: true}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Create label', hidden: true}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+    ).toBeInTheDocument();
   });
 
   it('renders menuContent as menu items', () => {
@@ -999,6 +992,34 @@ describe('ContextMenu compound mode', () => {
     openMenu();
 
     expect(screen.getByTestId('shortcut')).toHaveTextContent('⌘X');
+  });
+
+  it('shows a disabled reason for compound items outside the menu element', async () => {
+    render(
+      <ContextMenu
+        menuContent={
+          <ContextMenuItem
+            label="Export CSV"
+            isDisabled
+            disabledMessage="There is nothing to export"
+          />
+        }>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    openMenu();
+
+    const item = screen.getByRole('menuitem', {
+      name: 'Export CSV',
+      hidden: true,
+    });
+    fireEvent.mouseEnter(item);
+
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('There is nothing to export');
+      expect(tooltip.closest('[role="menu"]')).toBeNull();
+    });
   });
 
   it('renders the menu divider surface through the ContextMenu alias', () => {

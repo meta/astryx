@@ -6,14 +6,11 @@
  * @output ContextMenu's item prop type
  * @position Public type alias for the ContextMenu item component
  *
- * ContextMenu reuses the DropdownMenu row implementation, but its public API
- * is intentionally kept separate. The disabled-message proposal belongs to
- * DropdownMenu and is not part of ContextMenu's contract in this change.
+ * ContextMenu reuses the DropdownMenu row implementation, so its item props
+ * stay an exact alias. That keeps disabled reasons available in both the
+ * compound and data-driven ContextMenu paths.
  */
 
 import type {DropdownMenuItemProps} from '../DropdownMenu/DropdownMenuItem';
 
-export type ContextMenuItemProps = Omit<
-  DropdownMenuItemProps,
-  'disabledMessage'
->;
+export type ContextMenuItemProps = DropdownMenuItemProps;

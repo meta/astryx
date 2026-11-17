@@ -122,6 +122,10 @@ import {
 } from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
+  submenuHostProps,
+  submenuHostStyles,
+} from '../privateAttributes/submenuHost.stylex';
+import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
@@ -212,12 +216,6 @@ const styles = stylex.create({
     flexGrow: 1,
     flexShrink: 1,
     minBlockSize: 0,
-  },
-  // Where a sub-menu with a header or footer renders its surface: beside the
-  // menu, never inside it. It owns no box, so the popover's layout is
-  // unchanged.
-  surfaceHost: {
-    display: 'contents',
   },
   // While a sub-menu's drilled-in view with its own header or footer shows
   // in the surface host, the header and footer step aside for it, as the menu
@@ -1693,8 +1691,8 @@ function DropdownMenuPopover({
   const surfaceHostElement = (
     <div
       ref={attachSurfaceHost}
-      data-astryx-submenu-host=""
-      {...stylex.props(styles.surfaceHost)}
+      {...submenuHostProps}
+      {...stylex.props(submenuHostStyles)}
     />
   );
   const renderWithRegions = (menu: ReactNode): ReactNode =>
