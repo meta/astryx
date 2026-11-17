@@ -63,6 +63,7 @@ function program() {
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
   experimental.command('icon').argument('[query...]');
+  experimental.command('render').argument('[page]');
   return root;
 }
 
@@ -240,6 +241,28 @@ describe('words from another command line', () => {
     expect(await names(['eject', 'button', '--json'])).toEqual([
       'astryx swizzle Button --json',
     ]);
+  });
+
+  it('names no experimental command from a verb before the group', async () => {
+    for (const words of [
+      ['render', 'experimental'],
+      ['icons', 'experimental'],
+    ])
+      for (const name of (await names(words)) ?? [])
+        expect(name).not.toMatch(/^astryx experimental\b/);
+  });
+
+  it('keeps the program options after the name in the props, add and template-kind runs', async () => {
+    expect(await names(['props', 'Card', '--json'])).toEqual([
+      'astryx component Card --props --json',
+    ]);
+    expect(await names(['add', 'button', '--json'])).toEqual([
+      'astryx swizzle Button --json',
+      'astryx component Button --json',
+    ]);
+    expect(
+      await names(['list', 'pages', '--base', '@astryxdesign/core']),
+    ).toEqual(['astryx template --list --type page --base @astryxdesign/core']);
   });
 
   it("leaves a command's plural to the plural rule", async () => {

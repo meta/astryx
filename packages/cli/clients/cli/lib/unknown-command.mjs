@@ -334,7 +334,9 @@ function filled(template, words) {
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
 async function otherCliWords({word, before, after: rest}, program, findEntry) {
-  const top = visible(program);
+  // A stable answer names no experimental command, so no rule here reads
+  // the experimental group.
+  const top = visible(program).filter(c => c.name() !== 'experimental');
   /** @param {string} name */
   const command = name => top.find(c => c.name() === name);
   /** @param {string[]} parts @param {string} reason */
@@ -360,7 +362,7 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
     if (LIST_WORDS.has(verb) && kind && template && offers(template, '--list'))
       return [
         run(
-          ['template', '--list', '--type', kind],
+          ['template', '--list', '--type', kind, ...fitWords(template, after)],
           `template --list lists the ${objectWord.toLowerCase()}`,
         ),
       ];
@@ -386,11 +388,12 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
   ) {
     const entry = await entryOf(objectWord);
     const swizzle = command('swizzle');
-    if (entry?.command === 'component') {
+    const component = command('component');
+    if (entry?.command === 'component' && component) {
       if (PROPS_WORDS.has(verb))
         return [
           run(
-            ['component', entry.name, '--props'],
+            ['component', entry.name, '--props', ...fitWords(component, after)],
             `the props of ${entry.name}`,
           ),
         ];
@@ -406,7 +409,7 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
       if (ADD_WORDS.has(verb))
         runs.push(
           run(
-            ['component', entry.name],
+            ['component', entry.name, ...fitWords(component, after)],
             `${entry.name} ships in the package: import it`,
           ),
         );
