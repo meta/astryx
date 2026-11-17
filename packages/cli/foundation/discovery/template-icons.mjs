@@ -58,7 +58,12 @@ import {
   walk,
   writtenNames,
 } from './template-source-tree.mjs';
-import {definitionsByIcon, iconUseCommand} from './icon-set-discovery.mjs';
+import {
+  definitionsByIcon,
+  iconLookExport,
+  iconUseCommand,
+  missingIconLook,
+} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
 import {compareText} from '../text/compare-text.mjs';
@@ -350,7 +355,7 @@ export function placeholderFixes(definitions, main, backups = [], variant) {
  * @param {DiscoveredIconSet[]} sets
  * @returns {Map<string, SourceIcon>}
  */
-function indexSets(sets) {
+export function indexSets(sets) {
   /** @type {Map<string, SourceIcon>} */
   const index = new Map();
   const astryx = astryxDefinitionsByName();
@@ -451,45 +456,6 @@ export function matchIcon(source, target) {
 }
 
 /**
- * The export a mapped icon uses: the target's variant of the name asked for
- * (the project's variant, else the source's) when it has one, else the
- * default.
- * @param {IconSetIcon} icon
- * @param {DiscoveredIconSet} set
- * @param {string | undefined} variant
- */
-function targetExport(icon, set, variant) {
-  const module = icon.module ?? set.data.module;
-  if (variant && variant !== set.data.default?.variant) {
-    const entry = (icon.variants ?? []).find(each => each.variant === variant);
-    if (entry) {
-      return {module: entry.module ?? module, export: entry.export};
-    }
-  }
-  return {module, export: icon.export};
-}
-
-/**
- * The look a mapped icon draws when the look asked for (the project's
- * variant, else the source's) is one the target's icon does not have: what
- * was asked for and the target's default look. Undefined when the look is
- * kept, or when no look is asked for.
- * @param {IconSetIcon} icon
- * @param {DiscoveredIconSet} set
- * @param {string | undefined} variant
- * @returns {{asked: string, used: string | null} | undefined}
- */
-function lookChange(icon, set, variant) {
-  if (!variant) return undefined;
-  const fallback = set.data.default?.variant ?? null;
-  if (variant === fallback) return undefined;
-  if ((icon.variants ?? []).some(each => each.variant === variant)) {
-    return undefined;
-  }
-  return {asked: variant, used: fallback};
-}
-
-/**
  * Whether an icon draws a look: its own export draws the set's default
  * variant, and each of its `variants` one more.
  * @param {IconSetIcon} icon
@@ -513,7 +479,7 @@ function hasLook(icon, set, variant) {
  *   exports by the library export they re-export, read once per mapping
  * @returns {IconSetIcon | undefined}
  */
-function wrappedIcon(set, module, imported, read) {
+export function wrappedIcon(set, module, imported, read) {
   let byOrigin = read.get(set);
   if (!byOrigin) {
     byOrigin = new Map();
@@ -541,7 +507,7 @@ function wrappedIcon(set, module, imported, read) {
  * its subpaths, and every other `@astryxdesign/` package).
  * @param {string} module
  */
-function isAstryxModule(module) {
+export function isAstryxModule(module) {
   return module.startsWith('@astryxdesign/');
 }
 
@@ -551,7 +517,7 @@ function isAstryxModule(module) {
  * @param {DiscoveredIconSet} set
  * @param {string} module
  */
-function wrapsModule(set, module) {
+export function wrapsModule(set, module) {
   const library = set.data.source?.package;
   return (
     library != null && (module === library || module.startsWith(`${library}/`))
@@ -563,7 +529,7 @@ function wrapsModule(set, module) {
  * default import, `*` for a namespace import.
  * @param {any} specifier
  */
-function importedName(specifier) {
+export function importedName(specifier) {
   if (specifier.type === 'ImportDefaultSpecifier') return 'default';
   if (specifier.type === 'ImportNamespaceSpecifier') return '*';
   return specifier.imported.name ?? specifier.imported.value;
@@ -674,7 +640,7 @@ export function sharedTemplateMeanings(declared) {
  * a Node built-in.
  * @param {string} module
  */
-function isPackageModule(module) {
+export function isPackageModule(module) {
   return !/^(?:\.|\/|node:)/u.test(module);
 }
 
@@ -882,8 +848,8 @@ export const NO_ICON_SETS = Object.freeze({
  *   icon definition each imported icon draws, by its imported name
  * @returns {{source: string, icons: TemplateIconsReport | undefined}} `icons`
  *   is undefined, and the source unchanged, when no set is given and none is
- *   configured, as for every project without the opt-in, whose state carries
- *   no sets: icon sets are experimental (spec:AST-017 FR27), so a
+ *   configured, as for every project where icon features are off, whose
+ *   state carries no sets: icon sets are experimental (spec:AST-017 FR27), so a
  *   project that does not use them gets exactly the output it always has.
  */
 export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
@@ -1135,7 +1101,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, askedLook(record)),
+                  ...iconLookExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1160,7 +1126,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, askedLook(record)),
+                  ...iconLookExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1168,8 +1134,8 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         });
         continue;
       }
-      const chosen = targetExport(match.icon, set, askedLook(record));
-      const look = lookChange(match.icon, set, askedLook(record));
+      const chosen = iconLookExport(match.icon, set, askedLook(record));
+      const look = missingIconLook(match.icon, set, askedLook(record));
       const key = `${chosen.module}\0${chosen.export}`;
       let entry = added.get(key);
       if (!entry) {

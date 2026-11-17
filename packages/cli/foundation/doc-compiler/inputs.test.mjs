@@ -14,6 +14,8 @@ import * as path from 'node:path';
 import {Project} from '../config/project.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {collectDocInputs, packageSource} from './inputs.mjs';
+import {INSTALLED_ICON_SET_DOC} from '../discovery/name-roots.mjs';
+import {writeIconSetProject} from '../../test-utils/icon-set-fixture.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 const SKIP = new Set(['__tests__', '__fixtures__', 'fixtures', 'node_modules']);
@@ -72,11 +74,35 @@ describe('collectDocInputs over what this repo ships', () => {
     const read = inputs.map(input => input.file);
     const rel = (/** @type {string} */ file) => path.relative(REPO_ROOT, file);
     expect(read.filter(file => !shipped.has(file)).map(rel)).toEqual([]);
-    expect([...shipped].filter(file => !read.includes(file)).map(rel)).toEqual(
-      [],
-    );
+    // A project reads the installed-icon-set section only where it has an
+    // icon set; the test below reads it there.
+    expect(
+      [...shipped]
+        .filter(
+          file =>
+            !read.includes(file) &&
+            file !== fs.realpathSync(INSTALLED_ICON_SET_DOC),
+        )
+        .map(rel),
+    ).toEqual([]);
     expect(new Set(read).size).toBe(read.length);
     expect(new Set(inputs.map(input => input.id)).size).toBe(inputs.length);
+  }, 120_000);
+
+  it("reads the installed-icon-set section once, as the set package's extension of icons, where the project has an icon set", async () => {
+    const cwd = writeIconSetProject(tmpDir);
+    const {inputs, problems} = await collectDocInputs(await Project.load(cwd));
+    expect(problems).toEqual([]);
+    const section = inputs.filter(
+      input => input.file === fs.realpathSync(INSTALLED_ICON_SET_DOC),
+    );
+    expect(section).toHaveLength(1);
+    expect(section[0]).toMatchObject({
+      owner: '@acme/glyphs',
+      root: 'docs',
+      name: 'icons',
+      role: 'extension',
+    });
   }, 120_000);
 
   it('pins the core docs that `component <Name>` reads but the list leaves out', async () => {

@@ -105,7 +105,13 @@ async function newFinePage(browser: Browser) {
  */
 async function openStack(
   page: Page,
-  story: 'settings' | 'pushed' | 'carousel' | 'declines-pops' | 'large-title',
+  story:
+    | 'settings'
+    | 'pushed'
+    | 'carousel'
+    | 'declines-pops'
+    | 'large-title'
+    | 'raised-content',
   {
     standalone = false,
     pointer = 'touch',
@@ -1150,6 +1156,68 @@ function blockDuringPush(page: Page, ms: number) {
   });
 }
 
+test('a push whose commit blocks the main thread starts from its first frame', async ({
+  page,
+}) => {
+  // A heavy screen blocks the main thread in the task that pushes it (here
+  // for 300 ms, right after the stack mounts it). The push starts when that
+  // task ends, so its first frames show it near where it starts. Dated
+  // before the block, it would show almost all of its travel at once. The
+  // check reads the time since the block with the position, because an
+  // engine's first frames after a long task can take far longer than 16 ms.
+  const {driver, width} = await openStack(page, 'settings');
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector('[data-navigation-screen="screen-General"]') ==
+        null
+      ) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + 300;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  // The second frame after the block, and how long after the block it ran.
+  const {x, sinceBlock} = await page.evaluate(
+    () =>
+      new Promise<{x: number; sinceBlock: number}>(resolve => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const pushed = document.querySelector(
+              '[data-navigation-screen="screen-General"]',
+            );
+            const value =
+              pushed == null ? 'none' : getComputedStyle(pushed).translate;
+            const blockEnd =
+              (window as Window & {blockEnd?: number}).blockEnd ?? 0;
+            resolve({
+              x: value === 'none' ? 0 : parseFloat(value),
+              sinceBlock: performance.now() - blockEnd,
+            });
+          }),
+        );
+      }),
+  );
+  // The push spring from the trailing edge (OMEGA, starting at
+  // PUSH_VELOCITY): about 70 % of the width is still to travel after 33 ms.
+  // The share left `ms` into the push:
+  const leftAt = (ms: number) => {
+    const s = ms / 1000;
+    return (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
+  // Started at the block's end, at least half of what the spring leaves at
+  // that time is still to travel. Dated before the 300 ms block, almost none
+  // would be.
+  expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
+});
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
@@ -1500,6 +1568,58 @@ test('under a finger, a pop that reveals a screen two levels down leaves its bar
   expect(await readCut(page, 'root')).toEqual({shown: 0});
   expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
 });
+
+for (const pointer of ['touch', 'mouse'] as const) {
+  test(`screen content with z-index 2 stays under the bar's title and Back (${pointer})`, async ({
+    page,
+    browser,
+  }) => {
+    // A mouse page reads a fine pointer only in its own context.
+    const {context, page: target} =
+      pointer === 'mouse' ? await newFinePage(browser) : {context: null, page};
+    try {
+      await openStack(target, 'raised-content', {pointer});
+      await expect(target.getByTestId('raised-content')).toBeVisible();
+      // At rest, after the animator lets go of `will-change` (it holds it
+      // briefly after the last motion, and that alone makes a stacking
+      // context), so only the card's own isolation keeps the content under.
+      await expect
+        .poll(() =>
+          target.evaluate(() =>
+            [...document.querySelectorAll('[data-navigation-screen]')].every(
+              screen => getComputedStyle(screen).willChange === 'auto',
+            ),
+          ),
+        )
+        .toBe(true);
+      const hits = await target.evaluate(() => {
+        const at = (element: Element | null) => {
+          const box = element?.getBoundingClientRect();
+          if (element == null || box == null) {
+            return null;
+          }
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return hit != null && element.contains(hit);
+        };
+        const title = [...document.querySelectorAll('h2')].find(
+          h => h.closest('[inert]') == null,
+        );
+        return {
+          title: at(title ?? null),
+          back: at(document.querySelector('[data-navigation-back]')),
+        };
+      });
+      expect(hits).toEqual({title: true, back: true});
+      await target.locator('[data-navigation-back]').click();
+      await expect(card(target, 'screen-General')).toHaveCount(0);
+    } finally {
+      await context?.close();
+    }
+  });
+}
 
 test('under a finger, Back reveals the covered bar whole', async ({page}) => {
   const {driver} = await openStack(page, 'settings');

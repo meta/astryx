@@ -40,7 +40,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description:
-        'Directory to resolve @astryxdesign/core and templates from.',
+        'Directory to resolve @astryxdesign/core and templates from, and whose theme wiring the playbook names.',
       default: 'process.cwd()',
     },
     {

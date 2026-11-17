@@ -54,7 +54,11 @@ const RUNNERS = {
   },
   'api/integration/pack-check.mjs': {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
-    sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
+    sites: ['child_process.spawnSync ×2', 'loadTopicModule'],
+  },
+  'api/search/_gather-docs.mjs': {
+    runs: "each extension doc of a topic, to leave an experimental extension's sections out of search",
+    sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
@@ -203,6 +207,14 @@ const RUNNERS = {
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
     sites: ['import ./manifest.doc.mjs'],
+  },
+  'clients/cli/commands/mcp.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./mcp.doc.mjs'],
+  },
+  'clients/cli/lib/mcp-server.mjs': {
+    runs: "this CLI's own bin, once for each tool call an MCP client makes",
+    sites: ['child_process.spawn'],
   },
   'clients/cli/commands/postinstall.mjs': {
     runs: SELF_DOCS,
@@ -359,7 +371,7 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/bases/core-docs.mjs': {
-    runs: "docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run",
+    runs: 'docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run',
     sites: ['import(../discovery/docs-discovery.mjs)'],
   },
   'foundation/config/project.mjs': {
@@ -438,15 +450,21 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from",
+    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values",
     sites: [
       '.import() ×11',
       'createJiti ×2',
       'globalThis[<computed>]',
+      'import(<computed>)',
       'module',
       'module.register',
+      'require(@babel/parser)',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/client-bundle.mjs': {
+    runs: "nothing: it parses the page's script it built (a vm.Script that is never run), so a script that would not run never reaches the file",
+    sites: ['vm.Script'],
   },
   'foundation/render/layers.mjs': {
     runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
@@ -503,7 +521,7 @@ const RUNNERS = {
     sites: ['importUserModule'],
   },
   'foundation/integrations/pack-state.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is written)",
+    runs: "`npm pack --json`, with its output in temporary files: `--dry-run --ignore-scripts` to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is packed), and the real pack `api/integration/pack-check.mjs` asks for (it runs the package's pack scripts and writes the tarball)",
     sites: ['child_process.spawnSync'],
   },
   'foundation/integrations/validate-contributions.mjs': {

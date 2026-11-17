@@ -17,7 +17,11 @@ import {installedProjectCoreDir} from '../fs/paths.mjs';
 import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 import {CORE_BASE_NAME, coreBase} from './core.mjs';
 import {BASE_CAPABILITIES} from './steps.mjs';
-import {registerRunBaseResolver} from './state.mjs';
+import {
+  registerRunBaseResolver,
+  requestedBase,
+  setRequestedBase,
+} from './state.mjs';
 
 /**
  * The one base a run reads.
@@ -39,22 +43,6 @@ import {registerRunBaseResolver} from './state.mjs';
 
 /** @typedef {import('../integrations/integrations.mjs').LoadedIntegration} LoadedIntegration */
 
-/** @type {string | null} */
-let requested = null;
-
-/**
- * Set the package `--base` names for this run; null when it names none.
- * @param {string | null | undefined} name
- */
-export function setRequestedBase(name) {
-  requested = typeof name === 'string' && name.length > 0 ? name : null;
-}
-
-/** @returns {string | null} */
-export function requestedBase() {
-  return requested;
-}
-
 /** @type {Map<string, {integrations: LoadedIntegration[], failedToLoad: Array<{name: string, error: string}>}>} */
 const candidatesByDir = new Map();
 
@@ -74,7 +62,7 @@ export function recordBaseCandidates(cwd, integrations, failedToLoad = []) {
 /** Forget every recorded project. For tests. */
 export function _resetBases() {
   candidatesByDir.clear();
-  requested = null;
+  setRequestedBase(null);
 }
 
 /**
@@ -89,7 +77,7 @@ export function runBase(cwd = process.cwd()) {
     cwd,
     integrations: recorded?.integrations ?? [],
     failedToLoad: recorded?.failedToLoad ?? [],
-    requested,
+    requested: requestedBase(),
   });
 }
 

@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[feat] For AI tools that cannot run commands, `astryx mcp` serves every astryx command as a Model Context Protocol (MCP) tool, over standard input and output; agents that can run commands keep using the CLI. Each command that answers with `--json` is one tool, named by its words (`theme build` is `theme_build`), with the command's arguments and options as its inputs under their CLI names, and every root option except `--json` and `--version`; an input a tool does not list is refused. A tool call runs that command with `--json` in the project folder, or in a folder inside it that the call names, and answers with the command's output unchanged; a command that exits non-zero answers as an error. The tools come from the same command definitions as `--help` and the manifest, so a new command or option is a tool input at once. When the project has no agent docs yet, the server gives the agent the text `astryx init` writes. `astryx mcp --docs-only` serves only the commands that read the docs (`search`, `build`, `component`, `hook`, `docs`, `template`, `discover`, `theme list` and `theme targets`), one message at a time, without the inputs that name a folder, a file to write or a package to read (`cwd`, `path`, `cdn`, `overwrite`, `package` and `base`); the docs site's MCP server is this command. `astryx mcp --json` exits 1 with `ERR_INVALID_OPTION`, because standard output carries the protocol. `astryx docs working-with-ai` shows the client entries.
+
+@josephfarina
