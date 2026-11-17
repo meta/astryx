@@ -4354,6 +4354,8 @@ export function draftAnswer(ctx, env, question) {
   // "40% more transparent").
   /** The "<color> for <thing>" pieces no role took, to name as not taken. @type {string[]} */
   const untakenFor = [];
+  /** A font width said ("condensed headings"), answered with a note. @type {string[]} */
+  const widthSaid = [];
   question = question
     .replace(
       /\b(?:more\s+)?(transparent|translucent|see-through)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi,
@@ -4664,6 +4666,19 @@ export function draftAnswer(ctx, env, question) {
         colorsIn(String(whole).slice(0, at).toLowerCase()).length
           ? 'highlights'
           : m,
+    )
+    // ("heavy condensed headings", "a condensed font"): condensed beside
+    // text words is a typeface's width, never less room: it is taken out
+    // of the readers and answered with a note.
+    .replace(
+      /\b(condensed|narrow|compressed|extended|expanded|wide)\s+(?=(?:[a-z]+\s+)?(?:fonts?|type|typefaces?|headings?|titles?|lettering|letters)\b)/gi,
+      (m, w, at, whole) => {
+        // ("wide letter spacing" is spacing.)
+        if (/^\s*(?:letter|tracking)/i.test(String(whole).slice(at + m.length)))
+          return m;
+        widthSaid.push(String(w).toLowerCase());
+        return '';
+      },
     )
     // ("sky blue", "near-black"): names in two words.
     .replace(/\bsky[- ]blue\b/gi, 'sky')
@@ -13184,6 +13199,18 @@ export function draftAnswer(ctx, env, question) {
             ? {word: c.compound}
             : unknownSlot(c.text, Boolean(c.unknownSubject))
           : null;
+      // (A compound in a lead before a colon, "page loud and fast: black
+      // background, …", describes the look: its words are named with the
+      // rest not taken, never as a part.)
+      if (
+        slot &&
+        c.compound &&
+        slot.word === c.compound &&
+        new RegExp(
+          String.raw`\b${c.compound.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b[^,;.]*:`,
+        ).test(q)
+      )
+        continue;
       if (slot) {
         push({
           text: `no part is called "${slot.word}". Name one of them, or list the parts`,
@@ -21157,9 +21184,19 @@ export function draftAnswer(ctx, env, question) {
       }
       case 'weight': {
         const typedW = weightIn(c);
+        // ("heavy condensed headings": a weight said is the weight's way,
+        // whatever way another word in the clause gives.)
+        // (Never "how heavy are …", "too heavy": a question or a complaint
+        // about the weight; nor beside a weight named, "set them bold".)
+        const heavy =
+          /(?<!\b(?:how|too|so)\s+)\bheav(?:y|ier)\b/.test(noMode(c.text)) &&
+          !/\b(?:bold|semibold|medium|regular|light|thin)\b/.test(
+            noMode(c.text),
+          );
         const light =
-          /\b(light(er)?|thin(ner)?)\b/.test(noMode(c.text)) ||
-          (c.dir === 'less' && !c.neg);
+          !heavy &&
+          (/\b(light(er)?|thin(ner)?)\b/.test(noMode(c.text)) ||
+            (c.dir === 'less' && !c.neg));
         const value =
           typedW ??
           (c.neg
@@ -21168,7 +21205,9 @@ export function draftAnswer(ctx, env, question) {
               ? /\btoo /.test(c.text)
                 ? '400'
                 : '300'
-              : '700');
+              : heavy && HEADING_WEIGHTS.heavy
+                ? String(HEADING_WEIGHTS.heavy)
+                : '700');
         // A part whose text is all in parts inside it that set their own
         // weight (a dialog's title block): those tokens, on the part.
         const heldW =
@@ -27523,6 +27562,14 @@ export function draftAnswer(ctx, env, question) {
       });
     }
   }
+  // ("condensed headings"): the width of a typeface is its own face, which
+  // a family draws or not; no setting makes a face narrower.
+  if (widthSaid.length)
+    result.push({
+      text: `${widthSaid[0]} is a typeface's width: no setting draws a font narrower or wider; choose a family that has a ${widthSaid[0]} face (font <family> --on heading), nothing is written for "${widthSaid[0]}"`,
+      options: [],
+      lookup: `${HOW} font`,
+    });
   // ("chart colors", "a palette for charts", "chart-friendly colors"):
   // charts draw from the data tokens, which set takes like any token; the
   // answer names them, with a line to start from.
