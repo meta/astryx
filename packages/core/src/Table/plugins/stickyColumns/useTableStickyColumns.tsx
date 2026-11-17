@@ -45,13 +45,13 @@ import {
 import {collapsedBottom} from '../../rowDivider';
 import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
-import {tableStickyCellGlidingStyles} from '../../../privateAttributes/cellGliding.stylex';
-import {tableStickyPinnedCarryStyles} from '../../../privateAttributes/tablePinned.stylex';
 import {
-  tableStickyCellStyles,
   tableStickyHeaderCellStyles,
   tableStickyBodyCellStyles,
 } from '../../tableStickyCell.stylex';
+import {tableStickyCellGlidingStyles} from '../../../privateAttributes/cellGliding.stylex';
+import {tableStickyPinnedCarryStyles} from '../../../privateAttributes/tablePinned.stylex';
+import {tableStickyPinnedCellStyles} from '../../../privateAttributes/tableStickyPinnedCell.stylex';
 
 // =============================================================================
 // Config
@@ -632,7 +632,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           },
           xstyle: [
             ...props.xstyle,
-            tableStickyCellStyles,
+            tableStickyPinnedCellStyles,
             tableStickyCellGlidingStyles.cell,
             tableStickyPinnedCarryStyles.cell,
             tableStickyHeaderCellStyles,
@@ -663,7 +663,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           },
           xstyle: [
             ...props.xstyle,
-            tableStickyCellStyles,
+            tableStickyPinnedCellStyles,
             tableStickyCellGlidingStyles.cell,
             tableStickyPinnedCarryStyles.cell,
             tableStickyBodyCellStyles,

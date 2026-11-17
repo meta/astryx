@@ -174,12 +174,12 @@ describe('TableHeaderCell', () => {
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('position: sticky');
     expect(declarations).toContain('top: 0px');
-    expect(declarations).toContain('overflow: hidden');
+    expect(declarations).toContain('overflow: visible');
     expect(declarations).toContain('z-index: 2');
     expect(declarations.join('\n')).toContain('table-sticky-background');
-    expect(declarations.join('\n')).toContain(
-      'background-image: linear-gradient',
-    );
+    const content = container.querySelector('thead th > div') as HTMLElement;
+    expect(content).not.toBeNull();
+    expect(cssDeclarationsOf(content)).toContain('overflow: hidden');
     expect(
       declarations.some(declaration => declaration.includes('::after')),
     ).toBe(false);

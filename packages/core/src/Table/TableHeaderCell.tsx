@@ -34,7 +34,6 @@ import {
 } from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {tableStickyCellStyles} from './tableStickyCell.stylex';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -115,9 +114,21 @@ const stickyHeaderStyles = stylex.create({
     position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
-    // Sticky-column surfaces allow their shadow to bleed; header labels still
-    // need the normal overflow clip for ellipsis.
+    // The sticky-column surface and its divider need to bleed out of the
+    // header cell. The label's inner wrapper owns truncation instead.
+    backgroundColor: `var(--table-sticky-background, ${colorVars['--color-background-card']})`,
+    backgroundClip: 'padding-box',
+    overflow: 'visible',
+  },
+});
+
+const stickyHeaderContentStyles = stylex.create({
+  content: {
+    display: 'block',
+    maxWidth: '100%',
     overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
@@ -183,7 +194,7 @@ export function TableHeaderCell({
       cellStyles.push(headerMenuCellStyles.cell);
     }
     if (ctx.hasStickyHeader) {
-      cellStyles.push(tableStickyCellStyles, stickyHeaderStyles.cell);
+      cellStyles.push(stickyHeaderStyles.cell);
     }
   }
 
@@ -199,6 +210,11 @@ export function TableHeaderCell({
   const mergedStyle = ctx?.hasStickyHeader
     ? {position: 'sticky' as const, insetBlockStart: 0, ...incomingStyle}
     : incomingStyle;
+  const renderedContent = ctx?.hasStickyHeader ? (
+    <div {...stylex.props(stickyHeaderContentStyles.content)}>{content}</div>
+  ) : (
+    content
+  );
 
   return (
     <th
@@ -210,7 +226,7 @@ export function TableHeaderCell({
         incomingClassName,
         mergedStyle,
       )}>
-      {content}
+      {renderedContent}
     </th>
   );
 }

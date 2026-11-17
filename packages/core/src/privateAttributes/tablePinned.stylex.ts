@@ -14,13 +14,11 @@ const CARRYING = '[data-astryx-table-pinned="carry"]';
 /** Conditional divider colors for a pinned cell carrying an app border. */
 export const tableStickyPinnedCarryStyles = stylex.create({
   cell: {
-    '::before': {
-      borderBottomStyle: {
-        [CARRYING]: 'var(--_table-row-divider-app-style, solid)',
-      },
-      borderBottomColor: {
-        [CARRYING]: 'var(--_table-row-divider-app-color, var(--color-border))',
-      },
+    '--_table-pinned-cell-divider-style': {
+      [CARRYING]: 'var(--_table-row-divider-app-style, solid)',
+    },
+    '--_table-pinned-cell-divider-color': {
+      [CARRYING]: 'var(--_table-row-divider-app-color, var(--color-border))',
     },
   },
 });
