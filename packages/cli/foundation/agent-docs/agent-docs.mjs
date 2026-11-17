@@ -620,11 +620,11 @@ export const ICON_FINDER_LINE =
  * among them. An agent cannot ask for a topic it was never told about, and
  * `getting-started` is the one it should reach for first.
  *
- * @param {string | null} version the Core version
  * `iconFeatures` is the project's icon feature gate. Where it is on, the
  * block tells the agent to ask the icon finder for an icon instead of copying
  * one; where it is off, the block has no icon line.
  *
+ * @param {string | null} version the Core version
  * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
  * @returns {string}
  */

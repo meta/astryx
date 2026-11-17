@@ -451,6 +451,7 @@ describe('the icon finder line in the agent block', () => {
     const config = {experimental: {iconSet: 'glyphs'}};
     const {block} = await blockLines([], config);
     const project = await Project.load(path.join(root, 'app'), {fresh: true});
+    expect(iconFeatureGate(project).on).toBe(true);
     expect(block.includes(ICON_FINDER_LINE)).toBe(iconFeatureGate(project).on);
   });
 });
