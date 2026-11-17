@@ -53,7 +53,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -67,6 +67,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
+ * @property {{component: string, prop: string, value: string, file: string, line: number}[]} [propValues] - Each string the page's own files give a Core component's prop, for the caller to check against the component's docs.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -1513,6 +1514,7 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
+    propValues: message.propValues ?? [],
     fromSet: message.fromSet ?? [],
     ...(drawn ? {scriptBytes: Buffer.byteLength(drawn), scriptModules: message.scriptModules ?? 0} : {}),
   };

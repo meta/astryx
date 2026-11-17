@@ -146,6 +146,33 @@ describe('render(): page to one HTML file', () => {
     expect(dropped[0].message).toContain('label=');
   });
 
+  it('warns for a value a Core prop does not have, and for nothing else', async () => {
+    put(
+      'values.tsx',
+      `import {Button as Action} from '@astryxdesign/core/Button';
+import {Text} from '@astryxdesign/core';
+function Own(props: {variant: string}) { return <span>{props.variant}</span>; }
+const kind = 'danger';
+export default function Page() {
+  return (
+    <main>
+      <Action label="Delete" variant="danger" />
+      <Action label="Save" variant="primary" size={'lg'} />
+      <Action label="Maybe" variant={kind} />
+      <Own variant="danger" />
+      <Text>Plain</Text>
+    </main>
+  );
+}
+`,
+    );
+    const answer = /** @type {any} */ (await render('values.tsx', {cwd: dir, out: 'values.html'}));
+    const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+    expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+      'values.tsx:8: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive.',
+    ]);
+  });
+
   it('gives the page back byte for byte', async () => {
     const back = /** @type {any} */ (
       await render('page.html', {cwd: dir, reverse: true, out: 'back/page.tsx'})
