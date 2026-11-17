@@ -2221,6 +2221,73 @@ describe('step-label and step-description theme targets', () => {
   });
 });
 
+describe('current step selected state', () => {
+  // The current step carries the shared `selected` state that tabs,
+  // pagination and other selection controls use, so one theme rule for
+  // selected items reaches it. `aria-current` stays the accessible cue.
+  const parts = (root: ParentNode, target: string) => [
+    ...root.querySelectorAll<HTMLElement>(`.astryx-${target}`),
+  ];
+
+  it.each(['separated', 'on-track'] as const)(
+    'marks only the current step, its indicator and its label (%s)',
+    indicatorPosition => {
+      const {container} = render(
+        <Stepper activeStep={1} indicatorPosition={indicatorPosition}>
+          <Step step={0} label="Account" description="a" />
+          <Step step={1} label="Payment" description="b" />
+          <Step step={2} label="Review" description="c" />
+        </Stepper>,
+      );
+      for (const target of ['step', 'step-indicator', 'step-label']) {
+        expect(parts(container, target).map(el => el.dataset.selected)).toEqual(
+          [undefined, 'selected', undefined],
+        );
+      }
+      for (const el of parts(container, 'step-description')) {
+        expect(el).not.toHaveAttribute('data-selected');
+      }
+      const current = parts(container, 'step')[1];
+      expect(current).toHaveAttribute('aria-current', 'step');
+    },
+  );
+
+  it('moves with the active step, to the first and the last step', () => {
+    const steps = (
+      <>
+        <Step step={0} label="Account" />
+        <Step step={1} label="Payment" />
+        <Step step={2} label="Review" />
+      </>
+    );
+    const {container, rerender} = render(
+      <Stepper activeStep={0}>{steps}</Stepper>,
+    );
+    const selected = () =>
+      parts(container, 'step').map(el => el.dataset.selected ?? null);
+    expect(selected()).toEqual(['selected', null, null]);
+    rerender(<Stepper activeStep={2}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, 'selected']);
+    rerender(<Stepper activeStep={3}>{steps}</Stepper>);
+    expect(selected()).toEqual([null, null, null]);
+  });
+
+  it('emits theme selectors for the state', () => {
+    const theme = defineTheme({
+      name: 'step-selected-state-test',
+      components: {
+        step: {'selected:selected': {backgroundColor: 'rgb(1, 2, 3)'}},
+        'step-indicator': {'selected:selected': {borderRadius: '999px'}},
+        'step-label': {'selected:selected': {fontWeight: '700'}},
+      },
+    });
+    const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-indicator[data-selected="selected"]');
+    expect(css).toContain('.astryx-step-label[data-selected="selected"]');
+  });
+});
+
 describe('clickable step text reading', () => {
   // axe-core's Label in Name rule joins a button's text nodes with nothing
   // between them, aria-hidden ones included, so a number badge next to a label

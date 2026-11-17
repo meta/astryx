@@ -1195,6 +1195,7 @@ export function Step({
               progress,
               status: status ?? undefined,
               disabled: isDisabled ? 'disabled' : null,
+              selected: isActive ? 'selected' : null,
             }),
             stylex.props(styles.numberBadge, numberColorStyle),
           )}>
@@ -1270,6 +1271,7 @@ export function Step({
               progress,
               status: status ?? undefined,
               disabled: isDisabled ? 'disabled' : null,
+              selected: isActive ? 'selected' : null,
             }),
             stylex.props(styles.icon, iconColorStyle),
           )}>
@@ -1322,11 +1324,13 @@ export function Step({
 
   // Both text parts carry {progress, status}, the phase vocabulary of
   // `step-indicator` above. The indicator and the label each own disabled
-  // paint, so each carries disabled; the description does not.
+  // paint, so each carries disabled; the description does not. The label also
+  // carries `selected` on the current step, as the step and indicator do.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
     disabled: isDisabled ? 'disabled' : null,
+    selected: isActive ? 'selected' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
     progress,
@@ -1402,10 +1406,12 @@ export function Step({
   ) : null;
 
   // The step paints nothing of its own when disabled, so it carries no
-  // `disabled` selector.
+  // `disabled` selector. The current step is also `selected`, the state that
+  // marks the chosen item of tabs, pagination and other selection controls.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
+    selected: isActive ? 'selected' : null,
   });
 
   // ======= SUMMARY: this step, drawn below a collapsed track =======
