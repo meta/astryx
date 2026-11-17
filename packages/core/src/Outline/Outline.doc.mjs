@@ -99,7 +99,8 @@ export const docs = {
         {
           name: 'label',
           type: 'string',
-          description: 'Accessible label for the nav landmark.',
+          description:
+            "Accessible label for the nav landmark. A caller's aria-label wins over it.",
           default: "'Table of contents'",
         },
         {
@@ -309,6 +310,11 @@ function FlashOnArrival() {
           'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.',
       },
       {
+        guidance: true,
+        description:
+          'Give each Outline a distinct label when a page has more than one navigation landmark, so screen reader users can tell them apart.',
+      },
+      {
         guidance: false,
         description:
           'Use Outline for application navigation - use SideNav or TopNav for routes.',
@@ -371,7 +377,7 @@ export const docsZh = {
         {
           name: 'label',
           type: 'string',
-          description: 'nav 地标的无障碍标签。',
+          description: 'nav 地标的无障碍标签。调用方传入的 aria-label 优先。',
           default: "'Table of contents'",
         },
         {
@@ -448,6 +454,11 @@ export const docsZh = {
           'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.',
       },
       {
+        guidance: true,
+        description:
+          'Give each Outline a distinct label when a page has more than one navigation landmark, so screen reader users can tell them apart.',
+      },
+      {
         guidance: false,
         description:
           'Use Outline for application navigation - use SideNav or TopNav for routes.',
@@ -501,6 +512,11 @@ export const docsDense = {
           'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.',
       },
       {
+        guidance: true,
+        description:
+          'Give each Outline a distinct label when a page has more than one navigation landmark, so screen reader users can tell them apart.',
+      },
+      {
         guidance: false,
         description:
           'Use Outline for application navigation - use SideNav or TopNav for routes.',
@@ -522,7 +538,8 @@ export const docsDense = {
       'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
     activeId: 'Controlled active heading id. Disables built-in scroll-spy.',
     onActiveIdChange: 'Called when active id changes from scroll-spy or click.',
-    label: "Accessible nav label. Default: 'Table of contents'.",
+    label:
+      "Accessible nav label; a caller aria-label wins. Default: 'Table of contents'.",
     density:
       "Density variant: 'default' (standard) or 'compact'. Default: 'default'.",
     onNavigateStart:
@@ -549,7 +566,8 @@ export const docsDense = {
         activeId: 'Controlled active heading id. Disables built-in scroll-spy.',
         onActiveIdChange:
           'Called when active id changes from scroll-spy or click.',
-        label: "Accessible nav label. Default: 'Table of contents'.",
+        label:
+          "Accessible nav label; a caller aria-label wins. Default: 'Table of contents'.",
         density: "Density variant: 'default' | 'compact'. Default: 'default'.",
         onNavigateStart:
           'Called with the id when navigation begins, before the scroll.',

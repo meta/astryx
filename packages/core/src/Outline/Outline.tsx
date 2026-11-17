@@ -67,7 +67,10 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   /** Called when the active item changes from scroll-spy or click. */
   onActiveIdChange?: (id: string) => void;
 
-  /** Accessible label for the nav landmark. @default 'Table of contents' */
+  /**
+   * Accessible label for the nav landmark. A caller's aria-label wins over it.
+   * @default 'Table of contents'
+   */
   label?: string;
 
   /**
@@ -171,7 +174,13 @@ const styles = stylex.create({
     top: 'anchor(--outline-active top, 0px)',
     height: 'anchor-size(--outline-active height, 0px)',
     transitionProperty: 'top, height',
-    transitionDuration: durationVars['--duration-fast-min'],
+    // Under reduced motion the indicator does not travel on any pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   activeAnchor: {
@@ -206,7 +215,14 @@ const styles = stylex.create({
     position: 'relative',
     textAlign: 'start',
     textDecoration: 'none',
-    transitionDuration: durationVars['--duration-fast'],
+    // Under reduced motion a hover or current color changes at once on any
+    // pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionProperty: 'background-color, color',
     transitionTimingFunction: easeVars['--ease-standard'],
     width: '100%',
@@ -346,11 +362,12 @@ export function Outline({
   style,
   ref,
   'data-testid': testId,
+  'aria-label': ariaLabel,
   ...props
 }: OutlineProps) {
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
-  const label = labelFromProps ?? t('@astryx.outline.label');
+  const label = ariaLabel ?? labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
   const {activeId: resolvedActiveId, scrollTo} = useScrollSpy({

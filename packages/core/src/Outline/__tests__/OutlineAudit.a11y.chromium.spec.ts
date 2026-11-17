@@ -125,6 +125,10 @@ async function outline(page: Page) {
       ctx.clearRect(0, 0, 1, 1);
       ctx.fillStyle = '#010203';
       ctx.fillStyle = value;
+      // A color the canvas cannot parse leaves the sentinel: no measurement.
+      if (ctx.fillStyle === '#010203' && value !== 'rgb(1, 2, 3)') {
+        return [NaN, NaN, NaN, NaN];
+      }
       ctx.fillRect(0, 0, 1, 1);
       const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
       return [r, g, b, Math.round((a / 255) * 100) / 100];
@@ -185,7 +189,6 @@ async function outline(page: Page) {
     const links = Array.from(nav.querySelectorAll('a.astryx-outline-item'));
     const indicatorStyle = indicator ? getComputedStyle(indicator) : null;
     const lineStyle = trackLine ? getComputedStyle(trackLine) : null;
-    const navBackdrop = backdrop(nav);
     return {
       tag: nav.tagName,
       name: nav.getAttribute('aria-label'),
@@ -229,16 +232,8 @@ async function outline(page: Page) {
             duration: indicatorStyle.transitionDuration,
           }
         : null,
-      indicatorVsTrack:
-        indicatorStyle && lineStyle
-          ? ratioOf(
-              rgba(indicatorStyle.backgroundColor),
-              rgba(lineStyle.backgroundColor).slice(0, 3),
-            )
-          : null,
-      indicatorVsPage: indicatorStyle
-        ? ratioOf(rgba(indicatorStyle.backgroundColor), navBackdrop)
-        : null,
+      indicatorColor: indicatorStyle?.backgroundColor ?? null,
+      trackColor: lineStyle?.backgroundColor ?? null,
     };
   }, NAV);
 }
@@ -501,6 +496,17 @@ for (const pointer of ['fine', 'coarse'] as const) {
       check(
         !travels,
         `the indicator slides under reduced motion: ${JSON.stringify(transition)}`,
+      );
+      const colorTransitions = (before?.links ?? []).filter(link =>
+        link.transition
+          .split(' ')
+          .slice(-1)[0]
+          .split(',')
+          .some(value => Number.parseFloat(value) > 0),
+      );
+      check(
+        colorTransitions.length === 0,
+        `link colors animate under reduced motion: ${JSON.stringify(colorTransitions.map(link => link.transition))}`,
       );
       await page.locator(`${NAV} a`, {hasText: 'Accessibility'}).click();
       await nextFrames(page);
