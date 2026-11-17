@@ -601,3 +601,23 @@ export const TableFilterTemplate: Story = {
     </div>
   ),
 };
+
+/** Two lists as the start lane's own children share the room beside the end lane; each folds into its own trigger without clipping. */
+export const TwoOverflowLists: Story = {
+  name: 'Composition: Two Overflow Lists',
+  render: () => (
+    <div data-testid="two-lists-frame" style={{width: 530, maxWidth: '100%'}}>
+      <Toolbar
+        label="Two action groups"
+        size="sm"
+        startContent={
+          <>
+            {overflowActions()}
+            {overflowActions()}
+          </>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
+};

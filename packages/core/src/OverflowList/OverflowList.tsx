@@ -70,9 +70,9 @@ const styles = stylex.create({
   },
 });
 
-// A single-row list never shrinks below the width it takes folded as far as
-// it can fold, so a squeezed row clips no part of its indicator. The floor is
-// never wider than the unfolded items, so a list with room is unchanged.
+// A single-row list never shrinks below its fully folded width. Its indicator
+// then stays whole in a squeezed row. The floor is never wider than the
+// unfolded items, so a list with room is unchanged.
 const inlineFloor = stylex.create({
   publish: (width: number) => ({minWidth: `${width}px`}),
 });

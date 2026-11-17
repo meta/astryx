@@ -216,6 +216,65 @@ test.describe("a start lane's own OverflowList", () => {
   });
 });
 
+test.describe('two lists in one row', () => {
+  /** Each list's visible labels, and whether it clips its last child. */
+  async function lists(page: Page) {
+    return page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="two-lists-frame"] .astryx-overflow-list',
+        ),
+      ].map(list => {
+        const last = list.lastElementChild?.getBoundingClientRect();
+        return {
+          labels: [...list.children]
+            .map(child => (child as HTMLElement).innerText.trim())
+            .join(' '),
+          clips:
+            last != null &&
+            last.right > list.getBoundingClientRect().right + 0.5,
+        };
+      }),
+    );
+  }
+
+  for (const width of [380, 530, 900]) {
+    test(`settle without clipping or flicker at ${width} px`, async ({
+      page,
+    }) => {
+      await openStory(
+        page,
+        'core-toolbar--two-overflow-lists',
+        'two-lists-frame',
+      );
+      await rowAt(page, 'two-lists-frame', 320);
+      await rowAt(page, 'two-lists-frame', width);
+      // Let any measuring cycle run, then sample several frames.
+      await page.waitForTimeout(300);
+      const samples = [];
+      for (let frame = 0; frame < 6; frame += 1) {
+        samples.push(await lists(page));
+        await page.evaluate(
+          async () =>
+            new Promise<void>(resolve => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            }),
+        );
+      }
+      test.info().annotations.push({
+        type: `two-lists-${width}`,
+        description: JSON.stringify(samples[0]),
+      });
+      for (const sample of samples) {
+        expect(sample).toEqual(samples[0]);
+        expect(sample.map(list => list.clips)).toEqual([false, false]);
+      }
+    });
+  }
+});
+
 test.describe('a list that is not the lane’s own child', () => {
   test('a nested list keeps its lane at content width with every action shown', async ({
     page,

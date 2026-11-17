@@ -377,10 +377,16 @@ function isSingleFlexRow(parent: Element): boolean {
 }
 
 /**
- * The free width in the single flex row that holds `list`: the row's content
- * width less its in-flow children and the gaps between them. A folded list
- * in such a row is as wide as its folded items, so its own width never shows
- * the room it could unfold into; this does.
+ * Lists that may unfold into their flex row's free width. Lists that share a
+ * row share its free width, so together they never claim more than it.
+ */
+const freeWidthSharers = new WeakSet<Element>();
+
+/**
+ * This list's share of the free width in its single flex row. The free
+ * width is the row's content width less its in-flow children and gaps. A
+ * folded list is only as wide as its folded items, so its own width never
+ * shows the room it could unfold into.
  */
 function flexRowFreeWidth(list: HTMLElement): number {
   const parent = list.parentElement;
@@ -391,6 +397,7 @@ function flexRowFreeWidth(list: HTMLElement): number {
   const px = (value: string) => parseFloat(value) || 0;
   let used = 0;
   let count = 0;
+  let sharers = 0;
   for (const child of parent.children) {
     if (!(child instanceof HTMLElement)) {
       continue;
@@ -408,6 +415,9 @@ function flexRowFreeWidth(list: HTMLElement): number {
       px(childStyle.marginLeft) +
       px(childStyle.marginRight);
     count += 1;
+    if (freeWidthSharers.has(child)) {
+      sharers += 1;
+    }
   }
   const content =
     parent.getBoundingClientRect().width -
@@ -415,10 +425,11 @@ function flexRowFreeWidth(list: HTMLElement): number {
     px(style.paddingRight) -
     px(style.borderLeftWidth) -
     px(style.borderRightWidth);
-  return Math.max(
+  const free = Math.max(
     0,
     content - used - px(style.columnGap) * Math.max(0, count - 1),
   );
+  return free / Math.max(1, sharers);
 }
 
 /**
@@ -449,11 +460,11 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  const {remeasure: _remeasure, ...result} = useOverflowInternal(
-    itemCount,
-    options,
-    {tracksRows: true},
-  );
+  const {
+    remeasure: _remeasure,
+    inlineBounds: _inlineBounds,
+    ...result
+  } = useOverflowInternal(itemCount, options, {tracksRows: true});
   return result;
 }
 
@@ -739,11 +750,16 @@ export function useOverflowInternal(
           row != null &&
           isSingleFlexRow(row)
         ) {
-          unobserveRowRef.current = observeForOverflow(
+          freeWidthSharers.add(el);
+          const unobserveRow = observeForOverflow(
             row,
             measureLatest,
             measuredSizes,
           );
+          unobserveRowRef.current = () => {
+            freeWidthSharers.delete(el);
+            unobserveRow();
+          };
         }
       }
     },
