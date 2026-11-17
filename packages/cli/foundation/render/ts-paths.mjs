@@ -40,6 +40,14 @@ const EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.mts', '.cts'
 /** The extensions the render's module loader tries for an extensionless import, in its order. */
 export const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'];
 
+/** The TypeScript sources a JavaScript extension stands for, in TypeScript's order. */
+const TS_SOURCES = /** @type {Record<string, string[]>} */ ({
+  js: ['.ts', '.tsx'],
+  jsx: ['.tsx'],
+  mjs: ['.mts'],
+  cjs: ['.cts'],
+});
+
 /** The config file names TypeScript looks for in a folder, in its order. */
 const CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json'];
 
@@ -403,6 +411,13 @@ export function existingFile(candidate, extensions = EXTENSIONS) {
     }
   };
   if (isFile(candidate)) return candidate;
+  // As TypeScript does, a JavaScript name stands for its TypeScript source:
+  // `./helper.js` for helper.ts or helper.tsx.
+  const js = /\.(js|jsx|mjs|cjs)$/.exec(candidate);
+  if (js) {
+    const stem = candidate.slice(0, -js[0].length);
+    for (const ext of TS_SOURCES[js[1]]) if (isFile(stem + ext)) return stem + ext;
+  }
   for (const ext of extensions) if (isFile(candidate + ext)) return candidate + ext;
   for (const ext of extensions) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
   return null;
