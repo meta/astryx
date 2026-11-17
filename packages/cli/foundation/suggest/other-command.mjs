@@ -39,7 +39,11 @@ import {
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
 import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
-import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
+import {
+  hasNameLine,
+  keptTreeSummary,
+  keptTreeSummaryAsync,
+} from '../fs/kept-tree.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
@@ -492,9 +496,7 @@ export async function findOtherCommand(
   }
   if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
-      const {discoverHookKeywords} =
-        await import('../discovery/hook-discovery.mjs');
-      const found = hookByMeaning(typed, discoverHookKeywords(coreDir), {
+      const found = hookByMeaning(typed, await coreHookKeywords(coreDir), {
         keywords: from === 'component',
       });
       if (found) best = hintFor('hook', found.name, from, found.tier);
@@ -503,6 +505,38 @@ export async function findOtherCommand(
     }
   }
   return best;
+}
+
+/** The code that makes the kept hook keywords. */
+const HOOK_KEYWORDS_CODE = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(new URL('../discovery/hook-discovery.mjs', import.meta.url)),
+];
+
+/**
+ * Each Core hook with the keywords its doc declares, as
+ * hook-discovery.mjs discoverHookKeywords reads them: a summary kept while
+ * every folder of Core's `src` the hook lookup can list, every doc it read
+ * and every path it probed are unchanged, so a warm miss reads no hook doc.
+ * @param {string} coreDir
+ * @returns {Promise<Array<{name: string, keywords: string[]}>>}
+ */
+function coreHookKeywords(coreDir) {
+  return keptTreeSummaryAsync(
+    {
+      kind: 'core-hook-keywords',
+      roots: [path.join(coreDir, 'src')],
+      code: HOOK_KEYWORDS_CODE,
+      skip: name =>
+        name === 'utils' || name === '__tests__' || name === 'node_modules',
+      recorded: true,
+    },
+    async () => {
+      const {discoverHookKeywords} =
+        await import('../discovery/hook-discovery.mjs');
+      return discoverHookKeywords(coreDir);
+    },
+  );
 }
 
 /**
