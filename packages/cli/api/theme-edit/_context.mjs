@@ -499,6 +499,13 @@ export function cutShortProblem(ctx, slug, c) {
 }
 
 /**
+ * Text a picture draws too faint to read, as the browser measured it: the
+ * part it sits in, its text, the mode, its ratio and its two colors, and
+ * the page (`page`, null for a sheet) and picture it is on.
+ * @typedef {{page: string | null, file: string, part: string, text: string, mode: 'light' | 'dark', ratio: number, fg: string, bg: string}} LowContrast
+ */
+
+/**
  * Pictures of HTML files, on request. A shot with a `name` is a page laid
  * out so its text fits in the base theme (the sample page): the text its
  * pictures draw cut short, as the browser measured it, comes back in
@@ -512,11 +519,17 @@ export function cutShortProblem(ctx, slug, c) {
  *   `most`: the tallest the page's picture may be; a taller one is cut into
  *   pictures that tall, in order ({@link pagesOfPicture})
  * @param {Array<'light' | 'dark'>} modes
- * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[]}>}
+ * Every picture also measures the text it draws too faint to read
+ * (`lowContrast`): one entry for each part, text, pair of colors and mode,
+ * with the page it is on.
+ * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[], lowContrast: LowContrast[]}>}
  */
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /** @type {Map<string, LowContrast>} */
+  const faint = new Map();
+  const faintNotes = () => [...faint.values()];
   /**
    * The text drawn cut short, by page, then by part: its texts, the modes
    * it was drawn so in, whether keeping the part's width draws every one
@@ -596,6 +609,7 @@ export async function pictures(project, shots, modes) {
       return {
         files,
         cutShort: [],
+        lowContrast: [],
         problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
       };
   }
@@ -605,6 +619,7 @@ export async function pictures(project, shots, modes) {
     return {
       files,
       cutShort: [],
+      lowContrast: [],
       problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
     };
   /** The pictures to take, each with where it goes. @type {Array<{html: string, out: string, part: string, m: 'light' | 'dark', name?: string, most?: number}>} */
@@ -642,6 +657,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
       // A folder it cannot write gets no picture: named before the browser
@@ -652,6 +668,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
@@ -678,6 +695,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: files.length
             ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r?.reason ?? 'the browser stopped first'}`
             : `No picture was taken: ${r?.reason ?? 'the browser stopped first'}`,
@@ -690,6 +708,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
         };
       }
@@ -720,6 +739,20 @@ export async function pictures(project, shots, modes) {
         }
       }
       for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
+      for (const x of r.lowContrast ?? []) {
+        const key = `${name ?? r.file}\u0000${x.part}\u0000${x.text}\u0000${x.fg}\u0000${x.bg}\u0000${m}`;
+        if (!faint.has(key))
+          faint.set(key, {
+            page: name ?? null,
+            file: r.file,
+            part: x.part,
+            text: x.text,
+            mode: m,
+            ratio: x.ratio,
+            fg: x.fg,
+            bg: x.bg,
+          });
+      }
       // What the browser measured, kept by page and part; nothing when its
       // script measured nothing. A sheet's narrow cells cut long labels in
       // every theme, so a sheet keeps only text drawn over its neighbor.
@@ -770,6 +803,7 @@ export async function pictures(project, shots, modes) {
     // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
     cutShort: cutShortNotes(),
+    lowContrast: faintNotes(),
   };
 }
 
