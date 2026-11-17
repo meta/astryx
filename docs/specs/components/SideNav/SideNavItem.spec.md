@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, accessibility]
 verified_by:
   [
     packages/core/src/SideNav/SideNav.test.tsx,
+    packages/core/src/SideNav/SideNavItem.iconTarget.test.tsx,
     packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts,
     apps/storybook/stories/SideNav.stories.tsx,
     apps/storybook/rtl-audit/targets.json,
@@ -35,15 +36,15 @@ system_specs: [spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `SideNavItem` with `label`, `href`, `as`, `onClick`, `icon`, `selectedIcon`, `isSelected`, `isDisabled`, `endContent`, `actions`, `children`, `collapsible`, and `size`; target `side-nav-item` with `size`, `selected`, and `disabled` states.          |
-| Behavior                | One SideNav row: a link or button with optional icon and passive end content, optional row-level actions beside it, and optional nested children that can expand and collapse. In a collapsed rail it is icon-only with a tooltip or a flyout.           |
-| End-user impact         | Users see and hear the current page, reach row actions before nested items, expand or collapse groups without navigating, and return to the page after choosing a destination in the mobile drawer.                                                      |
-| Builder impact          | None.                                                                                                                                                                                                                                                    |
-| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps (see Current-state impact).                                                                                                                                                        |
-| Review checks           | Reject an interactive control rendered inside the primary element, a link that also toggles collapse, a toggle or action that activates the row, collapsed children that stay reachable, or an unmodified drawer activation that leaves the drawer open. |
-| Governing rules         | `component:SideNav` FR1–FR5, DD1 (nesting and row geometry); `family:navigation-destinations`; `architecture:interaction-modality`; `architecture:public-component-api`.                                                                                 |
+| Area                    | Contract                                                                                                                                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | `SideNavItem` with `label`, `href`, `as`, `onClick`, `icon`, `selectedIcon`, `isSelected`, `isDisabled`, `endContent`, `actions`, `children`, `collapsible`, and `size`; targets `side-nav-item` (`size`, `selected`, `disabled`) and `side-nav-item-icon` (`selected`, `disabled`). |
+| Behavior                | One SideNav row: a link or button with optional icon and passive end content, optional row-level actions beside it, and optional nested children that can expand and collapse. In a collapsed rail it is icon-only with a tooltip or a flyout.                                       |
+| End-user impact         | Users see and hear the current page, reach row actions before nested items, expand or collapse groups without navigating, and return to the page after choosing a destination in the mobile drawer.                                                                                  |
+| Builder impact          | Themes style the row through `side-nav-item` and its built-in icon through `side-nav-item-icon`.                                                                                                                                                                                     |
+| Compatibility/readiness | Additive: the `side-nav-item-icon` target adds a class and state attributes to the built-in icon; no default look change. Three implementation gaps (see Current-state impact).                                                                                                      |
+| Review checks           | Reject an interactive control rendered inside the primary element, a link that also toggles collapse, a toggle or action that activates the row, collapsed children that stay reachable, or an unmodified drawer activation that leaves the drawer open.                             |
+| Governing rules         | `component:SideNav` FR1–FR5, DD1 (nesting and row geometry); `family:navigation-destinations`; `architecture:interaction-modality`; `architecture:public-component-api`.                                                                                                             |
 
 This table is a review projection; the body below is authoritative.
 
@@ -59,7 +60,8 @@ in `SideNavItem.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: additive. The `side-nav-item-icon` target adds a
+  class and state attributes to the built-in icon and changes no default look
 - Controlled/uncontrolled behavior: nested children start expanded and the item
   owns that state unless `collapsible.isCollapsed` is defined; a controlled item
   reports toggle intent through `onCollapsedChange` and flips only when the prop
@@ -111,7 +113,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   disabled state).
 - Row fill colors, radius, minimum height, and padding per size — owned by the
   shared nav item styles, which take the height as a minimum, and the
-  `side-nav-item` target.
+  `side-nav-item` target. The built-in icon's look — owned by Icon and the
+  `side-nav-item-icon` target (AV2).
 
 ## Public concepts
 
@@ -144,7 +147,18 @@ Consumer migration instructions belong in consumer docs and release notes.
   label and end content stay inside it (`spec:AST-102` FR4). A collapsed rail
   row keeps its square size.
 - **AV2 — Theme styling.** Themes restyle `side-nav-item` per size, selected,
-  and disabled state.
+  and disabled state. Themes restyle the built-in icon (an icon name or an
+  icon component given as `icon` or `selectedIcon`) through
+  `side-nav-item-icon`, per selected and disabled state, in the expanded and
+  the collapsed rail. The target rides on the Icon element itself, so a theme
+  that styles it reaches only side nav item icons, never the label or other
+  icons. It reflects the row's states but not its size: the Icon reflects its
+  own `size` on that element. A custom React node given as `icon` carries no
+  target, because Core does not inject props into consumer elements; the row
+  target's inherited color still reaches it. SideNavItem draws the built-in
+  icon with `drawsAsIcon` (`packages/core/src/Icon/Icon.tsx`, Core-internal,
+  not exported from the package), the check `renderIconSlot` uses, so both
+  read an icon slot value the same way.
 
 ### Representative states
 
@@ -185,12 +199,21 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Anatomy or state | Design requirement                                  | Representation authority       | Hierarchy role | Component contract |
 | ---------------- | --------------------------------------------------- | ------------------------------ | -------------- | ------------------ |
 | Primary element  | Icon, label, passive end content, optional chevron. | Current source and public docs | Prominent      | FR1                |
+| Icon             | The built-in icon, styled apart from other icons.   | Current source and public docs | Supporting     | AV2                |
 | Toggle           | Trailing chevron button of the row control size.    | Current source                 | Supporting     | FR7                |
 | Actions          | Trailing row controls.                              | Current source and public docs | Supporting     | FR4                |
 | Flyout           | Parent label header over the children.              | Current source                 | Supporting     | FR9                |
 
 `SideNavItem.doc.mjs` declares no anatomy of its own, so no anatomy-theming map
 is recorded. Row geometry visual intent is `component:SideNav` DD1.
+
+The built-in icon is rendered by Icon, but it owns the `side-nav-item-icon`
+target rather than delegating to Icon's `icon` target
+(`architecture:component-theming-surface` INV5). SideNavItem guarantees a
+distinct visual contract for it: a theme colors the side nav's icons apart
+from their labels and from every other icon. The row's selected and disabled
+states stay on the row's own target and are reflected on the icon's target as
+well, so a theme reaches each icon state without a structural selector.
 
 ## Family and system relationships
 
@@ -213,6 +236,7 @@ is recorded. Row geometry visual intent is `component:SideNav` DD1.
 | FR10          | `SideNav.test.tsx` mobile drawer close-on-activate suite                                     | Link, button, toggle, action, outside drawer                                                                              | Wrong close behavior fails.                                                       | `audit:SideNavItem/behavior`      |
 | FR11          | `SideNav.test.tsx` focus ring suite                                                          | Plain, split, actions rows                                                                                                | Missing shared ring classes fail.                                                 | `audit:SideNavItem/accessibility` |
 | FR3, FR7, FR9 | `SideNav.test.tsx` keyboard operation and focus management suites                            | Tab order, Enter/Space toggle, flyout Escape                                                                              | Lost order, a stranded focus, or no focus return fails.                           | `audit:SideNavItem/accessibility` |
+| AV2 icon      | `SideNavItem.iconTarget.test.tsx`                                                            | Expanded and collapsed rail; selected, disabled; custom icon node                                                         | A target off a built-in icon, on a label, row, chevron or custom node fails.      | `audit:SideNavItem/behavior`      |
 | RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `SideNav / Default` | Item icon and label; LTR and RTL                                                                                          | An icon that is not at the inline start of its label fails D2.                    | `audit:SideNavItem/i18n-rtl`      |
 
 Read from source, with no focused test yet:
