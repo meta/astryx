@@ -59,6 +59,7 @@ system_specs:
     spec:AST-061/DEC-6,
     spec:AST-061/DEC-9,
     spec:AST-061/FR6,
+    spec:AST-061/FR11,
     spec:AST-064/DEC-6,
     spec:AST-036/DEC-12,
   ]
