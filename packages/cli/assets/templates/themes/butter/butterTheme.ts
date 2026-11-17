@@ -156,13 +156,17 @@ function ruleSelector(part: string, key: string): string {
 
 /**
  * Inside a coloured card and not inside a part with a fill of its own
- * there: where a part draws on the card's pastel fill.
+ * between that card and the element: where a part draws on the card's
+ * pastel fill. A part with its own fill above the card does not count.
  */
-const IN_COLOURED_CARD = `:where(${COLOURED_CARDS.map(
-  variant => `.astryx-card[data-variant="${variant}"] *`,
-).join(', ')}):not(:where(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
-  .map(([part, key]) => `${ruleSelector(part, key)} *`)
-  .join(', ')}))`;
+const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"]`,
+).join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} :is(${OWN_FILL_RULES.filter(
+  ([, , selector]) => !selector,
+)
+  .map(([part, key]) => ruleSelector(part, key))
+  .join(', ')}) *))`;
 
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({

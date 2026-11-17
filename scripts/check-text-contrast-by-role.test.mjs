@@ -29,6 +29,7 @@
  * @position Repo-level guard, sibling of the other scripts/check-*.
  */
 
+import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import {
   FIRST_PARTY_THEMES,
@@ -89,22 +90,54 @@ function rule(theme, part, key = 'base') {
   return theme.components?.[part]?.[key] ?? {};
 }
 
+const {document} = new JSDOM('').window;
+
+/** An element as Core marks a part's rule key. */
+function partElement(part, key) {
+  const element = document.createElement('div');
+  element.className = `astryx-${part}`;
+  if (key !== 'base') {
+    const [name, value = name] = key.split(':');
+    element.setAttribute(`data-${name}`, value);
+  }
+  return element;
+}
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part, key) {
+  if (key === 'base') return `.astryx-${part}`;
+  const [name, value = name] = key.split(':');
+  return `.astryx-${part}[data-${name}="${value}"]`;
+}
+
 /**
- * The nested selector blocks of a rule that apply inside a card of a
- * variant: those whose selector names that card (`.astryx-card[data-variant=
- * "blue"]`) outside a `:not()`, merged.
+ * The nested selector blocks of a part's rule that match the part inside a
+ * card of a variant, itself inside an optional ancestor part, merged. The
+ * selectors are matched on elements, as the browser matches them.
  */
-function insideCard(block, variant) {
+function insideCard(theme, part, key, variant, ancestor) {
+  const root = document.createElement('div');
+  let parent = root;
+  if (ancestor) {
+    const outer = partElement(...ancestor);
+    parent.append(outer);
+    parent = outer;
+  }
+  const card = partElement('card', `variant:${variant}`);
+  parent.append(card);
+  const element = partElement(part, key);
+  card.append(element);
   return Object.assign(
     {},
-    ...Object.entries(block)
-      .filter(
-        ([key]) =>
-          key.startsWith(':') &&
-          key
-            .split(':not(')[0]
-            .includes(`.astryx-card[data-variant="${variant}"]`),
-      )
+    ...Object.entries(rule(theme, part, key))
+      .filter(([nested]) => {
+        if (!nested.startsWith(':')) return false;
+        try {
+          return element.matches(`${ruleSelector(part, key)}${nested}`);
+        } catch {
+          return false;
+        }
+      })
       .map(([, value]) => value),
   );
 }
@@ -167,6 +200,14 @@ const NESTED = {
 
 /** Core's selector for a striped table's painted rows. */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+/** Parts with a fill of their own that a card can sit inside. */
+const CARD_ANCESTORS = [
+  ['section', 'variant:section'],
+  ['dialog', 'base'],
+  ['card', 'variant:default'],
+  ['layout-content', 'base'],
+];
 
 /** Parts drawn on the accent tint, with their own rule's key. */
 const ON_ACCENT_TINT = {
@@ -257,7 +298,7 @@ function rows() {
               ...cardOverrides(theme, variant),
               ...rule(theme, part),
               ...rule(theme, part, key),
-              ...insideCard(rule(theme, part, key), variant),
+              ...insideCard(theme, part, key, variant),
             });
             const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
             for (const role of [
@@ -267,6 +308,32 @@ function rows() {
               push({
                 ...base,
                 where: `${where} in ${inCard}`,
+                role,
+                text: at(tokens, role),
+                layers,
+              });
+          }
+        }
+        // The card inside a part with a fill of its own: the row still
+        // draws on the card's fill.
+        for (const ancestor of CARD_ANCESTORS) {
+          const cardLayers = [cardFill, at(page, '--color-background-surface')];
+          for (const [where, [part, key]] of Object.entries(ON_ACCENT_TINT)) {
+            if (part === 'file-input') continue;
+            const tokens = themeTokens(theme, {
+              ...cardOverrides(theme, variant),
+              ...rule(theme, part),
+              ...rule(theme, part, key),
+              ...insideCard(theme, part, key, variant, ancestor),
+            });
+            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
+            for (const role of [
+              '--color-text-primary',
+              '--color-text-secondary',
+            ])
+              push({
+                ...base,
+                where: `${where} in a ${variant} card inside a ${ancestor.join(' ')}`,
                 role,
                 text: at(tokens, role),
                 layers,
