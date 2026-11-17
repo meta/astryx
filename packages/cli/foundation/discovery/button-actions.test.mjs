@@ -179,6 +179,10 @@ describe('what is around the button', () => {
     ['a summary', '<details><summary><Button label="More" /></summary></details>'],
     ['an element with a click handler', '<div onClick={open}><Button label="Open" /></div>'],
     ['an element with a widget role', '<div role="button"><Button label="Open" /></div>'],
+    ['a disabled ButtonGroup', "<ButtonGroup isDisabled><Button label=\"Copy\" /></ButtonGroup>", "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';"],
+    ['a disabled InputGroup', "<InputGroup isDisabled><Button label=\"Go\" /></InputGroup>", "import {InputGroup} from '@astryxdesign/core/InputGroup';"],
+    ['a disabled fieldset', '<fieldset disabled><Button label="Send" /></fieldset>'],
+    ['inert content', '<div inert><Button label="Open" /></div>'],
     ['an element with a role the scan cannot read', '<div role={kind}><Button label="Open" /></div>'],
     ['an element with spread props', '<div {...rest}><Button label="Open" /></div>'],
     ['a Card that acts', '<Card onClick={select}><Button label="View" /></Card>'],
@@ -212,8 +216,9 @@ describe('what is around the button', () => {
     ['a provider', '<ToastProvider><Button label="Go" /></ToastProvider>'],
     ['a landmark role on a layout component', '<Card role="main"><Button label="Go" /></Card>'],
     ['a landmark role on HTML', '<nav role="navigation"><div role="group"><Button label="Go" /></div></nav>'],
+    ['a ButtonGroup that is not disabled', '<ButtonGroup isDisabled={false}><Button label="Copy" /></ButtonGroup>'],
   ])('%s: reported', (_, body) => {
-    const source = page(body).replace(
+    const source = page(body, "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';").replace(
       "import {VStack} from '@astryxdesign/core/Layout';",
       "import {VStack, Card, Layout} from '@astryxdesign/core/Layout';",
     );
@@ -260,6 +265,29 @@ describe('where the component that holds the button is rendered', () => {
     ['a component its own module lists', {'page.tsx': "import {Button} from '@astryxdesign/core/Button';\nexport function Home() {\n  return <Button label=\"Go\" />;\n}\nexport const routes = [{path: '/', component: Home}];\n"}],
   ])('%s: not reported', (_, modules) => {
     expect(deadButtons(modules)).toEqual([]);
+  });
+
+  it.each([
+    ['a lazy import through a barrel, under another name', {'Hero.tsx': hero, 'sections/index.ts': "export * from '../Hero';\n", 'page.tsx': pageWith("import {lazy} from 'react';\nconst Banner = lazy(() => import('./sections').then(m => ({default: m.Hero})));", '<a href="/x"><Banner /></a>')}],
+    ['a barrel read as a value', {'Hero.tsx': hero, 'sections/index.ts': "export {Hero} from '../Hero';\n", 'page.tsx': pageWith("import * as Sections from './sections';", '<a href="/x">{Object.values(Sections).map(S => <S key="s" />)}</a>')}],
+    ['a barrel of barrels loaded by import()', {'Hero.tsx': hero, 'all/index.ts': "export {Hero} from '../Hero';\n", 'top/index.ts': "export * from '../all';\n", 'page.tsx': pageWith("const load = () => import('./top');", '<a href="/x" onClick={load}>Go</a>')}],
+  ])('%s: not reported', (_, modules) => {
+    expect(deadButtons(modules)).toEqual([]);
+  });
+
+  it('a component through a barrel, in the open, is followed to the button', () => {
+    expect(
+      deadButtons({'Hero.tsx': hero, 'sections/index.ts': "export * from '../Hero';\n", 'page.tsx': pageWith("import {Hero} from './sections';", '<main><Hero /></main>')}),
+    ).toEqual(['Hero.tsx:3 Start']);
+  });
+
+  it('when the scan did not list every module, no component counts as one nothing renders', () => {
+    const isOwnCode = () => false;
+    const source = "import {Button} from '@astryxdesign/core/Button';\nexport default function Page() {\n  return <Button label=\"Go\" />;\n}\n";
+    const scanned = scanButtonActions(source, {isOwnCode, stem: 'page'});
+    const app = {files: ['page.tsx'], scan: () => scanned, modulesNaming: () => ['page.tsx']};
+    expect(buttonsWithoutAction(app)).toHaveLength(1);
+    expect(buttonsWithoutAction({...app, complete: false})).toEqual([]);
   });
 
   it('an aliased import in the open is followed to the button', () => {

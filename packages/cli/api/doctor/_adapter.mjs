@@ -319,10 +319,19 @@ export function findIconPlaceholders(projectDir) {
 
 /**
  * Test, story and fixture files: code that shows or checks a button, not a
- * page that a person uses.
+ * page that a person uses. The check reads none of them.
  */
-const NOT_APP_CODE =
-  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__|tests?|stories|fixtures|e2e)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+
+/**
+ * Folders that usually hold tests, stories or fixtures, though an app may
+ * also keep a page there (`src/pages/test/`). The check reads a file in one
+ * of them for where it renders components, and reports none of its buttons.
+ */
+const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
+
+/** As many source files as doctor lists in a project (see `listProjectSourceFiles`). */
+const SOURCE_FILE_LIMIT = 5000;
 
 /**
  * The name another module imports a module by: its file name without the
@@ -342,14 +351,18 @@ const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * (see `buttonsWithoutAction`), each with its file, line, column, component
  * and label, and the number of source files read. Test, story and fixture
  * files are left out. A file reads only as a syntax tree. Read without
- * executing app code.
+ * executing app code. `incomplete` says the project has more source files than
+ * doctor lists, so the check did not run.
  * @param {string} projectDir
- * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number}}
+ * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number, incomplete: boolean}}
  */
 export function findButtonsWithoutAction(projectDir) {
-  const files = listProjectSourceFiles(projectDir, '').filter(
-    file => !NOT_APP_CODE.test(path.relative(projectDir, file).split(path.sep).join('/')),
-  );
+  const listed = listProjectSourceFiles(projectDir, '');
+  const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
+  const files = listed.filter(file => !TEST_FILE.test(relative(file)));
+  // A listing cut short may leave out a module that renders a component, so
+  // the check cannot tell that nothing renders it.
+  if (listed.length >= SOURCE_FILE_LIMIT) return {found: [], files: files.length, incomplete: true};
   /** @type {Map<string, string | null>} */
   const texts = new Map();
   const textOf = (/** @type {string} */ file) => {
@@ -387,6 +400,7 @@ export function findButtonsWithoutAction(projectDir) {
   };
   // Only a file that imports from Core and names a button is parsed for buttons.
   const withButtons = files.filter(file => {
+    if (TEST_FOLDER.test(relative(file))) return false;
     const text = textOf(file);
     return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
   });
@@ -402,7 +416,7 @@ export function findButtonsWithoutAction(projectDir) {
     file: path.relative(projectDir, each.file).split(path.sep).join('/'),
   }));
   found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
-  return {found, files: files.length};
+  return {found, files: files.length, incomplete: false};
 }
 
 /**

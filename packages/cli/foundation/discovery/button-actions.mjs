@@ -22,6 +22,8 @@
  */
 
 import {parseTemplateSource, traverseTemplateSource} from './template-source-tree.mjs';
+import {importedName} from './template-icons.mjs';
+import {writtenString} from '../text/written-string.mjs';
 
 const CORE = '@astryxdesign/core';
 
@@ -183,7 +185,21 @@ function actsOnPress(attribute, tag) {
   if (/^on[A-Z]/.test(name)) return !(tag === 'form' && FORM_EVENTS.has(name));
   if (name.startsWith('data-')) return name !== 'data-testid';
   if (name === 'role') return !STRUCTURE_ROLES.has(staticText(attribute.value) ?? '');
+  // A disabled group or fieldset, or inert content, disables the buttons it holds.
+  if (name === 'isDisabled' || name === 'disabled' || name === 'inert') return !isFalse(attribute.value);
   return ['as', 'contentEditable', 'draggable', 'href', 'popover', 'ref', 'tabIndex'].includes(name);
+}
+
+/**
+ * Whether an attribute value is the literal `{false}`.
+ * @param {any} value a JSXAttribute value
+ */
+function isFalse(value) {
+  return (
+    value?.type === 'JSXExpressionContainer' &&
+    value.expression.type === 'BooleanLiteral' &&
+    value.expression.value === false
+  );
 }
 
 /** @param {any} attribute */
@@ -293,13 +309,7 @@ function placeholderNote({href, name}) {
  * @param {any} node
  */
 function staticText(node) {
-  if (node == null) return null;
-  if (node.type === 'StringLiteral') return node.value;
-  if (node.type === 'JSXExpressionContainer') return staticText(node.expression);
-  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
-    return node.quasis.map((/** @type {any} */ q) => q.value.cooked ?? '').join('');
-  }
-  return null;
+  return writtenString(node?.type === 'JSXExpressionContainer' ? node.expression : node);
 }
 
 /**
@@ -341,12 +351,7 @@ function importOf(binding) {
   if (declaration?.type !== 'ImportDeclaration') return null;
   const node = path.node;
   const typeOnly = declaration.importKind === 'type' || node.importKind === 'type';
-  /** @type {string} */
-  let imported;
-  if (node.type === 'ImportDefaultSpecifier') imported = 'default';
-  else if (node.type === 'ImportNamespaceSpecifier') imported = '*';
-  else imported = node.imported.type === 'StringLiteral' ? node.imported.value : node.imported.name;
-  return {source: /** @type {string} */ (declaration.source.value), imported, typeOnly};
+  return {source: /** @type {string} */ (declaration.source.value), imported: importedName(node), typeOnly};
 }
 
 /**
@@ -730,12 +735,7 @@ function missingAction(path, context) {
       continue;
     }
     if (name === 'isDisabled' || name === 'isLoading') {
-      const value = attribute.value;
-      const isFalse =
-        value?.type === 'JSXExpressionContainer' &&
-        value.expression.type === 'BooleanLiteral' &&
-        value.expression.value === false;
-      if (!isFalse) return null;
+      if (!isFalse(attribute.value)) return null;
       continue;
     }
     if (!BUTTON_LOOK_PROPS.has(name)) return null;
@@ -798,6 +798,8 @@ function holdsActingContent(path, context) {
  * @property {Map<string, string[]>} exports each component the module
  *   exports, by its name in the module, with the names it goes by elsewhere
  * @property {string | null} stem the module's name as another module imports it
+ * @property {string[]} reexports the names of the modules whose exports this
+ *   module passes on under the same names, as a barrel `index` does
  */
 
 /**
@@ -878,6 +880,8 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
   const uses = [];
   /** @type {Map<string, string[]>} */
   const exports = new Map();
+  /** @type {string[]} */
+  const reexports = [];
   const exportAs = (/** @type {string} */ local, /** @type {string} */ name) => {
     const names = exports.get(local) ?? [];
     if (!names.includes(name)) names.push(name);
@@ -945,6 +949,16 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
         }
       },
     },
+    ExportAllDeclaration(/** @type {any} */ path) {
+      const from = path.node.source.value;
+      if (!ownModule(from, isOwnCode)) return;
+      const fromStem = specifierStem(from);
+      if (path.node.exported) {
+        uses.push({local: null, names: [], module: fromStem, placement: 'blocked'});
+      } else if (fromStem && !reexports.includes(fromStem)) {
+        reexports.push(fromStem);
+      }
+    },
     ExportDefaultDeclaration(/** @type {any} */ path) {
       const declaration = path.node.declaration;
       const aliases = ['default', ...(stem ? [stem] : [])];
@@ -963,6 +977,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
         // goes by a name the scan cannot match to the component.
         if (!ownModule(from.value, isOwnCode)) return;
         const fromStem = specifierStem(from.value);
+        if (fromStem && !reexports.includes(fromStem)) reexports.push(fromStem);
         for (const specifier of specifiers ?? []) {
           if (specifier.type === 'ExportNamespaceSpecifier') {
             uses.push({local: null, names: [], module: fromStem, placement: 'blocked'});
@@ -996,7 +1011,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
       }
     },
   });
-  return {buttons, uses, exports, stem};
+  return {buttons, uses, exports, stem, reexports};
 }
 
 /**
@@ -1024,13 +1039,37 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false}
  * @param {(file: string) => ModuleScan | null} app.scan
  * @param {(names: string[]) => string[]} app.modulesNaming the modules whose
  *   text names any of the names, which may render a component that goes by one
+ * @param {boolean} [app.complete] false when the scan did not list every
+ *   module of the app; then no component counts as one that nothing renders
  * @returns {ButtonFinding[]}
  */
-export function buttonsWithoutAction({files, scan, modulesNaming}) {
+export function buttonsWithoutAction({files, scan, modulesNaming, complete = true}) {
   /** @type {Map<string, boolean>} */
   const known = new Map();
   /** @type {Set<string>} */
   const visiting = new Set();
+
+  /**
+   * A module's name and the names of the modules that pass its exports on,
+   * through barrels of barrels: a module that loads any of them may render
+   * any of its components.
+   * @param {string} stem
+   */
+  const passedOnBy = stem => {
+    const found = new Set([stem]);
+    const queue = [stem];
+    while (queue.length > 0) {
+      const next = /** @type {string} */ (queue.shift());
+      for (const other of modulesNaming([next])) {
+        const barrel = scan(other);
+        if (barrel?.stem && barrel.reexports.includes(next) && !found.has(barrel.stem)) {
+          found.add(barrel.stem);
+          queue.push(barrel.stem);
+        }
+      }
+    }
+    return found;
+  };
 
   /**
    * Whether every place the app renders a component is clear of anything
@@ -1057,21 +1096,21 @@ export function buttonsWithoutAction({files, scan, modulesNaming}) {
       if (here && !sameComponent(use.placement, component)) places.push({file, placement: use.placement});
     }
     const shared = names.filter(name => name !== 'default');
-    const moduleName = names.length > 0 ? (own?.stem ?? null) : null;
-    const lookFor = moduleName && !shared.includes(moduleName) ? [...shared, moduleName] : shared;
+    const moduleNames = names.length > 0 && own?.stem ? passedOnBy(own.stem) : new Set();
+    const lookFor = [...new Set([...shared, ...moduleNames])];
     if (lookFor.length > 0) {
       for (const other of modulesNaming(lookFor)) {
         if (other === file) continue;
         for (const use of scan(other)?.uses ?? []) {
           const byName = use.local == null && use.names.some(name => shared.includes(name));
-          const byModule = moduleName != null && use.module === moduleName;
+          const byModule = use.module != null && moduleNames.has(use.module);
           if (byName || byModule) places.push({file: other, placement: use.placement});
         }
       }
     }
     const result =
       places.length === 0
-        ? names.length > 0
+        ? complete && names.length > 0
         : places.every(place => placementClear(place.file, place.placement));
     visiting.delete(key);
     known.set(key, result);

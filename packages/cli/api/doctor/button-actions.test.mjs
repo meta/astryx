@@ -141,6 +141,27 @@ describe('the button-actions check', () => {
   );
 
   it(
+    'a file in a test folder counts for where it renders a component, and none of its buttons is reported',
+    async () => {
+      const check = await buttonCheck({
+        'src/main.tsx': MAIN,
+        'src/App.tsx': app('<Button label="Try it" onClick={() => go()} />'),
+        'src/Hero.tsx': app('<Button label="Start" />').replace('export default function App', 'export function Hero'),
+        'src/pages/test/Wrap.tsx': [
+          "import {Hero} from '../../Hero';",
+          'export default function Wrap() {',
+          '  return <a href="/start"><Hero /></a>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/pages/test/Page.tsx': app('<Button label="Demo" />'),
+      });
+      expect(check?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
     'a component loaded through lazy inside a link is not reported',
     async () => {
       const check = await buttonCheck({
