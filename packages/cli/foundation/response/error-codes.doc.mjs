@@ -365,7 +365,7 @@ export const doc = {
       value: 'ERR_RENDER_NOT_ASTRYX',
       stability: 'experimental',
       description:
-        '`export --reverse` was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental export command.',
+        '`experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
@@ -377,7 +377,7 @@ export const doc = {
       value: 'ERR_RENDER_NEWER_FORMAT',
       stability: 'experimental',
       description:
-        '`export --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental export command.',
+        '`experimental import` (or `export --reverse`) was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SCRIPT',

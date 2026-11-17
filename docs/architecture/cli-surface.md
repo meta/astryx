@@ -1108,8 +1108,8 @@ absolute path. A path the caller names absolutely is their choice of place, so
 refusing it (INV10). The file it writes there is still never one a render did
 not write: an existing file is replaced only when its head shows that a render
 wrote it, as everywhere else. A relative `--out` stays inside the current
-folder, and `--reverse`, which writes files the embedded source names, keeps
-every write inside it.
+folder, and the way back (`experimental import`, or `export --reverse`),
+which writes files the embedded source names, keeps every write inside it.
 
 Rejected: refusing every path outside the current folder (most agents that
 render a page for an artifact name an absolute path, and retry after the

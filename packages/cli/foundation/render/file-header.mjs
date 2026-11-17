@@ -39,7 +39,7 @@ const MAX_LISTED = 24;
  * @property {number} format - The render format of the embedded source.
  * @property {string} file - The rendered file's name.
  * @property {string} page - The page's path from its project's root; outside a project, its path among the files it carries.
- * @property {string} restored - Where --reverse writes the page by default, from the rendered file's folder.
+ * @property {string} restored - Where an import writes the page by default, from the rendered file's folder.
  * @property {string[]} files - The embedded files, page first.
  * @property {string[]} [notCarried] - Files the page uses that the file does not carry.
  * @property {Record<string, string>} packages - The packages the page rendered with, by name: their versions.
@@ -85,7 +85,7 @@ export function headerNote(facts) {
     'Run these commands in the folder that holds this file:',
     `  1. Get the source back. This writes ${facts.restored} and the files it imports`,
     `     (into ${facts.restored.split('/')[0]}-2/ and so on when that folder exists; the output names it):`,
-    `       ${run} experimental export --reverse ${file}`,
+    `       ${run} experimental import ${file}`,
     '  2. Edit the restored files.',
     '  3. Render again. A render replaces a file that a render wrote. Step 1 prints this',
     '     command with the folder it wrote:',
@@ -123,5 +123,5 @@ export function headerNote(facts) {
  * @returns {string} an HTML comment on one line
  */
 export function endNote(facts) {
-  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental export --reverse ${commentSafe(shellArg(facts.file))} -->`;
+  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental import ${commentSafe(shellArg(facts.file))} -->`;
 }

@@ -960,7 +960,7 @@ describe('render(): every write stays inside the current folder', () => {
         expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
         expect(result.data.warnings).toContainEqual({
           code: 'not-embedded',
-          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so --reverse cannot give it back.',
+          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so experimental import cannot give it back.',
         });
       } finally {
         fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o644);
@@ -2066,10 +2066,10 @@ describe('astryx experimental export (CLI)', () => {
         const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
         expect(line).toBeDefined();
         // The printed command, run as printed after the CLI's own name.
-        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental export ')[1];
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental import ')[1];
         const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
-        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
-        const back = await runCli(['experimental', 'export', ...args], dir);
+        expect(args).toEqual([out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'import', ...args], dir);
         expect(back.status, back.stderr).toBe(0);
         expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
           fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),

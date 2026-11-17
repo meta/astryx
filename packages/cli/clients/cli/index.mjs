@@ -122,6 +122,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon new-set',
   'experimental icon new-definition',
   'experimental export',
+  'experimental import',
   // The groups answer --json with their own help, as the root does.
   'experimental theme',
   'experimental theme editor',

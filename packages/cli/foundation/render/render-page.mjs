@@ -1339,7 +1339,7 @@ export async function renderPage(entry, options = {}) {
       notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so experimental import cannot give it back.`,
       });
     };
     /** @type {Buffer} */
@@ -1448,7 +1448,7 @@ export async function renderPage(entry, options = {}) {
     if (problem) {
       warnings.push({
         code: 'not-embedded',
-        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so --reverse cannot give it back.`,
+        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so experimental import cannot give it back.`,
       });
       continue;
     }
