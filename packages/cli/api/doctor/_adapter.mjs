@@ -197,25 +197,14 @@ export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
 }
 
-export const SOURCE_EXTENSIONS = new Set([
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-]);
+import {listProjectSourceFiles} from '../../foundation/fs/project-sources.mjs';
 
-const SKIP_DIRS = new Set([
-  '.git',
-  '.next',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-]);
+export {
+  SOURCE_EXTENSIONS,
+  listProjectSourceFiles,
+  projectImportsModule,
+  specifierTargets,
+} from '../../foundation/fs/project-sources.mjs';
 
 /** @param {string} file */
 export function readTextFile(file) {
@@ -230,50 +219,6 @@ export function readTextFileIfExists(file) {
   } catch {
     return null;
   }
-}
-
-/**
- * A bounded app-source walk that excludes dependencies, generated output, and
- * links. The doctor parses the returned bytes without executing app code.
- * @param {string} root
- * @param {string} generatedModule
- * @param {{stylesheets?: boolean, pages?: boolean}} [options] - also list
- *   `.css` files, and `.html` pages
- */
-export function listProjectSourceFiles(root, generatedModule, options = {}) {
-  /** @type {string[]} */
-  const files = [];
-  /** @type {string[]} */
-  const queue = [root];
-  while (queue.length > 0 && files.length < 5000) {
-    const dir = /** @type {string} */ (queue.shift());
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, {withFileTypes: true});
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue;
-      const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.astryx-')) {
-          queue.push(file);
-        }
-      } else if (
-        entry.isFile() &&
-        file !== generatedModule &&
-        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
-          (options.stylesheets === true &&
-            path.extname(entry.name) === '.css') ||
-          (options.pages === true &&
-            /^\.html?$/u.test(path.extname(entry.name))))
-      ) {
-        files.push(file);
-      }
-    }
-  }
-  return files;
 }
 
 /**
