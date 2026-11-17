@@ -70,7 +70,7 @@ link mode, and resting elevation. Consumer usage lives in `Button.doc.mjs`.
   default, export, or DOM change at rest
 - Builder choice: a caller `tooltip` or a wrapping `Tooltip` wins; there is no
   opt-out otherwise
-- Decider: josephfarina, 2026-11-16: a mouse or pen hover and keyboard focus
+- Decider: maintainers, 2026-11-16: a mouse or pen hover and keyboard focus
   open the cut-label tooltip on desktop, only when the label is cut; a touch
   tap opens nothing
 - Controlled/uncontrolled behavior: not applicable; Button holds no value.
