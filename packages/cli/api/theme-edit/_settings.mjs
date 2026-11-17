@@ -117,6 +117,7 @@ import {
   isColorValue,
   isSafeValue,
   parseColor,
+  colorsIn,
   oklabDistance,
   ratio,
   ratioWords,
@@ -4672,6 +4673,78 @@ export function borderFrames(ctx, data, value) {
 }
 
 /**
+ * The edge a floating surface keeps when the theme takes away the shadow
+ * that set it apart (`--shadow-med none` for a flat look): each overlay and
+ * menu that reads that shadow and draws no border of its own gets the
+ * theme's border (var(--border-width) solid var(--color-border)), so an
+ * open menu or popover never reads as a blank panel on a page of the same
+ * color. A part with a border or shadow setting of its own keeps it; a
+ * theme border width frames them already (frameCopies).
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
+ * @returns {Setting[]}
+ */
+export function edgeCopies(ctx, data, s) {
+  if (
+    s.source !== 'token' ||
+    !/^--shadow-/.test(String(s.thing)) ||
+    s.on ||
+    s.when ||
+    s.state ||
+    !/^(?:none|0(?:px)?(?:\s+0(?:px)?)*(?:\s+\S+)?)$/i.test(String(s.value).trim())
+  )
+    return [];
+  // (A theme border width frames the floating surfaces already.)
+  if (
+    data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === '--border-width' &&
+        !x.on &&
+        !x.when &&
+        !x.state &&
+        !/^0(?:px|rem|em)?$/.test(String(x.value).trim()),
+    )
+  )
+    return [];
+  const groups = groupsOf(ctx);
+  const floating = [
+    ...new Set([...(groups.overlays ?? []), ...(groups.menus ?? [])]),
+  ];
+  const C = /** @type {any} */ (ctx).C;
+  const bare = new Set(C ? borderlessSurfaces(C) : []);
+  /** @type {Setting[]} */
+  const out = [];
+  for (const p of floating) {
+    if (!ctx.project.target.has(p) || !bare.has(p)) continue;
+    const reads = (C?.partReads(p, 'shadow') ?? []).some(
+      (/** @type {{token: string}} */ r) => r.token === s.thing,
+    );
+    if (!reads) continue;
+    if (
+      data.settings.some(
+        x =>
+          !x.state &&
+          /^(border(-width|-style|-color)?|box-shadow|--border-[\w-]+)$/.test(
+            kebab(String(x.thing)),
+          ) &&
+          x.on &&
+          partsOf(ctx, x).includes(p),
+      )
+    )
+      continue;
+    out.push({
+      thing: 'border',
+      value: 'var(--border-width) solid var(--color-border)',
+      source: /** @type {const} */ ('property'),
+      on: p,
+      ...(s.mode ? {mode: s.mode} : {}),
+      only: true,
+    });
+  }
+  return out;
+}
+
+/**
  * The disabled state of a look painted over a part's fill (a gradient or
  * an image set at rest on a button and its family): each part it writes
  * that has a disabled state shows the theme's disabled treatment there, the
@@ -7591,6 +7664,7 @@ export function compileTheme(ctx, data, base) {
     ...momentCopies(ctx, data, x),
     ...frameCopies(ctx, data, x),
     ...disabledCopies(ctx, data, x),
+    ...edgeCopies(ctx, data, x),
   ]);
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.

@@ -81,6 +81,7 @@ import {
   partsOf,
   frameCopies,
   framesByDefault,
+  edgeCopies,
   borderFrames,
   undoArgs,
   isCheckNote,
@@ -7327,6 +7328,15 @@ async function changeOnce(
   if (s.note) notes.push(s.note);
   const framesNote = sub === 'set' ? frameNote(ctx, slug, data, s) : null;
   if (framesNote) notes.push(framesNote);
+  // (The floating surfaces that keep an edge when their shadow goes.)
+  const edged =
+    sub === 'set'
+      ? [...new Set(edgeCopies(ctx, data, s).map(x => String(x.on)))]
+      : [];
+  if (edged.length)
+    notes.push(
+      `with ${s.thing} gone, the floating surfaces that drew no border keep an edge at the theme's border (${edged.join(', ')}), so an open menu never reads as a blank panel; to keep one bare: \`${P} set ${slug} border none --on ${edged[0]}\``,
+    );
   if (keptForText.length)
     notes.push(
       `${keptForText.join(', ')} ${keptForText.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing}: this would make text there unreadable, so the change does not reach ${keptForText.length > 1 ? 'them' : 'it'}; to give it anyway: ${keptForText.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, keep: undefined}, String(s.value))}\``).join(', ')}`,
