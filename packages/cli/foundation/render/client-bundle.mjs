@@ -98,6 +98,19 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 }
 
+/**
+ * The file an esbuild message names: a page file is named with its
+ * namespace (`astryx-page:/…/page.tsx`), and the mount is the render's own,
+ * so it names none.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function locatedFile(file) {
+  if (file.startsWith(`${MOUNT}:`)) return null;
+  if (file.startsWith(`${PAGE}:`)) return file.slice(PAGE.length + 1);
+  return path.resolve(file);
+}
+
 /** @param {string} file */
 const loaderFor = file =>
   /\.[cm]?tsx$/.test(file) ? 'tsx' : /\.[cm]?ts$/.test(file) ? 'ts' : 'jsx';
@@ -317,9 +330,8 @@ export async function bundleForBrowser({
     if (first.detail?.compile) {
       throw new BundleError(first.text, {}, first.detail.compile);
     }
-    const where = first.location?.file
-      ? `${describe(path.resolve(first.location.file))}:${first.location.line}: `
-      : '';
+    const located = first.location?.file ? locatedFile(first.location.file) : null;
+    const where = located ? `${describe(located)}:${first.location.line}: ` : '';
     // A message that leads with a file's absolute path names it as the page does.
     const text = stripVTControlCharacters(first.text).replace(
       /^(\S+): /,
@@ -328,12 +340,7 @@ export async function bundleForBrowser({
     throw new BundleError(
       `The page's script cannot be built for the browser: ${where}${text}`,
       {
-        ...(first.location?.file
-          ? {
-              module: describe(path.resolve(first.location.file)),
-              line: first.location.line,
-            }
-          : {}),
+        ...(located ? {module: describe(located), line: first.location.line} : {}),
       },
     );
   } finally {

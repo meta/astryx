@@ -420,9 +420,30 @@ export default function Page() {
     );
     expect(error?.code).toBe('ERR_RENDER_SCRIPT');
     expect(error?.message).toContain(
-      'node-page.tsx loads node:fs, which is part of Node and not of a browser',
+      "The page's script cannot be built for the browser: node-page.tsx:1: node-page.tsx loads node:fs, which is part of Node and not of a browser",
     );
+    // Named as the page names it: no machine path, no build namespace.
+    expect(error?.message).not.toContain(dir);
+    expect(error?.message).not.toMatch(/astryx-(page|mount)/);
     expect(fs.existsSync(path.join(dir, 'node-page.html'))).toBe(false);
+  }, 120_000);
+
+  it('refuses a page whose lazily loaded module is missing, naming the page file as the page names it', async () => {
+    put(
+      'src/lazy-missing.tsx',
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./gone'));\nexport default function Page() {\n  return (\n    <Suspense fallback={<p>Loading</p>}>\n      <Panel />\n    </Suspense>\n  );\n}\n",
+    );
+    const error = await errorOf(() =>
+      render('src/lazy-missing.tsx', {cwd: dir, out: 'lazy-missing.html'}),
+    );
+    expect(error?.code).toBe('ERR_RENDER_SCRIPT');
+    expect(error?.message).toContain(
+      "The page's script cannot be built for the browser: lazy-missing.tsx:2: ",
+    );
+    expect(error?.message).toContain('./gone');
+    expect(error?.message).not.toContain(dir);
+    expect(error?.message).not.toMatch(/astryx-(page|mount)/);
+    expect(fs.existsSync(path.join(dir, 'lazy-missing.html'))).toBe(false);
   }, 120_000);
 
   it('composes with --title: the note, the record and the reverse keep it', async () => {
