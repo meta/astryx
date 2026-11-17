@@ -670,10 +670,11 @@ export default function Page() {
     );
     await render('src/shadowed.tsx', {cwd: dir, out: 'shadowed.html'});
     expect(fs.existsSync(path.join(dir, 'shadowed.html'))).toBe(true);
-    // A type re-exported as a type, and a file the page reads as text, are no value uses.
+    // A type re-exported as a type or plainly, and a file the page reads as
+    // text, are no value uses.
     put(
       'src/types-re.ts',
-      "import {ButtonProps} from '@astryxdesign/core/Button';\nexport type {ButtonProps};\nexport {type ButtonProps as Props};\n",
+      "import {ButtonProps} from '@astryxdesign/core/Button';\nexport type {ButtonProps};\nexport {type ButtonProps as Props};\nexport {ButtonProps as Plain};\nexport const label = 'Go';\n",
     );
     put(
       'src/snippet.tsx',
@@ -681,7 +682,7 @@ export default function Page() {
     );
     put(
       'src/re-and-raw.tsx',
-      "import type {ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label: 'Go'};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\n",
+      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\n",
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
