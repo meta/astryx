@@ -18,6 +18,58 @@ import {
 } from './_css.mjs';
 
 export {splitTop};
+
+/**
+ * The box color shorthands, which take one color per side, and how many
+ * sides each names (`border-color: top right bottom left`).
+ * @type {Record<string, number>}
+ */
+const COLOR_SIDE_COUNT = {
+  'border-color': 4,
+  'border-block-color': 2,
+  'border-inline-color': 2,
+};
+
+/**
+ * The sides each count of colors names, as CSS gives them out.
+ * @type {Record<number, string[][]>}
+ */
+const SIDE_NAMES = {
+  4: [['top'], ['right'], ['bottom'], ['left']],
+  3: [['top'], ['right', 'left'], ['bottom']],
+  2: [
+    ['top', 'bottom'],
+    ['right', 'left'],
+  ],
+};
+
+/**
+ * A box color shorthand's colors as typed, one per side (`#ddd #ddd
+ * transparent`), each with the sides it colors; null for a property that
+ * takes one color, or for one value. `tooMany` is set when the value has
+ * more than the property takes.
+ * @param {string} prop the property, as CSS names it
+ * @param {string} value
+ * @returns {{colors: Array<{color: string, sides: string[]}>, max: number, tooMany: boolean} | null}
+ */
+export function colorSides(prop, value) {
+  const max = COLOR_SIDE_COUNT[prop];
+  if (!max) return null;
+  const parts = splitTop(String(value).trim(), ' ')
+    .map(x => x.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  const logical = max === 2 && prop !== 'border-color';
+  /** @type {string[][]} */
+  const names = logical
+    ? [['start'], ['end']]
+    : (SIDE_NAMES[parts.length] ?? []);
+  return {
+    colors: parts.map((color, i) => ({color, sides: names[i] ?? []})),
+    max,
+    tooMany: parts.length > max,
+  };
+}
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */

@@ -108,6 +108,7 @@ import {
   ratio,
   ratioWords,
   splitTop,
+  colorSides,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -11596,11 +11597,21 @@ function borderContrastProblems(ctx, data, res, base) {
         !/^(border|border-color|outline|outline-color)$/.test(x.thing)
       )
         continue;
-      const color = /-color$/.test(x.thing)
-        ? String(x.value)
-        : colorOfBorder(String(x.value));
+      // A box color shorthand colors each side on its own (`#ddd #ddd
+      // transparent`): each side's color is measured, and a transparent
+      // side, which draws no line, is left out. The faintest side speaks.
+      const perSide = colorSides(x.thing, String(x.value));
+      const sideColors = perSide
+        ? perSide.colors.filter(
+            y => !/^transparent$/i.test(y.color) && alphaOf(y.color) !== 0,
+          )
+        : null;
+      const color = sideColors
+        ? (sideColors[0]?.color ?? null)
+        : /-color$/.test(x.thing)
+          ? String(x.value)
+          : colorOfBorder(String(x.value));
       if (!color) continue;
-      const border = inMode(color, mode, res[mode]);
       for (const t of partsOf(ctx, x).filter(control)) {
         const own = [...data.settings]
           .reverse()
@@ -11621,7 +11632,35 @@ function borderContrastProblems(ctx, data, res, base) {
           : read
             ? inMode(`var(${read.token})`, mode, res[mode])
             : page;
-        const now = measure(border, ground || page, page);
+        // Each side's color, faintest first (one entry without sides).
+        const measured = (sideColors ?? [{color, sides: []}])
+          .map(y => {
+            const c = inMode(y.color, mode, res[mode]);
+            return {c, sides: y.sides, r: measure(c, ground || page, page)};
+          })
+          .sort((a, b) => (a.r ?? Infinity) - (b.r ?? Infinity));
+        const faintest = measured[0];
+        const border = faintest.c;
+        const now = faintest.r;
+        // Every side drawn in that color, as CSS orders the sides.
+        const faintSides = [
+          'top',
+          'right',
+          'bottom',
+          'left',
+          'start',
+          'end',
+        ].filter(side =>
+          measured.some(y => y.c === border && y.sides.includes(side)),
+        );
+        const which = (/** @type {string[]} */ list) =>
+          list.length > 1
+            ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`
+            : list[0];
+        const edge =
+          sideColors && faintSides.length
+            ? `the ${which(faintSides)} border${faintSides.length > 1 ? 's' : ''}`
+            : 'the border';
         // The base theme's border on the part: what it reads at rest, else
         // in its default variant (a card's), else the shared border token.
         const bReads = ctx.C.partReads(t, 'border').filter(r =>
@@ -11651,12 +11690,25 @@ function borderContrastProblems(ctx, data, res, base) {
           (was == null || was > now) &&
           (themeWas == null || themeWas > now + 0.005)
         ) {
-          const color = fixOn(ground || page, page, border);
+          const fixed = fixOn(ground || page, page, border);
+          // The fix keeps every other side as typed, with the faint one
+          // made readable.
+          const fixValue =
+            fixed && perSide
+              ? perSide.colors
+                  .map(y =>
+                    inMode(y.color, mode, res[mode]) === border &&
+                    !/^transparent$/i.test(y.color)
+                      ? fixed
+                      : y.color,
+                  )
+                  .join(' ')
+              : fixed;
           add(
             `border|${x.thing}|${t}|${mode}`,
-            `the border on ${t} (${border}) is ${ratioWords(now)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
-            color
-              ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${x.only && x.on === t ? ' --only' : ''}${modeFlag(mode)}`
+            `${edge} on ${t} (${border}) ${sideColors && faintSides.length > 1 ? 'are' : 'is'} ${ratioWords(now)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
+            fixValue
+              ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} ${quoteCommandArgument(fixValue)} --on ${t}${x.only && x.on === t ? ' --only' : ''}${modeFlag(mode)}`
               : null,
           );
           break;
