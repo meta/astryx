@@ -593,7 +593,7 @@ function changeBlocks(r) {
   const done =
     unchanged && d.action === 'set'
       ? drawnAlready
-        ? `[ok] ${d.theme}: ${describe(s)} already shows; nothing written`
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
         : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`

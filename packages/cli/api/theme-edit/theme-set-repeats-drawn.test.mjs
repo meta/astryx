@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -55,6 +56,24 @@ describe('a part setting Core already draws', () => {
       'utf8',
     );
     expect(saved).not.toContain('badge');
+    // (A setting that did nothing is never reported as ok.)
+    const cli = await runCli(
+      [
+        'experimental',
+        'theme',
+        'editor',
+        'set',
+        't',
+        'corners',
+        'pill',
+        '--on',
+        'badge',
+      ],
+      {cwd},
+    );
+    expect(cli.stdout).toMatch(
+      /^\[no change\] t: corners = pill on badge already shows; nothing written/m,
+    );
   }, 240_000);
 
   it('square corners on a badge are written and styled', async () => {
