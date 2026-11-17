@@ -1918,14 +1918,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     setHighlightedIndex(-1);
   }
 
-  // Entering the cell that is already active changes nothing. Entering
-  // another option, or the other cell of the active grid row, is pointer
-  // input: that row draws no keyboard ring until a key moves the highlight.
+  // Entering another option is pointer input, and so is moving from the
+  // active row's action cell back onto its option cell. Any other entry into
+  // the active row, such as a key scrolling a cell under a still pointer,
+  // keeps the ring.
   const hoveredOptionOf = useCallback(
     (...args: Parameters<typeof onComboboxItemMouseEnter>) =>
-      args[1] === highlightedIndex && (args[2] ?? 'option') === highlightedCell
-        ? null
-        : args[1],
+      args[1] !== highlightedIndex ||
+      ((args[2] ?? 'option') === 'option' && highlightedCell === 'action')
+        ? args[1]
+        : null,
     [highlightedIndex, highlightedCell],
   );
   const {

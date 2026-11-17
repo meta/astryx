@@ -146,6 +146,35 @@ describe('MultiSelector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 
+  it('keeps the ring when a key scrolls the active grid row’s action cell under a still pointer', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={[
+          {
+            value: 'bug',
+            label: 'Bug',
+            action: <button type="button">Edit Bug</button>,
+          },
+          {value: 'feature', label: 'Feature'},
+        ]}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const field = screen.getByRole('combobox', {name: 'Labels'});
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    const row = screen.getByRole('row', {name: 'Bug', hidden: true});
+    expect(activeOption(field)).toBe(row);
+    // The browser reports an entry when the scroll moves the cell under the
+    // pointer; no pointer moved.
+    fireEvent.mouseEnter(row.children[1]);
+    expect(activeOption(field)).toBe(row);
+    expect(hasRing(row)).toBe(true);
+  });
+
   it('keeps the fill alone when the mouse moves from a grid row’s action cell back onto its option cell', async () => {
     const user = userEvent.setup();
     render(
