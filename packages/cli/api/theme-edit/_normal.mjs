@@ -686,7 +686,9 @@ export function colorPair(value) {
 
 /**
  * A value without the debris a copy brings along: a trailing `;`, a
- * `!important`, a comment. One of the exact cleanups a repair may offer.
+ * `!important`, a comment, an old browser hack's escape at its end (`\9`,
+ * `\0`, which browsers read as part of the last word, so they drop the
+ * value). One of the exact cleanups a repair may offer.
  * @param {string} v
  * @returns {string}
  */
@@ -695,6 +697,7 @@ export function withoutCopyDebris(v) {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\s*!\s*important\b/gi, '')
     .replace(/[\s;]+$/, '')
+    .replace(/\s*\\[09]$/, '')
     .trim();
 }
 
@@ -995,12 +998,19 @@ export const thousandsSetting = thing => {
  * @returns {string}
  */
 export function stateSpelling(text) {
+  // Several states at once are joined by +, with or without spaces around
+  // it (`selected + hover`): each is read on its own.
   return String(text)
-    .trim()
-    .replace(/^:+/, '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[\s_]+/g, '-')
-    .toLowerCase();
+    .split(/\s*\+\s*/)
+    .map(piece =>
+      piece
+        .trim()
+        .replace(/^:+/, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[\s_]+/g, '-')
+        .toLowerCase(),
+    )
+    .join('+');
 }
 
 /**

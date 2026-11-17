@@ -188,6 +188,7 @@ export function templateCopy(
         ? {givenPath: targetPath}
         : {}),
       ...(icons ? {icons} : {}),
+      isReady: match.isReady !== false,
     },
   };
 }

@@ -210,3 +210,74 @@ export function keyPathLine(source, keyPath, file) {
   visit(ast.program, []);
   return found;
 }
+
+/**
+ * The line of the first property named `key` whose value is the literal
+ * `value` as written (text, or a number written as itself), anywhere in a
+ * source: the place a value given through a const, a shorthand or a spread
+ * is written, where no whole key path reaches it. Null when none is.
+ * @param {string} source
+ * @param {string} key
+ * @param {unknown} value
+ * @param {string} [file]
+ * @returns {number | null}
+ */
+export function keyValueLine(source, key, value, file) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(source, {
+      sourceType: 'unambiguous',
+      plugins: sourcePlugins(file),
+    });
+  } catch {
+    return null;
+  }
+  /** @param {any} node @returns {any} */
+  const unwrapped = node => {
+    let n = node;
+    while (n && WRAPPERS.has(n.type)) n = n.expression;
+    return n;
+  };
+  /** @type {number | null} */
+  let found = null;
+  /** @param {any} node */
+  const visit = node => {
+    if (found != null || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (node.type === 'ObjectProperty' && !node.computed) {
+      const k =
+        node.key?.type === 'Identifier'
+          ? node.key.name
+          : node.key?.type === 'StringLiteral'
+            ? node.key.value
+            : node.key?.type === 'NumericLiteral'
+              ? String(node.key.value)
+              : null;
+      const v = unwrapped(node.value);
+      if (
+        k === key &&
+        (v?.type === 'StringLiteral' || v?.type === 'NumericLiteral') &&
+        v.value === value
+      ) {
+        found = node.loc?.start?.line ?? null;
+        return;
+      }
+    }
+    for (const [k, v] of Object.entries(node))
+      if (
+        k !== 'loc' &&
+        k !== 'start' &&
+        k !== 'end' &&
+        v &&
+        typeof v === 'object'
+      )
+        visit(v);
+  };
+  visit(ast.program);
+  return found;
+}

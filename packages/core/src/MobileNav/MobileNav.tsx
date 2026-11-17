@@ -181,6 +181,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxSizing: 'border-box',
     overflow: 'hidden',
     transitionProperty: 'transform',

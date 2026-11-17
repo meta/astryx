@@ -981,6 +981,98 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  /**
+   * A fresh clone of an app that added the neutral and stone themes: its
+   * `node_modules` holds Core but neither theme package.
+   * @param {string[]} listed the theme packages the app's package.json lists
+   */
+  async function freshCloneWithThemes(listed) {
+    const dir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'),
+    );
+    dirs.push(dir);
+    write(path.join(dir, 'tsconfig.json'), '{}\n');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'doctor-app',
+        private: true,
+        dependencies: {
+          '@astryxdesign/core': CLI_VERSION,
+          ...Object.fromEntries(listed.map(name => [name, CLI_VERSION])),
+        },
+      }),
+    );
+    write(path.join(dir, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    const packageDirs = [];
+    for (const slug of ['neutral', 'stone']) {
+      const packageDir = path.join(
+        dir,
+        `node_modules/@astryxdesign/theme-${slug}`,
+      );
+      packageDirs.push(packageDir);
+      write(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: `@astryxdesign/theme-${slug}`,
+          version: CLI_VERSION,
+          type: 'module',
+          exports: {
+            './built': `./dist/${slug}.js`,
+            './theme.css': './dist/theme.css',
+          },
+        }),
+      );
+      write(
+        path.join(packageDir, `dist/${slug}.js`),
+        `export const ${slug}Theme = {name: '${slug}', tokens: {}};\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/theme.css'),
+        `[data-astryx-theme="${slug}"] { --color-text: black; }\n`,
+      );
+      await themeAdd(slug, {cwd: dir, import: true});
+    }
+    // The project's dependencies are not installed yet.
+    for (const packageDir of packageDirs)
+      fs.rmSync(packageDir, {recursive: true});
+    return dir;
+  }
+
+  it("check 1, in a fresh clone that lists the theme packages, says to install the project's dependencies once", async () => {
+    const dir = await freshCloneWithThemes([
+      '@astryxdesign/theme-neutral',
+      '@astryxdesign/theme-stone',
+    ]);
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners).toMatchObject({
+      status: 'fail',
+      message: [
+        'Theme package "@astryxdesign/theme-neutral" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+        'Theme package "@astryxdesign/theme-stone" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+      ].join(' '),
+      fix: 'pnpm install',
+    });
+  });
+
+  it('check 1, in a fresh clone that lists only one of two theme packages, names each fix as its own command', async () => {
+    const dir = await freshCloneWithThemes(['@astryxdesign/theme-neutral']);
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    // The listed theme's install stays a command of its own, before the
+    // steps that add the other theme.
+    const steps = owners.fix.split('; ');
+    expect(steps[0]).toBe('pnpm install');
+    expect(steps.slice(1).join('; ')).toContain('@astryxdesign/theme-stone');
+    expect(steps.at(-1)).toMatch(/ theme add stone\b/);
+  });
+
   it('check 2 fails when the generated module is hand-edited', async () => {
     const {dir, moduleFile} = await fixture();
     fs.appendFileSync(moduleFile, '// hand edit\n');
@@ -1366,6 +1458,62 @@ describe('app-theme doctor checks', () => {
     180_000,
   );
 
+  it.skipIf(process.platform === 'win32')(
+    "check 6 through a CLI installed for the computer, which has no Core: reads the input with the project's Core",
+    async () => {
+      const home = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'astryx-doctor-home-'),
+      );
+      dirs.push(home);
+      const g = globalCli('npm', CLI_VERSION, {root: home, withoutCore: true});
+      const {dir, packageDir} = await fixture(undefined, {root: os.tmpdir()});
+      const projectCore = path.join(dir, 'node_modules/@astryxdesign/core');
+      fs.rmSync(projectCore, {recursive: true, force: true});
+      fs.symlinkSync(path.join(REPO_ROOT, 'packages/core'), projectCore, 'dir');
+      write(
+        path.join(packageDir, 'themes/ocean/oceanTheme.ts'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const oceanTheme = defineTheme({name: 'ocean', tokens: {}});\n",
+      );
+      const privateCheck = () => {
+        const result = spawnSync(
+          process.execPath,
+          [g.bin, 'doctor', '--json'],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            timeout: 120_000,
+            env: {
+              PATH: path.dirname(process.execPath),
+              HOME: home,
+              USERPROFILE: home,
+              XDG_CACHE_HOME: path.join(home, '.cache'),
+              XDG_CONFIG_HOME: path.join(home, '.config'),
+              npm_config_registry: 'http://127.0.0.1:9/',
+              npm_config_update_notifier: 'false',
+              NO_COLOR: '1',
+            },
+          },
+        );
+        return JSON.parse(result.stdout).data.checks.find(
+          c => c.id === 'theme-private-variables',
+        );
+      };
+
+      expect(privateCheck()).toMatchObject({status: 'pass'});
+
+      // A fresh clone: no Core to load the input with.
+      fs.rmSync(projectCore, {recursive: true, force: true});
+      expect(privateCheck()).toEqual({
+        id: 'theme-private-variables',
+        label: 'Private theme variables',
+        status: 'info',
+        message:
+          "The project's Core isn't installed, so theme inputs were not checked for private variables. Install the project's dependencies, then run doctor again.",
+      });
+    },
+    180_000,
+  );
+
   it('check 6 ignores private variables generated from guaranteed component properties', async () => {
     const {dir, packageDir} = await fixture([
       {
@@ -1395,15 +1543,94 @@ describe('app-theme doctor checks', () => {
     expect(result.message).toContain('--_button-radius');
   });
 
+  it("check 6 reads a bundled theme's input from the package the project installs", async () => {
+    const dir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-bundled-input-'),
+    );
+    dirs.push(dir);
+    write(path.join(dir, 'tsconfig.json'), '{}\n');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'doctor-app',
+        private: true,
+        dependencies: {
+          '@astryxdesign/core': CLI_VERSION,
+          '@astryxdesign/theme-neutral': CLI_VERSION,
+        },
+      }),
+    );
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    const packageDir = path.join(
+      dir,
+      'node_modules/@astryxdesign/theme-neutral',
+    );
+    write(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-neutral',
+        version: CLI_VERSION,
+        type: 'module',
+        exports: {
+          './built': './dist/neutral.js',
+          './theme.css': './dist/theme.css',
+          './fonts.css': './fonts.css',
+        },
+      }),
+    );
+    write(
+      path.join(packageDir, 'dist/neutral.js'),
+      "export const neutralTheme = {name: 'neutral', tokens: {}};\n",
+    );
+    write(
+      path.join(packageDir, 'dist/theme.css'),
+      '[data-astryx-theme="neutral"] { --color-text: black; }\n',
+    );
+    write(path.join(packageDir, 'fonts.css'), '');
+    await themeAdd('neutral', {cwd: dir, import: true});
+    write(
+      path.join(dir, 'src/index.tsx'),
+      "import {themes, defaultThemeSlug} from './astryx-themes';\nvoid themes[defaultThemeSlug];\n",
+    );
+
+    // A package that ships no source of its own: the CLI's copy is read.
+    expect(
+      check(await checkAppThemes(dir), 'theme-private-variables'),
+    ).toMatchObject({status: 'pass'});
+
+    // The package's own copy is the one the app uses.
+    write(
+      path.join(packageDir, 'src/neutralTheme.ts'),
+      "export const neutralTheme = {name: 'neutral', tokens: {}, components: {button: {base: {'--_button-radius': '2px'}}}};\n",
+    );
+    const result = check(await checkAppThemes(dir), 'theme-private-variables');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.message).toContain('--_button-radius');
+  });
+
   it('check 7 fails when a theme peer range rejects installed Core', async () => {
     const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '^9.0.0'});
 
     const result = check(await checkAppThemes(dir), 'theme-core-peers');
+    // With the package manager of the project's folder.
     expect(result).toMatchObject({
       status: 'fail',
-      fix: expect.stringContaining('npm install'),
+      fix: expect.stringMatching(
+        /^(?:npm install|pnpm add) '@astryxdesign\/core@\^9\.0\.0'; /u,
+      ),
     });
     expect(result.message).toContain('^9.0.0');
+  });
+
+  it("check 7's fix saves the one Core version a theme accepts exactly, in a project that pins its Core", async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '9.0.0'});
+
+    expect(check(await checkAppThemes(dir), 'theme-core-peers').fix).toMatch(
+      /^(?:npm install|pnpm add) -E @astryxdesign\/core@9\.0\.0; .*doctor$/u,
+    );
   });
 
   it('check 7 passes a theme package whose Core range is empty, which accepts every Core', async () => {
@@ -1482,6 +1709,98 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 names the package that loads a family the font stylesheet lacks', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Inter',
+        fontCss:
+          '/* No font stylesheets: no installed package loads them. */\n',
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.fix).toMatch(
+      /^Install the packages that load them \((npm install|pnpm add|yarn add|bun add) @fontsource\/inter\), then /,
+    );
+  });
+
+  it('check 9 keeps the stylesheet step for a self-hosted family, naming no package it would guess', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Acme Sans',
+        fontCss:
+          '/* No font stylesheets: no installed package loads them. */\n',
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.fix).toMatch(
+      /^Add the missing font stylesheet export or local <slug>\.fonts\.css, then /,
+    );
+    expect(result.fix).not.toContain('@fontsource/acme-sans');
+  });
+
+  it("check 9 counts a family that another added theme's font stylesheet loads, as for a theme that extends it", async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {slug: 'sunset', fontFamily: 'Ocean Sans'},
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it("check 9 reports an imported font stylesheet it cannot parse, even when another theme's stylesheet loads the family", async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {
+        slug: 'sunset',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@font-face { font-family: "Ocean Sans"; src: url(\n',
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining(
+        'sunset: font stylesheet could not be parsed',
+      ),
+    });
+  });
+
+  it('check 9 still warns for a family that no font stylesheet the module imports loads, naming only that one', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {slug: 'sunset', fontFamily: '"Ocean Sans", "Sunset Serif"'},
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message:
+        'Added themes name font families but import no font stylesheet (sunset: Sunset Serif (font stylesheet is not imported)).',
+    });
+  });
+
   it('check 9 warns when an external import cannot prove the named family', async () => {
     const {dir} = await fixture([
       {
@@ -1494,6 +1813,42 @@ describe('app-theme doctor checks', () => {
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
       status: 'warn',
       message: expect.stringContaining('Ocean Sans'),
+    });
+  });
+
+  it('check 9 passes when a font service URL names the family, as Google Fonts imports do', async () => {
+    for (const fontCss of [
+      "@import url('https://fonts.googleapis.com/css2?family=Ocean+Sans:wght@400;500;600;700&display=swap');\n",
+      '@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&family=Ocean+Sans&display=swap");\n',
+      '@import "//fonts.googleapis.com/css?family=Roboto:400,700|Ocean+Sans:400";\n',
+    ]) {
+      const {dir} = await fixture([
+        {slug: 'ocean', fontFamily: 'Ocean Sans', fontCss},
+      ]);
+      expect(
+        check(await checkAppThemes(dir), 'theme-fonts'),
+        fontCss,
+      ).toMatchObject({
+        status: 'pass',
+        message:
+          'Every named non-system font is loaded by an @font-face rule or a font service URL that names it.',
+      });
+    }
+  });
+
+  it('check 9 still warns for a family the font service URL does not name', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: 'External font imports prevent proof for ocean: Ocean Sans.',
     });
   });
 

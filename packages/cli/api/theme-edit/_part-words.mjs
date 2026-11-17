@@ -17,6 +17,11 @@
  */
 export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (The page's main panel, the area its content sits in.)
+  [
+    /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
+    {on: 'layout-content'},
+  ],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},
@@ -28,7 +33,7 @@ export const OVERRIDES = [
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
   [
-    /\b(table header|column headers?|table headings?)\b/,
+    /\b(table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -53,6 +58,9 @@ export const OVERRIDES = [
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  // (Menus said plainly are every menu, the menus group; a dropdown menu,
+  // or one menu, is the dropdown menu.)
+  [/\b(?<!dropdown )menus\b/, {on: 'menus'}],
   [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
   // A part's own header or footer ("dialog header", "card footer") is that
   // part's, never the app's top bar or footer.
@@ -80,7 +88,12 @@ export const OVERRIDES = [
     /\b(danger|destructive|delete) (buttons?|ones?|variant)\b/,
     {on: 'button', when: 'variant:destructive'},
   ],
-  [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
+  // (Never the operating system, "Windows 11 accent …": a window named
+  // with a version is a product.)
+  [
+    /\b(panels?|windows?(?!\s+(?:\d|xp\b|vista\b))|boxes|tiles?|containers?)\b/,
+    {on: 'containers'},
+  ],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
   // A sheet is Core's bottom sheet (never a style sheet).
   [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],
@@ -117,6 +130,11 @@ export const OVERRIDES = [
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
+  // (A keyboard key, "the key chips", is Core's Kbd, never a badge.)
+  [
+    /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
+    {on: 'kbd'},
+  ],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],

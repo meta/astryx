@@ -105,6 +105,7 @@ import {
   THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
+  dependencyInstallFor,
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
@@ -127,6 +128,12 @@ import {
   builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
+import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
+import {coreBase} from '../../foundation/bases/core.mjs';
+import {
+  CLI_PROVIDER_ID,
+  CORE_PROVIDER_ID,
+} from '../../foundation/identity/providers.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -146,6 +153,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string} cwd - Directory to diagnose.
  * @property {string} nodeVersion - Running Node version.
  * @property {string|null} coreDir - Resolved core package directory, or null.
+ * @property {import('../../foundation/bases/resolve.mjs').ActiveBase} [base]
+ *   The base the project's run reads; Core when absent.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
  * @property {string[]} [addedThemePackages] - Packages of the project's added
@@ -327,6 +336,12 @@ export function checkNodeVersion(ctx) {
 export function checkCoreInstalled(ctx) {
   const found = Boolean(ctx.coreDir);
   const version = pkgVersion(ctx.coreDir);
+  // A project that lists Core but has not installed its dependencies, as a
+  // fresh clone, gets Core by installing them: adding Core would install
+  // another release and replace the version the project lists.
+  const install = found
+    ? null
+    : dependencyInstallFor(ctx.cwd, '@astryxdesign/core');
   return {
     id: 'core-installed',
     label: '@astryxdesign/core installed',
@@ -337,8 +352,27 @@ export function checkCoreInstalled(ctx) {
     ...(found
       ? {}
       : {
-          fix: 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+          fix: install
+            ? `Install the project's dependencies: \`${install}\`.`
+            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
+  };
+}
+
+/**
+ * The active base is installed and resolvable, in a project whose base is
+ * not Core. A project on Core has {@link checkCoreInstalled} instead.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkBaseInstalled(ctx) {
+  if (ctx.base == null || ctx.base.core) return null;
+  const {name, version} = ctx.base;
+  return {
+    id: 'base-installed',
+    label: `${name} installed`,
+    status: 'pass',
+    message: `${name}, the active base, resolved${version ? ` (v${version})` : ''}.`,
   };
 }
 
@@ -393,8 +427,13 @@ export function checkVersionAlignment(ctx) {
     // is not the project's, or in no project, the fix says how to reach one.
     const add = addCliCommandFor(ctx.cwd, coreVersion);
     const matches = coreVersion === cliVersion;
+    const lead = add?.declared
+      ? 'To install the CLI this project declares'
+      : matches
+        ? 'To pin it for the team and CI'
+        : 'To match';
     const fix = add
-      ? `${matches ? 'To pin it for the team and CI' : 'To match'}, run: ${add.command}.`
+      ? `${lead}, run: ${add.command}.`
       : matches
         ? null
         : NO_PROJECT_FIX;
@@ -1634,6 +1673,10 @@ export async function checkCliDocs(_ctx, options = {}) {
   }
 }
 
+/** The providers whose docs a run on another base leaves out. */
+/** @type {Set<string>} */
+const CORE_DOC_PROVIDERS = new Set([CORE_PROVIDER_ID, CLI_PROVIDER_ID]);
+
 /**
  * The docs tree builds with no error, and every CLI typed doc in a `cli/...`
  * group has a route in it (spec:AST-046): each placement names a namespace of
@@ -1673,15 +1716,20 @@ export async function checkDocsTree(_ctx, options = {}) {
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
       // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names.
+      // reference block also includes all it names. A run whose base is not
+      // Core leaves Core's docs out; a link to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
         }
       }
-      problems.push(...(await docsLinkProblems(catalog, tree)));
+      const coreDocs = await coreOnlyDocNames();
+      /** @param {{provider: string, name: string}} target */
+      const absent = target =>
+        CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
+      problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
       problems.push(
-        ...(await docsLinkProblems(catalog, tree, {references: true})),
+        ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
     }
     // New findings warn: a project that passed before keeps passing
@@ -2338,7 +2386,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2351,6 +2399,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
   checkConfiguredIntegrations,
@@ -2365,6 +2414,18 @@ export const SYNC_CHECKS = [
   checkCliCommand,
   checkGatherCache,
 ];
+
+/**
+ * The checks that read Core. A project whose base is not Core reads no Core,
+ * so they are left out of it, with the `themes` check, which counts Core's
+ * theme packages.
+ * @type {ReadonlySet<(ctx: DoctorContext) => DoctorCheck | null>}
+ */
+const CORE_CHECKS = new Set([
+  checkCoreInstalled,
+  checkVersionAlignment,
+  checkPeerDeps,
+]);
 
 /**
  * Run all diagnostic checks and return a structured report.
@@ -2556,7 +2617,9 @@ export async function runChecks(options = {}) {
     iconSets,
     // Set after the docs checks, below.
     iconPlaceholders: null,
+    base: project?.base.ok ? project.base.base : coreBase(),
   };
+  const readsCore = ctx.base?.core !== false;
 
   // The checks that read only files, each kept while every file it read is
   // unchanged; the Core the project loads is part of what they read. They
@@ -2588,7 +2651,7 @@ export async function runChecks(options = {}) {
   // Run the theme checks and config check after the environment checks. The
   // released `themes` check keeps its place, ahead of the app-theme checks.
   for (const fn of SYNC_CHECKS) {
-    const check = fn(ctx);
+    const check = readsCore || !CORE_CHECKS.has(fn) ? fn(ctx) : null;
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
@@ -2600,10 +2663,8 @@ export async function runChecks(options = {}) {
         () => themeImportWiring(cwd),
         THEME_WIRING_CODEC,
       );
-      checks.push(
-        checkThemes(cwd, appThemeChecks, wiring),
-        ...withProviderWiring(appThemeChecks, wiring),
-      );
+      if (readsCore) checks.push(checkThemes(cwd, appThemeChecks, wiring));
+      checks.push(...withProviderWiring(appThemeChecks, wiring));
       checks.push(await checkConfig(ctx));
     }
   }

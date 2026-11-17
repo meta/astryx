@@ -38,7 +38,7 @@ export const docs = {
           style: 'unordered',
           items: [
             "The project installs the CLI, as recommended: that CLI answers, whatever its version, as it always has. When you type the global astryx command instead, it passes the run to the project's CLI, with the same arguments, input, output, and exit status, so either command gives the same answer.",
-            "The project installs only Core, or nothing is installed yet, as in a fresh clone: the astryx command you started answers, as it always has. When its version differs from the project's Core, a hint after the command, once a day, names the command that adds the CLI at Core's version.",
+            "The project installs only Core, or nothing is installed yet, as in a fresh clone: the astryx command you started answers, as it always has. When its version differs from the project's Core, a hint after the command, once a day, names the command that adds the CLI at Core's version, or, when the project's package.json lists the CLI in its dependencies already, the command that installs them.",
             "The project's CLI is installed but cannot start: the CLI version equal to the project's Core answers instead (from the installed Core, else the lockfile, else the newest one the declared range allows), installed once into a cache.",
           ],
         },
@@ -68,12 +68,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'In a project with only Core, the hint looks like this, after the command, at most once a day per project:',
+          text: 'In a project with only Core, pinned to one version, the hint looks like this, after the command, at most once a day per project:',
         },
         {
           type: 'code',
           lang: 'text',
-          code: 'astryx: this project has no Astryx CLI installed; answered by CLI 0.7.2 while its Core is 0.6.8. To match, run: npm install @astryxdesign/cli@0.6.8',
+          code: 'astryx: this project has no Astryx CLI installed; answered by CLI 0.7.2 while its Core is 0.6.8. To match, run: npm install -E @astryxdesign/cli@0.6.8',
         },
         {
           type: 'prose',

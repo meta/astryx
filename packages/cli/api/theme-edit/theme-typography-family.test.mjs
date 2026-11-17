@@ -72,6 +72,56 @@ describe('a typography family in the theme file', () => {
   }, 120_000);
 });
 
+describe('typography values in the theme file', () => {
+  /**
+   * Compile with a typography block given whole.
+   * @param {string} typography
+   */
+  const compileTypography = async typography => {
+    const file = path.join(cwd, 'themes/t/t.theme.ts');
+    const before = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(
+      file,
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {tSettings} from './t.settings';\nexport const tTheme = defineTheme({\n  extends: tSettings,\n  name: 't',\n  typography: ${typography},\n});\n`,
+    );
+    try {
+      const r = await runCli(
+        ['experimental', 'theme', 'compile', 'themes/t/t.theme.ts', '--json'],
+        cwd,
+      );
+      return JSON.parse(r.stdout);
+    } finally {
+      fs.writeFileSync(file, before);
+    }
+  };
+
+  it('refuses a heading level written twice, a role given as a value, and a weights that is no block', async () => {
+    const twice = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '300', 1: '800'}}}",
+    );
+    expect(twice.error).toMatch(/1 and 01 are both heading level 1/);
+    const role = await compileTypography("{body: 'Inter' as any}");
+    expect(role.error).toMatch(/typography\.body is a block of fields/);
+    const weights = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: 'bold' as any}}",
+    );
+    expect(weights.error).toMatch(/reads "bold" by its letters as levels/);
+  }, 240_000);
+
+  it('takes a heading level Core reads in any spelling, and refuses a weight no browser reads', async () => {
+    const level = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '800'}}}",
+    );
+    expect(level.error).toBeUndefined();
+    const weight = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: 'semi-bold'}}",
+    );
+    expect(weight.error).toMatch(
+      /typography\.body\.weight \(builds --text-body-weight\)/,
+    );
+  }, 240_000);
+});
+
 describe('a weight beside a known family on the font dial', () => {
   it('is a weight in any form CSS reads', async () => {
     for (const typed of [
@@ -93,5 +143,23 @@ describe('a weight beside a known family on the font dial', () => {
         /holds a weight where a family goes/,
       );
     }
+  }, 120_000);
+});
+
+describe('a weight word after a family whose start the editor knows', () => {
+  it('is read as a number there is, and a family it does not know stays whole', async () => {
+    /** @type {any} */
+    let err = null;
+    try {
+      await themeEditSet('t', 'font', 'Inter Tight Bold', {cwd});
+    } catch (e) {
+      err = e;
+    }
+    expect(String(err?.message)).toMatch(/holds a weight where a family goes/);
+    expect(
+      (err?.suggestions ?? []).map((/** @type {any} */ x) => x.name).join('\n'),
+    ).toMatch(/set t font 'Inter Tight'/);
+    const kept = await themeEditSet('t', 'font', 'Archivo Black', {cwd});
+    expect(JSON.stringify(kept)).toContain('Archivo Black');
   }, 120_000);
 });

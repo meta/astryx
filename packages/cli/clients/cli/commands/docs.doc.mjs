@@ -28,7 +28,7 @@ export const doc = {
     'shows: one line (brief, the default), its sections (compact), or all of it (full).',
   fn: 'docs',
   args: [
-    {name: 'topic', param: 'topic', required: false},
+    {name: 'topic', param: 'topic', required: false, names: 'topic'},
     {name: 'section', param: 'section', required: false},
   ],
   options: [

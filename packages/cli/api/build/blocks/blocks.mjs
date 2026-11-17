@@ -66,7 +66,7 @@ import {STOPWORDS} from '../../search/_query.mjs';
  * @property {Record<string, number>} theta the ranking coefficients
  *
  * @typedef {import('../kit/signals.mjs').BlockScore} BlockScore
- * @typedef {{name: string, package?: string, displayName?: string, description?: string, command?: string}} CatalogBlock
+ * @typedef {{name: string, package?: string, displayName?: string, description?: string, command?: string, isReady?: boolean}} CatalogBlock
  * @typedef {{name: string, keywords?: string[]}} CatalogComponent
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
  */
@@ -714,6 +714,7 @@ export function pickBlocks(request, signals, weights, keep) {
       displayName: block.displayName,
       kind: 'block',
       command: block.command ?? '',
+      isReady: block.isReady !== false,
     });
   }
   return {names: out, entries};

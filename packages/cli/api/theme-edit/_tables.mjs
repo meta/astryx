@@ -483,7 +483,7 @@ export const DIALS = wordTable({
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background follows it too, at the official theme\'s page shade of the gray, so a warm or cool gray reaches the page as it reaches the cards; for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes), which then keeps its color. From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -522,7 +522,7 @@ export const DIALS = wordTable({
   },
   font: {
     help:
-      'The typeface. System presets (always show): ' +
+      'The typeface. System presets (fonts systems ship, so no package loads them; a system with none of a stack shows its own font of that kind, and a picture says when this machine has none): ' +
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +

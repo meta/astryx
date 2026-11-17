@@ -31,6 +31,7 @@ import {
   checkIntegrationIssues,
   checkIntegrationCoreRange,
   checkVersionAlignment,
+  checkCoreInstalled,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
 } from './doctor.mjs';
@@ -260,11 +261,11 @@ describe("doctor — the project's own CLI and Core on different releases", () =
       `This project's CLI ${cli} answers it, but its Core is 0.0.1`,
     );
     expect(older.fix).toBe(
-      `To align them, run: npm install @astryxdesign/core@${cli}, then npx astryx upgrade --from 0.0.1 --apply.`,
+      `To align them, run: npm install -E @astryxdesign/core@${cli}, then npx astryx upgrade --from 0.0.1 --apply.`,
     );
     const newer = at('99.0.0');
     expect(newer.fix).toBe(
-      'To align them, run: npm install @astryxdesign/cli@99.0.0.',
+      'To align them, run: npm install -E @astryxdesign/cli@99.0.0.',
     );
     expect(at(cli).status).toBe('pass');
   });
@@ -293,7 +294,45 @@ describe("doctor — the project's own CLI and Core on different releases", () =
     expect(c.message).toBe(
       `This project has no Astryx CLI installed; CLI ${cli}, the one you started, answered while its Core is 0.0.1.`,
     );
-    expect(c.fix).toBe('To match, run: npm install @astryxdesign/cli@0.0.1.');
+    expect(c.fix).toBe('To match, run: npm install -E @astryxdesign/cli@0.0.1.');
+  });
+});
+
+describe('the core-installed check in a fresh clone', () => {
+  it("says to install the project's dependencies when the project lists Core, and to add Core otherwise", () => {
+    const listed = mkProject({
+      'package.json': JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.10'},
+      }),
+      'yarn.lock': '',
+    });
+    expect(
+      checkCoreInstalled({
+        cwd: listed,
+        nodeVersion: '',
+        coreDir: null,
+        configPath: null,
+      }).fix,
+    ).toBe("Install the project's dependencies: `yarn install`.");
+
+    // Core named only as a peer is not installed by every package manager.
+    const peer = mkProject({
+      'package.json': JSON.stringify({
+        name: 'kit',
+        peerDependencies: {'@astryxdesign/core': '0.7.10'},
+      }),
+    });
+    expect(
+      checkCoreInstalled({
+        cwd: peer,
+        nodeVersion: '',
+        coreDir: null,
+        configPath: null,
+      }).fix,
+    ).toBe(
+      'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+    );
   });
 });
 
