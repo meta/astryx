@@ -64,7 +64,12 @@ export const OVERRIDES = [
     /\b((dropdown |context )?menu (items?|options?|entries)|dropdown items?)\b/,
     {on: 'dropdown-menu-item'},
   ],
-  [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
+  // (A top nav's or a navbar's links are its items, never the top nav and
+  // every link.)
+  [
+    /\b((?:top )?(?:nav(igation)?(?: ?bar)?|navbar) (links?|items?))\b/,
+    {on: 'top-nav-item'},
+  ],
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
@@ -162,6 +167,8 @@ export const OVERRIDES = [
   [/\bh([1-6])\b/, {on: 'heading'}],
   // (A large title, the biggest title a screen has, is its top heading.)
   [/\blarge titles?\b/, {on: 'heading', level: '1'}],
+  // (A display heading is the heading's largest display look.)
+  [/\bdisplay (?:headings?|titles?|text)\b/, {on: 'heading', when: 'type:display-1'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],

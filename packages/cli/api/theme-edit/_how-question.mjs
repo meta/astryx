@@ -72,6 +72,7 @@ import {
   MOMENT_STATES,
   groupsOf,
   GROUP_ROLES,
+  partComponentDocs,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -2635,6 +2636,14 @@ export function partLexicon(ctx) {
         ),
         real ? {on: real} : {on: key, missing: `${said} ${piece}`},
       ]);
+      // (Said before the part that holds it: "the copy button on code
+      // blocks", "the title of the dialog".)
+      out.push([
+        new RegExp(
+          `\\b${piece.replace(/-/g, '[\\s-]?')}s?\\s+(?:on|in|of|inside)\\s+(?:the\\s+|all\\s+|every\\s+|each\\s+)?(?:${source})`,
+        ),
+        real ? {on: real} : {on: key, missing: `${said} ${piece}`},
+      ]);
     }
     return out;
   };
@@ -3496,6 +3505,26 @@ function clausesOf(q, partWords, words = null) {
         if (
           /[a-z]-$/i.test(rest.slice(0, at)) ||
           /^-[a-z]/i.test(rest.slice(at + x[0].length))
+        )
+          continue;
+        // (A longer part phrase that holds this match, "top nav items"
+        // around "top nav", names the part: this match gives way to it.)
+        const end = at + x[0].length;
+        if (
+          partWords.some(([other]) => {
+            if (other === re) return false;
+            const o = new RegExp(
+              other.source,
+              other.flags.includes('g') ? other.flags : `${other.flags}g`,
+            );
+            for (const y of rest.matchAll(o)) {
+              const s = /** @type {number} */ (y.index);
+              if (s > at) break;
+              if (s + y[0].length >= end && y[0].trim().length > x[0].trim().length)
+                return true;
+            }
+            return false;
+          })
         )
           continue;
         m = x;
@@ -14724,6 +14753,14 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // "ghost buttons look like the default button": one variant takes
+    // another's look, never a reset.
+    const copy = variantLookAnswer(c);
+    if (copy) {
+      push(copy);
+      recordTop(c, copy.options[0] ?? []);
+      continue;
+    }
     // "reset the corners to default", "revert the font": take back what the
     // theme sets for it, as undo does.
     const back = resetAnswer(c);
@@ -17854,6 +17891,50 @@ export function draftAnswer(ctx, env, question) {
         }
       }
     }
+    // A part's own piece taken away ("hide the code block copy button", "no
+    // copy button on code blocks", "alerts without icons", "hide the tab
+    // underline"): that element is not drawn, and the room it takes goes
+    // with it. Only an element of a part (its name is the owner's name and
+    // more, and it is not its component's own root): taking a whole part
+    // away ("no banners") is the app's call, never a theme's. "Hide" names
+    // the piece even where a look word is part of its name (a tab's
+    // underline); "no" or "without" does so only with no look asked
+    // ("cards without borders" is a border).
+    if (
+      c.parts.length &&
+      (/\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
+    ) {
+      const names = c.parts.map(p => one(p.on));
+      // (An owner and its piece said apart, "alerts without icons": the
+      // owner's own element by that name.)
+      const paired = names.flatMap(a =>
+        names
+          .filter(b => b !== a)
+          .map(b => `${a}-${b.replace(/s$/, '')}`)
+          .filter(k => TARGET.has(k)),
+      );
+      const pieces = (paired.length ? paired : names).filter(
+        k =>
+          k.includes('-') &&
+          [...TARGET.keys()].some(o => k.startsWith(`${o}-`)) &&
+          ctx.project.components?.[String(TARGET.get(k)?.component)]
+            ?.targets?.[0]?.className !== `astryx-${k}`,
+      );
+      if (pieces.length === 1 && C.MAP[pieces[0]]) {
+        const own = pieces[0];
+        seenPart(own);
+        const control = (C.MAP[own]?.tags ?? []).some(
+          (/** @type {string} */ t) =>
+            /^(?:button|input|select|textarea|a)$/.test(String(t)),
+        );
+        push({
+          text: `no ${own}: it is not drawn, and the room it takes goes with it${control ? `; it is a control, so what it does is gone for everyone using the theme` : ''}`,
+          options: [[set('display', 'none', {on: own})]],
+          intent: {...intentOf(c, []), families: []},
+        });
+        continue;
+      }
+    }
     // A part with no aspect: what it reads.
     if (c.parts.length && !c.aspects.length) {
       for (const p of c.parts.slice(0, 2))
@@ -18051,6 +18132,115 @@ export function draftAnswer(ctx, env, question) {
     }
   }
   settleSubject();
+
+  /**
+   * The steps for a clause that asks one variant of a part to look like
+   * another ("ghost buttons look like the default button"): the other
+   * variant's look, written for the asked variant alone; null when it does
+   * not ask that.
+   * @param {Clause} c
+   * @returns {Draft | null}
+   */
+  function variantLookAnswer(c) {
+    const said = /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
+      c.text.trim(),
+    );
+    if (!said) return null;
+    const on = [...new Set(c.parts.map(x => x.on))];
+    if (on.length !== 1 || FAMILIES[on[0]]) return null;
+    const part = one(on[0]);
+    // The part's variant values, as Core's reads name them.
+    /** @type {Set<string>} */
+    const values = new Set();
+    for (const g of Object.keys(GROUPS))
+      for (const r of C.partReads(part, g) ?? [])
+        for (const w of r.when ?? [])
+          for (const m of String(w).matchAll(/(?:^|[\s,])variant=([a-z-]+)/g))
+            values.add(m[1]);
+    /** @param {string} side */
+    const valueIn = side =>
+      [...values].filter(v => new RegExp(`\\b${v}\\b`).test(side));
+    const from = valueIn(said[1]);
+    // ("the default button": the variant a part has when none is given.)
+    const def = /^'([a-z-]+)'$/.exec(
+      String(
+        partComponentDocs(ctx, part)
+          .map(d => d.doc.props?.variant)
+          .find(Boolean)?.default ?? '',
+      ).trim(),
+    )?.[1];
+    const toSaid = valueIn(said[2]);
+    const to =
+      toSaid.length === 1
+        ? toSaid[0]
+        : !toSaid.length && /\bdefault\b/.test(said[2]) && def && values.has(def)
+          ? def
+          : null;
+    if (from.length !== 1 || !to || from[0] === to) return null;
+    const A = `variant:${from[0]}`;
+    const B = `variant:${to}`;
+    // Its look: what the theme sets on that variant, as set; then, for the
+    // fill, text, border and shadow it does not set (and anything the theme
+    // sets on the other variant alone), what that variant draws now.
+    const scoped = (/** @type {string} */ when) =>
+      env.data.settings.filter(
+        st => st.on === on[0] && st.when === when && !st.state,
+      );
+    /** @type {Step[]} */
+    const steps = scoped(B).map(st =>
+      set(st.thing, String(st.value), {
+        on: on[0],
+        when: A,
+        ...(st.mode ? {mode: st.mode} : {}),
+      }),
+    );
+    // (A fill set as background covers background-color, a border its
+    // color.)
+    const covered = new Set(
+      steps.flatMap(st =>
+        st.thing === 'background'
+          ? ['background', 'background-color']
+          : st.thing === 'border'
+            ? ['border', 'border-color']
+            : [st.thing],
+      ),
+    );
+    const things = [
+      ...new Set([
+        'background-color',
+        'color',
+        'border-color',
+        'box-shadow',
+        ...scoped(A)
+          .filter(st => st.source === 'property')
+          .map(st => st.thing),
+      ]),
+    ].filter(t => !covered.has(t));
+    for (const thing of things) {
+      const k = keepAsIs(/** @type {Step} */ ({verb: 'set', thing}), {
+        on: on[0],
+        when: B,
+      });
+      for (const x of [k].flat())
+        if (x && x !== UNTOUCHED && x !== BY_SCREEN && x.value != null)
+          steps.push(
+            set(x.thing, String(x.value), {
+              on: on[0],
+              when: A,
+              ...(x.mode ? {mode: x.mode} : {}),
+            }),
+          );
+    }
+    if (!steps.length) return null;
+    return {
+      text: `${from[0]} ${on[0]} takes the ${to} ${on[0]}'s look${to === def && !toSaid.length ? ` (${to} is the variant ${on[0]} has when none is given)` : ''}: its fill, text, border and shadow as ${env.slug} draws them there, written for ${from[0]} only`,
+      options: [steps],
+      sequence: steps.length > 1,
+      // (A whole look is asked: every kind of change it makes is asked, on
+      // that variant alone.)
+      intent: {...intentOf(c, []), families: []},
+    };
+  }
 
   /**
    * The undo steps for a clause that asks to go back to the base value of a
@@ -23157,10 +23347,23 @@ export function draftAnswer(ctx, env, question) {
               options: [[set(largest[0], value, {on})]],
             };
         }
+        // (A look of the part said, "display headings", sizes from the token
+        // Core reads for that look.)
+        const lookW = f.when?.replace(':', '=');
+        const lookTok = lookW
+          ? Object.entries(
+              C.MAP[one(on)]?.own?.['font-size']?.tokens ?? {},
+            ).find(([, conds]) =>
+              /** @type {string[]} */ (conds).some(w =>
+                w.split(/[\s,]+/).includes(lookW),
+              ),
+            )?.[0]
+          : undefined;
         const sizeTok =
           on === 'heading' && p?.level
             ? `--text-heading-${p.level}-size`
-            : (C.partReads(one(on), 'font').find(r =>
+            : (lookTok ??
+              C.partReads(one(on), 'font').find(r =>
                 r.props.includes('font-size'),
               )?.token ??
               Object.keys(C.MAP[one(on)]?.own?.['font-size']?.tokens ?? {})[0]);
@@ -29457,8 +29660,14 @@ export function draftAnswer(ctx, env, question) {
   // way, parts among them or not: "page loud and fast: black background,
   // …, heavy condensed headings" names "fast".)
   const qWords = q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? [];
+  // ("make it Acme", "look like Acme": the whole look named by one word.)
+  const NAMED_LOOK = String.raw`\b(?:make|turn|style)\s+(?:it|this|everything|the\s+(?:app|theme|ui|site))\s+(?:look\s+)?(?:like\s+)?`;
   const lookAsk =
     /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
+    new RegExp(`${NAMED_LOOK}[a-z]`).test(q) ||
+    /\blooks?\s+like\s+(?!(?:this|that|the|a|an|my|our|these|those)\b)[a-z]/.test(
+      q,
+    ) ||
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3 ||
     qWords.some(w => FEELS.has(w));
   /** The feel words a dial's help read for the whole theme. @type {Set<string>} */
@@ -29562,14 +29771,14 @@ export function draftAnswer(ctx, env, question) {
         !lookWrites &&
         !describes(w) &&
         new RegExp(
-          String.raw`\b${w.replace(/-like$/, '')}(?:-like)?\s+${LOOK_NOUNS}\b|\b(?:like|as)\s+${w}\b`,
+          String.raw`\b${w.replace(/-like$/, '')}(?:-like)?\s+${LOOK_NOUNS}\b|\b(?:like|as)\s+${w}\b|${NAMED_LOOK}${w}\b`,
         ).test(q.toLowerCase()),
     );
     if (namedFor.length)
       result.push({
-        text: `how does not know what ${namedFor.map(w => `"${w.replace(/-like$/, '')}"`).join(', ')} looks like and never guesses a brand's colors: give them as hex (the accent, the page, the text), with its font and how round its corners are, and how writes each`,
+        text: `how does not know what ${namedFor.map(w => `"${w.replace(/-like$/, '')}"`).join(', ')} looks like and never guesses a brand's colors: say its colors (the accent, the page, the text, as hex), its font, how round its corners are and how roomy it is, and how writes each; for a screenshot of it, how <picture file> reads its colors as hex`,
         options: [],
-        lookup: `${HOW} "accent #<hex>, page #<hex>, text #<hex>"`,
+        lookup: `${HOW} "accent #2563eb, page #f8fafc, font Inter, corners round, spacing compact"`,
       });
     const rest = notTaken.filter(w => !namedFor.includes(w));
     if (rest.length)
