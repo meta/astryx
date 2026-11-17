@@ -196,10 +196,11 @@ export interface MobileNavConfig {
   /**
    * SSR hint: whether the initial render should assume mobile layout.
    * Seeds the breakpoint state so the server-rendered HTML is the phone
-   * layout, menu toggle included. Without it, the server-rendered wide
-   * layout still paints without its inline side nav below the breakpoint,
-   * and the toggle arrives when the page's script runs. Ignored when
-   * `breakpoint` is `none`, which is always non-mobile.
+   * layout, menu toggle included. Without it, when the theme keeps the
+   * standard width points, the server-rendered wide layout still paints
+   * without its inline side nav below the breakpoint, and the toggle
+   * arrives when the page's script runs. Ignored when `breakpoint` is
+   * `none`, which is always non-mobile.
    *
    * Derive from the User-Agent header or a device-detection cookie
    * in a server component, then pass down.
@@ -536,43 +537,55 @@ const styles = stylex.create({
 // queries ahead of time, so there is one rule per standard width point
 // (`DEFAULT_WIDTH_BREAKPOINTS`). Below the point, the inline side nav does
 // not paint and the elevated backdrop loses its corner, as in the phone
-// layout.
+// layout. The queries use `not all and (min-width)`: StyleX lowers
+// `(width < N)` to `(max-width: N - 0.01)`, which Chromium rounds up to N, so
+// the rule would also apply at the point itself.
 const unreadSideNavStyles = stylex.create({
-  sm: {display: {default: null, '@media (width < 640px)': 'none'}},
-  md: {display: {default: null, '@media (width < 768px)': 'none'}},
-  lg: {display: {default: null, '@media (width < 1024px)': 'none'}},
-  xl: {display: {default: null, '@media (width < 1280px)': 'none'}},
-  '2xl': {display: {default: null, '@media (width < 1536px)': 'none'}},
+  sm: {
+    display: {default: null, '@media not all and (min-width: 640px)': 'none'},
+  },
+  md: {
+    display: {default: null, '@media not all and (min-width: 768px)': 'none'},
+  },
+  lg: {
+    display: {default: null, '@media not all and (min-width: 1024px)': 'none'},
+  },
+  xl: {
+    display: {default: null, '@media not all and (min-width: 1280px)': 'none'},
+  },
+  '2xl': {
+    display: {default: null, '@media not all and (min-width: 1536px)': 'none'},
+  },
 });
 const unreadCornerStyles = stylex.create({
   sm: {
     borderStartStartRadius: {
       default: radiusVars['--radius-page'],
-      '@media (width < 640px)': 0,
+      '@media not all and (min-width: 640px)': 0,
     },
   },
   md: {
     borderStartStartRadius: {
       default: radiusVars['--radius-page'],
-      '@media (width < 768px)': 0,
+      '@media not all and (min-width: 768px)': 0,
     },
   },
   lg: {
     borderStartStartRadius: {
       default: radiusVars['--radius-page'],
-      '@media (width < 1024px)': 0,
+      '@media not all and (min-width: 1024px)': 0,
     },
   },
   xl: {
     borderStartStartRadius: {
       default: radiusVars['--radius-page'],
-      '@media (width < 1280px)': 0,
+      '@media not all and (min-width: 1280px)': 0,
     },
   },
   '2xl': {
     borderStartStartRadius: {
       default: radiusVars['--radius-page'],
-      '@media (width < 1536px)': 0,
+      '@media not all and (min-width: 1536px)': 0,
     },
   },
 });

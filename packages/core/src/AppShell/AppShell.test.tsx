@@ -724,14 +724,14 @@ describe('AppShell', () => {
           </AppShell>
         );
         const host = document.createElement('div');
-        document.body.appendChild(host);
-        host.innerHTML = renderToString(app);
-        expect(host.innerHTML).toContain(UNREAD_SIDE_NAV);
-
-        mockMql = createMockMatchMedia(isBelow);
-        vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
         let root: ReturnType<typeof hydrateRoot> | undefined;
         try {
+          document.body.appendChild(host);
+          host.innerHTML = renderToString(app);
+          expect(host.innerHTML).toContain(UNREAD_SIDE_NAV);
+
+          mockMql = createMockMatchMedia(isBelow);
+          vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
           await act(async () => {
             root = hydrateRoot(host, app);
           });
