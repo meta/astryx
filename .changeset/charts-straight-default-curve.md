@@ -2,6 +2,6 @@
 '@astryxdesign/charts': patch
 ---
 
-[fix] `line()` and `area()` join points with straight segments by default (`curve: 'linear'`). They were smoothed (`'monotone'`), which drew values between points that are not in the data. To keep the smooth look, pass `curve: 'monotone'`.
+[fix] `line()`, `area()` and `band()` join points with straight segments by default. They were smoothed (`'monotone'`), which drew values between points that are not in the data. To keep a smooth line or area, pass `curve: 'monotone'`.
 
 @josephfarina

@@ -189,6 +189,16 @@ describe('default curve', () => {
     }
   });
 
+  it('joins band bounds with straight segments', () => {
+    const {plot} = renderMarks(
+      [band({upper: 'hi', lower: 'lo'})],
+      BOUNDS,
+    );
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
   it('still smooths when a page asks for it', () => {
     const {plot} = renderMarks([line('v', {curve: 'monotone'})]);
     expect(plot.querySelector('path')?.getAttribute('d') ?? '').toMatch(/C/);
