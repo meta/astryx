@@ -26,7 +26,7 @@ import {
 } from '../utils/nodeType';
 import {sharedState} from '../utils/sharedRealm';
 
-import {FOCUSABLE_SELECTOR} from './focusableSelector';
+import {FOCUSABLE_SELECTOR, isTabStop} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 
 // Escape-dismissible focus traps currently mounted. This is the whole state
@@ -123,16 +123,6 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(
     container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
   ).filter(isVisiblyFocusable);
-}
-
-/**
- * A negative `tabindex` takes an element out of the Tab order, whatever the
- * element is: a roving group's other members hold `tabindex="-1"`.
- * FOCUSABLE_SELECTOR keeps such a button or link, so the region filters it.
- */
-function isTabStop(el: HTMLElement): boolean {
-  const value = el.getAttribute('tabindex');
-  return value == null || !(Number.parseInt(value, 10) < 0);
 }
 
 function getTabStops(container: HTMLElement): HTMLElement[] {
