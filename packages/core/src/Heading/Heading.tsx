@@ -205,7 +205,10 @@ const FALLBACK_LEVEL = 2;
 
 /** `level` as a number from 1 to 6, or the fallback level. */
 function resolveLevel(level: unknown): HeadingLevel {
-  const value = Number(level);
+  const value =
+    typeof level === 'number' || typeof level === 'string'
+      ? Number(level)
+      : Number.NaN;
   return Number.isInteger(value) && value >= 1 && value <= 6
     ? (value as HeadingLevel)
     : FALLBACK_LEVEL;
@@ -253,7 +256,7 @@ export function Heading({
   const level = resolveLevel(requestedLevel);
   useDevWarning(
     'Heading',
-    `level must be 1, 2, 3, 4, 5 or 6, but it is ${String(requestedLevel)}. The heading renders as level ${level}. Pass the outline level, for example <Heading level={2}>.`,
+    `level must be 1, 2, 3, 4, 5 or 6, but it is ${typeof requestedLevel === 'string' ? JSON.stringify(requestedLevel) : String(requestedLevel)}. The heading renders as level ${level}. Pass the outline level, for example <Heading level={2}>.`,
     level !== requestedLevel,
   );
   const Component = levelToTag[level];

@@ -555,6 +555,19 @@ describe('Heading without a valid level', () => {
     render(<Heading {...props} />);
     expect(screen.getByRole('heading', {name: 'Details'}).tagName).toBe('H3');
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('but it is "3".');
+    warn.mockRestore();
+  });
+
+  it('renders an h2 for a bare level, which passes true, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {level: true, children: 'Summary'} as unknown as Parameters<
+      typeof Heading
+    >[0];
+    render(<Heading {...props} />);
+    expect(screen.getByRole('heading', {name: 'Summary'}).tagName).toBe('H2');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('but it is true.');
     warn.mockRestore();
   });
 
