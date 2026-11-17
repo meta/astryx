@@ -15,7 +15,7 @@ import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {parsePoints} from './_adapter.mjs';
-import {checkSetting, pillDrawnRadios} from './_check.mjs';
+import {checkSetting} from './_check.mjs';
 import {context} from './_context.mjs';
 import {howTheme} from './_how-commands.mjs';
 import {compileTheme, keyOf} from './_settings.mjs';
@@ -41,23 +41,10 @@ vi.mock('./_preview.mjs', async importOriginal =>
 /** @type {string} */
 let cwd;
 
-/**
- * The steps that keep the radio marks round when the pills go square, on a
- * Core that draws a radio's circle with the pill token; none on a Core that
- * draws it at 50%.
- */
-let radioPins = '';
-
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
-  radioPins = pillDrawnRadios((await context(cwd)).C)
-    .map(
-      m =>
-        ` && set q --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
-    )
-    .join('');
 }, 120_000);
 
 afterAll(() => {
@@ -488,10 +475,8 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: () =>
-        new RegExp(
-          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
-        ),
+      // (The dial squares the pills that are a styling choice itself.)
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3188,10 +3173,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: () =>
-        new RegExp(
-          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
-        ),
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
