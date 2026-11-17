@@ -472,9 +472,15 @@ describe('analyzeTemplateNeeds in a hosted run', () => {
     });
   });
 
-  it('counts an integration the host approves as installed outside a project, as render serves it', () => {
+  it('counts an integration the host approves and its set holds as installed outside a project, as render serves it', () => {
     const set = temp('tmpl-needs-set-');
     fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const kit = path.join(set, 'node_modules', '@acme', 'astryx-kit');
+    fs.mkdirSync(kit, {recursive: true});
+    fs.writeFileSync(
+      path.join(kit, 'package.json'),
+      JSON.stringify({name: '@acme/astryx-kit', version: '1.0.0'}),
+    );
     const outside = temp('tmpl-needs-outside-');
     const page = `
       import {Button} from '@astryxdesign/core';
@@ -490,6 +496,17 @@ describe('analyzeTemplateNeeds in a hosted run', () => {
       installCommand: null,
       notes: [],
     });
+  });
+
+  it('still names an integration the host approves that its set does not hold, which render cannot serve', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const outside = temp('tmpl-needs-outside-');
+    activateHostedRun({startingRoot: set, integrations: ['@acme/astryx-kit']});
+    expect(
+      analyzeTemplateNeeds("import {Banner} from '@acme/astryx-kit';", outside)
+        .missingPackages,
+    ).toEqual(['@acme/astryx-kit']);
   });
 
   it('still names it inside a project, which installs its own packages', () => {
