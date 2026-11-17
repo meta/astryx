@@ -17,7 +17,7 @@ import {
   fontStack,
   wordTable,
 } from './_tables.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {colorOpacitiesAsCss, colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
@@ -1401,7 +1401,8 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * The declared sources: (1) the value typed, under the exact readings of
  * typedReading, sameToken and numbersEqual, the words joined into a CSS
  * color name (`dark red` is darkred), or the color the typed color is
- * (rgb() as its hex, a see-through color opaque); (2) a documented table
+ * (rgb() as its hex, a see-through color opaque, Tailwind's `black/5` as
+ * rgb(0 0 0 / 0.05)); (2) a documented table
  * registered with documentReadings, documentNumericTable or documentRange;
  * (3) the theme's own saved value of the line's setting, for a setting
  * other than the one typed (a keep or unlock line); (4) the setting's
@@ -1600,6 +1601,11 @@ function readsTypedValue({
     /^#[0-9a-f]{3,8}$/.test(o) &&
     (color ? hex(color) === o : colorProblem(t)?.opaque === o)
   )
+    return true;
+  // A color with an opacity after its slash, as Tailwind writes it
+  // (`black/5`), is that color at that opacity, as CSS writes it.
+  const clear = colorOpacitiesAsCss(t);
+  if (clear && !clear.unread.length && clear.css.trim().toLowerCase() === o)
     return true;
   // One half of a light and a dark pair: for the line that sets that mode,
   // or, as the light one, for a color dial, which makes both modes from
