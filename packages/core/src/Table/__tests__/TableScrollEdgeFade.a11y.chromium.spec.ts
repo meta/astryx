@@ -100,3 +100,30 @@ for (const dir of ['ltr', 'rtl'] as const) {
     await expect.poll(async () => maskOf(viewport)).toBe('none');
   });
 }
+
+test('a pinned edge shows its own shadow and no fade, while the other edge fades', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-tablestickycolumns--pin-start&viewMode=story`,
+  );
+  const viewport = page.locator('.astryx-table-scroll-wrapper').first();
+  await expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
+  // In the middle both edges hide content; only the unpinned end may fade.
+  await scrollTo(viewport, 'middle');
+  await expect(viewport).not.toHaveAttribute(
+    'data-scroll-inline-start',
+    'true',
+  );
+  await expect(viewport).not.toHaveAttribute('data-scroll-inline-end', 'true');
+  await expect.poll(async () => maskOf(viewport)).toContain('linear-gradient');
+  const lengths = await viewport.evaluate((element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return {
+      start: style.getPropertyValue('--_scroll-fade-start-1').trim(),
+      end: style.getPropertyValue('--_scroll-fade-end-1').trim(),
+    };
+  });
+  expect(lengths.start).toBe('0px');
+  expect(lengths.end).not.toBe('0px');
+});

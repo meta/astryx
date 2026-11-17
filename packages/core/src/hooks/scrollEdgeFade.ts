@@ -16,9 +16,10 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ScrollAxisState} from './useScrollableArea';
 
-// An adopter can tune the geometry on the viewport: `--_scroll-fade-inset` is
-// a clear band at the edge (a focus-ring bleed), and `--_scroll-fade-length`
-// is how far the fade runs after it.
+// An adopter can set two lengths on its viewport. `--_scroll-fade-inset` is a
+// clear band at the edge. Tokenizer uses it so a fade never paints into a
+// token's focus ring. `--_scroll-fade-length` is how far the fade runs after
+// the band.
 const INSET = 'var(--_scroll-fade-inset, 0px)';
 const FADED = `calc(${INSET} + var(--_scroll-fade-length, ${spacingVars['--spacing-8']}))`;
 
@@ -37,7 +38,8 @@ const FADE = {
   // The keyboard ring sits inside the viewport, so a fade would hide part of
   // it. Arrow keys scroll a focused viewport, and the ring marks it.
   ':focus-visible': 'none',
-  // Forced colors use system colours, and a mask cannot follow them.
+  // Forced colors replace the page colours. A mask would hide text the
+  // reader set to show.
   '@media (forced-colors: active)': 'none',
 } as const;
 
