@@ -63,6 +63,31 @@ beforeAll(() => {
     );
     fs.writeFileSync(path.join(pkg, 'templates', `${name}.tsx`), SOURCE);
   }
+  // A package of blocks for a component: `astryx component <Name> --blocks`
+  // lists them.
+  const blocks = path.join(dir, 'node_modules', '@acme', 'blocks');
+  fs.mkdirSync(path.join(blocks, 'docs'), {recursive: true});
+  fs.mkdirSync(path.join(blocks, 'blocks', 'Button'), {recursive: true});
+  fs.writeFileSync(
+    path.join(blocks, 'package.json'),
+    JSON.stringify({
+      name: '@acme/blocks',
+      version: '1.0.0',
+      astryx: {docs: 'docs', blocks: 'blocks'},
+    }),
+  );
+  fs.writeFileSync(
+    path.join(blocks, 'blocks', 'Button', 'ZebraBand.doc.mjs'),
+    `export default ${JSON.stringify({
+      name: 'ZebraBand',
+      description: 'Zebra roster band: read {@command docs icons} first.',
+      componentsUsed: ['Button'],
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(blocks, 'blocks', 'Button', 'ZebraBand.tsx'),
+    SOURCE,
+  );
 });
 
 afterAll(() => {
@@ -151,5 +176,26 @@ describe('astryx search', () => {
     );
     expect(json.code).toBe(0);
     expectJson(json.stdout);
+  });
+});
+
+describe('astryx component --blocks', () => {
+  it("a block's description, in text and JSON", async () => {
+    const text = await runCli(['component', 'Button', '--blocks'], dir);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(
+      `Zebra roster band: read \`${RUN} docs icons\` first.`,
+    );
+    expect(text.stdout).not.toContain('{@command');
+    const json = await runCli(
+      ['component', 'Button', '--blocks', '--json'],
+      dir,
+    );
+    expect(json.code).toBe(0);
+    expect(json.stdout).toContain(
+      'Zebra roster band: read `astryx docs icons` first.',
+    );
+    expect(json.stdout).not.toContain('{@command');
+    expect(json.stdout).not.toContain(RUN);
   });
 });
