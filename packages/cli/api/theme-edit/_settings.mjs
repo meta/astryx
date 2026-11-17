@@ -71,6 +71,7 @@ import {
 } from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   AUTO_SPREAD,
+  COLOR_PROPS,
   CORNERS,
   COMMON_STATES,
   DIALS,
@@ -4527,6 +4528,67 @@ export function spreads(ctx, s) {
 }
 
 /**
+ * The state a setting set for a moment (hover, focus, pressed…) takes on
+ * one member of the family it reaches: the state asked where the member
+ * draws it; else the member's own state that draws the paint the part named
+ * draws in that moment (a menu row's focus paint is a list option's
+ * highlighted paint: both are the row the pointer or keyboard is on). A
+ * private variable is read as its fallback. The state asked when nothing
+ * matches.
+ * @param {{project: any, C?: any}} ctx
+ * @param {Pick<Setting, 'on' | 'state' | 'only'> & {thing?: string}} s
+ * @param {string} member
+ * @returns {string | undefined}
+ */
+export function memberState(ctx, s, member) {
+  const st = s.state ?? undefined;
+  if (!st || !s.on || member === s.on || !MOMENT_STATES.includes(st))
+    return st;
+  if (!spreads(/** @type {any} */ (ctx), /** @type {any} */ (s))) return st;
+  const MAP = /** @type {any} */ (ctx).C?.MAP;
+  const fills = (/** @type {string} */ part) =>
+    Object.entries(MAP?.[part]?.at?.['background-color'] ?? {}).map(
+      ([cond, v]) => /** @type {[string, string]} */ ([cond, plainPaint(String(v))]),
+    );
+  /** @param {string} cond @param {string} state */
+  const inState = (cond, state) => {
+    const [head, ...tail] = cond.split(' ');
+    return (
+      tail.some(x => x === `:${state}`) ||
+      head.split(',').some(kv => kv.split('=')[0] === state)
+    );
+  };
+  const mine = fills(member);
+  if (mine.some(([cond]) => inState(cond, st))) return st;
+  // (The named part's paint in the moment asked, else in its other
+  // moments, in the table's order.)
+  const named = fills(String(s.on));
+  const paint = [st, ...MOMENT_STATES.filter(x => x !== st)]
+    .map(m => named.find(([cond]) => inState(cond, m))?.[1])
+    .find(Boolean);
+  if (!paint) return st;
+  /** @type {string[]} */
+  const states = (ctx.project?.target?.get(member)?.states ?? []).map(String);
+  const hit = states.find(
+    (/** @type {string} */ x) =>
+      !MOMENT_STATES.includes(x) &&
+      mine.some(([cond, v]) => v === paint && inState(cond, x)),
+  );
+  return hit ?? st;
+}
+
+/**
+ * A paint as Core resolves it when nothing sets its private variables:
+ * `var(--_private, <fallback>)` is its fallback.
+ * @param {string} v
+ */
+function plainPaint(v) {
+  let out = v.trim();
+  for (let m; (m = /^var\(--_[\w-]+\s*,\s*(.+)\)$/.exec(out)); ) out = m[1].trim();
+  return out;
+}
+
+/**
  * The parts a setting writes: partsOf, less the members of its group or
  * family that keep a setting of their own (ownSettingOf). The part it is
  * set on is its own: there the later of the two wins.
@@ -4538,7 +4600,11 @@ export function spreads(ctx, s) {
 export function writtenPartsOf(ctx, data, s) {
   const parts = partsOf(/** @type {any} */ (ctx), s);
   return spreads(ctx, s)
-    ? parts.filter(t => t === s.on || !ownSettingOf(data, s, t))
+    ? parts.filter(
+        t =>
+          t === s.on ||
+          !ownSettingOf(data, {...s, state: memberState(ctx, s, t)}, t),
+      )
     : parts;
 }
 
@@ -4661,12 +4727,13 @@ function drawnKind(prop, value) {
 /**
  * Whether a group member draws a property as the member named does, at
  * rest (the part data's values in each render, no state; for a setting on
- * a state, in that state), by kind (drawnKind): none, round or drawn. A
- * family spreads a setting only where its members are alike in Core: a
- * radio is round where a checkbox has small corners, so a checkbox's
- * corners stay the checkbox's; a button and a toggle button both fill
- * their box, so a fill set on one reaches the other. Unknown either way
- * counts as alike.
+ * a state, in that state): a color by its value (the same token), anything
+ * else by kind (drawnKind: none, round or drawn). A family spreads a
+ * setting only where its members are alike in Core: a radio is round where
+ * a checkbox has small corners, so a checkbox's corners stay the
+ * checkbox's; a button and a toggle button both draw a box, so a gradient
+ * set on one reaches the other; a toast's fill is not a banner's. Unknown
+ * either way counts as alike.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @param {string} member
@@ -4677,7 +4744,20 @@ function drawnAlike(ctx, s, member, exact = false) {
   if (member === s.on || !s.on) return true;
   const thing = String(s.thing ?? '');
   if (thing.startsWith('--')) return true;
-  const prop = thing === 'corners' ? 'border-radius' : kebab(thing);
+  // (A background of one color is a fill: compared as the fill.)
+  const plainFill =
+    kebab(thing) === 'background' &&
+    !/gradient\(|url\(/i.test(String(/** @type {any} */ (s).value ?? ''));
+  const prop =
+    thing === 'corners'
+      ? 'border-radius'
+      : plainFill
+        ? 'background-color'
+        : kebab(thing);
+  // A color is the part's own: members take it only where they draw that
+  // same color (a toast's fill never becomes a banner's). A shape, an edge,
+  // a shadow or a layered fill is a look: by kind.
+  const byValue = exact || COLOR_PROPS.test(prop);
   /** @type {Record<string, any> | undefined} */
   const MAP = /** @type {any} */ (ctx).C?.MAP;
   // (A condition is the part's own props and attributes, then what is
@@ -4715,7 +4795,9 @@ function drawnAlike(ctx, s, member, exact = false) {
     if (!at) return null;
     const vals = Object.entries(at)
       .filter(([cond]) => drawnIn(part, cond))
-      .map(([, v]) => (exact ? String(v).trim() : drawnKind(prop, String(v))));
+      .map(([, v]) =>
+        byValue ? plainPaint(String(v)) : drawnKind(prop, String(v)),
+      );
     return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
   };
   const a = rest(s.on);
@@ -5724,7 +5806,7 @@ export function compileTheme(ctx, data, base) {
     const t = (theme.components[target] ??= {});
     const {key, pseudo} = stateSlot(
       ctx.project.target.get(target)?.states ?? [],
-      s.state,
+      memberState(ctx, s, target),
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
@@ -5743,7 +5825,7 @@ export function compileTheme(ctx, data, base) {
     const t = (theme.components[target] ??= {});
     const {key, pseudo} = stateSlot(
       ctx.project.target.get(target)?.states ?? [],
-      s.state,
+      memberState(ctx, s, target),
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,

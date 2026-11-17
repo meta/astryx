@@ -169,6 +169,24 @@ describe('family reach by default', () => {
     expect(ruleOf(cssOf('d'), 'toggle-button')).toContain(GRADIENT);
   }, 240_000);
 
+  it("a menu row's hover look reaches each list option in the state that draws the row the pointer is on", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('h', {cwd, like: 'neutral'});
+    const look = 'linear-gradient(#eeeeee, #dddddd)';
+    const r = await themeEditSet('h', 'background-image', look, {
+      cwd,
+      on: 'dropdown-menu-item',
+      state: 'focus',
+    });
+    expect(r.data.parts).toEqual(expect.arrayContaining(['typeahead-option']));
+    // (A typeahead option draws that row as highlighted, never on focus.)
+    const css = cssOf('h');
+    const rule = new RegExp(
+      `\\.astryx-typeahead-option\\[data-highlighted[^{]*\\{[^}]*${look.replace(/[()#,]/g, '\\$&')}`,
+    );
+    expect(css).toMatch(rule);
+  }, 240_000);
+
   it('a member that draws the thing differently is left as Core draws it', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('k', {cwd, like: 'neutral'});

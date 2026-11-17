@@ -226,7 +226,7 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     );
   }, 240_000);
 
-  it('the selected pill, set on one item, reaches every selected item drawn alike', async ctx => {
+  it('a selected fill, set on one item, reaches the selected items that draw the same fill', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('p', {cwd, like: 'neutral'});
     const r = await themeEditSet('p', 'background-color', '#0069d6', {
@@ -236,16 +236,21 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     });
     expect(r.data.group?.name).toBe('selected-items');
     expect(r.data.parts).toEqual(
-      expect.arrayContaining(['side-nav-item', 'calendar-day']),
+      expect.arrayContaining(['side-nav-item', 'top-nav-item']),
     );
+    // (A color is the part's own: a calendar day selected in another color
+    // keeps it.)
+    expect(r.data.parts).not.toContain('calendar-day');
     expect(r.data.group?.only).toContain(
       '--on side-nav-item --state selected --only',
     );
-    const day = ruleOf(
-      cssOf('p'),
-      '.astryx-calendar-day[data-selected="selected"]',
-    );
-    expect(day).toMatch(/background-color: #0069d6/);
+    // A selected shape, a look, reaches every selected item drawn alike.
+    const shape = await themeEditSet('p', 'border-radius', '4px', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    expect(shape.data.parts.length).toBeGreaterThan(r.data.parts.length - 1);
   }, 240_000);
 });
 
