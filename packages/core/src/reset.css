@@ -292,9 +292,9 @@
 
   /*
    * Date and time fields match a text field with the same styles. iOS Safari
-   * centres the value and collapses it to no line at all while the field is
-   * empty; Chromium pads its row of editable fields 1px top and bottom. Both
-   * boxes sit inside the input, out of reach of any rule on the input itself.
+   * centres the value. An empty field also loses its line of height. Chromium
+   * pads the row of edit fields 1px at the top and bottom. Both parts are
+   * inside the input, so a rule on the input cannot reach them.
    */
   :where(input)::-webkit-date-and-time-value {
     min-height: 1lh;
