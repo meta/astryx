@@ -102,6 +102,17 @@ describe('MultiSelector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 
+  it('draws no ring on the opening highlight when a pointer press opens the list after keyboard input', async () => {
+    const user = userEvent.setup();
+    const field = renderField();
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{Escape}');
+    await user.click(field);
+    const row = activeOption(field);
+    expect(hasRing(row)).toBe(false);
+  });
+
   it.each(['light', 'dark'] as const)(
     'marks the keyboard-active option at 3:1 or more against the listbox in %s mode',
     async mode => {

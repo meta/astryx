@@ -1874,7 +1874,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     getItemId,
     getActionCellId,
     activeDescendantId,
-    onTriggerClick,
+    onTriggerClick: comboboxTriggerClick,
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
@@ -1918,30 +1918,29 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     setHighlightedIndex(-1);
   }
 
-  // Modality changes only on a key or a press, so a hover alone still reads
-  // as keyboard. The option the mouse enters therefore draws no ring until a
-  // key moves the highlight again. Entering the option that is already
-  // active, as when a key scrolls it under a still mouse, changes nothing.
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const keyDownAfterHover = useCallback(
-    (...args: Parameters<typeof onComboboxKeyDown>) => {
-      setHoveredIndex(null);
-      onComboboxKeyDown(...args);
-    },
-    [onComboboxKeyDown],
+  const hoveredOptionOf = useCallback(
+    (...args: Parameters<typeof onComboboxItemMouseEnter>) =>
+      args[1] === highlightedIndex ? null : args[1],
+    [highlightedIndex],
   );
-  const mouseEnterOption = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      const index = args[1];
-      if (index !== highlightedIndex) {
-        setHoveredIndex(index);
-      }
-      onComboboxItemMouseEnter(...args);
-    },
-    [onComboboxItemMouseEnter, highlightedIndex],
+  const {
+    isKeyboardHighlight,
+    hoveredIndex,
+    noteHighlightMove,
+    onKeyDown,
+    onItemMouseEnter,
+  } = useKeyboardHighlight(
+    readModality,
+    onComboboxKeyDown,
+    onComboboxItemMouseEnter,
+    hoveredOptionOf,
   );
-  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
-    useKeyboardHighlight(readModality, keyDownAfterHover, mouseEnterOption);
+  // A press that opens the list is pointer input, so its opening highlight
+  // draws no ring.
+  const onTriggerClick = useCallback(() => {
+    comboboxTriggerClick();
+    noteHighlightMove();
+  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the

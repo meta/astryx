@@ -1638,36 +1638,28 @@ export function Selector<T extends SelectorOptionType>(
 
   // Only after keyboard input does the active option draw the focus ring; a
   // pointer highlight keeps the fill alone, as a focused menu row does.
-  // Modality changes only on a key or a press, so a hover alone still reads
-  // as keyboard. The option the mouse enters therefore draws no ring until a
-  // key moves the highlight again. Entering the option that is already
-  // active, as when a key scrolls it under a still mouse, changes nothing.
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const keyDownAfterHover = useCallback(
-    (e: React.KeyboardEvent) => {
-      setHoveredIndex(null);
-      comboboxKeyDown(e);
-    },
-    [comboboxKeyDown],
-  );
   const mouseEnterOption = useCallback(
-    (item: SelectorOptionData, index: number, isActive: boolean) => {
-      if (!isActive) {
-        setHoveredIndex(index);
-      }
-      comboboxItemMouseEnter(item, index);
-    },
+    (item: SelectorOptionData, index: number, _isActive: boolean) =>
+      comboboxItemMouseEnter(item, index),
     [comboboxItemMouseEnter],
+  );
+  const hoveredOptionOf = useCallback(
+    (_item: SelectorOptionData, index: number, isActive: boolean) =>
+      isActive ? null : index,
+    [],
   );
   const {
     isKeyboardHighlight: isHighlightFromKeyboard,
+    hoveredIndex,
+    setHoveredIndex,
     noteHighlightMove,
     onKeyDown,
     onItemMouseEnter,
   } = useKeyboardHighlight(
     triggerModality.readModality,
-    keyDownAfterHover,
+    comboboxKeyDown,
     mouseEnterOption,
+    hoveredOptionOf,
   );
   const onTriggerClick = useCallback(() => {
     comboboxTriggerClick();
@@ -1811,6 +1803,7 @@ export function Selector<T extends SelectorOptionType>(
       typeahead,
       onKeyDown,
       noteHighlightMove,
+      setHoveredIndex,
     ],
   );
 
