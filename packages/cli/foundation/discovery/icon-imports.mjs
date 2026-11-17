@@ -36,6 +36,7 @@ import {
   wrapsModule,
 } from './template-icons.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {isPackageName} from '../identity/provider-identity.mjs';
 import {
   ICON_EXPORT_NAME_RE,
   definitionsByIcon,
@@ -64,18 +65,6 @@ import {
  *   the icon a set in the list draws for one of those definitions, the first
  *   set in the list that has one; null when no set in the list has one
  */
-
-/**
- * Whether a specifier names an npm package: a valid package name (`name` or
- * `@scope/name`, lower case), with or without a subpath. A path alias such as
- * `@/components/BrandIcon` or `~/icons`, and a package.json `imports` entry
- * such as `#icons`, are not package names.
- * @param {string} specifier
- */
-function isPackageName(specifier) {
-  const {name} = splitSpecifier(specifier);
-  return /^(?:@[a-z0-9-][a-z0-9-._]*\/)?[a-z0-9-][a-z0-9-._]*$/u.test(name);
-}
 
 /**
  * Each statement that reads names from a package: an import, or a named
@@ -156,7 +145,7 @@ export function iconImportFindings(
         names.every(
           each => each.named && ICON_EXPORT_NAME_RE.test(each.name),
         ) &&
-        isPackageName(module) &&
+        isPackageName(splitSpecifier(module).name) &&
         broken(module)
       ) {
         for (const each of names) {

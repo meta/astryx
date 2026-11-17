@@ -44,12 +44,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
-import {
-  baseUrlFor,
-  existingFile,
-  matchPath,
-  pathsFor,
-} from '../../foundation/render/ts-paths.mjs';
+import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
   splitSpecifier,
@@ -366,20 +361,13 @@ export function findIconImports(projectDir, iconSets) {
       continue;
     }
     const fromDir = path.dirname(file);
-    /** @param {string} module */
-    const aliased = module => {
-      // A path alias or `baseUrl` maps the specifier to the app's own code.
-      if (matchPath(pathsFor(file), module)) return true;
-      const base = baseUrlFor(file);
-      return base !== null && existingFile(path.join(base, module)) !== null;
-    };
     const imports = iconImportFindings(
       source,
       iconSets,
       module =>
         !declared.has(splitSpecifier(module).name) &&
         resolveIconModule(module, fromDir) === null &&
-        !aliased(module),
+        !projectMapsImport(module, file),
       wrappedRead,
     );
     if (!imports || imports.length === 0) continue;
