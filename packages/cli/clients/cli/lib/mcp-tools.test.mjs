@@ -136,6 +136,24 @@ describe('mcpTools', () => {
   });
 });
 
+describe('a run on a base that does not serve everything', () => {
+  it('leaves out a command and an option the manifest marks unavailable', () => {
+    const changed = structuredClone(manifest);
+    const all = flatten(changed.commands);
+    const search = all.find(c => c.name === 'search');
+    const component = all.find(c => c.name === 'component');
+    search.available = false;
+    const option = component.options.find((/** @type {any} */ o) => longOf(o.flag) === '--props');
+    option.available = false;
+    const names = mcpTools(changed).map(t => t.name);
+    expect(names).not.toContain('search');
+    expect(names).toContain('component');
+    const componentTool = mcpTools(changed).find(t => t.name === 'component');
+    expect(Object.keys(componentTool?.inputSchema.properties ?? {})).not.toContain('props');
+    expect(Object.keys(tools.find(t => t.name === 'component')?.inputSchema.properties ?? {})).toContain('props');
+  });
+});
+
 describe('a docs-only server', () => {
   /** @type {import('./mcp-tools.mjs').McpTool[]} */
   let docsTools;

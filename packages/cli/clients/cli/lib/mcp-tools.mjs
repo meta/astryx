@@ -178,7 +178,9 @@ function toolOf(command, rootOptions, docsOnly) {
   /** @type {McpOption[]} */
   const options = [];
   for (const [manifestOption, describe] of [
-    ...command.options.map(o => /** @type {const} */ ([o, true])),
+    ...command.options
+      .filter(o => o.available !== false)
+      .map(o => /** @type {const} */ ([o, true])),
     ...rootOptions.map(o => /** @type {const} */ ([o, false])),
   ]) {
     const entry = optionEntry(manifestOption);
@@ -207,7 +209,8 @@ function toolOf(command, rootOptions, docsOnly) {
 
 /**
  * The MCP tools of the CLI: one per command the manifest lists as answering
- * with --json, with an `outsideProject`, in the manifest's order. A docs-only
+ * with --json, with an `outsideProject`, in the manifest's order. A command or
+ * an option the manifest marks unavailable on the run's base is left out. A docs-only
  * server serves the DOCS_ONLY_COMMANDS among them, without the
  * DOCS_ONLY_OMITTED_INPUTS and without a folder input.
  *
@@ -218,7 +221,7 @@ function toolOf(command, rootOptions, docsOnly) {
 export function mcpTools(manifest, {docsOnly = false} = {}) {
   const rootOptions = toolRootOptions(manifest);
   return flatten(manifest.commands)
-    .filter(command => command.json && command.outsideProject)
+    .filter(command => command.json && command.outsideProject && command.available !== false)
     .filter(command => !docsOnly || DOCS_ONLY_COMMANDS.includes(command.name))
     .map(command => toolOf(command, rootOptions, docsOnly));
 }

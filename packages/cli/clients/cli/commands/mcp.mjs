@@ -15,7 +15,8 @@
 
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
-import {buildManifest, storedManifest} from '../lib/manifest.mjs';
+import {helpBase} from '../lib/base-gate.mjs';
+import {buildManifest, rebaseManifest, storedManifest} from '../lib/manifest.mjs';
 import {serveMcp} from '../lib/mcp-server.mjs';
 import {mcpInstructions, mcpTools, projectAgentText} from '../lib/mcp-tools.mjs';
 import {doc as mcpCommand} from './mcp.doc.mjs';
@@ -29,7 +30,11 @@ export function registerMcp(program, {jsonSupported, version}) {
   defineCommand(program, mcpCommand, {
     action: async (/** @type {{docsOnly?: boolean}} */ opts) => {
       const docsOnly = opts?.docsOnly === true;
-      const manifest = storedManifest() ?? buildManifest(program, {jsonSupported, version});
+      // The manifest `astryx manifest --json` prints for this run, on its base.
+      const stored = storedManifest();
+      const manifest = stored
+        ? rebaseManifest(stored, helpBase())
+        : buildManifest(program, {jsonSupported, version});
       const tools = mcpTools(manifest, {docsOnly});
       const agentText = await projectAgentText(process.cwd());
       await serveMcp({
