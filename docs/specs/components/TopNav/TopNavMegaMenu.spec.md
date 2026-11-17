@@ -38,8 +38,8 @@ system_specs: []
 | Public contract         | `TopNavMegaMenu` with `label`, `items` and `featured` slots, `delay` (150), `hideDelay` (250), and `onOpenChange`; target `top-nav-mega-menu` with a `mode` state.                                                                                    |
 | Behavior                | In the bar, a button that opens a wide panel of links below the whole TopNav on hover or click; the panel is a labeled group, not an ARIA menu. In the drawer, a disclosure that expands items and featured content inline. Hidden in the mobile bar. |
 | End-user impact         | Users browse a grid of destinations with descriptions and a featured card; keyboard users reach the panel's links from the trigger; drawer users expand the group in place.                                                                           |
-| Builder impact          | None.                                                                                                                                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no public change. Four current-state gaps (see Current-state impact).                                                                                                                                                       |
+| Builder impact          | A pick on an item or the featured card's link closes the panel and returns focus to the trigger; an item that sets `hasCloseOnSelect: false` keeps it open.                                                                                           |
+| Compatibility/readiness | Records shipped behavior, except the close on a pick (FR5), a nonbreaking behavior change with TopNavMegaMenuItem's `hasCloseOnSelect` opt-out. Four current-state gaps (see Current-state impact).                                                   |
 | Review checks           | Reject exposing the panel as `role="menu"`, wrapping it in a modal dialog, keyboard activation that closes an open panel, or a collapsed drawer group that stays reachable.                                                                           |
 | Governing rules         | `architecture:public-component-api` INV5 and INV7; `architecture:interaction-modality`; `component:TopNav` render modes.                                                                                                                              |
 
@@ -54,11 +54,11 @@ lives in `TopNavMegaMenu.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Released default preserved: `no` — FR5 closes the panel on a pick and returns focus to the trigger. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Compatibility class: nonbreaking behavior change; no new prop on TopNavMegaMenu (TopNavMegaMenuItem adds `hasCloseOnSelect`)
 - Controlled/uncontrolled behavior: open state is internal; `onOpenChange`
   reports it
-- Migration decision: none
+- Migration decision: a builder who needs the panel to stay open after a pick sets the item's `hasCloseOnSelect: false`
 
 Consumer migration instructions belong in consumer docs and release notes.
 

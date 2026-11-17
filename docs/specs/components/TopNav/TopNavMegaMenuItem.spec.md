@@ -33,8 +33,8 @@ system_specs: []
 | Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, `hasCloseOnSelect` (`true`), and `as`; target `top-nav-mega-menu-item` with a `mode` state.                         |
 | Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation, except a modified click on a link, which leaves it open. |
 | End-user impact         | Users see a title, description, and icon per destination.                                                                                                                                        |
-| Builder impact          | None.                                                                                                                                                                                            |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                                                   |
+| Builder impact          | A pick closes the mega menu panel and returns focus to the trigger; `hasCloseOnSelect: false` keeps it open.                                                                                     |
+| Compatibility/readiness | Records shipped behavior, except the close on a pick (FR1), a nonbreaking behavior change with the new `hasCloseOnSelect` prop. One implementation gap (see Current-state impact).               |
 | Review checks           | Reject a drawer item that leaves the drawer open after an unmodified activation or drops caller props and styling.                                                                               |
 | Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                                                                           |
 
@@ -48,10 +48,10 @@ usage lives in `TopNavMegaMenuItem.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Released default preserved: `no` — FR1 closes the panel on a pick and returns focus to the trigger. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Compatibility class: nonbreaking behavior change; one new prop, `hasCloseOnSelect` (default `true`)
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none
+- Migration decision: a builder who needs the panel to stay open after a pick sets `hasCloseOnSelect: false`
 
 Consumer migration instructions belong in consumer docs and release notes.
 

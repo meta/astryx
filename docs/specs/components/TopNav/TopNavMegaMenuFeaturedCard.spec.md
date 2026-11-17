@@ -29,15 +29,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavMegaMenuFeaturedCard` with `title`, `description`, `image`, `imageAlt`, `linkLabel`, `linkHref`, and `children`; target `top-nav-mega-menu-featured-card`. |
-| Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                     |
-| End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                      |
-| Builder impact          | None.                                                                                                                                                             |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                    |
-| Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                |
-| Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                     |
+| Area                    | Contract                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `TopNavMegaMenuFeaturedCard` with `title`, `description`, `image`, `imageAlt`, `linkLabel`, `linkHref`, and `children`; target `top-nav-mega-menu-featured-card`.            |
+| Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                                |
+| End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                                 |
+| Builder impact          | Following the link inside a mega menu panel closes the panel and returns focus to the trigger.                                                                               |
+| Compatibility/readiness | Records shipped behavior, except the close when the link is followed inside a panel (FR3), a nonbreaking behavior change. One implementation gap (see Current-state impact). |
+| Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                           |
+| Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                                |
 
 This table is a review projection; the body below is authoritative.
 
@@ -49,10 +49,10 @@ that promotes one destination. Consumer usage lives in
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Released default preserved: `no` — FR3 closes the panel when the link is followed inside it. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Compatibility class: nonbreaking behavior change; no public API change
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none
+- Migration decision: none: a builder who needs the panel to stay open renders their own control in `children`
 
 Consumer migration instructions belong in consumer docs and release notes.
 

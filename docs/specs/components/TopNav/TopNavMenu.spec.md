@@ -44,8 +44,8 @@ system_specs: []
 | Public contract         | `TopNavMenu` with `label`, `items` (`{title, description?, icon?, href?, onClick?, hasCloseOnSelect?}`), `delay` (150), and `hideDelay` (200); target `top-nav-menu`.                        |
 | Behavior                | In the bar, a button that opens a menu of rich items on hover or click, with APG menu keyboard support. In the drawer, a disclosure that expands its items inline. Hidden in the mobile bar. |
 | End-user impact         | Mouse users preview destinations on hover; keyboard users move through items with arrows and typeahead; drawer users expand the group in place.                                              |
-| Builder impact          | None.                                                                                                                                                                                        |
-| Compatibility/readiness | Records shipped behavior; no public change. Two current-state gaps (see Current-state impact).                                                                                               |
+| Builder impact          | A pick closes the menu and returns focus to the trigger; an item that sets `hasCloseOnSelect: false` keeps it open.                                                                          |
+| Compatibility/readiness | Records shipped behavior, except the close on a pick (FR4), a nonbreaking behavior change with the `hasCloseOnSelect` opt-out. Two current-state gaps (see Current-state impact).            |
 | Review checks           | Reject wrapping the popup in a modal dialog, more than one tab stop among items, a collapsed drawer group that stays reachable, or caller trigger handlers that replace the built-in ones.   |
 | Governing rules         | `architecture:public-component-api` INV5 and INV7; `architecture:interaction-modality`; `component:TopNav` render modes.                                                                     |
 
@@ -60,10 +60,10 @@ expandable group in the mobile drawer. Consumer usage lives in
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Released default preserved: `no` — FR4 closes the menu on a pick and returns focus to the trigger. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Compatibility class: nonbreaking behavior change; one new item field, `hasCloseOnSelect` (default `true`)
 - Controlled/uncontrolled behavior: open and expanded states are internal
-- Migration decision: none
+- Migration decision: a builder who needs the menu to stay open after a pick sets the item's `hasCloseOnSelect: false`
 
 Consumer migration instructions belong in consumer docs and release notes.
 
