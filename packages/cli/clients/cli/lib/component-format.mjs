@@ -605,28 +605,9 @@ export function shortUsage(docs, name) {
 }
 
 /**
- * Render props one per line with name, type, default and markers only. The
- * short answer names the command that prints each description.
- * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
- * @returns {string}
- */
-function formatPropsShort(props) {
-  if (!props || props.length === 0) return '';
-  return props
-    .map(p => {
-      const def = p.default ? ` = \`${p.default}\`` : '';
-      const req = p.required ? ' **(required)**' : '';
-      const stability =
-        p.stability === 'experimental' ? ' **(experimental)**' : '';
-      return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}`;
-    })
-    .join('\n');
-}
-
-/**
  * Format the short answer that a component read prints by default
  * (`--detail compact`): what the component is, its import, the common use,
- * every prop in short form, and its pieces. It ends with the commands that
+ * every prop with its description's first sentence, and its pieces. It ends with the commands that
  * print the rest, so nothing the doc holds is out of reach.
  *
  * Every part comes from fields each component doc already has, so a new
@@ -674,9 +655,12 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
+  // Each prop prints its description's first sentence (INV4); the More
+  // list names the `--props` read that prints them whole.
+  const plan = propsPlan(docs, options.propsCommand);
   if ('props' in docs && docs.props?.length) {
     sections.push('## Props\n');
-    sections.push(formatPropsShort(docs.props) + '\n');
+    sections.push(formatPropsList(docs.props, {whole: plan.whole}) + '\n');
   }
 
   if ('components' in docs && docs.components?.length) {
@@ -688,7 +672,10 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
       // A family doc can list its own entry again; its props are above.
       if (comp.name === name && 'props' in docs) continue;
       if (comp.props?.length) {
-        pieces.push(`### ${comp.name}\n`, formatPropsShort(comp.props) + '\n');
+        pieces.push(
+          `### ${comp.name}\n`,
+          formatPropsList(comp.props, {whole: plan.whole}) + '\n',
+        );
       } else {
         bare.push(comp.name);
       }
@@ -709,12 +696,14 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
 
   /** @type {string[]} */
   const more = [];
-  if (options.propsCommand) {
-    more.push(`- Each prop's description: \`${run} ${options.propsCommand}\``);
+  if (options.propsCommand && !plan.whole) {
+    more.push(
+      `- Each prop's whole description: \`${run} ${options.propsCommand}\``,
+    );
   }
   if (options.fullCommand) {
     more.push(
-      `- Anatomy, best practices, accessibility, examples and theming: \`${run} ${options.fullCommand}\``,
+      `- Anatomy, best practices, examples, and theming (classes, data attributes, CSS variables): \`${run} ${options.fullCommand}\``,
     );
   }
   if (more.length) {

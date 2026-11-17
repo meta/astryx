@@ -17,7 +17,9 @@ describe('component read default', () => {
       "import { Dialog } from '@astryxdesign/core/Dialog';",
     );
     expect(run.stdout).toContain('## Usage');
-    expect(run.stdout).toMatch(/^- `isOpen`: `boolean` \*\*\(required\)\*\*$/m);
+    expect(run.stdout).toMatch(
+      /^- `isOpen`: `boolean` \*\*\(required\)\*\* - Whether the dialog is open\.$/m,
+    );
     expect(run.stdout).toMatch(
       /component DialogHeader useImperativeDialog`\.$/m,
     );

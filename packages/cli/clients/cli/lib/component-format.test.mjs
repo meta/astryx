@@ -516,7 +516,8 @@ describe('short answer (compact)', () => {
         name: 'label',
         type: 'string',
         required: true,
-        description: 'Visible label. More text.',
+        description:
+          'Visible label. More text that only the props read prints, long enough that cutting it saves more than the line that names that read costs.',
       },
       {
         name: 'size',
@@ -528,15 +529,16 @@ describe('short answer (compact)', () => {
     ],
   };
 
-  it('prints the first paragraph, each prop in short form, and the routes to the rest', () => {
+  it('prints the first paragraph, each prop with its first sentence, and the routes to the rest', () => {
     const out = formatCompact(docs, 'Widget', '@acme/w/Widget', {
       propsCommand: 'component Widget --props',
       fullCommand: 'component Widget --detail full',
     });
     expect(out).toContain('A widget.');
     expect(out).not.toContain('second paragraph');
-    expect(out).toContain("- `size`: `'sm' | 'md'` = `'md'`");
-    expect(out).not.toContain('Visible label');
+    expect(out).toContain("- `size`: `'sm' | 'md'` = `'md'` - Size.");
+    expect(out).toContain('Visible label.');
+    expect(out).not.toContain('More text.');
     expect(out).toMatch(/component Widget --props`$/m);
     expect(out).toMatch(/component Widget --detail full`$/m);
   });
