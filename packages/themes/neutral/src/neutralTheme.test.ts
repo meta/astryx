@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {generateThemeCSS} from '@astryxdesign/core/theme';
 import {neutralPalettes} from './neutralPalettes';
@@ -635,5 +636,42 @@ describe('neutral touch + narrow type pin', () => {
     expect(generateThemeCSS(neutralTheme).component).toContain(
       '@media (width < 1024px) and (pointer: coarse)',
     );
+  });
+});
+
+describe('neutral theme fonts', () => {
+  const fontsCss = readFileSync(
+    new URL('../fonts.css', import.meta.url),
+    'utf-8',
+  );
+
+  it('loads Figtree with @font-face rules, not a render-blocking @import', () => {
+    expect(fontsCss).not.toMatch(/^\s*@import\b/m);
+    const figtree = fontsCss.match(
+      /@font-face\s*\{[^}]*font-family:\s*'Figtree';[^}]*\}/g,
+    );
+    expect(figtree).toHaveLength(2);
+    for (const rule of figtree ?? []) {
+      expect(rule).toMatch(/font-weight:\s*400 700;/);
+      expect(rule).toMatch(/font-display:\s*swap;/);
+      expect(rule).toMatch(/format\('woff2'\)/);
+    }
+  });
+
+  it('defines a size-matched fallback face that the theme names right after Figtree', () => {
+    const fallback = fontsCss.match(
+      /@font-face\s*\{[^}]*font-family:\s*'Figtree Fallback';[^}]*\}/,
+    )?.[0];
+    expect(fallback).toBeDefined();
+    for (const descriptor of [
+      'size-adjust',
+      'ascent-override',
+      'descent-override',
+      'line-gap-override',
+    ]) {
+      expect(fallback).toContain(descriptor);
+    }
+    const css = generateThemeCSS(neutralTheme).component;
+    expect(css).toMatch(/Figtree["']?,\s*"Figtree Fallback",\s*-apple-system/);
   });
 });

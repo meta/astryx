@@ -45,19 +45,20 @@ export const neutralTheme = defineTheme({
 
   // Typography: Figtree across body, heading, and display sizes (display
   // size tokens inherit from heading.family). Monospace stays as the
-  // platform default for code.
+  // platform default for code. "Figtree Fallback" is the size-matched face
+  // that fonts.css defines; without fonts.css the system stack applies.
   // Scale: base=14, ratio=1.2. Bold weights on h3/h4 for subsection hierarchy.
   typography: {
     scale: {base: 14, ratio: 1.2},
     body: {
       family: 'Figtree',
       fallbacks:
-        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        '"Figtree Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     },
     heading: {
       family: 'Figtree',
       fallbacks:
-        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        '"Figtree Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       weights: {3: 'bold', 4: 'bold'},
     },
     code: {
