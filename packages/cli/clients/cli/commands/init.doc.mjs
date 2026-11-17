@@ -70,7 +70,7 @@ export const doc = {
       description:
         'Write or refresh the computer-level agent text instead of setting up the folder: one skill file, ~/.agents/skills/astryx/SKILL.md, which most coding agents read, ' +
         'linked into the skill folders of agents that read only their own (~/.claude/skills always; Kiro, Windsurf, Letta, Xcode\'s coding assistant, and ~/.config/agents/skills when that folder exists): a folder symlink with a relative target, a junction on Windows, or a copy where neither can be made. Continue, whose scanner skips links, gets a managed copy, refreshed with the file. ' +
-        "It tells agents anywhere on the computer that Astryx is there, when it is relevant, and to start with `astryx search`. " +
+        "It tells agents anywhere on the computer that Astryx is there, when it is relevant, to start a page with `astryx build` and anything else with `astryx search`. " +
         'Records the links it made in astryx/settings.json in the per-user configuration folder, so removal removes exactly those; the CLI installed for the computer refreshes the file in the background after each upgrade. ' +
         'Works in any folder. A file without the Astryx markers, one edited since Astryx wrote it, or a symlink, is kept as it is, and so is anything at a link target that Astryx did not create. ' +
         'Warns, and still writes, when no `astryx` command on the computer runs the Astryx CLI. ' +

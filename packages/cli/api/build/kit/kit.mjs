@@ -14,8 +14,8 @@
  * composing from scratch while a template exists. Next to the start it names
  * the ranker's next two templates, then groups the unified search into the
  * blocks that cover parts and the domain components to fill gaps, plus the
- * always-on frame + foundation names. `pages` and `directMatch` keep search's
- * own view for callers that read them.
+ * always-on frame + foundation names. `pages` and `directMatch` describe
+ * search's matches that build could start from.
  *
  * signals.mjs computes what the kit is built from and answer.mjs shapes the
  * response; buildKit is the two with build's own blocks.
@@ -26,7 +26,7 @@
  * JSON shape stays package-manager-agnostic and stable across environments.
  *
  * Two commands are the kit's own: `start.command`, the scaffold (`astryx
- * template <id> --type page <path>`, with `<path>` a placeholder), and the `--skeleton`
+ * template <id> --type page <path>`, with `<path>` where it goes in the project), and the `--skeleton`
  * a page entry carries when it is not a direct match, so a loose page reads
  * as a layout preview rather than the thing to build. Neither is prefixing —
  * the invocation stays the renderer's job.

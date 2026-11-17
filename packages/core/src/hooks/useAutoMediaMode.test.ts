@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {pickMediaMode} from './useAutoMediaMode';
+import {pickInvertedSide, pickMediaMode} from './mediaSide';
 import {parseColor} from '../utils/color';
 
 const rgb = (value: string) => {
@@ -104,6 +104,37 @@ describe('pickMediaMode', () => {
     ).toBeNull();
     expect(
       pickMediaMode(rgb('#0A1317'), ambientLight, onDark, null),
+    ).toBeNull();
+  });
+});
+
+describe('pickInvertedSide', () => {
+  it('gives an inverted card the on-color that reads best, even where the page text clears 3:1', () => {
+    // A dark-mode error card under an off-white page text: the page text
+    // reads at about 4.15:1, white at 4.70:1, so the card takes white.
+    expect(
+      pickInvertedSide(rgb('#E3193B'), rgb('#F0F0F9'), onDark, onLight),
+    ).toBe('dark');
+  });
+
+  it('keeps the page text when it reads at least as well as both on-colors', () => {
+    expect(
+      pickInvertedSide(rgb('#E4E6EB'), ambientLight, onDark, onLight),
+    ).toBe('off');
+    expect(
+      pickInvertedSide(rgb('#E3193B'), rgb('#FFFFFF'), onDark, onLight),
+    ).toBe('off');
+  });
+
+  it('picks a side when the page text cannot be read', () => {
+    expect(pickInvertedSide(rgb('#0A1317'), null, onDark, onLight)).toBe(
+      'dark',
+    );
+  });
+
+  it('gives up when an on-color is unreadable', () => {
+    expect(
+      pickInvertedSide(rgb('#0A1317'), ambientLight, null, onLight),
     ).toBeNull();
   });
 });

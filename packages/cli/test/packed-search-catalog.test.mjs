@@ -215,6 +215,8 @@ const ASKS = [
   ['search', 'dashboard', '--type', 'doc'],
   ['search', 'neutral', '--type', 'theme', '--json'],
   ['search', 'table', '--type', 'component'],
+  ['search', 'incident console'],
+  ['search', 'incident console', '--json'],
   ['build', BUILD_IDEA],
   ['build', BUILD_IDEA, '--json'],
   ['build', 'a login page', '--detail', 'compact'],
@@ -232,6 +234,55 @@ describe('the stored search catalog', () => {
       expect(stored.status, `${ask.join(' ')}: ${stored.stderr}`).toBe(0);
       expect(stored, ask.join(' ')).toEqual(run(CLI_ROOT, ask));
     }
+  }, 300_000);
+
+  it('marks an unready template from the store as a live gather does, and drops the mark once it is ready', () => {
+    expect(storeAnswers()).toBe(true);
+    // Any page template still marked not ready, found from its own doc, so the
+    // test does not depend on which real template is ready.
+    const pagesDir = path.join(packed, 'assets', 'templates', 'pages');
+    const name = fs
+      .readdirSync(pagesDir)
+      .sort()
+      .find(dir => {
+        const file = path.join(pagesDir, dir, 'template.doc.mjs');
+        return (
+          fs.existsSync(file) &&
+          fs.readFileSync(file, 'utf8').includes('isReady: false,')
+        );
+      });
+    expect(name).toBeTruthy();
+    const unready = /** @type {string} */ (name);
+    const text = ['search', unready.replace(/-/g, ' '), '--type', 'template'];
+    const json = [...text, '--json'];
+    /**
+     * The template's own text record.
+     * @param {string} stdout
+     */
+    const record = stdout =>
+      stdout.split('\n\n').find(r => r.includes(`name:        ${unready}\n`)) ??
+      '';
+    /** @param {string} stdout */
+    const result = stdout =>
+      JSON.parse(stdout).data.results.find(
+        (/** @type {any} */ r) => r.name === unready,
+      );
+    expect(record(run(packed, text).stdout)).toContain(
+      'kind:        page (not ready)\n',
+    );
+    expect(result(run(packed, json).stdout).isReady).toBe(false);
+    const doc = path.join(pagesDir, unready, 'template.doc.mjs');
+    withEdit(doc, 'isReady: false,', 'isReady: true, ', () => {
+      expect(storeAnswers()).toBe(false);
+      const textAnswer = run(packed, text);
+      expect(textAnswer.status, textAnswer.stderr).toBe(0);
+      expect(record(textAnswer.stdout)).toContain('kind:        page\n');
+      expect(textAnswer).toEqual(runLive(text));
+      const jsonAnswer = run(packed, json);
+      expect(result(jsonAnswer.stdout).isReady).toBe(true);
+      expect(jsonAnswer).toEqual(runLive(json));
+    });
+    expect(storeAnswers()).toBe(true);
   }, 300_000);
 
   it("spells docs' commands for the project's package manager, as a live gather does", () => {

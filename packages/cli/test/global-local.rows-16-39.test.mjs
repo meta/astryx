@@ -124,7 +124,7 @@ describe.skipIf(!POSIX)(
       });
       expect(r.status).toBe(0);
       expect(filesIn(dir)).toEqual(before);
-      expect(fs.existsSync(path.join(pc.home, '.config', 'astryx'))).toBe(true);
+      expect(fs.existsSync(pc.configDir)).toBe(true);
       expect(
         userCacheDir({
           home: pc.home,
@@ -206,7 +206,7 @@ describe.skipIf(!POSIX)(
         // held. Wait for both completion records, not for a time: the
         // check's latest release with its lock released, and the agent
         // text written for this release.
-        const stateDir = path.join(pc.home, '.config', 'astryx');
+        const stateDir = pc.configDir;
         const settled = () => {
           const state = readState(pc);
           return (
@@ -234,7 +234,7 @@ describe.skipIf(!POSIX)(
         expect(first.lines).toEqual([handedTo('9.0.1')('9.0.0')]);
         expect(first.notice).toEqual([
           available('9.0.1', '9.0.5'),
-          'To upgrade, run: npm install @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then npx astryx upgrade --from 9.0.1 --apply',
+          'To upgrade, run: npm install -E @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then npx astryx upgrade --from 9.0.1 --apply',
         ]);
         // The notice comes after the command's own output.
         expect(first.stderr.trim().split('\n').at(-1)).toBe(first.notice[1]);
@@ -275,7 +275,7 @@ describe.skipIf(!POSIX)(
       expect(r.status).toBe(0);
       expect(r.notice).toEqual([
         available('9.0.0', '9.0.5'),
-        'To upgrade, run: npm install @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then host astryx upgrade --from 9.0.0 --apply',
+        'To upgrade, run: npm install -E @astryxdesign/core@9.0.5 @astryxdesign/cli@9.0.5, then host astryx upgrade --from 9.0.0 --apply',
       ]);
     });
 
@@ -431,7 +431,7 @@ describe.skipIf(!POSIX)(
       expect(result.stdout.trim()).toBe('9.0.0');
     });
 
-    it("G28 a Yarn Plug'n'Play project, whose own CLI Astryx cannot see, is answered by the copy that started the run", () => {
+    it("G28 a Yarn Plug'n'Play project whose runtime does not start: the run starts again once, and the copy that started it answers with Yarn's command in the hint", () => {
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
       const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});

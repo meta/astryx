@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file How many Node legs a pull-request CI run needs, from the recorded
- *   Node test times.
+ * @file How many Node legs a CI run needs, from the recorded Node test
+ *   times.
  * @input The repository's tracked files (`git ls-files`) and recorded seconds
  *   per Node test file (scripts/vitest-node-durations.json).
  * @output The leg count and whether every leg fits its budget; with `plan
@@ -10,7 +10,9 @@
  *   `reason`, `leg-widths`, `widen`).
  * @position ci.yml's `room` job runs it before admission, so one number sets
  *   test-node's matrix, the legs' full width and admission's peak at full
- *   width. Each leg's Vitest sequencer (scripts/vitest-shard-sequencer.mjs)
+ *   width. The Main workflow's `main-commit` runs it with `--main` for the
+ *   unit run's test-node matrix: as many legs as shorten the slowest leg
+ *   (DEC-17), whose legs also run the swizzle proof's slices. Each leg's Vitest sequencer (scripts/vitest-shard-sequencer.mjs)
  *   splits the files with the same cost function (`nodeFileCost`), so the
  *   legs it plans are the legs that run. Node built-ins and repository
  *   modules only: `room` has no installed dependencies.
@@ -20,7 +22,12 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {costOf, fitLegsToBudget, percentileOf} from './lib/duration-split.mjs';
+import {
+  costOf,
+  fitLegsToBudget,
+  percentileOf,
+  splitByDuration,
+} from './lib/duration-split.mjs';
 import {nodeTestFiles} from './vitest-node-files.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,6 +75,46 @@ export const LEG_BUDGET_SECONDS =
 // a run of eight legs already holds eight of CI's ninety jobs.
 export const MAX_NODE_LEGS = 8;
 
+// The most Node legs Main's unit run starts (spec:AST-030 FR22, DEC-17). Main
+// runs about once an hour, so it may hold more of the ceiling to finish inside
+// its legs' limit: on the recorded suite with the swizzle proof's slices,
+// twelve legs keep the slowest under about eleven minutes on a runner 1.28
+// times slower than measured, where eight legs reach the fifteen-minute limit.
+export const MAX_MAIN_NODE_LEGS = 12;
+
+// How much slower than measured a runner may be, and how long Main's slowest
+// Node leg may take on it before main's validation warns, ahead of the
+// fifteen-minute limit.
+export const SLOW_RUNNER = 1.28;
+export const MAIN_WARN_MINUTES = 12.5;
+
+/**
+ * A leg's projected wall time in minutes on a runner `SLOW_RUNNER` times
+ * slower than measured: its setup, then its recorded test seconds at the
+ * measured pace.
+ * @param {number} testSeconds
+ */
+export function projectedLegMinutes(testSeconds) {
+  return (
+    (SETUP_SECONDS +
+      (testSeconds / TEST_SECONDS_PER_WALL_SECOND) * SLOW_RUNNER) /
+    60
+  );
+}
+
+/**
+ * A never-failing notice for main's validation when Main's slowest Node leg
+ * would pass `MAIN_WARN_MINUTES` on a slow runner, so the record can be cut
+ * down before units time out. Null otherwise.
+ * @param {{longest: number, legs: number}} plan
+ * @returns {string | null}
+ */
+export function mainNearLimitNotice(plan) {
+  const minutes = projectedLegMinutes(plan.longest);
+  if (minutes <= MAIN_WARN_MINUTES) return null;
+  return `::warning title=Main Node legs near their limit::At ${plan.legs} legs, the slowest Node leg plans ${Math.round(plan.longest)} s of tests: about ${minutes.toFixed(1)} minutes on a runner ${SLOW_RUNNER} times slower than measured, past ${MAIN_WARN_MINUTES} of the fifteen-minute limit. Speed up or split the slowest test files.`;
+}
+
 // Node legs that run at once when CI is tight (admission's `leg-widths`), so
 // many open pull requests cannot flood the shared runner pool. Admission's
 // `peak` counts them.
@@ -114,6 +161,59 @@ export function planNodeLegs(files, seconds) {
   return {legs, fits, longest: plan.longest, total, reason};
 }
 
+/**
+ * Main's full unit run spends runner-minutes to finish sooner (spec:AST-030
+ * DEC-17): as many legs as shorten its slowest leg, up to `MAX_MAIN_NODE_LEGS`.
+ * That is the fewest legs whose longest leg is no longer than at the most
+ * legs; more would leave the slowest leg as it is (the slowest single file
+ * sets that floor).
+ * @param {string[]} files Main's Node test files
+ * @param {Record<string, number>} seconds recorded seconds per file
+ * @returns {{legs: number, fits: boolean, longest: number, total: number, reason: string}}
+ */
+export function planMainNodeLegs(files, seconds) {
+  const cost = nodeFileCost(files, seconds);
+  const total = files.reduce((sum, file) => sum + cost(file), 0);
+  const longestAt = count =>
+    Math.max(
+      0,
+      ...splitByDuration(files, count, cost).map(leg =>
+        leg.reduce((sum, file) => sum + cost(file), 0),
+      ),
+    );
+  const floor = longestAt(MAX_MAIN_NODE_LEGS);
+  let legs = MAX_MAIN_NODE_LEGS;
+  for (let count = 1; count < MAX_MAIN_NODE_LEGS; count += 1) {
+    if (longestAt(count) <= floor) {
+      legs = count;
+      break;
+    }
+  }
+  const longest = longestAt(legs);
+  const fits = longest <= LEG_BUDGET_SECONDS;
+  const reason = fits
+    ? ''
+    : `The Node suite plans ${Math.round(total)} s of tests: at ${legs} legs, as many as shorten the slowest, its longest leg plans ${Math.round(longest)} s, past the budget of ${Math.round(LEG_BUDGET_SECONDS)} s. Speed up the slowest test files.`;
+  return {legs, fits, longest, total, reason};
+}
+
+/**
+ * What a plan past its budget prints: a pull request's legs stop with the
+ * reason (an error), Main's unit run warns and runs its legs. Null when the
+ * plan fits.
+ * @param {{fits: boolean, reason: string}} plan
+ * @param {{main?: boolean}} [options]
+ * @returns {{level: 'error' | 'warning', line: string} | null}
+ */
+export function overBudgetNotice(plan, {main = false} = {}) {
+  if (plan.fits) return null;
+  const level = main ? 'warning' : 'error';
+  return {
+    level,
+    line: `::${level} title=Node legs over budget::${plan.reason}`,
+  };
+}
+
 /** Recorded seconds per Node test file, or none when the record cannot be read. */
 export function readDurations(file = DURATIONS) {
   try {
@@ -123,8 +223,14 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** The Node legs' test files: CI runs the swizzle proof's slices elsewhere. */
-export function nodeLegFiles(root = ROOT) {
+/**
+ * The Node legs' test files. A pull request runs the swizzle proof's slices in
+ * a job of their own; Main's unit run runs them in its Node legs
+ * (`swizzleProofOwnJob: false`).
+ * @param {string} [root]
+ * @param {{swizzleProofOwnJob?: boolean}} [options]
+ */
+export function nodeLegFiles(root = ROOT, {swizzleProofOwnJob = true} = {}) {
   const tracked = execFileSync('git', ['ls-files', '-z'], {
     cwd: root,
     encoding: 'utf8',
@@ -132,7 +238,7 @@ export function nodeLegFiles(root = ROOT) {
   })
     .split('\0')
     .filter(Boolean);
-  return nodeTestFiles(tracked, {swizzleProofOwnJob: true});
+  return nodeTestFiles(tracked, {swizzleProofOwnJob});
 }
 
 /**
@@ -169,13 +275,16 @@ if (
   const at = argv.indexOf('--other-widths');
   if (argv[0] !== 'plan' || (at !== -1 && argv[at + 1] == null)) {
     console.error(
-      "usage: node scripts/vitest-node-legs.mjs plan [--other-widths '<json>'] [--github-output]",
+      "usage: node scripts/vitest-node-legs.mjs plan [--main] [--other-widths '<json>'] [--github-output]",
     );
     process.exit(2);
   }
-  const files = nodeLegFiles();
+  const main = argv.includes('--main');
+  const files = nodeLegFiles(ROOT, {swizzleProofOwnJob: !main});
   const seconds = readDurations();
-  const plan = planNodeLegs(files, seconds);
+  const plan = main
+    ? planMainNodeLegs(files, seconds)
+    : planNodeLegs(files, seconds);
   const outputs = stepOutputs(plan, at === -1 ? {} : JSON.parse(argv[at + 1]));
   const unrecorded = files.filter(file => !Object.hasOwn(seconds, file));
   console.log(
@@ -189,8 +298,12 @@ if (
         .join(''),
     );
   else console.log(JSON.stringify(outputs));
-  if (!plan.fits) {
-    console.log(`::error title=Node legs over budget::${plan.reason}`);
-    process.exit(1);
+  // Main's unit run never stops for its plan: it runs its legs and warns.
+  const notice = overBudgetNotice(plan, {main});
+  if (notice) {
+    console.log(notice.line);
+    if (notice.level === 'error') process.exit(1);
   }
+  const nearLimit = main ? mainNearLimitNotice(plan) : null;
+  if (nearLimit) console.log(nearLimit);
 }

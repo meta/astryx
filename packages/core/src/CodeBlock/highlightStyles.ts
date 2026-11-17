@@ -3,7 +3,8 @@
 /**
  * @file highlightStyles.ts
  * @input Syntax token defaults from domainTokens
- * @output Injects ::highlight() CSS rules + fallback token values into the document head
+ * @output Injects ::highlight() CSS rules + fallback token values into the
+ *   document head, inside the astryx-base cascade layer
  * @position Shared utility; consumed by CodeBlock and CodeEditor
  *
  * SYNC: When modified, update:
@@ -15,7 +16,8 @@ import {syntaxTokenDefaults} from '../theme';
 /**
  * Build the fallback CSS custom properties from the syntax token defaults.
  * These provide colors when no theme explicitly sets --color-syntax-* tokens.
- * Themes override these via higher-specificity [data-astryx-theme] selectors.
+ * They sit in the astryx-base layer, so a theme's astryx-theme layer and
+ * unlayered app CSS override them in any load order.
  */
 const FALLBACK_TOKENS = `:root {\n${Object.entries(syntaxTokenDefaults)
   .map(([name, value]) => `  ${name}: ${value};`)
@@ -90,7 +92,11 @@ export function ensureHighlightStyles(): void {
 
   const style = document.createElement('style');
   style.setAttribute('data-astryx-highlight-styles', '');
-  style.textContent = HIGHLIGHT_STYLES;
+  // An unlayered rule beats every layered rule, so the injected rules go in
+  // the astryx-base layer like the rest of Core's CSS. The order statement
+  // comes first, so this sheet cannot declare astryx-base before reset when
+  // it loads before Core's stylesheet.
+  style.textContent = `@layer reset, astryx-base, astryx-theme;\n@layer astryx-base {\n${HIGHLIGHT_STYLES}\n}`;
   document.head.appendChild(style);
   inserted = true;
 }

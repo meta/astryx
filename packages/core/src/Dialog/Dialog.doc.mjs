@@ -171,7 +171,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead. The one exception is an AlertDialog that confirms a destructive action: it asks one question, and Escape closes only the alert.',
       },
       {
         guidance: false,
@@ -242,7 +242,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead. The one exception is an AlertDialog that confirms a destructive action: it asks one question, and Escape closes only the alert.',
       },
       {
         guidance: false,
@@ -315,7 +315,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; use steps in one dialog. Exception: an AlertDialog confirming a destructive action (one question; Escape closes only the alert).',
       },
       {
         guidance: false,

@@ -16,9 +16,16 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {
+  INPUT_DECLARATION_FILES,
+  inputFieldsFrom,
+} from '../theme/build/input-fields.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
-import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
+import {
+  collectThemingTargets,
+  collectThemingVars,
+} from '../../foundation/discovery/theming-targets.mjs';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {
@@ -39,9 +46,16 @@ import {
  * @property {string} cacheDir - node_modules/.cache/astryx-theme/<coreKey>
  * @property {any} core - Core's theme module.
  * @property {NodeJS.Require} req - Resolves packages from the project.
- * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[]} targets
- * @property {Map<string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget>} target
+ * @property {ProjectTarget[]} targets
+ * @property {Map<string, ProjectTarget>} target
  * @property {Record<string, ComponentInfo>} components
+ * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingVar[]} vars - The public custom properties Core's components read.
+ * @property {import('../theme/build/input-fields.mjs').InputFields | null} inputFields - The fields Core's theme input takes, read from its type declarations; null when they are not installed.
+ */
+
+/**
+ * A theming target, with the value Core writes for each of its states.
+ * @typedef {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget & {stateValues: Record<string, string>}} ProjectTarget
  */
 
 /**
@@ -63,7 +77,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 7;
+const DOCS_VERSION = 8;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -336,7 +350,7 @@ export async function openProject(cwd) {
   );
   // Reading every component doc takes a second; it is fixed per Core install.
   const docsFile = path.join(cacheDir, 'docs.json');
-  /** @type {{version: number, targets: ThemeProject['targets'], components: ThemeProject['components']} | null} */
+  /** @type {{version: number, targets: import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
     const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
@@ -350,6 +364,7 @@ export async function openProject(cwd) {
     docs = await withListingCache(async () => ({
       version: DOCS_VERSION,
       targets: await collectThemingTargets(path.join(coreDir, 'src')),
+      vars: await collectThemingVars(path.join(coreDir, 'src')),
       components: await readComponents(coreDir),
     }));
     try {
@@ -359,7 +374,20 @@ export async function openProject(cwd) {
       // A read-only node_modules: read the docs again next time.
     }
   }
-  const {targets, components} = docs;
+  const {components, vars} = docs;
+  // The value Core writes for each state a target lists: a state that names
+  // a boolean prop of its component (toggle-button's isPressed) is that
+  // prop's attribute, written "true" when on; any other is a bare state,
+  // written as its own name (parseStyleKey's two key forms).
+  const targets = docs.targets.map((/** @type {any} */ t) => ({
+    ...t,
+    stateValues: Object.fromEntries(
+      (t.states ?? []).map((/** @type {string} */ st) => [
+        st,
+        components[t.component]?.props?.[st]?.type === 'boolean' ? 'true' : st,
+      ]),
+    ),
+  }));
   const project = {
     cwd: key,
     coreDir,
@@ -371,9 +399,28 @@ export async function openProject(cwd) {
     targets,
     target: new Map(targets.map(t => [t.key, t])),
     components,
+    vars,
+    inputFields: readInputFields(path.dirname(themeFile)),
   };
   projects.set(key, project);
   return project;
+}
+
+/**
+ * The fields Core's theme input takes, read from the type declarations in
+ * the folder of its built theme module; null when one cannot be read.
+ * @param {string} themeDir
+ */
+function readInputFields(themeDir) {
+  return inputFieldsFrom(
+    INPUT_DECLARATION_FILES.map(file => {
+      try {
+        return fs.readFileSync(path.join(themeDir, file), 'utf8');
+      } catch {
+        return null;
+      }
+    }),
+  );
 }
 
 /**

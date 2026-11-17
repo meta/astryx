@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon set",
-    "matchCount": 396,
+    "matchCount": 399,
     "results": [
       {
         "domain": "doc",
@@ -69,6 +69,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToolbarTableFilter --type block",
+        "isReady": true,
         "mentions": []
       },
       {
