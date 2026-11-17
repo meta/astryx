@@ -95,6 +95,10 @@ registerEnglishFallback(english);
  * the announcement once iOS VoiceOver follows `aria-activedescendant`. A new
  * move replaces a name not yet spoken. `items` are the options in list
  * order; `isSelected` tells whether one is selected.
+ *
+ * SYNC: Selector's useActiveOptionAnnouncement (Selector/hooks.ts) makes the
+ * same announcement. Keep the words, the count, the iOS gate and the removal
+ * condition the same in both.
  */
 export function useMultiSelectorActiveOptionAnnouncement<
   I extends {readonly value: string; readonly label?: string},

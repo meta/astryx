@@ -4,15 +4,11 @@
 
 /**
  * @file hooks.ts
- * @input Uses untransformed DOM layout geometry from the Selector's outer
- *   anchor, listbox, and selected option, and the layer runtime's keyboard
- *   inset
- * @output Hooks for Selector. useSelectedItemOffset and useCombobox are
- *   public, exported from the Selector entry point. CommandPalette also uses
- *   useCombobox, and so do products with a combobox over their own text field
- *   (spec:AST-075). useSelectedItemOverlayMargin is Selector's own.
- *   announcesActiveOption, useActiveOptionAnnouncement and
- *   useComboboxWithKeyHighlight are internal to Selector.
+ * @input DOM layout geometry of the Selector's anchor, listbox and selected
+ *   option, and the layer runtime's keyboard inset
+ * @output Public useSelectedItemOffset and useCombobox (also used by
+ *   CommandPalette and products, spec:AST-075); Selector-only hooks
+ *   (useSelectedItemOverlayMargin, the active-option announcement)
  * @position Selector hooks; used by Selector.tsx and CommandPalette
  *
  * SYNC: When useCombobox's options or return change, update:
@@ -419,6 +415,11 @@ export function announcesActiveOption(): boolean {
  * where announcesActiveOption says so. A new move replaces a name not yet
  * spoken. `items` are the options in list order; `isSelected` tells whether
  * one is selected.
+ *
+ * SYNC: MultiSelector's useMultiSelectorActiveOptionAnnouncement
+ * (MultiSelector/hooks.ts) makes the same announcement. Keep the words, the
+ * count, the iOS gate (announcesActiveOption) and the removal condition the
+ * same in both.
  */
 export function useActiveOptionAnnouncement<
   I extends {readonly value: string; readonly label?: string},
