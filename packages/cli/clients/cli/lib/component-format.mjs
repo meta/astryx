@@ -564,106 +564,162 @@ export function formatFull(docs, options = {}) {
   return sections.join('\n');
 }
 
+/** Longest doc example the short answer prints; a longer one stays in `--detail full`. */
+const SHORT_EXAMPLE_MAX_LINES = 20;
+
 /**
- * Format compact docs for LLM consumption (replaces extractCompact + ensureImportStatement).
- * Includes: import, best practices, props, theming.
+ * The common-use code for the short answer: the doc's first example when it
+ * runs on its own and is short, else one element built from the required
+ * props. `…` marks each value the caller fills in.
+ * @param {any} docs
+ * @param {string} name - the component's export name
+ * @returns {string | null}
+ */
+export function shortUsage(docs, name) {
+  const example = (docs.examples ?? []).find(
+    (/** @type {any} */ ex) =>
+      ex.kind !== 'setup' && typeof ex.code === 'string',
+  );
+  if (example) {
+    const code = example.code.trim();
+    if (code.split('\n').length <= SHORT_EXAMPLE_MAX_LINES) return code;
+  }
+  if (!/^[A-Z]/.test(name) || !Array.isArray(docs.props)) return null;
+  /** @type {string[]} */
+  const attrs = [];
+  let hasChildren = false;
+  for (const p of docs.props) {
+    if (!p.required) continue;
+    if (p.name === 'children') {
+      hasChildren = true;
+      continue;
+    }
+    attrs.push(
+      /^'|^string$/.test(String(p.type ?? '').trim())
+        ? `${p.name}="…"`
+        : `${p.name}={…}`,
+    );
+  }
+  const open = [name, ...attrs].join(' ');
+  return hasChildren ? `<${open}>…</${name}>` : `<${open} />`;
+}
+
+/**
+ * Render props one per line with name, type, default and markers only. The
+ * short answer names the command that prints each description.
+ * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
+ * @returns {string}
+ */
+function formatPropsShort(props) {
+  if (!props || props.length === 0) return '';
+  return props
+    .map(p => {
+      const def = p.default ? ` = \`${p.default}\`` : '';
+      const req = p.required ? ' **(required)**' : '';
+      const stability =
+        p.stability === 'experimental' ? ' **(experimental)**' : '';
+      return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Format the short answer that a component read prints by default
+ * (`--detail compact`): what the component is, its import, the common use,
+ * every prop in short form, and its pieces. It ends with the commands that
+ * print the rest, so nothing the doc holds is out of reach.
+ *
+ * Every part comes from fields each component doc already has, so a new
+ * component or an integration's component gets the same answer.
  * @param {any} docs
  * @param {string} componentName
  * @param {string} [importHint]
- * @param {{propsCommand?: string|null}} [options] - `propsCommand` is the
- *   `component … --props` command that prints this read's props whole
+ * @param {{propsCommand?: string | null, fullCommand?: string | null}} [options]
  * @returns {string}
  */
 export function formatCompact(docs, componentName, importHint, options = {}) {
-  // Bare name (un-prefix migration P5a): the CLI now presents component names
-  // without the Astryx prefix. componentName is already bare post-P4.
-  const displayName = componentName.startsWith('XDS')
-    ? componentName.slice(3)
-    : componentName;
-
+  const run = getCliInvocation();
+  const name = docs.name ?? componentName;
   /** @type {string[]} */
   const sections = [];
 
-  sections.push(`# ${docs.name}\n`);
+  sections.push(`# ${name}\n`);
   const desc = docs.usage?.description || docs.description || '';
-  sections.push(desc + '\n');
+  const firstParagraph = desc.split(/\n\s*\n/)[0].trim();
+  if (firstParagraph) sections.push(firstParagraph + '\n');
 
-  if (docs.usage?.anatomy?.length) {
-    sections.push(
-      'Anatomy: ' +
-        docs.usage.anatomy
-          .map((/** @type {any} */ el) => {
-            const req = el.required ? '' : ' (optional)';
-            return `${el.name}${req}`;
-          })
-          .join(', ') +
-        '\n',
-    );
-  }
-
+  // A replacement prints the export its package has (componentName), not
+  // the Core name it answers to.
+  const displayName = componentName.startsWith('XDS')
+    ? componentName.slice(3)
+    : componentName;
   if (importHint) {
-    sections.push('## Import\n');
     sections.push(
-      `\`\`\`tsx\nimport { ${displayName} } from '${importHint}';\n\`\`\`\n`,
+      `**Import:** \`import { ${displayName} } from '${importHint}';\`\n`,
     );
   }
 
-  sections.push(...formatBestPractices(docs.usage?.bestPractices));
+  const setup = (docs.examples ?? []).filter(
+    (/** @type {any} */ ex) =>
+      ex.kind === 'setup' &&
+      typeof ex.code === 'string' &&
+      ex.code.trim().split('\n').length <= SHORT_EXAMPLE_MAX_LINES,
+  );
+  const usage = shortUsage(docs, displayName);
+  if (setup.length || usage) {
+    sections.push('## Usage\n');
+    for (const ex of setup) sections.push(...formatExample(ex, '###'));
+    if (usage) sections.push('```tsx\n' + usage + '\n```\n');
+  }
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  const plan = propsPlan(docs, options.propsCommand);
-  // The pointer prints once, above the first props list.
-  let pointer = plan.pointer;
-
-  // Props
-  if ('props' in docs) {
+  if ('props' in docs && docs.props?.length) {
     sections.push('## Props\n');
-    sections.push(...pointer);
-    pointer = [];
-    sections.push(formatPropsList(docs.props, {whole: plan.whole}) + '\n');
+    sections.push(formatPropsShort(docs.props) + '\n');
   }
 
-  if ('components' in docs) {
-    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
-      sections.push(...pointer);
+  if ('components' in docs && docs.components?.length) {
+    /** @type {string[]} */
+    const pieces = [];
+    /** @type {string[]} */
+    const bare = [];
+    for (const comp of docs.components) {
+      // A family doc can list its own entry again; its props are above.
+      if (comp.name === name && 'props' in docs) continue;
+      if (comp.props?.length) {
+        pieces.push(`### ${comp.name}\n`, formatPropsShort(comp.props) + '\n');
+      } else {
+        bare.push(comp.name);
+      }
     }
-    sections.push(
-      ...formatSubComponents(docs.components, undefined, plan.whole),
-    );
-  }
-
-  // Limited examples (max 3)
-  const examples = docs.examples?.slice(0, 3) || [];
-  if (examples.length) {
-    sections.push('## Usage\n');
-    for (const ex of examples) {
-      sections.push(...formatExample(ex, '###'));
+    if (pieces.length || bare.length) sections.push('## Components\n');
+    sections.push(...pieces);
+    if (bare.length) {
+      sections.push(
+        `${bare.join(', ')}: read ${bare.length === 1 ? 'it' : 'them in one call'} with \`${run} component ${bare.join(' ')}\`.\n`,
+      );
     }
-  }
-
-  // Derived theming properties (compact includes these for theme consumers)
-  if (docs.theming?.derived?.length) {
-    sections.push('## Derived Theme Properties\n');
-    sections.push('Standard CSS properties that also set internal vars:\n');
-    const propLines = [];
-    propLines.push('| CSS Property | Sets |');
-    propLines.push('|---|---|');
-    for (const d of docs.theming.derived) {
-      const target =
-        d.expand === 'container'
-          ? 'container layout tokens'
-          : (d.vars || [])
-              .map((/** @type {any} */ v) => `\`${mdCell(v)}\``)
-              .join(', ');
-      propLines.push(`| \`${mdCell(d.property)}\` | ${target} |`);
-    }
-    sections.push(propLines.join('\n') + '\n');
   }
 
   if (docs.theming?.componentIcons?.length) {
     sections.push('## Component Icon Slots\n');
     sections.push(formatComponentIconSlots(docs.theming.componentIcons));
+  }
+
+  /** @type {string[]} */
+  const more = [];
+  if (options.propsCommand) {
+    more.push(`- Each prop's description: \`${run} ${options.propsCommand}\``);
+  }
+  if (options.fullCommand) {
+    more.push(
+      `- Anatomy, best practices, accessibility, examples and theming: \`${run} ${options.fullCommand}\``,
+    );
+  }
+  if (more.length) {
+    sections.push('## More\n');
+    sections.push(more.join('\n') + '\n');
   }
 
   return sections.join('\n');
