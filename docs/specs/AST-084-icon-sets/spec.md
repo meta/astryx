@@ -310,7 +310,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   declares, in `icons`, the definition each imported icon draws (`{TrashIcon:
 'delete'}`), keyed by the name a named import reads (`{Trash as TrashIcon}`
   is `Trash`) or by a default import's local name. In a project with a set
-  (FR8, opted in), `astryx template` (printed or copied) rewrites each
+  (FR8, named by `experimental.iconSet`), `astryx template` (printed or
+  copied) rewrites each
   declared icon, and each icon another installed set ships, to the icon of
   the first set in the project's list that has one for it: the icon that
   names it in an `exact` or `strong` match, else the icon that set's `map`
@@ -361,8 +362,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   wraps, or by no import at all (`module` null), is kept with the reason, and so is an icon that draws no definition
   and has no match; a side-effect import binds nothing. Text output prints a
   line per placeholder that names the definition and both fixes. Printed
-  source keeps the report on stderr. Without the opt-in there is no `icons`
-  field and no rewrite. `integration check` notes each key a template's
+  source keeps the report on stderr. Without `experimental.iconSet` there is
+  no `icons` field and no rewrite. `integration check` notes each key a template's
   source never imports (`template_icon_not_imported`), never counted or
   failing, under `--strict` or `--next`. In a package whose templates declare
   `icons`, it notes each icon a template imports but does not declare
