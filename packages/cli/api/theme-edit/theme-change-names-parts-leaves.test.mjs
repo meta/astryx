@@ -74,12 +74,14 @@ describe('a whole-theme change', () => {
     expect(notesOf(r)).toContain(' set c4 corners 4px --on avatar');
   }, 240_000);
 
-  it('a border width names the surfaces it does not reach and the dividers it thickens', async () => {
+  it('a border width names the surfaces it frames and the dividers it thickens', async () => {
     await themeEditNew('b3', {cwd});
     const r = await themeEditSet('b3', '--border-width', '4px', {cwd});
     const notes = notesOf(r);
-    expect(notes).toMatch(/does not reach the surfaces[^\n]*popover/);
-    expect(notes).toMatch(/does not reach the surfaces[^\n]*tooltip/);
+    const framed = r.data.notes.join('\n');
+    expect(framed).toMatch(/also frames the surfaces[^\n]*popover/);
+    expect(framed).toMatch(/also frames the surfaces[^\n]*dialog/);
+    expect(notes).toMatch(/small boxes[^\n]*tooltip/);
     expect(notes).toMatch(/dividers[^\n]*table-cell/);
     expect(notes).toContain(' --border-width 1px --on ');
   }, 240_000);

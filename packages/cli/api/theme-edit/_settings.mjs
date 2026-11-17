@@ -96,6 +96,7 @@ import {
   SHOWCASE_GROUPS,
   COLOR_PROP_PARTS,
 } from './_tables.mjs';
+import {borderlessSurfaces} from './_surfaces.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
   baseWord,
@@ -4589,6 +4590,179 @@ export function memberState(ctx, s, member) {
 }
 
 /**
+ * The surfaces a border width does not reach that draw a box of their own
+ * (a dialog, a banner, a filled button's variants), each with the steps
+ * that frame it with `value`: scoped to the variants that draw a filled
+ * box at rest, where some do not (a ghost button); none for a part that
+ * draws no box at rest (a ghost toggle button, a menu row), one whose
+ * filled variants set cannot name, or one a border setting covers. Show's
+ * missed list and set's note on a border width both take them.
+ * @param {any} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} value the border each step sets
+ * @returns {Array<{part: string, why: string, steps: Array<{thing: string, value: string, on: string, when?: string}>}>}
+ */
+export function borderFrames(ctx, data, value) {
+  const C = ctx.C;
+  /** @param {string} p */
+  const covered = p =>
+    data.settings.some(
+      x =>
+        x.on &&
+        !x.state &&
+        partsOf(ctx, x).includes(p) &&
+        /^(border(-width|-style|-color)?|--border-[\w-]+)$/.test(x.thing),
+    );
+  /** The fills a part draws (never the shared hover and pressed tints). @param {string} p */
+  const fills = p =>
+    (C.partReads(p, null) ?? []).filter(
+      (/** @type {any} */ r) =>
+        /^--color-/.test(r.token) &&
+        !/^--color-overlay-/.test(r.token) &&
+        r.props.some((/** @type {string} */ x) => /^background/.test(x)),
+    );
+  /** @type {Array<{part: string, why: string, steps: Array<{thing: string, value: string, on: string, when?: string}>}>} */
+  const out = [];
+  for (const p of borderlessSurfaces(C).filter(
+    x => ctx.project.target.has(x) && !covered(x),
+  )) {
+    // A part whose variants differ, some with a filled box and some with
+    // none (a button's ghost): only the variants that draw a filled box
+    // at rest get a frame; one with no fill is borderless on purpose.
+    const variants = [
+      ...new Set(
+        fills(p)
+          .flatMap((/** @type {any} */ r) => r.when)
+          .filter((/** @type {string} */ w) => !/:|aria-|selected|\[/.test(w))
+          .map(
+            (/** @type {string} */ w) => /(?:^|\s)variant=(\S+)/.exec(w)?.[1],
+          )
+          .filter(Boolean),
+      ),
+    ];
+    // A part that draws no filled box at rest in any variant (a ghost
+    // toggle button, a menu row: their fills are pressed, hover or
+    // selected ones) is borderless on purpose: no frame for it.
+    const boxAtRest = fills(p).some((/** @type {any} */ r) =>
+      r.when.some(
+        (/** @type {string} */ w) => w === '' || !/:|aria-|selected|\[/.test(w),
+      ),
+    );
+    if (!boxAtRest) continue;
+    const all = /** @type {string[]} */ ([...(C.MAP[p]?.attrs?.variant ?? [])]);
+    const scoped = variants.length && all.some(v => !variants.includes(v));
+    // Scoped to variants set can name (the part's own variant prop); a
+    // part whose filled variants set cannot name is left out: one frame
+    // for all of them would frame the ones that draw no box.
+    const settable = /** @type {string[]} */ (
+      C.variantValues(p)?.variant ?? []
+    );
+    if (scoped && !variants.every(v => settable.includes(v))) continue;
+    out.push({
+      part: p,
+      why: scoped
+        ? `still borderless: the border width reaches no border it does not draw (the ${variants.join(', ')} variant${variants.length > 1 ? 's' : ''}; the others draw no box)`
+        : 'still borderless: the border width reaches no border it does not draw',
+      steps: (scoped ? variants.map(v => `variant:${v}`) : [undefined]).map(
+        when => ({thing: 'border', value, on: p, ...(when ? {when} : {})}),
+      ),
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether a whole-theme border width frames a borderless part by default:
+ * the surfaces that hold content (a dialog, a menu, a banner, a panel), not
+ * a button, whose frame the buttons dial gives, nor a small box that only
+ * draws its own text (a badge, a token, a tooltip, a field's status line),
+ * which plain borders do not mean (the edges dial's outlines frame them
+ * too); those are offered one line each.
+ * @param {Ctx} ctx @param {ThemeData} data @param {string} part
+ */
+export function framesByDefault(ctx, data, part) {
+  if ((groupsOf(ctx)['button-like'] ?? []).includes(part)) return false;
+  // (Outlines frame every part that draws a box, the small ones too.)
+  if (outlinesOf(data)) return true;
+  // (A surface holds content: text another part draws inside it, where the
+  // census drew it. A badge, a tooltip or a field's status line draws its
+  // own text and holds none.)
+  /** @type {any[]} */
+  const pairs = /** @type {any} */ (ctx).C?.pairs ?? [];
+  return pairs.some(p => p.text !== part && (p.within ?? []).includes(part));
+}
+
+/**
+ * The frames a whole-theme border width (or the edges dial's outlines)
+ * gives the surfaces that draw no
+ * border of their own (a card, a banner, a field's box; never a button,
+ * whose frame the buttons dial gives): a border at the
+ * theme's width and border color on each, scoped to the variants that draw
+ * a filled box, so a theme with borders has them everywhere a box is drawn.
+ * A part with a border setting of its own keeps it (borderFrames), and
+ * `border none --on <part>` keeps one borderless. A width of zero frames
+ * nothing.
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
+ * @returns {Setting[]}
+ */
+export function frameCopies(ctx, data, s) {
+  const zero = (/** @type {unknown} */ v) =>
+    /^0(?:px|rem|em)?$/.test(String(v).trim());
+  const width = data.settings.find(
+    x =>
+      x.source === 'token' &&
+      x.thing === '--border-width' &&
+      !x.on &&
+      !x.when &&
+      !x.state,
+  );
+  const outlines = outlinesOf(data);
+  // (Made once: at the theme's own border width, or at the edges dial when
+  // it asks for outlines; a width of zero frames nothing.)
+  const at =
+    s === width
+      ? !zero(s.value) && !(outlines && data.settings.indexOf(outlines) > data.settings.indexOf(width))
+      : s === outlines
+        ? !(width && zero(width.value)) &&
+          !(width && data.settings.indexOf(width) > data.settings.indexOf(outlines))
+        : false;
+  if (!at) return [];
+  return borderFrames(
+    /** @type {any} */ (ctx),
+    data,
+    'var(--border-width) solid var(--color-border)',
+  )
+    .filter(x => framesByDefault(ctx, data, x.part))
+    .flatMap(x =>
+      x.steps.map(st => ({
+        thing: 'border',
+        value: String(st.value),
+        source: /** @type {const} */ ('property'),
+        on: st.on,
+        ...(st.when ? {when: st.when} : {}),
+        ...(s.mode ? {mode: s.mode} : {}),
+        only: true,
+      })),
+    );
+}
+
+/**
+ * The edges setting that asks for outlines, if the theme has one.
+ * @param {ThemeData} data
+ * @returns {Setting | undefined}
+ */
+export function outlinesOf(data) {
+  return [...data.settings]
+    .reverse()
+    .find(x => x.source === 'dial' && x.thing === 'edges' && !x.on)
+    ?.value === 'outlines'
+    ? [...data.settings]
+        .reverse()
+        .find(x => x.source === 'dial' && x.thing === 'edges' && !x.on)
+    : undefined;
+}
+
+/**
  * The copies of a moment setting (hover, focus, pressed) that reach its
  * family: for each member it writes that draws the moment in a state of its
  * own (memberState), the setting on that member alone, in that state. The
@@ -7345,12 +7519,17 @@ export function compileTheme(ctx, data, base) {
   // A setting for a moment (hover, focus, pressed) that reaches a family
   // member drawing that moment in a state of its own (a list option's
   // highlighted row, which the keyboard or the pointer moves) is written
-  // there too, right after it, as that member's.
+  // there too, right after it, as that member's. A whole-theme border width
+  // frames the surfaces that draw no border of their own (frameCopies).
   const ordered = [
     ...data.settings.filter(x => x.source === 'dial' && !onPart(x)),
     ...data.settings.filter(x => x.source === 'dial' && onPart(x)),
     ...data.settings.filter(x => x.source !== 'dial'),
-  ].flatMap(x => [x, ...momentCopies(ctx, data, x)]);
+  ].flatMap(x => [
+    x,
+    ...momentCopies(ctx, data, x),
+    ...frameCopies(ctx, data, x),
+  ]);
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
   // A background for one mode is that region's in its mode block only:
@@ -7655,6 +7834,8 @@ export function compileTheme(ctx, data, base) {
             ? TYPE_STYLES[type.value].ratio
             : (theme.typography.scale?.ratio ?? baseRatio),
         };
+      } else if (s.thing === 'edges') {
+        // (Read where the frames are made: frameCopies.)
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
         // The rungs scale the spacing the base theme starts from.
