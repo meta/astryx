@@ -191,12 +191,12 @@ async function picture({html, png, mode}, i) {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
-  // An overlay drawn open plays its opening animation (a fade-in) as the
-  // page loads: it is run to its end, and a looping one held at a frame a
-  // person sees (SETTLE_ANIMATIONS), before the picture.
   // The page draws, at the window's size, until it is quiet (a chart's
   // drawing over frames ends).
   await send('Runtime.evaluate', {expression: AWAIT_QUIET, awaitPromise: true}, sessionId);
+  // An overlay drawn open plays its opening animation (a fade-in) as the
+  // page loads: it is run to its end, and a looping one held at a frame a
+  // person sees (SETTLE_ANIMATIONS), before the picture.
   await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
