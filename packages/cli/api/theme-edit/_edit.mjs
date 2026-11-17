@@ -2434,21 +2434,29 @@ function leftOutParts(ctx, slug, data, sub, s) {
       });
   }
   // Square corners square the pills that are a styling choice (the build
-  // does); the parts drawn as circles keep their shape, said, with the line
-  // that squares one.
+  // does), and corners of an explicit size (Bootstrap's 4px) give them that
+  // size; the parts drawn as circles keep their shape either way, said,
+  // with the lines that give them the corners too.
+  const plain =
+    s.source === 'dial' && s.thing === 'corners'
+      ? cornersPlain(String(s.value))
+      : null;
+  const sized =
+    plain != null && /^\d*\.?\d+px$/.test(plain) && cornerPx(plain) < 9999;
   if (
-    s.source === 'dial' &&
-    s.thing === 'corners' &&
-    ['square', '0px'].includes(cornersPlain(String(s.value)) ?? '') &&
+    plain != null &&
+    (['square', '0px'].includes(plain) || sized) &&
     !data.settings.some(x => x.thing === '--radius-full' && !x.on)
   ) {
     const circles = pillShapes(C).circles.filter(has);
+    const square = ['square', '0px'].includes(plain);
     if (circles.length)
       out.push({
-        note: `the parts drawn as circles stay round (${circles.join(', ')}): a circle is their shape, not a corner choice; to square one:`,
-        run: circles
-          .slice(0, 3)
-          .map(m => `${P} set ${slug} corners square --on ${m}`),
+        note: `the parts drawn as circles stay round (${circles.join(', ')}): a circle is their shape, not a corner choice; ${square ? 'to square one:' : `to give them these ${plain} corners too:`}`,
+        run: (square ? circles.slice(0, 3) : circles).map(
+          m =>
+            `${P} set ${slug} corners ${square ? 'square' : plain} --on ${m}`,
+        ),
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
