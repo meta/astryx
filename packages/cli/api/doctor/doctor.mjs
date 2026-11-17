@@ -105,6 +105,7 @@ import {
   THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
+  dependencyInstallFor,
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
@@ -112,6 +113,7 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
@@ -127,6 +129,12 @@ import {
   builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
+import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
+import {coreBase} from '../../foundation/bases/core.mjs';
+import {
+  CLI_PROVIDER_ID,
+  CORE_PROVIDER_ID,
+} from '../../foundation/identity/providers.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -146,6 +154,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string} cwd - Directory to diagnose.
  * @property {string} nodeVersion - Running Node version.
  * @property {string|null} coreDir - Resolved core package directory, or null.
+ * @property {import('../../foundation/bases/resolve.mjs').ActiveBase} [base]
+ *   The base the project's run reads; Core when absent.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
  * @property {string[]} [addedThemePackages] - Packages of the project's added
@@ -173,12 +183,13 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
  * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
- *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   The project's icon sets (AST-084 FR17), or null when they could not be
+ *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
- *   the CLI writes for a missing icon, read only in a project that sets
- *   `experimental.iconSet`; null otherwise.
+ *   the CLI writes for a missing icon, read only where the icon feature gate
+ *   is on; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
@@ -327,6 +338,12 @@ export function checkNodeVersion(ctx) {
 export function checkCoreInstalled(ctx) {
   const found = Boolean(ctx.coreDir);
   const version = pkgVersion(ctx.coreDir);
+  // A project that lists Core but has not installed its dependencies, as a
+  // fresh clone, gets Core by installing them: adding Core would install
+  // another release and replace the version the project lists.
+  const install = found
+    ? null
+    : dependencyInstallFor(ctx.cwd, '@astryxdesign/core');
   return {
     id: 'core-installed',
     label: '@astryxdesign/core installed',
@@ -337,8 +354,27 @@ export function checkCoreInstalled(ctx) {
     ...(found
       ? {}
       : {
-          fix: 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+          fix: install
+            ? `Install the project's dependencies: \`${install}\`.`
+            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
+  };
+}
+
+/**
+ * The active base is installed and resolvable, in a project whose base is
+ * not Core. A project on Core has {@link checkCoreInstalled} instead.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkBaseInstalled(ctx) {
+  if (ctx.base == null || ctx.base.core) return null;
+  const {name, version} = ctx.base;
+  return {
+    id: 'base-installed',
+    label: `${name} installed`,
+    status: 'pass',
+    message: `${name}, the active base, resolved${version ? ` (v${version})` : ''}.`,
   };
 }
 
@@ -393,8 +429,13 @@ export function checkVersionAlignment(ctx) {
     // is not the project's, or in no project, the fix says how to reach one.
     const add = addCliCommandFor(ctx.cwd, coreVersion);
     const matches = coreVersion === cliVersion;
+    const lead = add?.declared
+      ? 'To install the CLI this project declares'
+      : matches
+        ? 'To pin it for the team and CI'
+        : 'To match';
     const fix = add
-      ? `${matches ? 'To pin it for the team and CI' : 'To match'}, run: ${add.command}.`
+      ? `${lead}, run: ${add.command}.`
       : matches
         ? null
         : NO_PROJECT_FIX;
@@ -626,8 +667,8 @@ export function checkImplicitIntegrations(ctx) {
       'themes',
       'docs',
       'codemods',
-      // An experimental root counts only in a project that opts in.
-      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+      // An experimental root counts only where icon features are on.
+      ...(ctx.iconSets ? ['iconSets'] : []),
     ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
@@ -1114,8 +1155,8 @@ export function checkIntegrationCoreRange(ctx) {
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
  * other installed set that was withdrawn, with why.
- * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
- * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project where the
+ * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
@@ -1125,12 +1166,16 @@ export function checkIconSets(ctx) {
   const label = 'Icon sets';
   if (state == null) return null;
   const {sets, withdrawn, choice} = state;
-  // Only a project that opts in with `experimental.iconSet` gets the check.
-  if (!choice.configured) return null;
-  const list = [
-    {selector: choice.configured, status: choice.status, reason: choice.reason},
-    ...(choice.backups ?? []),
-  ];
+  const list = choice.configured
+    ? [
+        {
+          selector: choice.configured,
+          status: choice.status,
+          reason: choice.reason,
+        },
+        ...(choice.backups ?? []),
+      ]
+    : [];
   const installFix =
     'Install the package that ships the set, or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the installed sets).';
   const missing = list.filter(each => each.status === 'missing');
@@ -1172,8 +1217,8 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
-          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
           ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
@@ -1224,22 +1269,36 @@ export function checkIconSets(ctx) {
  */
 function iconUseCommandOf(choice, variant) {
   return iconUseCommand(
-    /** @type {string} */ (choice.configured),
+    /** @type {string} */ (choice.configured ?? choice.set?.name),
     (choice.backups ?? []).map(each => each.selector),
     variant,
   );
 }
 
 /**
+ * The main set the placeholder fixes name: the one `experimental.iconSet`
+ * names, else the only installed set; null when no main set is decided or
+ * icon features are off. The placeholder check, and the source scan it
+ * reads, run only when there is one.
+ * @param {DoctorContext['iconSets']} iconSets
+ * @returns {string | null}
+ */
+export function placeholderMainSet(iconSets) {
+  return iconSets?.choice.configured ?? iconSets?.choice.set?.name ?? null;
+}
+
+/**
  * The placeholder component for a missing icon, still in the project's own
  * source (AST-084): each file and the meanings it stands for, with the commands that give each a
- * real icon. Only a project that sets `experimental.iconSet` gets the check.
+ * real icon. Only a project where the icon feature gate is on, and whose
+ * main set is decided, gets the check.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
 export function checkIconPlaceholders(ctx) {
   const choice = ctx.iconSets?.choice;
-  if (!choice?.configured || ctx.iconPlaceholders == null) return null;
+  const main = placeholderMainSet(ctx.iconSets);
+  if (!choice || !main || ctx.iconPlaceholders == null) return null;
   const id = 'icon-placeholders';
   const label = 'Placeholder icons';
   const found = ctx.iconPlaceholders;
@@ -1251,7 +1310,6 @@ export function checkIconPlaceholders(ctx) {
       message: 'No copied code uses the placeholder for a missing icon.',
     };
   }
-  const main = choice.configured;
   const meanings = [
     ...new Set(found.flatMap(each => each.meanings ?? [])),
   ].sort();
@@ -1634,6 +1692,10 @@ export async function checkCliDocs(_ctx, options = {}) {
   }
 }
 
+/** The providers whose docs a run on another base leaves out. */
+/** @type {Set<string>} */
+const CORE_DOC_PROVIDERS = new Set([CORE_PROVIDER_ID, CLI_PROVIDER_ID]);
+
 /**
  * The docs tree builds with no error, and every CLI typed doc in a `cli/...`
  * group has a route in it (spec:AST-046): each placement names a namespace of
@@ -1673,15 +1735,20 @@ export async function checkDocsTree(_ctx, options = {}) {
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
       // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names.
+      // reference block also includes all it names. A run whose base is not
+      // Core leaves Core's docs out; a link to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
         }
       }
-      problems.push(...(await docsLinkProblems(catalog, tree)));
+      const coreDocs = await coreOnlyDocNames();
+      /** @param {{provider: string, name: string}} target */
+      const absent = target =>
+        CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
+      problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
       problems.push(
-        ...(await docsLinkProblems(catalog, tree, {references: true})),
+        ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
     }
     // New findings warn: a project that passed before keeps passing
@@ -2338,7 +2405,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2351,6 +2418,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
   checkConfiguredIntegrations,
@@ -2365,6 +2433,18 @@ export const SYNC_CHECKS = [
   checkCliCommand,
   checkGatherCache,
 ];
+
+/**
+ * The checks that read Core. A project whose base is not Core reads no Core,
+ * so they are left out of it, with the `themes` check, which counts Core's
+ * theme packages.
+ * @type {ReadonlySet<(ctx: DoctorContext) => DoctorCheck | null>}
+ */
+const CORE_CHECKS = new Set([
+  checkCoreInstalled,
+  checkVersionAlignment,
+  checkPeerDeps,
+]);
 
 /**
  * Run all diagnostic checks and return a structured report.
@@ -2523,7 +2603,9 @@ export async function runChecks(options = {}) {
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
       try {
-        iconSets = await project.iconSets();
+        iconSets = iconFeatureGate(project).on
+          ? await project.iconSets()
+          : null;
       } catch {
         iconSets = null;
       }
@@ -2556,7 +2638,9 @@ export async function runChecks(options = {}) {
     iconSets,
     // Set after the docs checks, below.
     iconPlaceholders: null,
+    base: project?.base.ok ? project.base.base : coreBase(),
   };
+  const readsCore = ctx.base?.core !== false;
 
   // The checks that read only files, each kept while every file it read is
   // unchanged; the Core the project loads is part of what they read. They
@@ -2573,8 +2657,9 @@ export async function runChecks(options = {}) {
       checkDocsProgressiveDisclosure(ctx),
     ),
   ];
-  // Only a project that names an icon set scans its source for placeholders.
-  if (iconSets?.choice.configured) {
+  // Only a project where icon features are on and a main set is decided
+  // scans its source for placeholders: no other project gets the check.
+  if (placeholderMainSet(iconSets)) {
     try {
       ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
     } catch {
@@ -2588,7 +2673,7 @@ export async function runChecks(options = {}) {
   // Run the theme checks and config check after the environment checks. The
   // released `themes` check keeps its place, ahead of the app-theme checks.
   for (const fn of SYNC_CHECKS) {
-    const check = fn(ctx);
+    const check = readsCore || !CORE_CHECKS.has(fn) ? fn(ctx) : null;
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
@@ -2600,10 +2685,8 @@ export async function runChecks(options = {}) {
         () => themeImportWiring(cwd),
         THEME_WIRING_CODEC,
       );
-      checks.push(
-        checkThemes(cwd, appThemeChecks, wiring),
-        ...withProviderWiring(appThemeChecks, wiring),
-      );
+      if (readsCore) checks.push(checkThemes(cwd, appThemeChecks, wiring));
+      checks.push(...withProviderWiring(appThemeChecks, wiring));
       checks.push(await checkConfig(ctx));
     }
   }

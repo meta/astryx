@@ -506,6 +506,45 @@ export function iconSetLook(set, variant) {
 }
 
 /**
+ * The export that draws an icon in a look: the icon's variant of that name
+ * when it has one, else its own export, which draws the set's default look.
+ * Template mapping and `experimental icon <words>` both use it.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{module: string, export: string}}
+ */
+export function iconLookExport(icon, set, variant) {
+  const module = icon.module ?? set.data.module;
+  if (variant && variant !== set.data.default?.variant) {
+    const entry = (icon.variants ?? []).find(each => each.variant === variant);
+    if (entry) {
+      return {module: entry.module ?? module, export: entry.export};
+    }
+  }
+  return {module, export: icon.export};
+}
+
+/**
+ * What an icon draws when it does not have the look asked for: that look,
+ * and the set's default look it draws instead (null for a set with one
+ * look). Undefined when the icon has the look, or when none is asked for.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+export function missingIconLook(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
+}
+
+/**
  * Installed sets the project's list leaves out: the problem, and the fix that
  * adds them as backups after the list's own, keeping the project's look.
  * Doctor and `experimental icon use` print the same words. Every set is

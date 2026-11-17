@@ -42,6 +42,13 @@ export interface OutsidePressOptions {
    */
   readonly onPan?: () => void;
   /**
+   * Called as each press the watch follows begins, with whether it is
+   * inside. The watch then judges no lift: a press that starts and ends
+   * outside calls no `onOutside` and counts no dismissal. Each shadow root
+   * reports after the roots outside it, so the last report stands.
+   */
+  readonly onPress?: (isInside: boolean) => void;
+  /**
    * The shadow root the layer renders in. The document sees a press inside a
    * closed root as a press on its host. So each root from this one out to the
    * document judges presses too, and an inner root's judgment stands.
@@ -86,6 +93,7 @@ export function watchOutsidePress(
     pointerTypes,
     closesOnPan = false,
     onPan,
+    onPress,
     root = null,
   }: OutsidePressOptions = {},
 ): () => void {
@@ -120,6 +128,7 @@ export function watchOutsidePress(
       return;
     }
     startedOutside = !isInside(event.composedPath());
+    onPress?.(!startedOutside);
     if (followsPans) {
       panStart = startedOutside
         ? {id: event.pointerId, x: event.clientX, y: event.clientY}
@@ -148,6 +157,7 @@ export function watchOutsidePress(
   const judgeUp = (event: PointerEvent) => {
     if (
       reportPan != null ||
+      onPress != null ||
       !follows(event) ||
       (closesOnPan && panStart?.id !== event.pointerId)
     ) {

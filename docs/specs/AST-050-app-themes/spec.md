@@ -210,8 +210,14 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   loads it when the input is one of its own outputs, naming the source that
   output was built from, or when the input is not a theme module. Each output's
   header names its source from the project root of the outputs, so a build
-  from any folder writes the same outputs. At a path `--out` names, it
-  replaces its own earlier outputs. It replaces the output of another theme
+  from any folder writes the same outputs. Beside its source and at a path
+  `--out` names, it replaces only its own earlier outputs: a file whose header
+  has the build's mark. Beside its source, an output of the CLI before it was
+  named Astryx is its own too: a file with that CLI's build mark, or with the
+  shape that CLI's releases without a header wrote. It never replaces any other
+  file there. The build fails with
+  `ERR_FILE_EXISTS` before it writes anything, names the file, and says to
+  build with `--out` or to move or rename the file. It replaces the output of another theme
   source that still exists and warns, naming both sources, once every output
   of the build may be written. A backslash in `--out` separates folders.
   Building a theme the theme editor made (`<slug>.theme.ts` beside
@@ -269,9 +275,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      Core;
   8. the default theme is one of the added themes;
   9. every font family an added theme names is a system font or is loaded by a
-     font stylesheet the module imports (a warning that names the family when
-     this cannot be shown, as when the stylesheet imports its fonts from a font
-     service);
+     font stylesheet the module imports, with an `@font-face` rule or a font
+     service URL that names the family (a warning that names the family when
+     this cannot be shown, as when the stylesheet imports a font service URL
+     that does not name it);
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once.
 

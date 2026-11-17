@@ -89,7 +89,8 @@ rather than left to the command author.
    contract; INV20–INV22 fix where each part lives.
 5. **Render.** Exactly one of two paths. In `--json` mode, `jsonOut` writes a
    single envelope. Otherwise the formatters render the same values as text,
-   from a closed set of blocks (INV23). Nothing else may write to stdout.
+   from a closed set of blocks (INV23). Nothing else may write to stdout,
+   except the protocol messages of `astryx mcp` (INV4).
 
 Discovery of components, templates, themes, codemods and docs is not per-command. It
 goes through the `Project` seam in `foundation/config`, which resolves the
@@ -124,11 +125,15 @@ and remains available through explicit Core package selection.
 - **INV1 — The CLI never asks a question.** No prompt, no TTY detection, no
   read of stdin for control flow. A non-TTY environment is the only supported
   condition, not a fallback. A command with nothing to do exits with a result,
-  never a question.
+  never a question. `astryx mcp` reads protocol requests that an MCP client
+  program writes to its stdin, and asks nothing (`spec:AST-121` FR1).
 - **INV2 — Every `--json` emission is one valid envelope.** Success is
   `{apiVersion, type, data}` plus optional `package` (INV28) and `meta`, which
   carries `answeredBy` on every success (`spec:AST-081` FR5). Failure is
-  `{apiVersion, error, code}` plus optional `suggestions`. There is no third
+  `{apiVersion, error, code}` plus optional `suggestions`, and the
+  `requirement` member on `ERR_BASE_CAPABILITY` (`spec:AST-114` FR8). In a run
+  whose base is not Core, `answeredBy` also names the base (`spec:AST-114`
+  FR2). There is no third
   shape, no partial write, and no raw stack trace: an uncaught throw becomes an
   envelope at the bin error boundary.
 - **INV3 — The code is the contract; the prose is not.** `code` is stable and
@@ -142,7 +147,8 @@ and remains available through explicit Core package selection.
   detection, no width wrapping, byte-for-byte identical printed or piped. A
   projection may shorten a prose field to its first sentence; a command's
   `--verbose`, where it has one, prints such a field whole, and `--json` carries
-  every field.
+  every field. The stdout of `astryx mcp` carries protocol messages only, and
+  each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
 - **INV6 — One command, one file.** A command is
@@ -282,8 +288,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -322,6 +328,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   it.** The `Project` seam loads each integration independently and records
   the failure, and the command's own work proceeds without that integration's
   contributions. The diagnostic command is the exception by purpose (INV29).
+  A manifest key the running CLI does not know is ignored, and the rest of the
+  manifest loads. It is not an integration issue: everyday commands do not
+  warn about it, and project `doctor` does not list it. `doctor integration
+validate` and `integration check` list it as an `unknown_manifest_key` note
+  that fails nothing; a key one edit from a known key is a `next` note with
+  its fix.
   A command whose own module cannot load (a broken install) still answers
   every run of it with the load error: whatever other options and words it
   was given, it exits 1; `--help` prints its usage with the load error.
@@ -396,6 +408,18 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
     agents' skill folders) is not a project's agent docs: only
     `astryx init --user` and the global copy's background step write it, as
     INV10 and FR8 state.
+  - Before it writes, init reads the state of the agent docs it is about to
+    write, against the block it writes: `missing` (no Astryx block), `stale`
+    (a block from another release or with other text, or, with
+    `--agent-docs-path`, a named file without the block), or `current`
+    (every block already matches). The `init.run` receipt reports it as
+    `agentDocsStatus`, null when agent docs were not installed or the write
+    failed. Inside a project, a default run whose agent docs were `current`
+    treats the app as set up: it prints the build and search commands
+    instead of the getting-started steps, and `nextSteps` is false. A
+    `missing` or `stale` run writes the block and prints the steps; feature
+    runs (`--features`, `--all`) are unchanged. The exit code is 0 in every
+    case.
   - Upgrade refreshes every copy where it is and moves none.
   - The managed block is Astryx-owned: `spec:AST-040`'s protections cover
     consumer-owned content, not the block; INV10 still confines every write.
@@ -505,8 +529,11 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   renders the result through `jsonOut` or the formatter kit. It reads no files,
   loads no project, runs no discovery, and starts no subprocess or network
   request; it may phrase hints with the command name `spec:AST-081` FR5's picker
-  chooses. Only command handlers, their `CommandDoc` files, and
-  their tests live in that directory. `clients/cli/commands/blog.mjs` is the
+  chooses. The `mcp` handler reads the project's agent docs as `init` renders
+  them, with the same renderer, for the server instructions (`spec:AST-121`
+  FR5), and hands its run to the CLI's MCP server, which starts one run of the
+  CLI per tool call (`spec:AST-121` FR4). Only command
+  handlers, their `CommandDoc` files, and their tests live in that directory. `clients/cli/commands/blog.mjs` is the
   reference handler.
 - **INV23 — The formatter kit is closed.** Text output is built only from the
   block constructors in `clients/cli/formatters/index.mjs` — `section`, `text`,
@@ -576,12 +603,20 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   hooks, templates, and codemods name `@astryxdesign/core`; the docs the CLI
   ships name `@astryxdesign/cli`; an integration's artifacts name the
   integration's package, with nothing written for it by the integration's
-  author. Two lists of plain names, `hook --list` and `swizzle --list`, hold
-  only Core's artifacts and name `package` once, in the envelope; `build`'s
-  `frame` and `foundation` are fixed lists of Core component names. Text
+  author. Two lists of plain names, `hook --list` and `swizzle --list`, name
+  `package` once, in the envelope: the run's active base, which is
+  `@astryxdesign/core` in a run on Core (`spec:AST-114` FR1). `build`'s
+  `frame` and `foundation` are fixed lists of Core component names in a run
+  on Core, and empty in a run on another base. Text
   output names the same package. Verbatim source output (`--source`,
   `--showcase`, and a template's source) keeps stdout to the source alone, so
-  it pipes byte for byte, and names the package on stderr.
+  it pipes byte for byte, and names the package on stderr. A `--json` result
+  gives each template it lists or returns `isReady`, `false` when the
+  template's doc sets `isReady: false` and `true` otherwise, and no other kind
+  of artifact carries it; text output marks a template whose doc sets
+  `isReady: false` `(not ready)` wherever a result lists or returns it.
+  `discover` names a package's templates only by id, often for a package the
+  project has not installed, so its results carry neither.
 
 - **INV30 — A host's package set fills only what the project leaves open, from
   one root.** A package set is a package root whose `node_modules` holds a CLI,
@@ -1036,7 +1071,7 @@ app builds, typechecks and lints).
 | INV23     | `clients/cli/formatters/index.test.mjs` for the kit; review of handlers; no mechanical check yet                                                                                                                                                                                                                                                                                                                                                                           | A handler pads, aligns, or draws text itself, or a block kind is missing from the help "Output format" list.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV24     | `api/integration/add-contribution.test.mjs`, `api/integration/add-theme.test.mjs`, `foundation/discovery/theme-discovery.test.mjs`                                                                                                                                                                                                                                                                                                                                         | New authoring emits an untyped or non-`.doc.mjs` item, adding one item edits a shared file, or an item catalog becomes authoritative.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV25     | `foundation/discovery/cli-self-docs.test.mjs`, `api/doctor/doctor.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                | A CLI doc with no namespace, a namespace no topic reads, or no section in its topic passes doctor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| INV28     | `test/inv28-package-provenance.test.mjs`, `clients/cli/commands/text-json-parity.test.mjs`, `cli-api-types-verify`                                                                                                                                                                                                                                                                                                                                                         | A result about one artifact has no envelope `package`, a listed artifact has no `package`, or text omits the package the envelope names.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| INV28     | `test/inv28-package-provenance.test.mjs`, `clients/cli/commands/text-json-parity.test.mjs`, `cli-api-types-verify`, `clients/cli/commands/not-ready.test.mjs`                                                                                                                                                                                                                                                                                                              | A result about one artifact has no envelope `package`, a listed artifact has no `package`, or text omits the package the envelope names. A result that lists or returns a template has no boolean `isReady` on it, another artifact carries `isReady`, or the text of an unready template's result lacks `(not ready)`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV29     | `api/doctor/doctor.test.mjs` (configured-integrations: not installed, no manifest, manifest throws; self-named authored package, direct and through a symlinked `node_modules` or `cwd`; provider-conflict set-aside; an astryx.config that imports but cannot load the project → failed `config` check)                                                                                                                                                                   | A configured integration that cannot load leaves `doctor` at exit 0, or an installed-but-unnamed one fails it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | INV30     | `foundation/runtime/package-set.test.mjs`, `foundation/runtime/hosted-runtime.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                    | A run resolves from two roots; a root contributes an integration inside a project, including an `@astryxdesign/*` package that ships an integration manifest; a run the starting copy answers resolves from a root other than the one that holds it, or is announced as a fallback when that copy is the release `spec:AST-081` FR2 names; a run another named release answers resolves from a root whose CLI is not that release, from one that lacks a version the project would install, or from a later root when an earlier one qualifies; a hosted run installs a release, or a named-release run with no qualifying root does not fall back as FR2 says; a lookup consults a root before the project's own install, or with no set active; an approved integration resolves from another root or skips its validation; a root's config is read; a run writes into a package root or outside the places `spec:AST-081` FR7 names; the host entry's result lacks a resolved package or its source; or a project check judges the package set. |
 | INV31     | `foundation/agent-docs/agent-docs.test.mjs`, `foundation/agent-docs/agent-docs.path-safety.test.mjs`, `clients/cli/commands/init.behavior.test.mjs`, `api/init/remove/remove.test.mjs`, `clients/cli/commands/doctor.test.mjs`                                                                                                                                                                                                                                             | A layout test finds the block missing from a file INV31 names or present in a file it excludes, a managed import of a block-less `AGENTS.md` passes doctor, agent docs land in the home folder or in a settings folder outside a project, or `--remove-agents` leaves a block at the project root or in the working folder.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

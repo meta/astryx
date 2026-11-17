@@ -34,6 +34,7 @@ import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
+  hexToOklch,
   oklabCoordinates,
   oklabCoordinatesToHex,
 } from '../theme/palette/generate/color.mjs';
@@ -54,6 +55,7 @@ import {
   customPropertyValues,
   declarationValues,
   elementCustomProperties,
+  fontKey,
   fontRules,
 } from '../../foundation/fonts/font-stylesheet.mjs';
 import {
@@ -72,6 +74,8 @@ import {
   SPACING,
   SURFACES,
   SURFACE_PARTS,
+  FLOATING_PANELS,
+  FLOATING_SURFACES,
   TEXT_SIZE,
   TYPE_STYLES,
   familyOf,
@@ -99,6 +103,7 @@ import {
   isColorValue,
   isSafeValue,
   parseColor,
+  oklabDistance,
   ratio,
   splitTop,
 } from './_color.mjs';
@@ -318,7 +323,7 @@ export function dialTakesText(dial) {
 export function dialValueFits(dial, value) {
   const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
   if (!spec) return false;
-  const v = String(value).trim();
+  const v = dialNumber(dial, String(value).trim());
   if (v === '') return false;
   return spec.split('|').some(option => {
     if (!option.startsWith('<') && !option.startsWith('"'))
@@ -332,6 +337,24 @@ export function dialValueFits(dial, value) {
     if (option === '<number>') return /^\d*\.?\d+$/.test(v);
     return false;
   });
+}
+
+/**
+ * A dial's number as the dial takes it: for a dial whose number is in a
+ * unit (text-size's pixels), the number typed with that unit, in any case
+ * and with a space before it (`24px`, `24 PX`), is that number; any other
+ * value is returned as it is. The one reader for typed and saved values.
+ * @param {string} dial
+ * @param {string} value
+ * @returns {string}
+ */
+export function dialNumber(dial, value) {
+  const unit = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.unit;
+  if (!unit) return value;
+  const m = new RegExp(`^\\s*([+]?\\d*\\.?\\d+)\\s*${unit}\\s*$`, 'i').exec(
+    String(value),
+  );
+  return m ? m[1].replace(/^\+/, '') : value;
 }
 
 /** @param {string} file @returns {string | null} */
@@ -566,6 +589,19 @@ export function namesSetting(word) {
 }
 
 /**
+ * Whether a word names a CSS property, which `set` writes only on a part
+ * (`--on`): a theme a `new` makes takes no value for it, so its line comes
+ * after the theme is made, with a part named.
+ * @param {string} word
+ */
+export function needsPart(word) {
+  const w = String(word).trim().toLowerCase();
+  return (
+    !Object.hasOwn(DIALS, w) && !w.startsWith('--') && cssProperties().has(w)
+  );
+}
+
+/**
  * Whether text typed where a theme goes names settings, in any form set
  * reads them: a setting's name (`corners`, `--color-accent`), with its value
  * (`corners pill`, `corners:pill`, `corners=pill`, `accent: red`), a list of
@@ -589,6 +625,48 @@ export function namesSettingAsTyped(text) {
     items.length > 0 &&
     items.every(item => namesSetting(item.split(/[\s:=]+/)[0]))
   );
+}
+
+/**
+ * The dial settings text holds, in any form set reads them: a JSON object
+ * (`{"accent":"red"}`), `key=value` or `key: value` pairs apart at `;`
+ * (`corners: pill; accent: red`), or `dial value` items apart at `,`
+ * (`accent red, corners pill`); null when it holds none, or anything else.
+ * @param {unknown} text
+ * @returns {Array<[string, string]> | null}
+ */
+export function dialSettingsInText(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  const dial = (/** @type {string} */ k) => {
+    const w = k.trim().toLowerCase();
+    return Object.hasOwn(DIALS, w) ? w : null;
+  };
+  if (/^\{/.test(t))
+    try {
+      const entries = Object.entries(JSON.parse(t));
+      return entries.length && entries.every(([k]) => dial(k))
+        ? entries.map(([k, v]) => [/** @type {string} */ (dial(k)), String(v)])
+        : null;
+    } catch {
+      return null;
+    }
+  const pairs = t
+    .split(/\s*;\s*/)
+    .filter(Boolean)
+    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x));
+  if (pairs.length && pairs.every(m => m && dial(m[1])))
+    return pairs.map(m => [
+      /** @type {string} */ (dial(/** @type {RegExpExecArray} */ (m)[1])),
+      /** @type {RegExpExecArray} */ (m)[2].trim(),
+    ]);
+  const items = t
+    .split(/\s*[,;]\s*/)
+    .map(x => x.trim().split(/\s+/))
+    .filter(x => x[0]);
+  return items.length && items.every(x => x.length > 1 && dial(x[0]))
+    ? items.map(x => [/** @type {string} */ (dial(x[0])), x.slice(1).join(' ')])
+    : null;
 }
 
 /**
@@ -943,6 +1021,20 @@ export function loadTheme(
           .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
           .sort()
       : [];
+    // A theme here with a setting pasted onto it (`t=accent`, `t: accent`):
+    // that theme, never a new one named after both.
+    const head = String(slug ?? '').split(/\s*[=:]\s*|\s+/)[0];
+    if (
+      !same &&
+      head !== String(slug ?? '').trim() &&
+      slugOk(head) &&
+      fs.existsSync(themeFiles(cwd, head).settings)
+    )
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}); ${head} is a theme here.`,
+        {didYouMean: [head], run: [`${P} show ${head}`]},
+      );
     // Settings typed where the theme goes (`corners, accent`,
     // `corners:pill`, `{"corners":"pill"}`): never a theme to make or a
     // list of themes; each theme here is offered to look at.
@@ -960,13 +1052,20 @@ export function loadTheme(
       const existing = words.filter(
         w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
       );
+      // A list none of whose words is a theme here (a value, `Inter,
+      // Arial`) names no theme at all: a look at each theme here, never a
+      // new one named after a word of it.
       refuse(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
-        `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`,
+        existing.length
+          ? `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`
+          : `"${String(slug ?? '').slice(0, 80)}" names no theme here; the theme comes first.`,
         {
           run: existing.length
             ? existing.map(w => `${P} show ${w}`)
-            : [`${P} new ${words[0]}`],
+            : have.length
+              ? have.slice(0, 3).map(h => `${P} show ${h}`)
+              : [`${P} new ${words[0]}`],
         },
       );
     }
@@ -1581,7 +1680,7 @@ export function settingsProblem(
     if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
       return s.source == null || s.source === ''
-        ? `${s.thing} has no source (dial, token or property)`
+        ? `${s.thing} has no source (dial, token or property)${unreadFieldsText(s)}`
         : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
@@ -1722,35 +1821,88 @@ function entryFieldOf(k) {
 }
 
 /**
- * The keys of an entry that write a field it already holds the editor's
- * way (`Value` beside `value`), each with that field.
+ * Whether a saved entry is a twin, in other letters only, of a setting the
+ * theme holds (`Accent` beside `accent`) with a value that setting takes:
+ * that setting listed twice, which a change of it fixes, rather than
+ * damage its own undo removes (a twin in another form, `var(--x)`, or with
+ * a value the setting does not take).
+ * @param {any} s
+ * @param {string} read the setting's name as the editor writes it
+ * @param {any} data
+ */
+function twinInLetters(s, read, data) {
+  return (
+    s.thing.toLowerCase() === read.toLowerCase() &&
+    entryProblem({...s, thing: read}, data) == null
+  );
+}
+
+/**
+ * The fields of a saved entry the editor does not read, said after what is
+ * wrong with it (`; it has "part", a field the editor does not read: a
+ * part is "on"`), or nothing.
+ * @param {any} s
+ */
+function unreadFieldsText(s) {
+  const unread = Object.keys(s).filter(
+    k => !ENTRY_FIELDS.includes(k) && !['parts', 'masked', 'note'].includes(k),
+  );
+  if (!unread.length) return '';
+  return `; it has ${unread.map(k => JSON.stringify(k)).join(', ')}, ${unread.length === 1 ? 'a field' : 'fields'} the editor does not read (the part a setting styles is "on")`;
+}
+
+/**
+ * The keys of an entry grouped by the field each writes, in the order
+ * written; `setting` (the thing as the editor prints it) is the thing.
  * @param {any} entry
- * @returns {Array<{key: string, field: string}>}
+ * @returns {Map<string, string[]>}
+ */
+function entryFieldGroups(entry) {
+  /** @type {Map<string, string[]>} */
+  const groups = new Map();
+  for (const key of Object.keys(entry)) {
+    const field = entryFieldOf(key);
+    if (!field) continue;
+    const as = field === 'setting' ? 'thing' : field;
+    groups.set(as, [...(groups.get(as) ?? []), key]);
+  }
+  return groups;
+}
+
+/**
+ * The keys of an entry that write a field it writes another way too
+ * (`Value` beside `value`, `On` beside `--on`, `setting` beside `thing`),
+ * each with that field and the key that is read: the editor's own
+ * spelling, else the first written.
+ * @param {any} entry
+ * @returns {Array<{key: string, field: string, read: string}>}
  */
 export function entryFieldTwins(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-  return Object.keys(entry).flatMap(key => {
-    const field = entryFieldOf(key);
-    return field && field !== key && field in entry ? [{key, field}] : [];
+  return [...entryFieldGroups(entry)].flatMap(([field, keys]) => {
+    if (keys.length < 2) return [];
+    const read = keys.includes(field) ? field : keys[0];
+    return keys.filter(k => k !== read).map(key => ({key, field, read}));
   });
 }
 
 /**
  * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
  * or spelled as their flags (`--on`) read as those fields, as setting
- * names are read in any case; a field written both ways keeps the editor's
- * own, and the other spelling is dropped (entryFieldTwins names it).
+ * names are read in any case; a field written several ways is read once,
+ * from the key entryFieldTwins names, and the others are dropped.
  * Anything else as it is. The one reader for a typed entry and a saved one.
  * @param {any} entry
  * @returns {any}
  */
 export function entryFieldNames(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const dropped = new Set(entryFieldTwins(entry).map(t => t.key));
   return Object.fromEntries(
     Object.entries(entry).flatMap(([k, x]) => {
+      if (dropped.has(k)) return [];
       const field = entryFieldOf(k);
-      if (!field || field === k) return [[k, x]];
-      return field in entry ? [] : [[field, x]];
+      return [[field ?? k, x]];
     }),
   );
 }
@@ -1795,20 +1947,43 @@ function readTypedEntries(data, notes) {
     // A field written both ways is read the editor's way, and said; the
     // next save writes the entry once.
     const twins = entryFieldTwins(saved);
-    for (const {key, field} of twins)
+    const named =
+      typeof fields?.thing === 'string'
+        ? fields.thing
+        : typeof fields?.setting === 'string'
+          ? fields.setting
+          : JSON.stringify(saved);
+    for (const {key, read} of twins)
       notes.push(
-        `${typeof saved.thing === 'string' ? saved.thing : JSON.stringify(saved)} writes both "${field}" and "${key}"; "${field}" is read (${JSON.stringify(saved[field])}, not ${JSON.stringify(saved[key])})`,
+        `${named} writes both "${read}" and "${key}"; "${read}" is read (${JSON.stringify(saved[read])}, not ${JSON.stringify(saved[key])})`,
       );
     const renamed = Object.keys(
       saved && typeof saved === 'object' ? saved : {},
     ).some(k => {
       const field = entryFieldOf(k);
-      return field != null && field !== k && !(field in saved);
+      return (
+        field != null &&
+        field !== k &&
+        !twins.some(t => t.key === k) &&
+        !(field in saved)
+      );
     });
     if (renamed)
       notes.push(
         `${JSON.stringify(saved)} writes its field names in other letters, read as ${JSON.stringify(fields)}`,
       );
+    // A field the editor does not read (`modes`, `part`) is not used, and
+    // said, with the field it is a typo of; the editor's own result fields
+    // (show's `parts`) are no part of a setting.
+    if (typeof fields?.thing === 'string')
+      for (const k of Object.keys(fields)) {
+        if (ENTRY_FIELDS.includes(k) || ['parts', 'masked', 'note'].includes(k))
+          continue;
+        const near = ENTRY_FIELDS.filter(f => typoNear(k.toLowerCase(), f));
+        notes.push(
+          `${named} has "${k}", a field the editor does not read${near.length === 1 ? ` (it reads "${near[0]}")` : ''}, so it is not used`,
+        );
+      }
     const s = printedEntry(fields);
     if (s !== fields)
       notes.push(
@@ -1923,19 +2098,26 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
-      // Not when the theme holds that dial already: the entry is then
-      // damage its own undo removes, never a second copy of the dial.
+      // When the theme holds that dial already, the entry is damage its
+      // own undo removes, never a second copy of the dial; but a twin in
+      // other letters with a value the dial takes is that dial listed
+      // twice (twinInLetters), which a change of it fixes.
       const held = data.settings.some(
         (/** @type {any} */ x) => x !== s && x?.thing === read && !x.on,
       );
-      if (read !== s.thing && DIALS[read] && !held) {
+      if (
+        read !== s.thing &&
+        DIALS[read] &&
+        (!held || twinInLetters(s, read, data))
+      ) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
     }
     // A CSS property saved in another form on a part (`Background-Color`,
     // `background color`) is that property, as set reads the name typed
-    // (the one property-name reader), unless the part holds it already.
+    // (the one property-name reader), unless the part holds it already
+    // (then a twin in other letters is that property listed twice).
     if (
       s.on &&
       !s.thing.startsWith('--') &&
@@ -1947,10 +2129,29 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         (/** @type {any} */ x) =>
           x !== s && x && keyOf(x) === keyOf({...s, thing: read}),
       );
-      if (read && !held) {
+      if (read && (!held || twinInLetters(s, read, data))) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
+    }
+    // A token saved in other letters (`--Color-Accent`) is that token, as
+    // set reads the name typed; with the theme holding it already, the two
+    // are that token listed twice.
+    if (
+      s.thing.startsWith('--') &&
+      s.thing !== s.thing.toLowerCase() &&
+      ['token', undefined, null, ''].includes(s.source) &&
+      (!data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s &&
+          x?.thing === s.thing.toLowerCase() &&
+          (x.on ?? null) === (s.on ?? null),
+      ) ||
+        twinInLetters(s, s.thing.toLowerCase(), data))
+    ) {
+      const read = s.thing.toLowerCase();
+      notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+      s.thing = read;
     }
     // A token saved in another form (`var(--color-accent)`) is that token,
     // as set reads the name typed (the one thing reader).
@@ -1963,6 +2164,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
+      // Not when the theme holds that token already: the entry is then
+      // damage its own undo removes.
       const held = data.settings.some(
         (/** @type {any} */ x) =>
           x !== s && x?.thing === read && (x.on ?? null) === (s.on ?? null),
@@ -2051,12 +2254,19 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       ['dial', undefined, null, ''].includes(s.source) ||
       String(s.source).toLowerCase() === 'dial'
     ) {
-      // A corners size saved in rem is the px set saves it as.
+      // A corners size saved in rem is the px set saves it as; a dial's
+      // number saved with its unit (text-size `20px`) is that number.
+      const number =
+        typeof s.value === 'string' ? dialNumber(s.thing, s.value) : null;
       const word =
         typeof s.value !== 'string'
           ? null
           : (dialWordOf(s.thing, s.value) ??
-            (s.thing === 'corners' ? cornersPlain(s.value) : null));
+            (s.thing === 'corners'
+              ? cornersPlain(s.value)
+              : number !== s.value
+                ? number
+                : null));
       if (word && word !== s.value) {
         notes.push(
           `${s.thing} was saved as ${JSON.stringify(s.value)}, read as ${word}`,
@@ -2217,9 +2427,12 @@ function damagedEntry(data, problem) {
     (Array.isArray(data?.settings) ? data.settings : []).find(
       (/** @type {any} */ s) =>
         (entryDamage(s) === 'source' &&
-          typeof s.source === 'string' &&
-          s.source !== '' &&
-          problem.startsWith(`${s.thing} has source `)) ||
+          ((typeof s.source === 'string' &&
+            s.source !== '' &&
+            problem.startsWith(`${s.thing} has source `)) ||
+            // An entry saved with no source its undo still names.
+            ((s.source == null || s.source === '') &&
+              problem.startsWith(`${s.thing} has no source `)))) ||
         (entryDamage(s) === 'mode' &&
           problem.startsWith(`${s.thing} has mode `)) ||
         (PLACE_SCOPES.some(k => entryDamage(s) === k) &&
@@ -3607,6 +3820,81 @@ function builtTopTokens(cwd, slug) {
 }
 
 /**
+ * The base rule block of a part that a census rule (its attributes,
+ * `variant=neutral,size=md`) falls under, most specific first: `base`, or a
+ * block keyed by conditions (`variant:neutral`) every one of which the rule
+ * has. Null when the base sets none.
+ * @param {Record<string, any> | undefined} blocks the base's blocks for the part
+ * @param {string} rule
+ * @returns {{key: string, block: Record<string, any>}[]}
+ */
+export function baseBlocksFor(blocks, rule) {
+  const attrs = rule.split(',').filter(Boolean);
+  return Object.entries(blocks ?? {})
+    .filter(([k, b]) => {
+      if (!b || typeof b !== 'object') return false;
+      if (k === 'base') return true;
+      const pairs = k.split(',');
+      return pairs.every(
+        pr =>
+          /^[a-z]+:[\w-]+$/.test(pr) && attrs.includes(pr.replace(':', '=')),
+      );
+    })
+    .sort(([a], [b]) =>
+      a === 'base'
+        ? 1
+        : b === 'base'
+          ? -1
+          : b.split(',').length - a.split(',').length,
+    )
+    .map(([key, block]) => ({key, block}));
+}
+
+/**
+ * Where a base theme draws a property a token feeds in Core with something
+ * else: each part and condition at rest under which Core reads the token for
+ * a property but the base theme's own rule for the part sets that property
+ * to another value (neutral's neutral badge fills with
+ * --color-background-gray, not --color-neutral), with the base's value. The
+ * token never reaches those.
+ * @param {any} C the part data
+ * @param {any} base the base theme, with its part blocks (`components`)
+ * @param {string} token
+ * @returns {Array<{part: string, when: string | null, prop: string, value: string}>}
+ */
+export function baseRedraws(C, base, token) {
+  /** @type {Map<string, {part: string, when: string | null, prop: string, value: string}>} */
+  const out = new Map();
+  const blocks = base?.components ?? {};
+  for (const [part, rec] of Object.entries(C?.MAP ?? {})) {
+    if (!blocks[part]) continue;
+    for (const [prop, at] of Object.entries(
+      /** @type {Record<string, Record<string, unknown>>} */ (
+        /** @type {any} */ (rec)?.at ?? {}
+      ),
+    ))
+      for (const [k, v] of Object.entries(at)) {
+        const [rule, cond = ''] = k.split(' ');
+        if (cond || !String(v).includes(`var(${token})`)) continue;
+        const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
+        const hit = baseBlocksFor(blocks[part], rule).find(
+          ({block}) => typeof block[camel] === 'string',
+        );
+        if (!hit || String(hit.block[camel]).includes(`var(${token})`))
+          continue;
+        const when = hit.key === 'base' ? null : hit.key;
+        out.set(`${part}|${when}|${prop}`, {
+          part,
+          when,
+          prop,
+          value: String(hit.block[camel]),
+        });
+      }
+  }
+  return [...out.values()];
+}
+
+/**
  * The tokens a base theme's own component rules for a part read through
  * var() (neutral's progress-bar reads --color-border-emphasized), from its
  * built module; an empty set when it is not installed.
@@ -4020,7 +4308,8 @@ function scopeProblem(s) {
   // (Several states at once are joined by +: `checked+disabled`.)
   if (s.state != null && !STATE_NAME.test(s.state))
     return `${s.thing} has state "${s.state}", which is not a state name`;
-  if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
+  // (Several, one per prop, are joined by +: `variant:ghost+size:sm`.)
+  if (s.when != null && !/^[\w-]+:[\w.-]+(?:\+[\w-]+:[\w.-]+)*$/.test(s.when))
     return `${s.thing} has --when "${s.when}", which is not prop:value`;
   if ((s.when != null || s.state != null) && s.on == null)
     return `${s.thing} has a variant or state but no part`;
@@ -4044,12 +4333,17 @@ export const keyOf = s =>
 
 /** One line for a setting. @param {Setting} s */
 export function describe(s) {
+  // A setting for one mode on no part reaches the whole theme in that mode:
+  // said in one phrase, never "(whole theme) [light only]", which reads as
+  // two scopes at odds.
   const where = s.on
     ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
-    : ' (whole theme)';
+    : s.mode
+      ? ` (whole theme, ${s.mode} mode only)`
+      : ' (whole theme)';
   // An entry saved with no value says so, never "undefined".
   const value = s.value === undefined ? '(no value)' : s.value;
-  return `${s.thing} = ${value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
+  return `${s.thing} = ${value}${where}${s.mode && s.on ? ` [${s.mode} only]` : ''}`;
 }
 
 /**
@@ -4063,12 +4357,15 @@ export function partsOf(ctx, s) {
   if (!s.on) return [];
   if (s.thing === 'font') return [];
   const has = (/** @type {string} */ t) => ctx.project.target.has(t);
-  // A border set on a group lands where each member draws its edges (a date
-  // and time field's two boxes, never the row around them).
+  // A border or a fill set on a group lands where each member draws its
+  // edges or paints its box (a date and time field's two boxes, never the
+  // row around them, which paints nothing).
   const spread = (/** @type {string[]} */ members) =>
     /^border(?!.*radius)(-|$)/.test(s.thing)
       ? [...new Set(members.flatMap(t => borderParts(ctx, t)))]
-      : members;
+      : /^background(-color)?$/.test(s.thing)
+        ? [...new Set(members.flatMap(t => fillParts(ctx, t)))]
+        : members;
   if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
@@ -4120,6 +4417,25 @@ export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
   const inner = cornerParts(ctx, part).filter(t => t !== part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * The parts that paint a part's box (a text input itself; a date and time
+ * field's two boxes, where the row around them paints none).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function fillParts(ctx, part) {
+  const own = ctx.C.MAP[part]?.own ?? {};
+  if (own['background-color'] || own.background) return [part];
+  const inner = cornerParts(ctx, part).filter(
+    t =>
+      t !== part &&
+      (ctx.C.MAP[t]?.own?.['background-color'] ||
+        ctx.C.MAP[t]?.own?.background),
+  );
   return inner.length ? inner : [part];
 }
 
@@ -4216,9 +4532,23 @@ export function fontOf(value) {
     fallbacks:
       parts.length > 1
         ? without(family, parts.slice(1))
-        : without(family, ['system-ui', 'sans-serif']),
+        : without(family, aloneFallbacks(family)),
     pkg: pkgOf(family),
   };
+}
+
+/**
+ * The fallbacks a family typed alone gets, by the kind its name says, as
+ * the open fonts get theirs: a monospace name (Mono, Code) monospace ones,
+ * a serif name (but no sans) serif ones, any other sans-serif ones.
+ * @param {string} family
+ * @returns {string[]}
+ */
+function aloneFallbacks(family) {
+  if (/\b(mono|code)\b/i.test(family)) return ['ui-monospace', 'monospace'];
+  if (/serif/i.test(family) && !/sans/i.test(family))
+    return ['Georgia', 'serif'];
+  return ['system-ui', 'sans-serif'];
 }
 
 /**
@@ -4680,6 +5010,151 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
     .filter(([k]) => !(k in kept));
 }
 
+/** The role each role-color dial sets, as Core's tokens and variants name it. */
+const ROLE_OF_DIAL = /** @type {const} */ ({
+  accent: 'accent',
+  success: 'success',
+  warning: 'warning',
+  danger: 'error',
+  info: 'info',
+});
+
+/**
+ * Where a role color the theme sets (a role dial, or a whole-theme role
+ * token) must be written onto a part for it to show, because the base theme
+ * draws that role there on its own:
+ * - a variant named for the role in a color of the base's palette written
+ *   out (butter's success badge, stone's success progress fill) points at
+ *   the role's token, as Core draws that variant;
+ * - a role token the base points at another token on a part (stone's
+ *   success banner at its green) takes the theme's own value there
+ *   (`value` null: the theme's token);
+ * - a color the base gives a part as its own accent, written as the color
+ *   itself (butter's nav links and outline buttons in its blue), points at
+ *   the accent token.
+ * Each comes once, and never where the theme sets that property on the
+ * part itself. The compiler writes them; the missed list leaves them out.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {any} base the base theme resolved: its tokens per mode and its components
+ * @returns {Array<{part: string, when: string | undefined, prop: string, value: string | null}>}
+ */
+export function roleReach(ctx, data, base) {
+  /** @type {Set<string>} */
+  const roles = new Set();
+  for (const x of data.settings) {
+    if (x.on || x.state || x.when) continue;
+    if (x.source === 'dial' && x.thing in ROLE_OF_DIAL)
+      roles.add(
+        ROLE_OF_DIAL[/** @type {keyof typeof ROLE_OF_DIAL} */ (x.thing)],
+      );
+    const token =
+      x.source === 'token' &&
+      /^--color-(?:on-|text-|icon-)?(accent|info|success|warning|error)(?:-[\w-]+)?$/.exec(
+        x.thing,
+      )?.[1];
+    if (token) roles.add(token);
+  }
+  /** @type {Array<{part: string, when: string | undefined, prop: string, value: string | null}>} */
+  const out = [];
+  if (!roles.size) return out;
+  const modes = modesOf(data);
+  /** A literal color in a mode: its half of light-dark(). @param {string} v @param {string} m */
+  const literal = (v, m) => {
+    const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
+    const halves = pair ? splitTop(pair[1], ',') : null;
+    const x = (
+      halves?.length === 2 ? halves[m === 'light' ? 0 : 1] : String(v)
+    ).trim();
+    return /^var\(/.test(x) ? null : parseColor(x);
+  };
+  const ACCENTS = [
+    '--color-accent',
+    '--color-text-accent',
+    '--color-icon-accent',
+  ];
+  for (const [part, looks] of Object.entries(
+    /** @type {Record<string, Record<string, any>>} */ (base?.components ?? {}),
+  )) {
+    if (!ctx.project.target.has(part)) continue;
+    for (const [key, look] of Object.entries(looks ?? {})) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      if (!look || typeof look !== 'object') continue;
+      const when = key === 'base' ? undefined : key;
+      /** @param {string} prop */
+      const owns = prop =>
+        data.settings.some(
+          x =>
+            x.on &&
+            !x.state &&
+            (x.when ?? undefined) === when &&
+            partsOf(ctx, x).includes(part) &&
+            (x.thing === prop ||
+              x.thing === kebab(prop) ||
+              (prop === 'borderColor' && x.thing === 'border')),
+        );
+      /** @param {string} prop @param {string | null} value */
+      const add = (prop, value) => {
+        if (
+          owns(prop) ||
+          out.some(o => o.part === part && o.when === when && o.prop === prop)
+        )
+          return;
+        out.push({part, when, prop, value});
+      };
+      const named = /^variant:(accent|info|success|warning|error)$/.exec(
+        String(when ?? ''),
+      )?.[1];
+      if (named && roles.has(named))
+        for (const [prop, side] of /** @type {const} */ ([
+          ['backgroundColor', 'background'],
+          ['color', 'text'],
+        ])) {
+          const v = look[prop];
+          if (typeof v !== 'string' || /var\(/.test(v)) continue;
+          if (!modes.every(m => literal(v, m) != null)) continue;
+          const core = (ctx.C.partReads(part, side) ?? []).find(
+            (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
+          )?.token;
+          add(
+            prop,
+            `var(${core ?? (side === 'text' ? `--color-text-${named}` : `--color-${named}`)})`,
+          );
+        }
+      for (const [prop, v] of Object.entries(look)) {
+        const role =
+          /^--color-(?:on-)?(accent|info|success|warning|error)(?:-[\w-]+)?$/.exec(
+            prop,
+          )?.[1];
+        if (!role || !roles.has(role) || typeof v !== 'string') continue;
+        const to = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+        if (to && to !== prop) add(prop, null);
+      }
+      if (roles.has('accent'))
+        for (const [prop, token] of /** @type {const} */ ([
+          ['color', '--color-text-accent'],
+          ['backgroundColor', '--color-accent'],
+          ['borderColor', '--color-accent'],
+        ])) {
+          const v = look[prop];
+          if (typeof v !== 'string') continue;
+          const isBaseAccent = modes.every(m => {
+            const c = literal(v, m);
+            return (
+              c != null &&
+              ACCENTS.some(a => {
+                const b = parseColor(String(base?.[m]?.[a] ?? ''));
+                return b != null && b.every((x, k) => x === c[k]);
+              })
+            );
+          });
+          if (isBaseAccent) add(prop, `var(${token})`);
+        }
+    }
+  }
+  return out;
+}
+
 /**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
@@ -4690,8 +5165,10 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
 export function compileTheme(ctx, data, base) {
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
+  // A setting the editor no longer accepts never reaches the build; a
+  // saved state is the part's own from here on (readSavedStates), so every
+  // line made from the theme names it so.
   readSavedStates(ctx, data);
-  // A setting the editor no longer accepts never reaches the build.
   data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
   const TOKENS = ctx.project.core.tokenDefaults;
   // The base theme's type scale, read back from its sizes: base text, and
@@ -5484,8 +5961,16 @@ export function compileTheme(ctx, data, base) {
       tg?.stateValues,
     );
     if (s.state && slot.key !== (s.when ?? 'base')) return null;
-    const [k, v] = s.when ? String(s.when).split(':') : [];
-    return `.astryx-${target}${s.when ? `[data-${k}="${v}"]` : ''}${slot.pseudo ?? ''}`;
+    const attrs = s.when
+      ? String(s.when)
+          .split('+')
+          .map(w => {
+            const [k, v] = w.split(':');
+            return `[data-${k}="${v}"]`;
+          })
+          .join('')
+      : '';
+    return `.astryx-${target}${attrs}${slot.pseudo ?? ''}`;
   };
 
   /**
@@ -6024,10 +6509,43 @@ export function compileTheme(ctx, data, base) {
           ? /^light-dark\((.*),\s*([^,]*)\)$/.exec(own.trim())
           : null;
       /** @param {'light' | 'dark'} m */
-      const at = m =>
-        exactText[m] ??
+      const baseAt = m =>
         (split ? split[m === 'light' ? 1 : 2].trim() : own) ??
         base[m]['--color-text-secondary'];
+      /** A token as the theme draws it so far in a mode, its references read. @param {string} k @param {'light' | 'dark'} m */
+      const drawnAs = (k, m) => {
+        let v = String(tok[k]?.[m] ?? base[m][k] ?? '');
+        for (let i = 0; i < 6; i++) {
+          const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+          if (!ref) break;
+          v = String(tok[ref]?.[m] ?? base[m][ref] ?? '');
+        }
+        return v;
+      };
+      // The exact color where it reads on what the part sits on (over the
+      // surface), else the base theme's own lift there.
+      /** @param {'light' | 'dark'} m */
+      const at = m => {
+        const exact = exactText[m];
+        if (exact == null) return baseAt(m);
+        const fill = drawnAs(ground, m);
+        const under = parseColor(drawnAs('--color-background-surface', m));
+        const top = parseColor(fill);
+        const text = parseColor(exact);
+        if (!top || !under || !text) return exact;
+        const seen = compositeOver(
+          /** @type {[number, number, number]} */ (top),
+          alphaOf(fill),
+          /** @type {[number, number, number]} */ (under),
+        );
+        const fallback = baseAt(m);
+        const back = parseColor(String(fallback));
+        return ratio(text, seen) >= 4.5 ||
+          !back ||
+          ratio(back, seen) <= ratio(text, seen)
+          ? exact
+          : fallback;
+      };
       lift = {light: {color: at('light')}, dark: {color: at('dark')}};
     }
     if (!lift || !ctx.project.target.has(target)) continue;
@@ -6152,6 +6670,22 @@ export function compileTheme(ctx, data, base) {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
         const f = fontOf(s.value);
+        // A family typed alone that the base theme already uses keeps the
+        // base's own fallbacks (Fraunces keeps Georgia, serif).
+        if (!s.value.includes(',') && !FONTS[s.value] && !OPEN_FONTS[s.value])
+          for (const token of [
+            '--font-family-heading',
+            '--font-family-body',
+            '--font-family-code',
+          ]) {
+            const stack = base.light[token];
+            if (!stack || !stack.includes(',')) continue;
+            const own = fontOf(stack);
+            if (fontKey(own.family) !== fontKey(f.family)) continue;
+            // The base's fallbacks as it writes them, quotes and all.
+            f.fallbacks = stack.slice(stack.indexOf(',') + 1).trim();
+            break;
+          }
         theme.typography ??= {};
         for (const r of s.on ? [s.on] : ['body', 'heading'])
           theme.typography[r] = {
@@ -6167,8 +6701,41 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
-        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x)))
-          Object.assign(block({...s, mode: undefined}, t), SURFACES[s.value]);
+        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
+          // (A panel floating over the page keeps an edge under flat.)
+          const look =
+            FLOATING_PANELS.includes(t) && FLOATING_SURFACES[s.value]
+              ? FLOATING_SURFACES[s.value]
+              : SURFACES[s.value];
+          // A frame that paints nothing (the banner's): its line and shadow
+          // go on the part inside it that paints the rounded fill, so they
+          // follow its corners; a square ring around them otherwise.
+          const paintsNone =
+            !ctx.C.MAP[t]?.at?.['background-color'] &&
+            !ctx.C.MAP[t]?.at?.['border-radius'];
+          const fill = paintsNone
+            ? (ctx.C.MAP[t]?.contains ?? []).find(
+                k =>
+                  ctx.C.MAP[k]?.at?.['background-color'] &&
+                  ctx.C.MAP[k]?.at?.['border-radius'],
+              )
+            : undefined;
+          if (!fill) {
+            Object.assign(block({...s, mode: undefined}, t), look);
+            continue;
+          }
+          const edge = Object.fromEntries(
+            Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
+          );
+          const rest = Object.fromEntries(
+            Object.entries(look).filter(
+              ([k]) => !/^(border|boxShadow)/.test(k),
+            ),
+          );
+          Object.assign(block({...s, mode: undefined}, fill), edge);
+          if (Object.keys(rest).length)
+            Object.assign(block({...s, mode: undefined}, t), rest);
+        }
       } else if (s.thing === 'buttons') {
         const primary = block(
           {...s, mode: undefined, when: 'variant:primary'},
@@ -6407,7 +6974,19 @@ export function compileTheme(ctx, data, base) {
         // The see-through main area and the fixed attachment go with the
         // page background: in its mode's block for a one-mode one, so the
         // other mode keeps the content panel Core paints.
-        if (ctx.project.target.has('layout-content')) {
+        // (A main area a setting gives a background of its own, in this
+        // mode or in every mode, keeps it: the see-through rule is not
+        // written over it, in whichever order the two were set.)
+        const panelOwn = data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^background(-color|-image)?$/.test(kebab(x.thing)) &&
+            !x.when &&
+            !x.state &&
+            (!x.mode || x.mode === s.mode) &&
+            partsOf(ctx, x).includes('layout-content'),
+        );
+        if (ctx.project.target.has('layout-content') && !panelOwn) {
           const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
           const scope = s.mode ? (lc[`@${s.mode}`] ??= {}) : lc;
           const main = (scope[':where(.astryx-app-shell [role="main"])'] ??=
@@ -6717,25 +7296,172 @@ export function compileTheme(ctx, data, base) {
       ? written('--color-background-surface', m)
       : null;
     const baseSurface = baseColor('--color-background-surface', m);
+    // A fill the base theme keeps between its page and its surface (a dark
+    // card the page's own shade) stays between the page and the surface the
+    // theme shows: its step never carries it past the page.
+    const basePage = baseColor('--color-background-body', m);
+    const page =
+      written('--color-background-body', m) ?? basePage ?? baseSurface;
     if (surface && baseSurface)
       for (const k of SURFACE_FAMILY) {
         if (!(k in TOKENS || base[m]?.[k] != null) || pinned(k, m)) continue;
         const from = baseColor(k, m);
         if (!from) continue;
         const [sl, sa, sb] = oklabCoordinates(surface);
-        const step =
-          oklabCoordinates(from)[0] - oklabCoordinates(baseSurface)[0];
-        putTok(
-          k,
-          oklabCoordinatesToHex([Math.max(0, Math.min(1, sl + step)), sa, sb]),
-          m,
-        );
+        const [fromL] = oklabCoordinates(from);
+        const [baseSurfaceL] = oklabCoordinates(baseSurface);
+        const l = Math.max(0, Math.min(1, sl + fromL - baseSurfaceL));
+        let color = oklabCoordinatesToHex([l, sa, sb]);
+        if (basePage && page) {
+          const [basePageL] = oklabCoordinates(basePage);
+          const [pageL] = oklabCoordinates(page);
+          const inside = (
+            /** @type {number} */ x,
+            /** @type {number} */ a,
+            /** @type {number} */ b,
+          ) => x >= Math.min(a, b) && x <= Math.max(a, b);
+          // Measured on the color written, so rounding never carries it
+          // past the page: at or past a bound, it is that bound's color.
+          if (
+            inside(fromL, basePageL, baseSurfaceL) &&
+            !inside(oklabCoordinates(color)[0], pageL, sl)
+          )
+            color = Math.abs(l - pageL) <= Math.abs(l - sl) ? page : surface;
+        }
+        putTok(k, color, m);
       }
+    // The emphasized border (input and selector frames) is never fainter
+    // than the border: an opaque border stronger than it on the surface
+    // carries it; a fainter one leaves it as it is.
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
-    if (border && !pinned('--color-border-emphasized', m))
+    const emphasized =
+      written('--color-border-emphasized', m) ??
+      baseColor('--color-border-emphasized', m);
+    const ground =
+      written('--color-background-surface', m) ??
+      baseColor('--color-background-surface', m);
+    if (
+      border &&
+      !pinned('--color-border-emphasized', m) &&
+      (!emphasized ||
+        !ground ||
+        ratio(
+          /** @type {[number, number, number]} */ (parseColor(border)),
+          /** @type {[number, number, number]} */ (parseColor(ground)),
+        ) >
+          ratio(
+            /** @type {[number, number, number]} */ (parseColor(emphasized)),
+            /** @type {[number, number, number]} */ (parseColor(ground)),
+          ))
+    )
       putTok('--color-border-emphasized', border, m);
+  }
+  // A flat panel is tinted with the muted fill. The pieces inside it drawn
+  // in that same color (a neutral badge, a track, whatever token the base
+  // theme draws them from) would vanish into the tint, so inside the panel
+  // each fill that shows as the tint is the panel's own surface instead (as
+  // on a raised card, the other way round), and the emphasized border is
+  // stepped where it stands out less from the tint than from that surface.
+  // The tint is written as the colors it shows, since the panel then points
+  // the muted fill elsewhere.
+  /** The color a token shows in a mode, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
+  const shown = (k, m) => {
+    let v = String(tok[k]?.[m] ?? base[m]?.[k] ?? '');
+    for (let i = 0; i < 4; i++) {
+      const ref = /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1];
+      if (!ref) break;
+      v = String(tok[ref]?.[m] ?? base[m]?.[ref] ?? '');
+    }
+    const rgb = parseColor(v.trim());
+    return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
+  };
+  for (const t of SURFACE_PARTS) {
+    const own = /^var\((--[\w-]+)\)$/.exec(
+      String(ctx.C.MAP[t]?.own?.['background-color']?.values?.[0] ?? ''),
+    )?.[1];
+    for (const b of Object.values(
+      /** @type {Record<string, Record<string, unknown>>} */ (
+        theme.components[t] ?? {}
+      ),
+    )) {
+      if (b?.backgroundColor !== 'var(--color-background-muted)' || !own)
+        continue;
+      /** @type {Partial<Record<'light' | 'dark', string>>} */
+      const tint = {};
+      /** @type {Partial<Record<'light' | 'dark', string>>} */
+      const edge = {};
+      // A mode in which the theme gives the panel a fill of its own (white
+      // cards) shows that fill, not the tint: its pieces stay as they are.
+      /** @param {'light' | 'dark'} m */
+      const ownFill = m =>
+        data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^background(-color)?$/.test(x.thing) &&
+            !x.state &&
+            (!x.mode || x.mode === m) &&
+            partsOf(ctx, x).includes(t),
+        );
+      for (const m of /** @type {const} */ (['light', 'dark'])) {
+        const fill = shown('--color-background-muted', m);
+        const surface = shown(own, m);
+        const line = shown('--color-border-emphasized', m);
+        if (!fill) continue;
+        tint[m] = fill;
+        if (!surface || !line || ownFill(m)) continue;
+        const rgb = (/** @type {string} */ x) =>
+          /** @type {[number, number, number]} */ (parseColor(x));
+        const need = ratio(rgb(line), rgb(surface));
+        let [l, a, bb] = oklabCoordinates(line);
+        const away = oklabCoordinates(fill)[0] > 0.5 ? -1 : 1;
+        let stepped = line;
+        for (let i = 0; i < 40 && ratio(rgb(stepped), rgb(fill)) < need; i++) {
+          l = Math.max(0, Math.min(1, l + away * 0.02));
+          stepped = oklabCoordinatesToHex([l, a, bb]);
+        }
+        if (stepped !== line) edge[m] = stepped;
+      }
+      if (!tint.light && !tint.dark) continue;
+      b.backgroundColor =
+        tint.light && tint.dark && tint.light !== tint.dark
+          ? `light-dark(${tint.light}, ${tint.dark})`
+          : (tint.light ?? tint.dark);
+      for (const k of Object.keys(TOKENS).filter(isPieceFill)) {
+        if (k === own) continue;
+        /** @type {Partial<Record<'light' | 'dark', boolean>>} */
+        const blends = {};
+        for (const m of /** @type {const} */ (['light', 'dark'])) {
+          const v = shown(k, m);
+          const f = tint[m];
+          if (ownFill(m)) {
+            blends[m] = false;
+            continue;
+          }
+          // A gray piece reads as the tint when it is near its lightness; a
+          // colored one (a status or category fill) keeps its hue.
+          blends[m] =
+            k === '--color-background-muted' ||
+            Boolean(
+              v &&
+              f &&
+              hexToOklch(v).C < GRAY_PIECE &&
+              ratio(
+                /** @type {[number, number, number]} */ (parseColor(v)),
+                /** @type {[number, number, number]} */ (parseColor(f)),
+              ) < BLENDS,
+            );
+        }
+        if (blends.light && blends.dark) b[k] = `var(${own})`;
+        else if (blends.light || blends.dark)
+          b[k] =
+            `light-dark(${blends.light ? `var(${own})` : shown(k, 'light')}, ${blends.dark ? `var(${own})` : shown(k, 'dark')})`;
+      }
+      if (edge.light || edge.dark)
+        b['--color-border-emphasized'] =
+          `light-dark(${edge.light ?? shown('--color-border-emphasized', 'light')}, ${edge.dark ?? shown('--color-border-emphasized', 'dark')})`;
+    }
   }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
@@ -6750,6 +7476,20 @@ export function compileTheme(ctx, data, base) {
           : modeOnly === 'dark'
             ? d
             : l;
+  }
+  // A role color the theme sets reaches the parts where the base theme
+  // draws that role on its own (see roleReach). What the theme sets on the
+  // part itself stays.
+  for (const r of roleReach(ctx, data, base)) {
+    const mine = r.value ?? theme.tokens[r.prop];
+    if (mine == null) continue;
+    const b = block(
+      /** @type {Setting} */ ({thing: '', value: '', when: r.when}),
+      r.part,
+    );
+    b[r.prop] ??= Array.isArray(mine)
+      ? `light-dark(${mine[0]}, ${mine[1]})`
+      : String(mine);
   }
   // Base themes set the type tokens again for phones (a coarse pointer
   // below the lg width); an exact font family or weight, and the headings
@@ -6912,6 +7652,36 @@ const SURFACE_FAMILY = [
   '--color-syntax-background',
   '--color-skeleton',
 ];
+
+/**
+ * The fills the pieces inside a panel are drawn from (a badge, a track, a
+ * placeholder): Core's background tokens other than the page's and the
+ * panels' own, and the skeleton.
+ */
+/** @param {string} k */
+const isPieceFill = k =>
+  (/^--color-background-/.test(k) &&
+    !/^--color-background-(body|surface|card|popover|inverted)$/.test(k)) ||
+  k === '--color-skeleton';
+
+/** Below this contrast a gray piece reads as the tint it sits on. */
+const BLENDS = 1.25;
+
+/** Below this OKLCH chroma a piece's fill reads as a gray. */
+const GRAY_PIECE = 0.02;
+
+/**
+ * The tokens that follow another one the theme sets exactly (where it
+ * does not set them itself): each with the token it follows.
+ */
+export const FOLLOWS = Object.freeze(
+  /** @type {Record<string, string>} */ ({
+    ...Object.fromEntries(
+      SURFACE_FAMILY.map(k => [k, '--color-background-surface']),
+    ),
+    '--color-border-emphasized': '--color-border',
+  }),
+);
 
 /**
  * A block's longhands that follow a shorthand covering them, where the base
@@ -8247,8 +9017,9 @@ async function buildThemeSteps(ctx, slug, data) {
       `removed ${removedPictures.join(', ')}: ${removedPictures.length === 1 ? 'a picture' : 'pictures'} of ${slug} as it was before this build; ${[
         ...new Set(
           removedPictures.map(p => {
+            // A family's picture, or a piece cut from it (sheet-inputs-2.png).
             const section =
-              /\/sheet-(?!dark\.png$)([a-z][a-z-]*?)(-dark)?\.png$/.exec(
+              /\/sheet-(?!dark[-.])([a-z][a-z-]*?)(-dark)?(-\d+)?\.png$/.exec(
                 p,
               )?.[1];
             // The open states are taken by every --png: no section named.
@@ -8304,6 +9075,9 @@ async function runBuild(ctx, slug, data) {
       {cwd},
       {compact: true},
       {
+        // The theme folder is the editor's: a half-written or damaged
+        // output there is repaired, never refused as a file of the user's.
+        ownsOutputs: true,
         colorModes: data
           ? oneColorMode(modesOf(data))
           : buildColorModes(cwd, slug),
@@ -8970,11 +9744,21 @@ export async function contrastProblems(ctx, data, res) {
       );
       const one =
         conds.size === 1 ? /^([\w-]+)=([\w-]+)$/.exec([...conds][0]) : null;
-      if (one) return `${one[1]}:${one[2]}`;
+      // (A state, a selected item's, is not a variant `--when` names: the
+      // pair is drawn in that state, which pairState says.)
+      const states = ctx.project.target.get(t)?.states ?? [];
+      if (one && !states.includes(one[1])) return `${one[1]}:${one[2]}`;
     }
+    // (Only variants the part is drawn in: a rule shared with its group
+    // can name a variant the part does not take, which `--when` refuses.)
+    const takes = new Set(
+      /** @type {string[]} */ ([...(ctx.C.MAP[t]?.attrs?.variant ?? [])]),
+    );
     /** @param {string[]} when */
     const atRest = when =>
-      when.map(w => /^variant=([\w-]+)$/.exec(w)?.[1]).filter(v => v != null);
+      when
+        .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+        .filter(v => v != null && takes.has(v));
     const reading = new Set(
       ctx.C.partReads(t, 'text')
         .filter(r => r.token === token)
@@ -9007,6 +9791,21 @@ export async function contrastProblems(ctx, data, res) {
    */
   const textTokens = (p, m, read) => {
     const t = p.fg.target;
+    // Text on a surface that keeps one side (a caption on a lightbox's
+    // dark island) reads the on-color for that side, in both modes.
+    const g = p.bg.target;
+    const sides = /** @type {string[]} */ (
+      /** @type {any} */ (g ? ctx.C.MAP[g] : null)?.mediaSides ?? []
+    );
+    if (
+      g &&
+      g !== t &&
+      ctx.C.MAP[g]?.media &&
+      !autoMediaPart(ctx, g) &&
+      sides.length === 1 &&
+      /^--color-text-(primary|secondary)$/.test(String(p.fg.tokens[0]))
+    )
+      return [`--color-on-${sides[0]}`];
     if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
       return p.fg.tokens;
     // A surface that follows what is painted behind it (a toast's) takes
@@ -9042,13 +9841,17 @@ export async function contrastProblems(ctx, data, res) {
    */
   const drawnBy = (p, m) => {
     const when = pairVariant(p);
+    // (A pair drawn in a state, a selected item's: a setting for that
+    // state draws it too, and wins over one at rest.)
+    const inState = pairState(p);
     /** @param {(x: Setting) => boolean} test @param {string | null} [w] the variant a setting must name, if any */
     const latest = (test, w = when) =>
       [...data.settings]
         .reverse()
+        .sort((a, b) => Number(!!b.state) - Number(!!a.state))
         .find(
           x =>
-            !x.state &&
+            (!x.state || (inState != null && x.state === inState)) &&
             (!x.when || x.when === w) &&
             (!x.mode || x.mode === m) &&
             test(x),
@@ -9071,30 +9874,103 @@ export async function contrastProblems(ctx, data, res) {
     if (ofBase(p, 'fg', m) != null) return null;
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
-    return latest(
+    const viaGround = latest(
       x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
       /** @type {any} */ (p).groundWhen ?? when,
     );
+    if (viaGround) return viaGround;
+    // A token set on the region the text and its ground sit in (a top
+    // bar's text color) reaches it the same way, as CSS inherits it.
+    const region = /** @type {any} */ (p).over?.target ?? null;
+    return region && region !== around && region !== own
+      ? latest(
+          x =>
+            x.source === 'token' && tokens.includes(x.thing) && on(x, region),
+          null,
+        )
+      : null;
   };
+  /**
+   * The mode a side of a pair is drawn in: the scheme of Core's media
+   * surface around it (a lightbox's dark island draws what it holds in its
+   * dark scheme, whatever the page's mode), for the text and the fill of a
+   * part inside it; else the page's mode. The ground the surface itself
+   * draws stays in the page's mode.
+   * @param {TextPair} p @param {'fg' | 'bg'} side @param {string} m
+   */
+  const inScheme = (p, side, m) => {
+    const drawnIn = /** @type {any} */ (p).drawnIn;
+    if (!drawnIn) return m;
+    return side === 'fg' || p.bg !== /** @type {any} */ (p).over ? drawnIn : m;
+  };
+  /**
+   * A fill the theme paints on a part between the text and the ground the
+   * census measured it on (a side nav pane painted blue, between its items
+   * and the app shell), or on the text's own part (a tab the base draws
+   * with no fill, painted gray): the text sits on that fill now. The
+   * setting's value and the part it paints, or null when the theme paints
+   * none there.
+   * @param {TextPair} p @param {string} m
+   * @returns {{value: string, part: string} | null}
+   */
+  const nearerFillOf = (p, m) => {
+    const t = p.fg.target;
+    const g = p.bg.target;
+    if (!t || !g || g === t || /** @type {any} */ (p).over) return null;
+    const holds = (/** @type {string} */ a, /** @type {string} */ b) =>
+      /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
+    /** @param {string} q */
+    const between = q =>
+      q === t ||
+      (q !== g &&
+        // (The census drew the text inside that part, and that part
+        // inside the ground: a side nav's item in the side nav.)
+        (p.within ?? []).includes(q) &&
+        holds(g, q));
+    const fill = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.source === 'property' &&
+          /^background(-color)?$/.test(x.thing) &&
+          !x.when &&
+          !x.state &&
+          (!x.mode || x.mode === m) &&
+          x.on &&
+          partsOf(ctx, x).some(between),
+      );
+    return fill
+      ? {
+          value: String(fill.value),
+          part: /** @type {string} */ (partsOf(ctx, fill).find(between)),
+        }
+      : null;
+  };
+  /** @param {TextPair} p @param {string} m */
+  const nearerFill = (p, m) => nearerFillOf(p, m)?.value ?? null;
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const value = (p, side, m) => {
+  const value = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     const s = p[side];
     const tokens = side === 'fg' ? textTokens(p, m, value) : s.tokens;
     return (
       inMode(
         side === 'fg'
           ? drawnBy(p, m)?.value
-          : override(
-              s,
-              side,
-              m,
-              // The ground's own variant; else the variant the text is
-              // drawn in, when the ground is the text's own part (a
-              // secondary button's label on its secondary fill).
-              /** @type {any} */ (p).groundWhen ??
-                /** @type {any} */ (p).when ??
-                (s.target && s.target === p.fg.target ? pairVariant(p) : null),
-            ),
+          : (nearerFill(p, m) ??
+              override(
+                s,
+                side,
+                m,
+                // The ground's own variant; else the variant the text is
+                // drawn in, when the ground is the text's own part (a
+                // secondary button's label on its secondary fill).
+                /** @type {any} */ (p).groundWhen ??
+                  /** @type {any} */ (p).when ??
+                  (s.target && s.target === p.fg.target
+                    ? pairVariant(p)
+                    : null),
+              )),
         m,
       ) ??
       // The base theme's own part style (neutral's destructive button),
@@ -9107,7 +9983,8 @@ export async function contrastProblems(ctx, data, res) {
     );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const baseValue = (p, side, m) => {
+  const baseValue = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     // Lifted text on the tint is held to 4.5:1, never excused by an
     // unlifted base pair.
     if (onTint(p, m) != null) return null;
@@ -9303,6 +10180,34 @@ export async function contrastProblems(ctx, data, res) {
   // where it is light, so the part's text is measured with the one its side
   // gives, on the part's own fill.
   /** @type {TextPair[]} */
+  /**
+   * A pair of a part drawn with its default props, named by the variant Core
+   * draws it as (a Button is `secondary` unless told otherwise): the one
+   * variant whose fill reads the pair's ground token and whose text reads
+   * its text token. Its fix then reaches that variant, as a setting scoped
+   * to it reaches the button the pair stands for. Any other pair as it is.
+   * @param {TextPair} q
+   * @returns {TextPair}
+   */
+  const defaultVariant = q => {
+    const t = q.fg.target;
+    if (!t || /** @type {any} */ (q).when || q.bg.target !== t) return q;
+    const bgReads = ctx.C.partReads(t, 'background') ?? [];
+    const fgReads = ctx.C.partReads(t, 'text') ?? [];
+    /** @param {Array<{token: string, when: string[]}>} reads @param {string} v */
+    const reads = (reads, v) =>
+      reads.find(r => r.when.includes(`variant=${v}`))?.token;
+    const variants = /** @type {string[]} */ ([
+      ...(ctx.C.MAP[t]?.attrs?.variant ?? []),
+    ]).filter(
+      v =>
+        reads(bgReads, v) === q.bg.tokens[0] &&
+        (reads(fgReads, v) ?? q.fg.tokens[0]) === q.fg.tokens[0],
+    );
+    return variants.length === 1
+      ? /** @type {any} */ ({...q, when: `variant:${variants[0]}`})
+      : q;
+  };
   const mediaPairs = [];
   const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
   // (One pair for each text and side, on the first surface that holds it:
@@ -9318,7 +10223,8 @@ export async function contrastProblems(ctx, data, res) {
     // shows that, not the page.
     const reads = ctx.C.partReads(m, 'background') ?? [];
     const ground = (reads.find(r => r.when.includes('')) ?? reads[0])?.token;
-    for (const q of [...census.pairs, ...variantPairs]) {
+    for (const q0 of [...variantPairs, ...census.pairs]) {
+      const q = defaultVariant(q0);
       const t = q.fg.target;
       if (
         !t ||
@@ -9329,7 +10235,8 @@ export async function contrastProblems(ctx, data, res) {
       )
         continue;
       for (const side of sides) {
-        const k = `${q.text}|${/** @type {any} */ (q).when ?? ''}|${side}`;
+        // (A part's default variant is one with that variant's own pair.)
+        const k = `${t}|${/** @type {any} */ (q).when ?? q.text}|${side}`;
         if (mediaSeen.has(k)) continue;
         mediaSeen.add(k);
         mediaPairs.push(
@@ -9343,13 +10250,15 @@ export async function contrastProblems(ctx, data, res) {
               ],
             },
             mediaOf: m,
+            drawnIn: side,
+            pageOf: q,
             ...(ground ? {over: {target: m, tokens: [ground], raw: null}} : {}),
           }),
         );
       }
     }
   }
-  const {problems, unchecked} = ctx.C.contrast(
+  const {problems: measured, unchecked} = ctx.C.contrast(
     value,
     baseValue,
     modesOf(data),
@@ -9363,28 +10272,178 @@ export async function contrastProblems(ctx, data, res) {
     },
     [...variantPairs, ...headerPairs, ...ownTextPairs, ...mediaPairs],
   );
+  // Text on a media surface is drawn in the surface's scheme whatever the
+  // page's mode: one problem for it, not one for each mode.
+  const mediaProblems = new Set();
+  const problems = measured.filter(x => {
+    const p = /** @type {any} */ (x.pair);
+    if (!p?.drawnIn) return true;
+    const k = `${x.part}|${p.when ?? ''}|${p.drawnIn}`;
+    if (mediaProblems.has(k)) return false;
+    mediaProblems.add(k);
+    return true;
+  });
   const slug = data.name;
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
   /** @type {(text: string) => ThemeProblem} */
   const plain = text => ({text, fix: null, key: text});
+  /**
+   * The whole-theme text token setting that draws a pair's text in a mode,
+   * when no setting on a part does: one line on that token fixes every
+   * place it is too faint.
+   * @param {TextPair} pair @param {string} m
+   * @returns {Setting | null}
+   */
+  const wholeOf = (pair, m) => {
+    if (drawnBy(pair, m) || /** @type {any} */ (pair).mediaOf) return null;
+    const toks = textTokens(pair, m, value);
+    return (
+      [...data.settings]
+        .reverse()
+        .find(
+          y =>
+            y.source === 'token' &&
+            !y.on &&
+            !y.when &&
+            !y.state &&
+            (!y.mode || y.mode === m) &&
+            toks.includes(y.thing),
+        ) ?? null
+    );
+  };
+  /** The grounds each whole-theme text token is too faint on, by token and mode. @type {Map<string, Array<[number, number, number]>>} */
+  const wholeGrounds = new Map();
+  for (const x of problems) {
+    const w = wholeOf(/** @type {TextPair} */ (x.pair), x.mode);
+    if (!w) continue;
+    const k = `${w.thing}|${x.mode}`;
+    wholeGrounds.set(k, [...(wholeGrounds.get(k) ?? []), x.ground]);
+  }
+  const scoped = scopedTextProblems(ctx, data, res);
+  /**
+   * A destructive button a person cannot tell from the primary one: their
+   * fills, as drawn, close in OKLab in a mode. A note (it fails no
+   * contrast), with the line that draws the destructive button in the
+   * theme's danger color, and its text on it.
+   * @returns {ThemeProblem[]}
+   */
+  const destructiveLookalike = () => {
+    /** The button pair drawn in a variant. @param {string} v */
+    const pairOf = v =>
+      variantPairs.find(
+        q =>
+          q.fg.target === 'button' &&
+          /** @type {any} */ (q).when === `variant:${v}`,
+      ) ??
+      (v === 'primary'
+        ? censusPairs.find(
+            q =>
+              q.fg.target === 'button' &&
+              q.bg.target === 'button' &&
+              !pairVariant(q),
+          )
+        : null);
+    const primary = pairOf('primary');
+    const destructive = pairOf('destructive');
+    if (!primary || !destructive) return [];
+    /** @type {ThemeProblem[]} */
+    const out = [];
+    for (const m of modesOf(data)) {
+      const page = parseColor(
+        String(
+          res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
+        ),
+      );
+      /** A fill as drawn on the page. @param {TextPair} q */
+      const drawn = q => {
+        const v = String(value(q, 'bg', m) ?? '');
+        const c = parseColor(v);
+        if (!c || !page || /gradient\(|url\(/.test(v)) return null;
+        return compositeOver(c, alphaOf(v), page);
+      };
+      const a = drawn(primary);
+      const b = drawn(destructive);
+      if (!a || !b) continue;
+      const d = oklabDistance(a, b);
+      if (d >= LOOKS_ALIKE) continue;
+      out.push({
+        key: `lookalike|button|destructive|${m}`,
+        note: true,
+        text: `the destructive button (${hex(b)}) looks like the primary button (${hex(a)}) in ${m}, so Delete and Save read alike; to draw it in the theme's danger color: ${P} set ${data.name} background-color 'var(--color-error)' --on button --when variant:destructive && ${P} set ${data.name} color 'var(--color-on-error)' --on button --when variant:destructive`,
+        fix: null,
+      });
+      break;
+    }
+    return out;
+  };
   return [
     ...problems.map(x => ({
       // What the problem is, whatever its ratio: the text, the token or
       // property that draws it, what it sits on, its variant and mode.
       key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
-      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
+      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${/** @type {any} */ (x.pair)?.drawnIn ? `${/** @type {any} */ (x.pair).drawnIn} (${/** @type {any} */ (x.pair).mediaOf} draws it in its ${/** @type {any} */ (x.pair).drawnIn} scheme)` : x.mode} (${x.fg} on ${(x.pair ? nearerFillOf(/** @type {TextPair} */ (x.pair), inScheme(/** @type {TextPair} */ (x.pair), 'bg', x.mode))?.part : null) ?? x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
       // The fix sets what draws the text: the setting that wins in CSS,
       // where one does, else the text token where the text sits.
       fix: (() => {
-        const color = `'${plainOn(x.ground)}'`;
         const pair = /** @type {TextPair} */ (x.pair);
+        // (A pair drawn in a state, a selected item's: its line is for that
+        // state.)
+        const pairIn = pairState(pair);
+        const stateFlag = pairIn ? ` --state ${pairIn}` : '';
+        // Secondary text (a placeholder, a caption) stays secondary: its
+        // own color moved toward black or white just far enough to read at
+        // 4.5:1, not the plain black or white of primary text.
+        // (It reads on every ground that text sits on there: a token set on
+        // a part reaches its text on each of the part's grounds.)
+        const fgNow = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+        const secondary =
+          fgNow &&
+          /^--color-text-(secondary|placeholder)/.test(
+            String(pair.fg.tokens?.[0]),
+          );
+        const page = parseColor(
+          String(
+            res[/** @type {'light' | 'dark'} */ (x.mode)][
+              '--color-background-body'
+            ],
+          ),
+        );
+        const groundsThere = secondary
+          ? [
+              x.ground,
+              .../** @type {TextPair[]} */ (
+                /** @type {any} */ (ctx).parts.pairs
+              )
+                .filter(
+                  q =>
+                    (q.bg.target === x.bgPart || q.fg.target === x.textPart) &&
+                    q.fg.tokens[0] === pair.fg.tokens[0],
+                )
+                .map(q => {
+                  const v = String(value(q, 'bg', x.mode) ?? '');
+                  const c = parseColor(v);
+                  const a = alphaOf(v);
+                  return c && a < 1 && page ? compositeOver(c, a, page) : c;
+                })
+                .filter(g => g != null && plainOn(g) === plainOn(x.ground)),
+            ]
+          : [];
+        const color = `'${
+          secondary
+            ? nearestReading(
+                /** @type {[number, number, number]} */ (fgNow),
+                /** @type {Array<[number, number, number]>} */ (groundsThere),
+                4.5,
+              )
+            : plainOn(x.ground)
+        }'`;
         // Text in the top bar sits over each of the bar's grounds (its
         // variants): when they need opposite text, one color set on the
         // text's part turns it the wrong way on the others, so no line
         // fixes this alone.
         const over = /** @type {any} */ (pair).over;
-        if (over) {
+        if (over && !(/** @type {any} */ (pair).mediaOf)) {
           const own = value(pair, 'bg', x.mode);
           const sides = new Set(
             grounds.map(g => {
@@ -9414,20 +10473,166 @@ export async function contrastProblems(ctx, data, res) {
           part && data.settings.some(s => s.on === part && s.only)
             ? ' --only'
             : '';
+        // Text inside Core's media surface (a button on a lightbox's dark
+        // island) is drawn in the surface's scheme whatever the page's
+        // mode: a color on its part (its variant) for that mode reaches it
+        // there, and the page's parts in that mode, which sit on a ground of
+        // the same kind. When the part's own fill lets the surface's ground
+        // through (a transparent button) and the same text on the page in
+        // that mode needs the other color, the two grounds disagree: the
+        // surface's own on-color for its side reaches only the text inside
+        // it (unless a color the theme set on the part draws the text).
+        const onMedia = /** @type {any} */ (pair).mediaOf;
+        const drawnIn = /** @type {any} */ (pair).drawnIn;
+        if (onMedia && drawnIn) {
+          const q = /** @type {TextPair} */ (/** @type {any} */ (pair).pageOf);
+          const v = q ? value(q, 'bg', drawnIn) : null;
+          const page = parseColor(
+            String(
+              res[/** @type {'light' | 'dark'} */ (drawnIn)][
+                '--color-background-body'
+              ],
+            ),
+          );
+          const c = parseColor(String(v ?? ''));
+          const a = alphaOf(String(v ?? ''));
+          const through =
+            !/gradient\(|url\(/.test(String(v ?? '')) && (!c || a < 1);
+          const ground = !through
+            ? null
+            : c && page
+              ? compositeOver(c, a, page)
+              : page;
+          const theirs = drawnBy(pair, drawnIn);
+          if (ground && plainOn(ground) !== plainOn(x.ground)) {
+            if (theirs?.thing === 'color') return null;
+            // (Text the surface draws on its own on-color grounds, a
+            // caption bar, would need that on-color the other way: then the
+            // surface's own ground (its overlay) is what turned, and the
+            // base theme's value for it is the line.)
+            const want = plainOn(x.ground);
+            const bars = census.pairs.some((/** @type {TextPair} */ q) => {
+              if (
+                q.bg.target !== onMedia ||
+                !/^--color-on-/.test(String(q.bg.tokens[0]))
+              )
+                return false;
+              const g = parseColor(String(value(q, 'bg', drawnIn) ?? ''));
+              return g != null && plainOn(g) !== want;
+            });
+            if (!bars)
+              return `${P} set ${slug} --color-on-${drawnIn} ${color} --on ${onMedia}`;
+            const tok = /** @type {any} */ (pair).over?.tokens?.[0];
+            const was = tok ? /** @type {any} */ (base)?.[x.mode]?.[tok] : null;
+            return tok &&
+              was &&
+              was !== res[/** @type {'light' | 'dark'} */ (x.mode)][tok]
+              ? `${P} set ${slug} ${tok} '${was}'${stateFlag}${modeFlag(x.mode)}`
+              : null;
+          }
+          if (x.textPart)
+            return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(theirs?.when ?? variant)}${modeFlag(drawnIn)}`;
+        }
+        // Text whose part's own color reads on a pane the theme painted for
+        // it (a side nav's dark fill), shown here on another part that
+        // holds it unpainted (the mobile nav drawer): that part takes the
+        // same fill, which keeps the color where it reads. Recoloring the
+        // text would turn it the wrong way on the painted pane.
+        if (
+          drawn?.thing === 'color' &&
+          x.textPart &&
+          x.bgPart &&
+          x.bgPart !== x.textPart &&
+          drawn.on &&
+          partsOf(ctx, drawn).includes(x.textPart)
+        ) {
+          const holds = (/** @type {string} */ a, /** @type {string} */ b) =>
+            /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
+          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+          const pane = [...data.settings]
+            .reverse()
+            .find(
+              y =>
+                y.source === 'property' &&
+                /^background(-color)?$/.test(y.thing) &&
+                !y.when &&
+                !y.state &&
+                (!y.mode || y.mode === x.mode) &&
+                y.on &&
+                y.on !== x.bgPart &&
+                partsOf(ctx, y).some(q => holds(q, String(x.textPart))),
+            );
+          const paneColor = pane ? parseColor(String(pane.value)) : null;
+          if (
+            pane &&
+            fg &&
+            paneColor &&
+            holds(x.bgPart, x.textPart) &&
+            ratio(fg, paneColor) >= 4.5
+          )
+            return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateFlag}${modeFlag(x.mode)}`;
+        }
+        // Text a whole-theme token setting draws, too faint in several
+        // places: one line on that token, the nearest color that reads on
+        // every ground it is too faint on (all of one side, light or dark).
+        const whole = wholeOf(pair, x.mode);
+        const wholeOn = whole
+          ? wholeGrounds.get(`${whole.thing}|${x.mode}`)
+          : null;
+        if (
+          whole &&
+          wholeOn &&
+          wholeOn.length > 1 &&
+          wholeOn.every(g => plainOn(g) === plainOn(wholeOn[0]))
+        ) {
+          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+          if (fg)
+            return `${P} set ${slug} ${whole.thing} '${nearestReading(fg, wholeOn, 4.5)}'${modeFlag(x.mode)}`;
+        }
         if (drawn) {
           const onText =
             drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
+          // A setting that reaches the text's part through its group (a
+          // color on date-input, which every input takes) cannot name a
+          // variant only the text's part has: that variant is scoped on
+          // the text's own part instead.
+          const v = drawn.when ?? (onText ? variant : null);
+          const name = /^variant:([\w-]+)$/.exec(String(v ?? ''))?.[1];
+          if (
+            name &&
+            !drawn.when &&
+            drawn.on &&
+            x.textPart &&
+            drawn.on !== x.textPart &&
+            ![
+              .../** @type {string[]} */ (
+                /** @type {any} */ (ctx.C.MAP[drawn.on])?.attrs?.variant ?? []
+              ),
+            ].includes(name)
+          )
+            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
         }
-        // Text inside Core's media surface (a button on an overlay) takes
-        // the surface's text colors: a color on the part itself (its
-        // variant) reaches it there, and reads the same on its fill
-        // everywhere else.
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
-        const onMedia = /** @type {any} */ (pair).mediaOf;
-        if (x.textPart && (onMedia || autoMediaPart(ctx, x.textPart)))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+        if (x.textPart && autoMediaPart(ctx, x.textPart))
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
+        // Text on a surface's own ground drawn from its on-color (a
+        // lightbox's caption bar): the ground is what changed, and that
+        // on-color on the surface is the line that reaches it, set to the
+        // color the text reads on.
+        const groundToken = String(pair.bg.tokens?.[0] ?? '');
+        if (
+          x.bgPart &&
+          ctx.C.MAP[x.bgPart]?.media &&
+          !autoMediaPart(ctx, x.bgPart) &&
+          /^--color-on-(dark|light)$/.test(groundToken)
+        ) {
+          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+          return fg
+            ? `${P} set ${slug} ${groundToken} '${plainOn(fg)}' --on ${x.bgPart}${only(x.bgPart)}`
+            : null;
+        }
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.
         // (Text on a ground part's variants that need opposite text: a color
@@ -9446,7 +10651,7 @@ export async function contrastProblems(ctx, data, res) {
         if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
           return sidesOver > 1
             ? null
-            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
         const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
         // A ground part that draws several grounds the theme cannot tell
         // apart (variants set cannot name): a token set on it would turn
@@ -9467,6 +10672,11 @@ export async function contrastProblems(ctx, data, res) {
                 return g ? plainOn(g) : '';
               }),
           ).size;
+        // Text over a region's ground (a button in the top bar): a token on
+        // the region reaches its text there, and nowhere else.
+        const region = /** @type {any} */ (pair).over?.target;
+        if (token && region && !onMedia)
+          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateFlag}${modeFlag(x.mode)}`;
         const mixed =
           token &&
           x.bgPart &&
@@ -9479,39 +10689,42 @@ export async function contrastProblems(ctx, data, res) {
             groundsOf(
               (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
             ) === 1
-            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`
+            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`
             : null;
+        // (The ground is the part the theme painted under the text, where
+        // it painted one: a tab given a fill of its own.)
+        const groundPart =
+          nearerFillOf(pair, inScheme(pair, 'bg', x.mode))?.part ?? x.bgPart;
         if (token)
           return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${only(x.bgPart)}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${modeFlag(x.mode)}`;
+            ? `${P} set ${slug} ${token} ${color} --on ${groundPart}${only(String(groundPart))}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateFlag}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
         return x.textPart
-          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${modeFlag(x.mode)}`
+          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateFlag}${modeFlag(x.mode)}`
           : null;
       })(),
     })),
     ...borderContrastProblems(ctx, data, res, base),
-    // Pairs styled for one variant or state are not measured yet.
+    ...trackContrastProblems(ctx, data, res, base),
+    ...floatingEdgeProblems(ctx, data, res, base),
+    ...scoped.problems,
+    ...buttonStyleProblems(ctx, data, res),
+    ...placeholderProblems(ctx, data, res, base),
+    ...leakedButtonProblems(ctx, data, res),
+    ...destructiveLookalike(),
+    // Pairs styled for one state or condition whose colors cannot be read
+    // as one color, and the button styles, are not measured yet.
     ...(() => {
-      const scoped = data.settings.filter(
-        x =>
-          (x.on &&
-            // A variant's own colors are measured with the variant pairs.
-            (x.state || (x.when && !/^variant:/.test(x.when))) &&
-            (/^(color|background|background-color)$/.test(x.thing) ||
-              /^--color-/.test(x.thing))) ||
-          // The button style recolors the primary button only.
-          (x.thing === 'buttons' && ['soft', 'outline'].includes(x.value)),
-      );
-      return scoped.length
+      const scopedLeft = [...new Set(scoped.unmeasured)];
+      return scopedLeft.length
         ? [
             plain(
-              `not checked: text contrast for ${scoped
+              `not checked: text contrast for ${scopedLeft
                 .slice(0, 3)
                 .map(describe)
                 .join(
                   '; ',
-                )}${scoped.length > 3 ? ` and ${scoped.length - 3} more` : ''}, set for one variant or state`,
+                )}${scopedLeft.length > 3 ? ` and ${scopedLeft.length - 3} more` : ''}, set for one variant or state`,
             ),
           ]
         : [];
@@ -9531,7 +10744,7 @@ export async function contrastProblems(ctx, data, res) {
  * no one command does. `key` names the problem whatever its ratio (what
  * is drawn, on what, in which variant and mode), so a change that only
  * moves a ratio makes no new problem.
- * @typedef {{text: string, fix: string | null, key: string}} ThemeProblem
+ * @typedef {{text: string, fix: string | null, key: string, note?: boolean}} ThemeProblem
  */
 
 /**
@@ -9546,12 +10759,46 @@ function plainOn(rgb) {
 }
 
 /**
+ * The contrast under which a border no longer differs from the page at all
+ * (the page's own color, within rounding). Where the base's own border is a
+ * hairline under 3:1, the theme's hairline is a choice of how faint, a
+ * clone's #ebebeb as much as the base's; only a border that draws nothing
+ * is a problem there.
+ */
+const HAIRLINE_SHOWS = 1.02;
+
+/**
+ * A color moved toward black or white (whichever stands out on the
+ * grounds) just far enough to reach a contrast on each: the nearest color
+ * that reads, so a muted gray stays a gray.
+ * @param {[number, number, number]} from
+ * @param {Array<[number, number, number]>} grounds the first decides black or white
+ * @param {number} need
+ * @returns {string}
+ */
+function nearestReading(from, grounds, need) {
+  const to = plainOn(grounds[0]);
+  const end = /** @type {[number, number, number]} */ (parseColor(to));
+  for (let i = 0; i <= 100; i++) {
+    const c = /** @type {[number, number, number]} */ (
+      from.map((v, k) => Math.round(v + ((end[k] - v) * i) / 100))
+    );
+    if (grounds.every(g => ratio(c, g) >= need)) return hex(c);
+  }
+  return to;
+}
+
+/**
  * Border contrast problems this theme caused: a border color it sets (a
  * border token for the whole theme, or a part's own border) below 3:1
  * against what the border sits on (the part's background, else the page)
  * in a mode, where the base theme's border there was not as low. A border
  * below 3:1 does not show as an edge (a control's edge needs 3:1, WCAG
- * 1.4.11).
+ * 1.4.11): a part's own border counts on controls only (a card's or a
+ * divider's is decoration). The border token for the whole theme, where
+ * the base's own is a hairline under 3:1 (its edge comes from elsewhere, a
+ * fill), is a problem only when it draws nothing at all
+ * ({@link HAIRLINE_SHOWS}). The fix is the nearest color that reaches 3:1.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
@@ -9561,12 +10808,43 @@ function plainOn(rgb) {
 function borderContrastProblems(ctx, data, res, base) {
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
-  /** The fix color for a border on a ground, or null. @param {string} ground @param {string} page */
-  const fixOn = (ground, page) => {
+  /**
+   * The fix color for a border on a ground, or null: the border's own color
+   * moved toward black or white (whichever stands out on the ground) just
+   * far enough to reach 3:1, so a faint gray edge becomes the nearest gray
+   * that shows, not black.
+   * @param {string} ground @param {string} page @param {string} [border]
+   */
+  const fixOn = (ground, page, border) => {
     const p = parseColor(page);
     const g0 = parseColor(ground);
     if (!p || !g0) return null;
-    return plainOn(compositeOver(g0, alphaOf(ground), p));
+    const g = compositeOver(g0, alphaOf(ground), p);
+    const b0 = border ? parseColor(border) : null;
+    if (!b0) return plainOn(g);
+    return nearestReading(
+      compositeOver(b0, alphaOf(String(border)), g),
+      [g],
+      3,
+    );
+  };
+  /**
+   * Whether a part is a control (it takes input: Core draws it disabled,
+   * or as a button): its edge is how it is found, and needs 3:1 (WCAG
+   * 1.4.11). A container's border (a card's hairline) is decoration, and a
+   * faint one is a choice.
+   * @param {string} t
+   */
+  const control = t => {
+    const rec = /** @type {any} */ (ctx.C.MAP[t]);
+    return Boolean(
+      rec &&
+      ('disabled' in (rec.attrs ?? {}) ||
+        [...(rec.tags ?? [])].some(
+          (/** @type {string} */ g) =>
+            g === 'button' || g === 'input' || g === 'select',
+        )),
+    );
   };
   /** A value as one color in a mode: its half of light-dark(), a token read. @param {string} v @param {'light' | 'dark'} m @param {Record<string, string>} tokens */
   const inMode = (v, m, tokens) => {
@@ -9647,8 +10925,16 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
           basePage,
         );
-        if (now != null && now < 3 && (was == null || was > now)) {
-          const color = fixOn(page, page);
+        if (
+          now != null &&
+          now < 3 &&
+          (was == null || (was >= 3 ? was > now : now < HAIRLINE_SHOWS))
+        ) {
+          const color = fixOn(
+            page,
+            page,
+            inMode(res[mode][x.thing], mode, res[mode]),
+          );
           add(
             `border|${x.thing}|${mode}`,
             `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
@@ -9671,7 +10957,7 @@ function borderContrastProblems(ctx, data, res, base) {
         : colorOfBorder(String(x.value));
       if (!color) continue;
       const border = inMode(color, mode, res[mode]);
-      for (const t of partsOf(ctx, x)) {
+      for (const t of partsOf(ctx, x).filter(control)) {
         const own = [...data.settings]
           .reverse()
           .find(
@@ -9707,7 +10993,7 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
         );
         if (now != null && now < 3 && (was == null || was > now)) {
-          const color = fixOn(ground || page, page);
+          const color = fixOn(ground || page, page, border);
           add(
             `border|${x.thing}|${t}|${mode}`,
             `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
@@ -9721,6 +11007,837 @@ function borderContrastProblems(ctx, data, res, base) {
     }
   }
   return [...out.values()];
+}
+
+/**
+ * Track contrast problems this theme caused: a value a part draws on a
+ * track (a progress bar's fill, a slider's thumb) below 3:1 against the
+ * track at rest in a mode, where the base theme's was not as low. The fill
+ * is how the value is read, so it needs 3:1 against what it sits on (WCAG
+ * 1.4.11), as a control's edge does. A track is a part named for one (its
+ * name ends in -track), and what it draws a value with is each part of its
+ * component beside or inside it that paints a fill of its own. A fill
+ * inside the track (a progress bar's) is read against the track alone; one
+ * beside it (a slider's thumb, larger than the track) is lost only when it
+ * reads neither on the track nor on the page.
+ * Each fill reads its token where the parts around it point it (neutral's
+ * progress track reads the muted fill, which its progress bar points at
+ * the emphasized border). The fix is the nearest color for the track that
+ * reaches 3:1, on the track alone, so the fill keeps the color it shows
+ * everywhere else.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {{light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}} base
+ * @returns {ThemeProblem[]}
+ */
+function trackContrastProblems(ctx, data, res, base) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  const modeFlag = (/** @type {string} */ m) =>
+    modesOf(data).length > 1 ? ` --mode ${m}` : '';
+  /** The component a part belongs to. @param {string} t */
+  const component = t => ctx.project.target.get(t)?.component ?? null;
+  /** The parts that hold a part. @param {string} t */
+  const holders = t =>
+    Object.keys(map).filter(h => map[h]?.contains?.includes(t));
+  /** The token a part fills itself with at rest, or null. @param {string} t */
+  const fillToken = t =>
+    ctx.C.partReads(t, 'background').find(
+      r =>
+        r.token &&
+        r.when.includes('') &&
+        r.props.some(p => /^background(-color)?$/.test(p)),
+    )?.token ??
+    ctx.C.partReads(t, 'background').find(
+      r => r.token && r.props.some(p => /^background(-color)?$/.test(p)),
+    )?.token ??
+    null;
+  /**
+   * A token's color in a mode on a part: where the part or a part holding
+   * it points the token at another value, that value, as the theme built
+   * it (its own blocks) or the base theme draws it.
+   * @param {string} token @param {string} t @param {'light' | 'dark'} m
+   * @param {Record<string, string>} tokens @param {Record<string, any>} [own] part-scoped tokens
+   * @param {Record<string, any>} [blocks] the base theme's part blocks
+   */
+  const colorOn = (token, t, m, tokens, own, blocks) => {
+    const around = [t, ...holders(t)];
+    let v = `var(${token})`;
+    for (let i = 0; i < 6; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(v.trim());
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) v = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(v.trim())?.[1];
+      if (!ref) break;
+      const scoped =
+        around
+          .map(
+            a =>
+              own?.[a]?.[ref] ??
+              blocks?.[a]?.base?.[ref] ??
+              Object.values(blocks?.[a] ?? {}).find(
+                (/** @type {any} */ b) =>
+                  b && typeof b === 'object' && typeof b[ref] === 'string',
+              )?.[ref],
+          )
+          .find(x => typeof x === 'string' && x !== `var(${ref})`) ?? null;
+      v = String(scoped ?? tokens[ref] ?? '');
+    }
+    const rgb = parseColor(v.trim());
+    return rgb ? {rgb, alpha: alphaOf(v), value: v.trim()} : null;
+  };
+  /**
+   * A part's own fill in a mode, as the theme sets it at rest (a later
+   * setting wins), read in that mode, or null.
+   * @param {string} t @param {'light' | 'dark'} m
+   */
+  const ownFill = (t, m) => {
+    const hit = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          !x.state &&
+          !x.when &&
+          (!x.mode || x.mode === m) &&
+          x.source === 'property' &&
+          /^background(-color)?$/.test(x.thing) &&
+          partsOf(ctx, x).includes(t),
+      );
+    if (!hit) return null;
+    const halves = /^light-dark\((.*)\)$/is.exec(String(hit.value).trim());
+    const one = halves
+      ? (splitTop(halves[1], ',')[m === 'light' ? 0 : 1] ?? '').trim()
+      : String(hit.value).trim();
+    const ref = /^var\(\s*(--[\w-]+)/.exec(one)?.[1];
+    const v = ref ? String(res[m][ref] ?? '') : one;
+    const rgb = parseColor(v);
+    return rgb ? {rgb, alpha: alphaOf(v), value: v} : null;
+  };
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  const own = /** @type {any} */ (res).parts ?? {};
+  for (const track of Object.keys(map).filter(t => /-track$/.test(t))) {
+    if (!ctx.project.target.has(track)) continue;
+    const trackToken = fillToken(track);
+    if (!trackToken) continue;
+    const fills = [
+      ...new Set([
+        ...(map[track]?.contains ?? []),
+        ...holders(track).flatMap(h => map[h]?.contains ?? []),
+      ]),
+    ].filter(
+      f =>
+        f !== track &&
+        !/-track$/.test(f) &&
+        !holders(track).includes(f) &&
+        component(f) != null &&
+        component(f) === component(track) &&
+        Boolean(fillToken(f)),
+    );
+    for (const fill of fills) {
+      const fillTok = /** @type {string} */ (fillToken(fill));
+      for (const m of modesOf(data)) {
+        const mode = /** @type {'light' | 'dark'} */ (m);
+        const page = parseColor(String(res[mode]['--color-background-body']));
+        const basePage = parseColor(
+          String(base[mode]['--color-background-body']),
+        );
+        const tr =
+          ownFill(track, mode) ??
+          colorOn(trackToken, track, mode, res[mode], own, base.components);
+        const fi =
+          ownFill(fill, mode) ??
+          colorOn(fillTok, fill, mode, res[mode], own, base.components);
+        const btr = colorOn(
+          trackToken,
+          track,
+          mode,
+          base[mode],
+          undefined,
+          base.components,
+        );
+        const bfi = colorOn(
+          fillTok,
+          fill,
+          mode,
+          base[mode],
+          undefined,
+          base.components,
+        );
+        if (!tr || !fi || !page) continue;
+        const inside = Boolean(map[track]?.contains?.includes(fill));
+        /** How well a fill reads where it sits. @param {any} f @param {any} t @param {[number, number, number]} pg */
+        const reads = (f, t, pg) => {
+          const g = compositeOver(t.rgb, t.alpha, pg);
+          const onTrack = ratio(compositeOver(f.rgb, f.alpha, g), g);
+          return inside
+            ? onTrack
+            : Math.max(onTrack, ratio(compositeOver(f.rgb, f.alpha, pg), pg));
+        };
+        const ground = compositeOver(tr.rgb, tr.alpha, page);
+        const now = reads(fi, tr, page);
+        const was = btr && bfi && basePage ? reads(bfi, btr, basePage) : null;
+        if (now >= 3 || (was != null && was <= now)) continue;
+        // The fix moves the side the theme moved: the track when its color
+        // is not the base's (a border it follows), else the fill, on that
+        // part alone, so the color it shows elsewhere stays.
+        const trackMoved = !btr || hex(btr.rgb) !== hex(tr.rgb);
+        const fillGround = inside
+          ? ground
+          : /** @type {[number, number, number]} */ (page);
+        const color = trackMoved
+          ? nearestReading(ground, [compositeOver(fi.rgb, fi.alpha, ground)], 3)
+          : nearestReading(
+              compositeOver(fi.rgb, fi.alpha, ground),
+              [ground, ...(inside ? [] : [fillGround])],
+              3,
+            );
+        out.push({
+          key: `track|${track}|${fill}|${mode}`,
+          text: `the ${fill} (${hex(fi.rgb)}) is ${now.toFixed(2)}:1 on the ${track} (${hex(ground)})${inside ? '' : ' and no better on the page'} in ${mode}; a value drawn on a track needs 3:1 to be read`,
+          fix: `${P} set ${data.name} background-color '${color}' --on ${trackMoved ? track : fill}${modeFlag(mode)}`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Floating edge problems: a panel that floats over the page (a menu, a
+ * popover, a dialog) whose fill is within 1.1:1 of the page in a mode,
+ * with no border and no shadow, has no edge to be seen by, whether the
+ * surfaces dial or the theme's own settings drew it so. The fix is a
+ * hairline border of the theme's border color on the panel.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {{light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}} base
+ * @returns {ThemeProblem[]}
+ */
+function floatingEdgeProblems(ctx, data, res, base) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  const own = /** @type {any} */ (res).parts ?? {};
+  /** The latest setting at rest on a part, of one of some things. @param {string} t @param {RegExp} thing @param {'light' | 'dark'} [m] */
+  const last = (t, thing, m) =>
+    [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          !x.state &&
+          !x.when &&
+          (!m || !x.mode || x.mode === m) &&
+          thing.test(x.thing) &&
+          (x.thing === 'surfaces' || partsOf(ctx, x).includes(t)),
+      );
+  /** A value in a mode: its half of light-dark(), its tokens read. @param {string} v @param {string} t @param {'light' | 'dark'} m */
+  const read = (v, t, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 6; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x)?.[1];
+      if (!ref) break;
+      x = String(
+        own[t]?.[ref] ?? base.components?.[t]?.base?.[ref] ?? res[m][ref] ?? '',
+      ).trim();
+    }
+    return x;
+  };
+  /** The census value a part draws at rest for a property, or null. @param {string} t @param {string} prop */
+  const atRest = (t, prop) => {
+    const at = map[t]?.at?.[prop] ?? {};
+    const k =
+      Object.keys(at).find(x => !x.includes(' ') && !/variant=|=/.test(x)) ??
+      Object.keys(at).find(x => !x.includes(' '));
+    return k == null ? null : String(at[k]);
+  };
+  const surfaces = last('', /^surfaces$/)?.value ?? null;
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  for (const t of FLOATING_PANELS) {
+    if (!ctx.project.target.has(t) || !map[t]) continue;
+    // Its edge as the theme draws it: a border or a shadow of its own, the
+    // surfaces dial's, else Core's (and the base theme's) at rest.
+    const borderSet = last(t, /^border(-style|-width)?$/);
+    const border = borderSet
+      ? !/(^|\s)(none|hidden)(\s|$)|^0(px)?(\s|$)/.test(String(borderSet.value))
+      : surfaces
+        ? ['outlined', 'glass', 'flat'].includes(String(surfaces))
+        : (() => {
+            const style =
+              base.components?.[t]?.base?.borderStyle ??
+              atRest(t, 'border-style');
+            const width =
+              base.components?.[t]?.base?.borderWidth ??
+              atRest(t, 'border-width');
+            return (
+              Boolean(style) &&
+              !/none|hidden/.test(String(style)) &&
+              !/^0(px)?$/.test(String(width ?? '1px').trim())
+            );
+          })();
+    if (border) continue;
+    for (const m of modesOf(data)) {
+      const mode = /** @type {'light' | 'dark'} */ (m);
+      const shadowSet = last(t, /^box-shadow$/, mode);
+      const shadowValue = shadowSet
+        ? String(shadowSet.value)
+        : surfaces && ['raised', 'glass'].includes(String(surfaces))
+          ? 'shadow'
+          : surfaces
+            ? 'none'
+            : String(
+                base.components?.[t]?.base?.boxShadow ??
+                  atRest(t, 'box-shadow') ??
+                  'none',
+              );
+      const shadow =
+        shadowValue === 'shadow' ||
+        !/^\s*(none|0 0 transparent)?\s*$/.test(read(shadowValue, t, mode));
+      if (shadow) continue;
+      const fillSet = last(t, /^background(-color)?$/, mode);
+      const fillValue = fillSet
+        ? String(fillSet.value)
+        : String(
+            base.components?.[t]?.base?.backgroundColor ??
+              atRest(t, 'background-color') ??
+              '',
+          );
+      const fill = parseColor(read(fillValue, t, mode));
+      const page = parseColor(String(res[mode]['--color-background-body']));
+      if (!fill || !page || alphaOf(read(fillValue, t, mode)) < 1) continue;
+      const r = ratio(fill, page);
+      if (r >= FLOATING_SHOWS) continue;
+      out.push({
+        key: `floating|${t}|${mode}`,
+        text: `the ${t} (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
+        fix: `${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
+      });
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Below this contrast with the page, a floating panel with no border or
+ * shadow reads as the page itself.
+ */
+const FLOATING_SHOWS = 1.1;
+
+/**
+ * A button color the theme sets that also paints the buttons Core draws
+ * inside a toast (its close button, an icon in a ghost button): measured on
+ * the toast's own fill in each type and mode, where an icon needs 3:1. No
+ * setting reaches the toast's buttons apart from the rest, so the problem
+ * says so; its line is the nearest button color that reads both there and
+ * on the page and surface (4.5:1), or none when no one color does.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function leakedButtonProblems(ctx, data, res) {
+  const modes = modesOf(data);
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** @param {string} v @param {[number, number, number]} under */
+  const solid = (v, under) => {
+    const c = parseColor(v);
+    return c ? compositeOver(c, alphaOf(v), under) : null;
+  };
+  /** @type {Map<string, ThemeProblem>} */
+  const out = new Map();
+  for (const m of Object.keys(ctx.C.MAP).filter(t => autoMediaPart(ctx, t))) {
+    const held = /** @type {string[]} */ (
+      /** @type {any} */ (ctx.C.MAP[m])?.holdsVariants?.button ?? []
+    );
+    if (!held.length) continue;
+    const reads = ctx.C.partReads(m, 'background') ?? [];
+    const types = /** @type {string[]} */ ([
+      ...(ctx.C.MAP[m]?.attrs?.type ?? []),
+    ]);
+    // The toast's fill in each type and page mode, with the scheme its
+    // media surface draws what it holds in there: a setting for one mode
+    // reaches the toast's buttons only where the surface draws that mode
+    // (or takes no side, 'off', where the page's mode applies).
+    /** @type {Array<{type: string, mode: 'light' | 'dark', scheme: 'light' | 'dark', value: string, rgb: [number, number, number]}>} */
+    const fills = [];
+    for (const m0 of modes) {
+      const mode = /** @type {'light' | 'dark'} */ (m0);
+      const page = parseColor(String(res[mode]['--color-background-body']));
+      if (!page) continue;
+      for (const type of ['', ...types]) {
+        const cond = type ? `type=${type}` : '';
+        const fillSet = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y.source === 'property' &&
+              /^background(-color)?$/.test(y.thing) &&
+              !y.state &&
+              (!y.mode || y.mode === mode) &&
+              (!y.when || y.when === `type:${type}`) &&
+              y.on &&
+              partsOf(ctx, y).includes(m),
+          );
+        const read =
+          reads.find(r => cond && r.when.includes(cond)) ??
+          reads.find(r => r.when.includes(''));
+        const value = fillSet
+          ? inMode(fillSet.value, mode)
+          : read
+            ? inMode(`var(${read.token})`, mode)
+            : '';
+        if (/gradient\(|url\(/.test(value)) continue;
+        const rgb = solid(value, page);
+        if (!rgb) continue;
+        const side = autoMediaSide(value, res[mode], {
+          mode,
+          error: type === 'error',
+        });
+        fills.push({
+          type,
+          mode,
+          scheme: side === 'off' ? mode : side,
+          value,
+          rgb,
+        });
+      }
+    }
+    for (const scheme of /** @type {Array<'light' | 'dark'>} */ ([
+      'light',
+      'dark',
+    ])) {
+      const here = fills.filter(f => f.scheme === scheme);
+      if (!here.length) continue;
+      const x = [...data.settings]
+        .reverse()
+        .find(
+          y =>
+            y.source === 'property' &&
+            y.thing === 'color' &&
+            !y.state &&
+            (!y.mode || y.mode === scheme) &&
+            y.on &&
+            partsOf(ctx, y).includes('button') &&
+            (!y.when || held.some(v => y.when === `variant:${v}`)),
+        );
+      if (!x) continue;
+      const page = parseColor(
+        String(res[scheme]['--color-background-body'] ?? ''),
+      );
+      if (!page) continue;
+      const color = solid(inMode(x.value, scheme), page);
+      if (!color) continue;
+      const failing = here.filter(f => ratio(color, f.rgb) < 3);
+      if (!failing.length) continue;
+      // The nearest color that reads on every one of those fills (3:1) and,
+      // where the theme draws that mode, as text on its page and surface
+      // (4.5:1), toward black or white; none when no one color does.
+      const surface = solid(
+        String(res[scheme]['--color-background-surface'] ?? ''),
+        page,
+      );
+      const grounds = /** @type {Array<[number, number, number]>} */ (
+        modes.includes(scheme) ? [page, surface].filter(Boolean) : []
+      );
+      /** @type {string | null} */
+      let best = null;
+      let steps = Infinity;
+      for (const end of /** @type {Array<[number, number, number]>} */ ([
+        [0, 0, 0],
+        [255, 255, 255],
+      ]))
+        for (let i = 0; i <= 100 && i < steps; i++) {
+          const c = /** @type {[number, number, number]} */ (
+            color.map((v, k) => Math.round(v + ((end[k] - v) * i) / 100))
+          );
+          if (
+            here.every(f => ratio(c, f.rgb) >= 3) &&
+            grounds.every(g => ratio(c, g) >= 4.5)
+          ) {
+            best = hex(c);
+            steps = i;
+            break;
+          }
+        }
+      for (const f of failing) {
+        const where = `${m}${f.type ? ` (type ${f.type})` : ''}`;
+        const key = `leak|button|${m}|${f.type}|${f.mode}`;
+        if (out.has(key)) continue;
+        out.set(key, {
+          key,
+          text: `your button color (${describe(x)}) also paints the close button in ${where}: it is ${ratio(color, f.rgb).toFixed(2)}:1 on the ${m}'s fill (${f.value}) in ${f.mode}, and an icon needs 3:1; no setting keeps the ${m}'s buttons apart${best ? '' : `, and no one button color reads on every ${m} and on the page`}`,
+          fix: best
+            ? `${P} set ${data.name} color '${best}' --on ${x.on}${x.only ? ' --only' : ''}${x.when ? ` --when ${x.when}` : ''}${x.mode || modes.length > 1 ? ` --mode ${scheme}` : ''}`
+            : null,
+        });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * The peak opacity Core's loading placeholder pulses to (Skeleton climbs
+ * from 0.25 to 0.925), and the contrast under which a placeholder at that
+ * peak cannot be told from what it sits on.
+ */
+const PLACEHOLDER_PEAK = 0.925;
+const PLACEHOLDER_SHOWS = 1.2;
+
+/**
+ * Whether a check is a note rather than a problem: what could not be
+ * measured, a failure the base theme draws itself (no line of the theme's
+ * makes it, and the base's own fix is its maker's), or a look worth a word
+ * that fails nothing (a check marked `note`).
+ * @param {{text: string, note?: boolean}} x
+ */
+export function isCheckNote(x) {
+  return (
+    Boolean(x.note) ||
+    x.text.startsWith('not checked') ||
+    x.text.startsWith("the base theme's ")
+  );
+}
+
+/**
+ * How close two button fills may look before a person cannot tell them
+ * apart at a glance: their OKLab distance.
+ */
+const LOOKS_ALIKE = 0.1;
+
+/**
+ * Loading placeholders (the parts that paint --color-skeleton) a person
+ * cannot see: under {@link PLACEHOLDER_SHOWS}:1 against the page or a
+ * card's surface at their pulse's peak, in a mode. A problem where the
+ * theme's own colors make it so, with the nearest placeholder color that
+ * shows on both; a note where the base theme draws it so itself.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {ThemeProblem[]}
+ */
+function placeholderProblems(ctx, data, res, base) {
+  const TOKEN = '--color-skeleton';
+  const parts = Object.keys(ctx.C.MAP).filter(t =>
+    (ctx.C.partReads(t, 'background') ?? []).some(r => r.token === TOKEN),
+  );
+  if (!parts.length) return [];
+  const modes = modesOf(data);
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  for (const m0 of modes) {
+    const m = /** @type {'light' | 'dark'} */ (m0);
+    const v = String(res[m][TOKEN] ?? '');
+    const c0 = parseColor(v);
+    const page = parseColor(String(res[m]['--color-background-body'] ?? ''));
+    const surface = parseColor(
+      String(res[m]['--color-background-surface'] ?? ''),
+    );
+    if (!c0 || !page) continue;
+    const grounds = /** @type {Array<[number, number, number]>} */ (
+      [page, surface].filter(Boolean)
+    );
+    const a = alphaOf(v) * PLACEHOLDER_PEAK;
+    /** @param {[number, number, number]} c */
+    const worst = c =>
+      Math.min(...grounds.map(g => ratio(compositeOver(c, a, g), g)));
+    const r = worst(c0);
+    if (r >= PLACEHOLDER_SHOWS) continue;
+    const same = [
+      TOKEN,
+      '--color-background-body',
+      '--color-background-surface',
+    ].every(k => String(res[m][k]) === String(base[m]?.[k]));
+    const what = `the loading placeholder (${parts.slice(0, 3).join(', ')}, ${TOKEN} ${v}) is ${r.toFixed(2)}:1 on the page${surface ? ' or a surface' : ''} in ${m} at its brightest`;
+    if (same) {
+      out.push({
+        key: `placeholder|base|${m}`,
+        text: `the base theme's ${what.slice(4)}, so it barely shows; the base theme draws it so`,
+        fix: null,
+      });
+      continue;
+    }
+    // The nearest color, toward black or white (whichever stands out on
+    // the page), that shows on the page and the surface at the peak.
+    const end = /** @type {[number, number, number]} */ (
+      parseColor(plainOn(page))
+    );
+    let fix = /** @type {string | null} */ (null);
+    for (let i = 0; i <= 100 && !fix; i++) {
+      const c = /** @type {[number, number, number]} */ (
+        c0.map((x, k) => Math.round(x + ((end[k] - x) * i) / 100))
+      );
+      if (worst(c) >= PLACEHOLDER_SHOWS) fix = hex(c);
+    }
+    out.push({
+      key: `placeholder|${m}`,
+      text: `${what}; a placeholder needs ${PLACEHOLDER_SHOWS}:1 to show`,
+      fix: fix
+        ? `${P} set ${data.name} ${TOKEN} '${fix}'${modes.length > 1 ? ` --mode ${m}` : ''}`
+        : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Text contrast for the primary button the button style draws (`buttons
+ * soft`: the accent's muted fill with accent text; `outline`: no fill, so
+ * its accent text sits on the page and on a card's surface), in each mode.
+ * A later color or fill setting on the primary button wins over the
+ * style's, in the order the settings come. Below 4.5:1 is a problem, fixed
+ * with the nearest color that reads on every ground it sits on there.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function buttonStyleProblems(ctx, data, res) {
+  let at = -1;
+  data.settings.forEach((x, i) => {
+    if (x.source === 'dial' && x.thing === 'buttons' && !x.on) at = i;
+  });
+  const style = at >= 0 ? data.settings[at] : null;
+  if (!style || !['soft', 'outline'].includes(String(style.value))) return [];
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  const drawn =
+    style.value === 'soft'
+      ? {fill: 'var(--color-accent-muted)', color: 'var(--color-text-accent)'}
+      : {fill: 'transparent', color: 'var(--color-text-accent)'};
+  /** A later setting of a property on the primary button, in a mode. @param {RegExp} thing @param {string} m */
+  const later = (thing, m) =>
+    [...data.settings.slice(at + 1)]
+      .reverse()
+      .find(
+        y =>
+          y.source === 'property' &&
+          thing.test(y.thing) &&
+          !y.state &&
+          (!y.mode || y.mode === m) &&
+          y.on &&
+          (!y.when || y.when === 'variant:primary') &&
+          partsOf(ctx, y).includes('button'),
+      ) ?? null;
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  for (const m0 of modes) {
+    const m = /** @type {'light' | 'dark'} */ (m0);
+    const page = parseColor(String(res[m]['--color-background-body']));
+    if (!page) continue;
+    const fillSet = later(/^background(-color)?$/, m);
+    const colorSet = later(/^color$/, m);
+    const fillValue = inMode(fillSet ? fillSet.value : drawn.fill, m);
+    const textValue = inMode(colorSet ? colorSet.value : drawn.color, m);
+    if (/gradient\(|url\(/.test(`${fillValue}${textValue}`)) continue;
+    const surface = parseColor(
+      String(res[m]['--color-background-surface'] ?? ''),
+    );
+    const under = /** @type {Array<[number, number, number]>} */ (
+      [page, surface].filter(Boolean)
+    );
+    const f0 = parseColor(fillValue);
+    const a = f0 ? alphaOf(fillValue) : 0;
+    const grounds = under.map(u => (f0 && a > 0 ? compositeOver(f0, a, u) : u));
+    const fg0 = parseColor(textValue);
+    if (!fg0 || !grounds.length) continue;
+    const worst = grounds
+      .map(g => ({g, r: ratio(compositeOver(fg0, alphaOf(textValue), g), g)}))
+      .sort((x, y) => x.r - y.r)[0];
+    if (worst.r >= 4.5) continue;
+    const fg = compositeOver(fg0, alphaOf(textValue), worst.g);
+    out.push({
+      key: `button-style|${style.value}|${m}`,
+      text: `text in button (variant primary, buttons ${style.value}) is ${worst.r.toFixed(2)}:1 in ${m} (${textValue} on ${fillValue === 'transparent' ? 'the page and surface' : fillValue}); text needs 4.5:1`,
+      fix: `${P} set ${data.name} color '${nearestReading(fg, grounds, 4.5)}' --on button --when variant:primary${modeFlag(m)}`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Text contrast for a part in one state or condition the theme styles on
+ * its own (a selected row's fill, an info banner's fill, a selected nav
+ * item's text color), which the census drew at rest: the part's text
+ * measured on its fill in that state or condition, in each mode. The fill
+ * is a fill the theme sets for it there, else the token its part data reads
+ * there (as the theme sets it on the part there, or resolves it), else its
+ * resting fill, else the page; the text likewise, else the theme's primary
+ * text. Below 4.5:1 is a problem, fixed with the nearest color that reads
+ * there, set on what draws the text, in that state or condition. Settings
+ * whose text or fill cannot be read as one color come back unmeasured.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {{problems: ThemeProblem[], unmeasured: Setting[]}}
+ */
+function scopedTextProblems(ctx, data, res) {
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  const FILL = /^background(-color)?$/;
+  /** @param {Setting} x */
+  const scopedColor = x =>
+    Boolean(
+      x.on &&
+      (x.state || (x.when && !/^variant:/.test(x.when))) &&
+      (/^(color|background|background-color)$/.test(x.thing) ||
+        /^--color-/.test(x.thing)),
+    );
+  /** @type {Map<string, ThemeProblem>} */
+  const out = new Map();
+  /** @type {Setting[]} */
+  const unmeasured = [];
+  /** @type {Set<string>} */
+  const done = new Set();
+  for (const x of data.settings.filter(scopedColor)) {
+    const st = x.state ? String(x.state) : null;
+    const when = st ? null : String(x.when);
+    for (const t of partsOf(ctx, x)) {
+      const scopeKey = `${t}|${st ?? ''}|${when ?? ''}`;
+      if (done.has(scopeKey)) continue;
+      done.add(scopeKey);
+      /** A part-data condition is this scope. @param {string} w */
+      const inScope = w => {
+        const terms = w.split(' ')[0].split(',');
+        return st
+          ? new RegExp(`(^|[\\s,])${st}=`).test(w)
+          : terms.includes(String(when).replace(':', '='));
+      };
+      /** A setting is on this part in this scope (or at rest), in a mode. @param {Setting} y @param {string} m @param {boolean} scoped */
+      const here = (y, m, scoped) =>
+        Boolean(y.on) &&
+        (!y.mode || y.mode === m) &&
+        (scoped
+          ? (y.state ?? null) === st && (st ? true : y.when === when)
+          : !y.state && !y.when) &&
+        partsOf(ctx, y).includes(t);
+      /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
+      const latest = (test, m) =>
+        [...data.settings].reverse().find(y => test(y) && here(y, m, true)) ??
+        [...data.settings].reverse().find(y => test(y) && here(y, m, false)) ??
+        null;
+      /** The value of a token on this part in this scope, in a mode. @param {string} tok @param {'light' | 'dark'} m */
+      const tokenValue = (tok, m) => {
+        const set = latest(y => y.source === 'token' && y.thing === tok, m);
+        return set ? inMode(set.value, m) : inMode(`var(${tok})`, m);
+      };
+      /** The part-data read for a group in this scope, else at rest. @param {string} group */
+      const readOf = group => {
+        const reads = ctx.C.partReads(t, group) ?? [];
+        return (
+          reads.find(r => r.when.some(inScope)) ??
+          reads.find(r => r.when.includes('')) ??
+          null
+        );
+      };
+      for (const m0 of modes) {
+        const m = /** @type {'light' | 'dark'} */ (m0);
+        const page = parseColor(String(res[m]['--color-background-body']));
+        if (!page) continue;
+        const fillSet = latest(
+          y => y.source === 'property' && FILL.test(y.thing),
+          m,
+        );
+        const fillRead = readOf('background');
+        const groundValue = fillSet
+          ? inMode(fillSet.value, m)
+          : fillRead
+            ? tokenValue(fillRead.token, m)
+            : String(res[m]['--color-background-body']);
+        const colorSet = latest(
+          y => y.source === 'property' && y.thing === 'color',
+          m,
+        );
+        const textRead = readOf('text');
+        const textToken = textRead?.token ?? '--color-text-primary';
+        const textValue = colorSet
+          ? inMode(colorSet.value, m)
+          : tokenValue(textToken, m);
+        if (/gradient\(|url\(/.test(`${groundValue}${textValue}`)) {
+          unmeasured.push(x);
+          continue;
+        }
+        const g0 = parseColor(groundValue);
+        const fg0 = parseColor(textValue);
+        if (!g0 || !fg0) {
+          unmeasured.push(x);
+          continue;
+        }
+        const ground = compositeOver(g0, alphaOf(groundValue), page);
+        const fg = compositeOver(fg0, alphaOf(textValue), ground);
+        const r = ratio(fg, ground);
+        if (r >= 4.5) continue;
+        const scope = st ? `--state ${st}` : `--when ${when}`;
+        const label = st ? st : String(when).replace(':', ' ');
+        const fix = nearestReading(fg, [ground], 4.5);
+        // What draws the text: a color set there, else the token the text
+        // reads, set on the part in that state or condition.
+        const thing = colorSet || !textRead ? 'color' : textToken;
+        const key = `scoped-text|${t}|${st ?? ''}|${when ?? ''}|${m}`;
+        out.set(key, {
+          key,
+          text: `text in ${t} (${label}) is ${r.toFixed(2)}:1 in ${m} (${textValue} on ${t}'s ${fillSet ? groundValue : fillRead ? fillRead.token : 'page'} there); text needs 4.5:1`,
+          fix: `${P} set ${data.name} ${thing} '${fix}' --on ${t} ${scope}${modeFlag(m)}`,
+        });
+      }
+    }
+  }
+  return {problems: [...out.values()], unmeasured};
 }
 
 /**
@@ -9943,7 +12060,9 @@ function stepText(text, cwd, radii) {
 }
 
 /** The file's own top-level fields. */
-const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
+const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted', 'palette'];
+/** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
+const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
 /**
  * What an entry as saved sets: its thing and scope, in any letters, so two
@@ -9975,7 +12094,8 @@ function topFieldNames(data) {
   /** @type {string[]} */
   const notes = [];
   for (const k of Object.keys(data)) {
-    const field = TOP_FIELDS.find(f => f === k.trim().toLowerCase());
+    const lower = k.trim().toLowerCase();
+    const field = TOP_FIELDS.find(f => f === lower) ?? TOP_FIELD_WORDS[lower];
     if (!field || field === k) continue;
     if (field in data) {
       if (
@@ -10001,7 +12121,18 @@ function topFieldNames(data) {
     data[field] = data[k];
     delete data[k];
     notes.push(
-      `the settings file writes "${k}" in other letters, read as ${field}`,
+      TOP_FIELD_WORDS[lower]
+        ? `the settings file writes the ${lower} as "${k}", read as ${field}`
+        : `the settings file writes "${k}" in other letters, read as ${field}`,
+    );
+  }
+  // A field the editor does not read (`theme`, `modes`) is not used, and
+  // said, with the field it is a typo of.
+  for (const k of Object.keys(data)) {
+    if (TOP_FIELDS.includes(k)) continue;
+    const near = TOP_FIELDS.filter(f => typoNear(k.trim().toLowerCase(), f));
+    notes.push(
+      `the settings file has "${k}", a field the editor does not read${near.length === 1 ? ` (it reads "${near[0]}")` : ''}, so it is not used`,
     );
   }
   return notes;
@@ -10377,6 +12508,23 @@ export function stateKey(state, wrapsControl = false) {
  * button): set names each as a state, and the build writes it as the
  * attribute.
  */
+/**
+ * The states a pointer or the keyboard puts a part in for a moment (hover,
+ * focus, a press), as against the conditions a part holds (checked,
+ * selected, disabled, invalid, open). Two moment states said together
+ * ("hovered and pressed buttons") are each one; a list with a condition in
+ * it ("the checked and disabled checkboxes") is the part in all of them at
+ * once.
+ */
+export const MOMENT_STATES = [
+  'hover',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'active',
+  'pressed',
+];
+
 export const ARIA_STATES = {
   current: {
     attr: 'aria-current',
@@ -10469,33 +12617,76 @@ export function partState(ctx, part, state) {
 }
 
 /**
- * Read each saved entry's state on a part as `set` reads a typed one: each
- * of its pieces in the part's own spelling (toggle-button's `is-pressed` or
- * `ispressed` is its isPressed), in place, with a note; the next change
- * saves it that way. The loader reads only what needs no census (case, a
- * colon, a CSS state's words); this is the census half of the one state
- * reader, which the saved-setting check and the build both run.
+ * A saved entry's state on a part as `set` reads a typed one: each of its
+ * pieces in the part's own spelling (toggle-button's `is-pressed` or
+ * `ispressed` is its isPressed), or null when it reads as no state of the
+ * part or as itself. The census half of the one state reader (the loader
+ * reads what needs no census: case, a colon, a CSS state's words): the
+ * saved-setting check and the build read the state through it, and leave
+ * the entry as saved, so a build stamped from the settings matches the
+ * file; a change saves the read state (readSavedStates).
+ * @param {Ctx} ctx
+ * @param {any} s
+ * @returns {string | null}
+ */
+export function savedStateRead(ctx, s) {
+  if (
+    !s ||
+    typeof s.on !== 'string' ||
+    typeof s.state !== 'string' ||
+    !ctx.project.target.has(s.on)
+  )
+    return null;
+  const read = partState(ctx, s.on, s.state);
+  const states = partStates(ctx, s.on);
+  return read.split('+').every(p => states.includes(p)) ? read : null;
+}
+
+/**
+ * Read each saved entry's state on a part in place, as savedStateRead
+ * reads it, with a note: what a change does before it saves the settings,
+ * so the file then holds the part's own spelling.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  */
 export function readSavedStates(ctx, data) {
   for (const s of data.settings ?? []) {
-    if (
-      !s ||
-      typeof s.on !== 'string' ||
-      typeof s.state !== 'string' ||
-      !ctx.project.target.has(s.on)
-    )
-      continue;
-    const read = partState(ctx, s.on, s.state);
-    const states = partStates(ctx, s.on);
-    if (read === s.state || !read.split('+').every(p => states.includes(p)))
-      continue;
+    const read = savedStateRead(ctx, s);
+    const was = SAVED_STATE.get(s) ?? s?.state;
+    // (A state the loader put in its words, `selected + hover`, is noted
+    // here too, with its spelling as saved.)
+    if (!read || (read === s.state && was === s.state)) continue;
+    if (!LOADED_STATE.has(s)) LOADED_STATE.set(s, String(s.state));
     ENTRY_NOTES.get(data)?.push(
-      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(SAVED_STATE.get(s) ?? s.state)}, read as ${read}`,
+      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(was)}, read as ${read}`,
     );
     s.state = read;
   }
+}
+
+/**
+ * The state an entry had as the theme was loaded, before readSavedStates
+ * read it as the part's own; the stamp of a build is the settings as loaded,
+ * so a build that only reads them (show) matches the file it read, and a
+ * change that writes them forgets it (commitTheme), as the file then holds
+ * the part's spelling.
+ * @type {WeakMap<object, string>}
+ */
+const LOADED_STATE = new WeakMap();
+
+/**
+ * The settings as they were loaded: each state readSavedStates read put
+ * back as the loader read it.
+ * @param {ThemeData} data
+ * @returns {ThemeData}
+ */
+function loadedForm(data) {
+  return {
+    ...data,
+    settings: data.settings.map(s =>
+      LOADED_STATE.has(s) ? {...s, state: LOADED_STATE.get(s)} : s,
+    ),
+  };
 }
 
 /**
@@ -10553,13 +12744,20 @@ export function innerTextTokens(C, part, deep = false) {
     for (const inner of rec?.contains ?? []) {
       const r = C.MAP[inner];
       add(r?.inside);
-      // A part's own color counts where it reads the token always, not
-      // only in a variant or a state.
+      // A part's own color counts where it reads the token always, or for
+      // a look of its own (a heading or a text's color role, `color=primary`
+      // beside its level), never only in a state.
       for (const [tok, conds] of Object.entries(r?.own?.color?.tokens ?? {}))
         if (
           TEXT_ROLES.includes(tok) &&
           /** @type {string[]} */ (conds).some(
-            w => !w.trim() || w.trim() === 'always',
+            w =>
+              !w.trim() ||
+              w.trim() === 'always' ||
+              (!/\s/.test(w.trim()) &&
+                !/(?:^|,)(?:disabled|selected|checked|readonly|aria-[\w-]+|status)=/.test(
+                  w,
+                )),
           )
         )
           out.add(tok);
@@ -10991,8 +13189,14 @@ export function refuseLinks(cwd, slug) {
   // replaced: that one picture is skipped and named (`pictures`), so it
   // refuses nothing here.
   const recorded = readWrittenRecord(cwd, slug);
+  // A link at a page's name (preview.html, the sheets) or at the record of
+  // pictures is left alone the same way: that page or picture is not made,
+  // and the result names it.
   const own = (/** @type {string} */ n) =>
-    (isEditorFile(slug, n, recorded) && !n.endsWith('.png')) ||
+    (isEditorFile(slug, n, recorded) &&
+      !n.endsWith('.png') &&
+      !isEditorPage(n, recorded) &&
+      n !== `${slug}.pictures.json`) ||
     n === `${slug}.theme.ts` ||
     n === 'tokens';
   /** @type {string[]} */
@@ -11026,7 +13230,7 @@ export function refuseLinks(cwd, slug) {
 export function settingsStamp(data) {
   // The settings as the file keeps them, so the stamp of a build matches
   // the file it was built from.
-  const saved = savedForm(data);
+  const saved = savedForm(loadedForm(data));
   const hash = createHash('sha256')
     .update(
       JSON.stringify({
@@ -11311,6 +13515,78 @@ export function readHistory(file) {
 }
 
 /**
+ * The custom properties a built stylesheet sets on its parts, by rule: the
+ * selector and the property, with the value. The theme's own scope
+ * (`:scope`, `:root`) is left out: resolvedTokens reads it.
+ * @param {string | null} css
+ * @returns {Map<string, string>}
+ */
+function partTokenValues(css) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  if (!css) return out;
+  try {
+    postcss.parse(css).walkRules(rule => {
+      if (/^(?::scope|:root|html\b)/.test(rule.selector.trim())) return;
+      rule.each(node => {
+        if (node.type === 'decl' && node.prop.startsWith('--'))
+          out.set(`${rule.selector}\u0000${node.prop}`, node.value);
+      });
+    });
+  } catch {
+    // A stylesheet that does not parse lists no part token changes.
+  }
+  return out;
+}
+
+/**
+ * Each part token whose built value changed between two stylesheets, as a
+ * changedTokens line: the property, the rule it is set on, and each mode
+ * whose half moved (the theme's own mode first).
+ * @param {string | null} before
+ * @param {string | null} after
+ * @param {Array<'light' | 'dark'>} modes the modes the theme has
+ * @returns {string[]}
+ */
+function partTokenChanges(before, after, modes) {
+  if (!before || !after) return [];
+  const was = partTokenValues(before);
+  const now = partTokenValues(after);
+  /** @param {string | undefined} v */
+  const halves = v => {
+    const m = /^light-dark\(([\s\S]*)\)$/i.exec(String(v ?? '').trim());
+    const parts = m ? splitTop(m[1], ',').map(x => x.trim()) : null;
+    return parts && parts.length === 2
+      ? {light: parts[0], dark: parts[1]}
+      : {light: v, dark: v};
+  };
+  /** @type {Array<'light' | 'dark'>} */
+  const order = modes.includes('light') ? ['light', 'dark'] : ['dark', 'light'];
+  /** @type {string[]} */
+  const out = [];
+  for (const key of new Set([...was.keys(), ...now.keys()])) {
+    const a = was.get(key);
+    const b = now.get(key);
+    if (String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase())
+      continue;
+    const [selector, prop] = key.split('\u0000');
+    const where = selector.replace(/\.astryx-/g, '').replace(/\s+/g, ' ');
+    const [ha, hb] = [halves(a), halves(b)];
+    const sides = order.filter(
+      m =>
+        String(ha[m] ?? '').toLowerCase() !== String(hb[m] ?? '').toLowerCase(),
+    );
+    const one =
+      sides.length === 2 && ha.light === ha.dark && hb.light === hb.dark;
+    for (const m of one ? [order[0]] : sides)
+      out.push(
+        `${prop} on ${where}${one ? '' : ` (${m})`}: ${ha[m] ?? 'unset'} -> ${hb[m] ?? 'unset'}`,
+      );
+  }
+  return out;
+}
+
+/**
  * Write the settings, build, and on a failed build put back what was there.
  * Returns what changed in the resolved tokens and the lifted keys that are
  * new since the last build.
@@ -11331,6 +13607,9 @@ export async function commitTheme(
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
   await refuseThemeSource(cwd, slug);
+  // The settings are written as they are now read (a saved state in the
+  // part's own spelling): the build is stamped with what is written.
+  for (const s of data.settings) LOADED_STATE.delete(s);
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
@@ -11366,6 +13645,7 @@ export async function commitTheme(
   if (noop && fs.existsSync(f.js) && !stale)
     return {
       changed: [],
+      changedParts: [],
       res: {light: {}, dark: {}},
       problems: [],
       problemList: [],
@@ -11397,6 +13677,15 @@ export async function commitTheme(
     notes.push(
       `there was no last build (${path.basename(f.js)} is missing), so the token changes are not listed; the theme is built again`,
     );
+  /** The built stylesheet the change is measured against. */
+  const cssNow = () => {
+    try {
+      return fs.readFileSync(f.css, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  let cssBefore = snapBefore && !staleBefore ? cssNow() : null;
   let resBefore =
     snapBefore && fs.existsSync(f.js) && !staleBefore
       ? await resolvedTokens(ctx, slug).catch(() => {
@@ -11489,6 +13778,7 @@ export async function commitTheme(
     // is measured against what they show.
     if (staleBefore && saved) {
       await buildTheme(ctx, slug, saved);
+      cssBefore = cssNow();
       resBefore = await resolvedTokens(ctx, slug).catch(() => {
         notes.push(
           `the last build (${path.basename(f.js)}) could not be read, so the token changes are not listed; the theme is built again`,
@@ -11642,6 +13932,8 @@ export async function commitTheme(
   /** @type {string[]} */
   const changed = [];
   /** @type {string[]} */
+  const changedParts = [];
+  /** @type {string[]} */
   let problems = [];
   /** @type {ThemeProblem[]} */
   let problemList = [];
@@ -11656,7 +13948,13 @@ export async function commitTheme(
         String(a).toLowerCase() === String(b).toLowerCase();
       // Both modes are compared: a theme that becomes one-mode changes what
       // the other mode's visitors see, though it no longer has that mode.
-      for (const m of /** @type {const} */ (['light', 'dark'])) {
+      // (The theme's own mode comes first: a dark-only theme lists its
+      // dark changes before the light ones.)
+      /** @type {Array<'light' | 'dark'>} */
+      const order = modes.includes('light')
+        ? ['light', 'dark']
+        : ['dark', 'light'];
+      for (const m of order) {
         const own = modes.includes(m);
         for (const k of Object.keys(res[m])) {
           // A change of letter case alone (#FFFFFF, #ffffff) is no change.
@@ -11679,12 +13977,13 @@ export async function commitTheme(
         }
       }
     }
+    // A token the built stylesheet sets on a part (a readable text color
+    // on a selected row, a dropzone) moves with the dials too: each one
+    // whose built value changed is listed, by its rule, in each mode.
+    if (resBefore)
+      changedParts.push(...partTokenChanges(cssBefore, cssNow(), modes));
     const found = await contrastProblems(ctx, data, res);
-    // What cannot be measured is a note, not a problem.
-    notes.push(
-      ...found.filter(x => x.text.startsWith('not checked')).map(x => x.text),
-    );
-    problemList = found.filter(x => !x.text.startsWith('not checked'));
+    problemList = found.filter(x => !isCheckNote(x));
     problems = problemList.map(x => x.text);
     // The problems this change made: the ones the settings before it did
     // not have, measured the same way.
@@ -11695,11 +13994,24 @@ export async function commitTheme(
           )
         : new Set();
     newProblems = problemList.filter(x => !had.has(x.key));
+    // What cannot be measured is a note, not a problem; a failure the base
+    // theme draws itself is said when this change brings it (show says it
+    // every time), not after every change.
+    notes.push(
+      ...found
+        .filter(
+          x =>
+            isCheckNote(x) &&
+            (x.text.startsWith('not checked') || !had.has(x.key)),
+        )
+        .map(x => x.text),
+    );
   } catch (e) {
     ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   return {
     changed,
+    changedParts,
     res,
     problems,
     problemList,
@@ -11708,6 +14020,10 @@ export async function commitTheme(
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
     notes,
     unchanged: false,
+    // The theme and its tokens before this change, for what a caller says
+    // of the change against them.
+    before,
+    resBefore,
   };
 }
 
