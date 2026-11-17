@@ -57,7 +57,15 @@ owns response fields and compatibility.
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind; between runs, the lexical order holds,
-  including its domain priority.
+  including its domain priority. Inside a run, a family's root leads a part of
+  its own family when the part answers no query word the root does not, and no
+  query word, in any plural or stem form, is a word of the part's name that
+  does not start a word of the root's name. Among matches of the first
+  result's domain that tie with it on score and on the query words they
+  matched, the match whose own name holds more query words leads. A first
+  result that matched the whole query (a name, keyword, or title hit), or
+  whose title the query holds, keeps its place, and a part of the first result
+  never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
   ranker's answer unchanged.
@@ -125,12 +133,16 @@ owns response fields and compatibility.
   that would come last is left out. That command is the only suggestion when
   the list is otherwise empty, and, for docs, when no route it suggests shares
   a word with the argument. A component error for an example block keeps its
-  suggestions, since its message already names `astryx template`. A name that
-  resolves keeps resolving to the same entry, except `tag-list`: a keyword in
-  OverflowList's doc and one slip from TabList, it does not resolve, and its
-  list gives OverflowList first, then TabList. A component's exact name in
-  another case is that component's: a module that only shares its spelling
-  never resolves for it. Which candidates fill a component list and the order
+  suggestions, since its message already names `astryx template`. A keyword is
+  a word to find a component by, not another name for it: `astryx component`
+  resolves a name only by its file name or by a component's exact name in any
+  case, and never by a keyword. A name that is exactly one component's keyword,
+  where no other Core component matches within 20 points, does not resolve: it
+  gets the unknown-component error, and that component is its first
+  suggestion, ahead of any other command, in a list no longer than the
+  component list. Every other name that resolves keeps resolving to the same
+  entry. A component's exact name in another case is that component's: a
+  module that only shares its spelling never resolves for it. Which candidates fill a component list and the order
   of every list change only under FR6, measured on the held-out and fresh
   failed-lookup evaluation sets. FR5 holds for this order.
 

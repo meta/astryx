@@ -92,6 +92,9 @@
  *   | 'ERR_SIGNAL_TERMINATED'
  *   | 'ERR_VERSIONS_UNAVAILABLE'
  *   | 'ERR_PROJECT_REQUIRED'
+ *   | 'ERR_BASE_CAPABILITY'
+ *   | 'ERR_BASE_NOT_FOUND'
+ *   | 'ERR_BASE_AMBIGUOUS'
  *   | 'ERR_RENDER_COMPILE'
  *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
  *   | 'ERR_RENDER_MISSING_DEPENDENCY'
@@ -102,6 +105,7 @@
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
  *   | 'ERR_RENDER_NEWER_FORMAT'
+ *   | 'ERR_RENDER_SCRIPT'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -283,6 +287,24 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_PROJECT_REQUIRED: 'ERR_PROJECT_REQUIRED',
 
+  // ── Bases ────────────────────────────────────────────────────────
+  /**
+   * The command, or an option or argument value given to it, needs a step
+   * the run's base does not serve. Nothing was written. The envelope's
+   * `requirement` names the command, the steps, and the base.
+   */
+  ERR_BASE_CAPABILITY: 'ERR_BASE_CAPABILITY',
+  /**
+   * `--base` names a package that is not installed where the run can read
+   * it, or that is not Core and does not declare `base`. Nothing was done.
+   */
+  ERR_BASE_NOT_FOUND: 'ERR_BASE_NOT_FOUND',
+  /**
+   * The project installs two or more bases and no Core, and the run named
+   * none with `--base`. Nothing was done.
+   */
+  ERR_BASE_AMBIGUOUS: 'ERR_BASE_AMBIGUOUS',
+
   // ── Render (experimental) ────────────────────────────────────────
   /**
    * The page given to `astryx experimental render` does not compile (a syntax
@@ -294,8 +316,9 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_NO_DEFAULT_EXPORT: 'ERR_RENDER_NO_DEFAULT_EXPORT',
   /**
-   * The page imports a package that is not installed where the page is.
-   * Nothing was written.
+   * The page imports a package that is not installed where the page is, or
+   * the esbuild the CLI depends on to build the page's script is missing from
+   * the CLI's install. Nothing was written.
    */
   ERR_RENDER_MISSING_DEPENDENCY: 'ERR_RENDER_MISSING_DEPENDENCY',
   /**
@@ -341,6 +364,12 @@ export const ERROR_CODES = Object.freeze({
    * wrote the file, which reads it.
    */
   ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
+  /**
+   * `render` could not build the page's script for the browser: a module
+   * the page loads needs Node (`fs`, `path`), or cannot be found or compiled
+   * for the browser. Nothing was written. The message names the module.
+   */
+  ERR_RENDER_SCRIPT: 'ERR_RENDER_SCRIPT',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

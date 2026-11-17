@@ -26,6 +26,17 @@ import {CLI_ROOT} from '../fs/paths.mjs';
 export const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
 
 /**
+ * The section the project's icon set adds to the `icons` topic. The project
+ * reads it only where it has an icon set (config/project.mjs docs).
+ */
+export const INSTALLED_ICON_SET_DOC = path.join(
+  CLI_ROOT,
+  'assets',
+  'icons',
+  'installed-icon-set.doc.mjs',
+);
+
+/**
  * A built-in topic file: `{topic}.doc.mjs`. Anchored at both ends so a
  * localization overlay (`{topic}.doc.zh.mjs`) is not read as a topic of its
  * own — it is loaded by the topic it overlays. A docs tree file is named the

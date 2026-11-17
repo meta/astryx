@@ -27,6 +27,7 @@ export default function BreadcrumbsCustomSeparator() {
             {label}
           </Text>
           <Breadcrumbs
+            label={`Breadcrumb, ${label} separator`}
             separator={
               needsRtlMirror ? (
                 <span {...stylex.props(rtlStyles.mirror)}>{char}</span>

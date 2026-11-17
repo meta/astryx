@@ -9,14 +9,20 @@
  * @position Theme hook; used by data viz, canvas, and non-CSS consumers
  *
  * Provides synchronous access to theme token values resolved for the
- * current color mode — no DOM reads on the provider path, no double render.
- * The returned `mode` is always 'light' | 'dark': 'system', and any value
- * outside the union, resolves through the OS preference.
+ * current color mode, with no double render. The returned `mode` is always
+ * 'light' | 'dark'. 'system', and any value outside the union, resolves the
+ * way a system Theme's CSS does: to the scheme the page draws in (the one
+ * the page root names, such as a host that draws the page dark, else the one
+ * the page's color-scheme meta names, else light), and to the OS preference
+ * when that names both; under a Theme that forces light or dark, to the OS
+ * preference.
  * Without a reachable ThemeContext it consults `<html data-theme>` and
  * `<html data-astryx-theme>` (kept in sync by Theme) via shared, refcounted
- * MutationObservers before assuming OS preference/default tokens. Provider-path
- * consumers subscribe to no-op stores instead, so mounting under a Theme never
- * creates an observer. Token resolution is shared with the server-safe helpers
+ * MutationObservers before assuming OS preference/default tokens. A consumer
+ * that reads a forced mode subscribes to no-op stores and creates no observer.
+ * A consumer that resolves `system` under no forced Theme shares one more
+ * observer, of the page root's scheme. Each observer runs only while a
+ * consumer listens. Token resolution is shared with the server-safe helpers
  * in ./tokens.ts.
  *
  * SYNC: When modified, update:
@@ -30,7 +36,9 @@ import {resolveThemeTokens} from './tokens';
 import {getRegisteredTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {watchMediaQuery} from '../utils/coarsePointer';
 import {createSharedContext} from '../utils/sharedContext';
+import {sharedState} from '../utils/sharedRealm';
 
 // =============================================================================
 // Context
@@ -58,6 +66,18 @@ export const ThemeContext = createSharedContext<ThemeContextValue | null>(
   null,
 );
 ThemeContext.displayName = 'ThemeContext';
+
+/**
+ * What a `system` mode follows here: the page root's scheme, or the OS
+ * preference below a Theme that forces light or dark. Theme provides it.
+ * @internal Not exported from the theme barrel.
+ */
+export const SystemSchemeContext = createSharedContext<'root' | 'preference'>(
+  'SystemSchemeContext',
+  1,
+  'root',
+);
+SystemSchemeContext.displayName = 'SystemSchemeContext';
 
 // =============================================================================
 // Return type
@@ -199,6 +219,191 @@ function subscribeNoop(): () => void {
   return () => {};
 }
 
+// A system consumer under no forced Theme resolves the way a system Theme's
+// CSS does: from the one scheme the page root names, such as a host's
+// `color-scheme: dark`. One observer serves them all, and it runs only while
+// one listens. Every copy of Core on the page shares the listeners and the
+// observer's `stop`, so the last copy to unsubscribe stops what the first
+// started.
+const rootScheme = sharedState(
+  'theme/use-theme/root-scheme',
+  1,
+  (): {listeners: Set<() => void>; stop: (() => void) | null} => ({
+    listeners: new Set(),
+    stop: null,
+  }),
+);
+
+const STYLE_NODES = 'style, link[rel~="stylesheet"]';
+/** The meta element that names the schemes a page supports. */
+const SCHEME_META = 'meta[name="color-scheme" i]';
+
+/**
+ * `light` or `dark` for schemes that name only that one, null for schemes
+ * that name both (the reader's preference decides), and undefined for none.
+ */
+function oneScheme(schemes: string): 'light' | 'dark' | null | undefined {
+  const names = schemes.toLowerCase().split(/\s+/);
+  const light = names.includes('light');
+  const dark = names.includes('dark');
+  if (light && dark) {
+    return null;
+  }
+  if (light || dark) {
+    return dark ? 'dark' : 'light';
+  }
+  return undefined;
+}
+
+/**
+ * The scheme the page draws in, as the browser picks it: the root's
+ * `color-scheme` when it names one or both, else the page's
+ * `<meta name="color-scheme">`, else light. `light` or `dark` when that names
+ * one scheme; null when it names both, so the reader's preference decides,
+ * or when the engine reports no scheme.
+ */
+function getRootSchemeSnapshot(): 'light' | 'dark' | null {
+  const declared: string | undefined = window.getComputedStyle(
+    document.documentElement,
+  ).colorScheme;
+  if (declared == null || declared === '') {
+    return null;
+  }
+  if (declared !== 'normal') {
+    return oneScheme(declared) ?? null;
+  }
+  // The first meta whose content names a scheme decides, as in a browser.
+  for (const meta of document.querySelectorAll(SCHEME_META)) {
+    const content = meta.getAttribute('content') ?? '';
+    const fromMeta = oneScheme(content);
+    if (fromMeta !== undefined) {
+      return fromMeta;
+    }
+    if (/(^|\s)normal(\s|$)/i.test(content)) {
+      return 'light';
+    }
+  }
+  return 'light';
+}
+
+/**
+ * Whether a change can change the root's scheme: one of the root's
+ * attributes, the text of a style element, an attribute of a style, link or
+ * meta element (`href`, `media`, `disabled`, `rel`, `name`, `content`), or a
+ * style, stylesheet link or color-scheme meta that came or went in the head.
+ */
+function changesRootScheme(records: MutationRecord[]): boolean {
+  return records.some(record => {
+    const target = record.target;
+    if (target === document.documentElement) {
+      return true;
+    }
+    const element = target instanceof Element ? target : target.parentElement;
+    if (element?.closest('style') != null) {
+      return true;
+    }
+    if (record.type === 'attributes') {
+      return element?.matches('link, style, meta') === true;
+    }
+    const watched = `${STYLE_NODES}, ${SCHEME_META}`;
+    return [...record.addedNodes, ...record.removedNodes].some(
+      node =>
+        node instanceof Element &&
+        (node.matches(watched) || node.querySelector(watched) != null),
+    );
+  });
+}
+
+function notifyRootSchemeChange(): void {
+  for (const listener of rootScheme.listeners) {
+    listener();
+  }
+}
+
+function notifyRootSchemeListeners(records: MutationRecord[]): void {
+  if (changesRootScheme(records)) {
+    notifyRootSchemeChange();
+  }
+}
+
+/**
+ * A linked stylesheet applies when it loads, after its element is in the
+ * head, so its load reads the root again. Load does not bubble; a capturing
+ * listener on the document hears it.
+ */
+function onStylesheetLoad(event: Event): void {
+  if (event.target instanceof HTMLLinkElement) {
+    notifyRootSchemeChange();
+  }
+}
+
+function subscribeRootScheme(onStoreChange: () => void): () => void {
+  rootScheme.listeners.add(onStoreChange);
+  if (
+    rootScheme.listeners.size === 1 &&
+    typeof MutationObserver !== 'undefined'
+  ) {
+    const observer = new MutationObserver(notifyRootSchemeListeners);
+    observer.observe(document.documentElement, {attributes: true});
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['href', 'media', 'disabled', 'rel', 'name', 'content'],
+    });
+    document.addEventListener('load', onStylesheetLoad, true);
+    // A root whose color-scheme follows the reader through a media query
+    // changes with the reader's preference, with no DOM change.
+    const stopPreference = watchMediaQuery(
+      window,
+      '(prefers-color-scheme: dark)',
+      notifyRootSchemeChange,
+    );
+    rootScheme.stop = () => {
+      observer.disconnect();
+      document.removeEventListener('load', onStylesheetLoad, true);
+      stopPreference();
+    };
+  }
+  return () => {
+    rootScheme.listeners.delete(onStoreChange);
+    if (rootScheme.listeners.size === 0 && rootScheme.stop != null) {
+      rootScheme.stop();
+      rootScheme.stop = null;
+    }
+  };
+}
+
+/**
+ * The one scheme the page draws in (the root's, else its color-scheme meta,
+ * else light), or null when the reader's preference decides. With `watch` false it reads nothing and subscribes to nothing. Server
+ * rendering reads null, so it resolves the OS preference as before.
+ */
+export function useRootScheme(watch: boolean): 'light' | 'dark' | null {
+  return useSyncExternalStore(
+    watch ? subscribeRootScheme : subscribeNoop,
+    watch ? getRootSchemeSnapshot : getNullThemeSnapshot,
+    getNullThemeSnapshot,
+  );
+}
+
+/**
+ * The scheme a Theme of `mode` draws in: `light` or `dark` as forced, else
+ * the scheme the page draws in (the root's, else its color-scheme meta), else
+ * the reader's preference. With `watchRoot` false it reads the preference
+ * alone and subscribes to no document change.
+ */
+function useResolvedScheme(
+  mode: ThemeMode,
+  watchRoot: boolean,
+): 'light' | 'dark' {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const forced = mode === 'light' || mode === 'dark';
+  const rootScheme = useRootScheme(!forced && watchRoot);
+  return forced ? mode : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
+}
+
 /**
  * Reads the root Theme's mode off `<html data-theme>`, live via the shared
  * MutationObserver. Null means no root Theme has synced it (none present,
@@ -264,9 +469,11 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  * (e.g. Vega, D3, Chart.js) that need concrete values rather than
  * CSS custom property references.
  *
- * When called outside a <Theme> provider, resolves mode from the root
- * Theme's `<html data-theme>` when one is present, falling back to the
- * current system color mode otherwise.
+ * Under a `system` Theme, the mode is the scheme the page draws in: the
+ * root's `color-scheme`, else the page's color-scheme meta, else light, and
+ * the system color mode when that names both. When called outside a <Theme>
+ * provider, resolves mode from the root Theme's `<html data-theme>` when one
+ * is present, falling back to the current system color mode otherwise.
  *
  * @example
  * ```
@@ -283,6 +490,7 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  */
 export function useTheme(): UseThemeReturn {
   const ctx = use(ThemeContext);
+  const systemScheme = use(SystemSchemeContext);
 
   // Falls back to the root Theme's mode via <html data-theme> when there's
   // no ThemeContext ancestor (e.g. useToast's detached fallback viewport).
@@ -291,17 +499,13 @@ export function useTheme(): UseThemeReturn {
   const rootAttrMode = useRootModeAttr(hasCtx);
   const rootThemeName = useRootThemeNameAttr(hasCtx);
 
-  // Resolve 'system' to 'light' | 'dark' using the OS preference
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-
   const mode = ctx?.mode ?? rootAttrMode ?? 'system';
   const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
 
   // Anything outside light|dark (a stale persisted preference cast to
   // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
   // sync already treats it, so the declared return type holds.
-  const effectiveMode: 'light' | 'dark' =
-    mode === 'light' || mode === 'dark' ? mode : prefersDark ? 'dark' : 'light';
+  const effectiveMode = useResolvedScheme(mode, systemScheme === 'root');
 
   // Build the full resolved map, memoized on theme + effective mode
   const tokens = useMemo(
