@@ -2421,6 +2421,34 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
   }, 60_000);
 
+  it('names every file it leaves out in the note and notCarried, whatever the reason', () => {
+    const tree = path.join(away, 'left-out');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'rows.test.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(path.join(tree, 'fake.png'), 'console.log(1)\n');
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {rows} from './rows.test';\nimport cfg from './chart.config.json';\nexport default function Page() {\n  return <main><h1>{cfg.title}</h1><p>{rows.join(' ')}</p><img src=\"fake.png\" alt=\"\" /></main>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect([...run.json.data.notCarried].sort()).toEqual(['chart.config.json', 'fake.png', 'rows.test.ts']);
+    const codes = run.json.data.warnings.map((/** @type {any} */ w) => w.code);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-carried')).toHaveLength(1);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-embedded')).toHaveLength(2);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    const line = note.split('\n').find(l => l.trim().startsWith('Not carried:'));
+    expect(line?.trim().replace(/^Not carried: | \(--reverse cannot give them back\)$/g, '').split(', ').sort()).toEqual([
+      'chart.config.json',
+      'fake.png',
+      'rows.test.ts',
+    ]);
+    expect(note).not.toContain('come back exactly');
+  }, 60_000);
+
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
     const tree = path.join(away, 'config-renamed');
     fs.mkdirSync(tree, {recursive: true});

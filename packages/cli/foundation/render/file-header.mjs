@@ -41,7 +41,7 @@ const MAX_LISTED = 24;
  * @property {string} page - The page's path from its project's root; outside a project, its path among the files it carries.
  * @property {string} restored - Where --reverse writes the page by default, from the rendered file's folder.
  * @property {string[]} files - The embedded files, page first.
- * @property {string[]} [notCarried] - Files the page imports that the file does not carry.
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry.
  * @property {Record<string, string>} packages - The packages the page rendered with, by name: their versions.
  * @property {string[]} install - What a render outside a project must install first, as name@version.
  * @property {string} [title] - The title given with --title.

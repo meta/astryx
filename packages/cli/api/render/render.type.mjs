@@ -52,7 +52,7 @@
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
- * @property {string[]} [data.notCarried] - Files the page imports that the file does not carry because their names read as a tool's configuration, so --reverse cannot give them back. Present only when there are some.
+ * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder, or an image it cannot carry. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */

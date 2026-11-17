@@ -67,7 +67,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
- * @property {string[]} [notCarried] - Files the page imports that the file does not carry because their names read as a tool's configuration; present only when there are some.
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back (each also has a warning); present only when there are some.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -1414,13 +1414,17 @@ export async function renderPage(entry, options = {}) {
   const ordered = [entry, ...files.filter(f => f !== entry)];
   /** @type {{path: string, bytes: Buffer}[]} */
   const embedded = [];
-  /** Imported files left out because their names read as configuration. @type {string[]} */
-  const configNamed = [];
+  /**
+   * Files the page uses that the file does not carry, so --reverse cannot
+   * give them back: the note and the result name each one.
+   * @type {string[]}
+   */
+  const leftOut = [];
   for (const f of ordered) {
     const rel = path.relative(base, f).split(path.sep).join('/');
     const problem = f === entry ? null : embeddedPathProblem(rel);
+    if (problem) leftOut.push(rel);
     if (problem?.toolConfig) {
-      configNamed.push(rel);
       warnings.push({
         code: 'not-carried',
         message: `${rel} is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. Rename it, such as ${carriedNameFor(path.basename(f))}, to carry it.`,
@@ -1435,6 +1439,9 @@ export async function renderPage(entry, options = {}) {
       continue;
     }
     embedded.push({path: rel, bytes: fs.readFileSync(f)});
+  }
+  for (const asset of notCarried) {
+    leftOut.push(path.relative(base, asset).split(path.sep).join('/'));
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
     .exec(markup)?.[1]
@@ -1506,7 +1513,7 @@ export async function renderPage(entry, options = {}) {
         : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
-      notCarried: configNamed,
+      notCarried: leftOut,
       packages,
       install: Object.entries(packages)
         .filter(([name]) => !isServedPackage(name, []))
@@ -1571,7 +1578,7 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
-    ...(configNamed.length > 0 ? {notCarried: configNamed} : {}),
+    ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
   };
