@@ -280,8 +280,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (Core's stylesheet and reset.css default the
- *   root to color-scheme: light dark)
+ * - 'system' → removes data-theme (reset.css defaults the root to
+ *   color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -380,8 +380,8 @@ export function Theme({
   useRootTextSizeSync(isNested);
 
   // A system Theme takes the scheme around it. That is the page root's, or a
-  // system Theme's above it. Core's stylesheet and reset.css make the root
-  // follow the reader's preference, and a host can set its own. Under a Theme
+  // system Theme's above it. reset.css makes the root follow the reader's
+  // preference, and a host can set its own; with neither, the page is light. Under a Theme
   // that forces light or dark, a system Theme declares `light dark`. Then it
   // follows the reader's preference again.
   const colorSchemeStyle =
