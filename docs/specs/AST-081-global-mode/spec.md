@@ -223,10 +223,15 @@ works on is `spec:AST-040` FR9's.
     and in a machine-readable result `meta.answeredBy.copy` is `fallback`.
     No other release answers, and nothing falls back while the matched
     release can be obtained. A failed install is recorded in the per-user
-    cache, by release, and no copy using that cache starts it again for 2
-    minutes after a first failure, or 10 minutes after a second failure in a
-    row; a successful install forgets it. So an offline run prints at most one
-    line saying it installs, and the warning says when it was last tried.
+    cache, by release and with npm's registry settings at the time (the
+    `@astryxdesign` scope's registry and npm's registry), and no copy using
+    that cache starts it again for 2 minutes after a first failure, or 10
+    minutes after a second failure in a row with those settings; a successful
+    install forgets it, and a run whose settings differ from the recorded ones
+    installs at once. So an offline run prints at most one line saying it
+    installs, the reason names the registry npm failed to reach, and the
+    warning says when it was last tried and that changing the registry tries
+    again.
     `ERR_VERSIONS_UNAVAILABLE` is for a run nothing can answer, such as a
     command that needs Core outside a project that cannot install it (FR3).
 - **FR3 — Outside a project, the running release answers as a new project
