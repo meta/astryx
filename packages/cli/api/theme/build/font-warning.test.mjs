@@ -26,6 +26,26 @@ describe('collectUnloadedFonts', () => {
     ).toEqual(['Fraunces']);
   });
 
+  it('does not name a metric fallback face beside its family', () => {
+    expect(
+      collectUnloadedFonts({
+        tokens: {
+          '--font-family-body':
+            'Figtree, "Figtree Fallback", -apple-system, Arial, sans-serif',
+        },
+        typography: {
+          heading: {family: 'Figtree', fallbacks: '"Figtree Fallback", Arial'},
+        },
+      }),
+    ).toEqual(['Figtree']);
+    // Without its family before it, the name is an ordinary family.
+    expect(
+      collectUnloadedFonts({
+        tokens: {'--font-family-body': '"Inter Fallback", Arial, sans-serif'},
+      }),
+    ).toEqual(['Inter Fallback']);
+  });
+
   it('returns nothing for the default system stacks', () => {
     expect(
       collectUnloadedFonts({

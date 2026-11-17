@@ -34,8 +34,8 @@
 
 /*
  * Arial scaled to Figtree's average glyph width, ascent and descent. Text
- * drawn in it takes the space Figtree takes, so the swap to Figtree does not
- * move the layout.
+ * drawn in it takes about the space Figtree takes, so the swap to Figtree
+ * moves the layout less.
  */
 @font-face {
   font-family: 'Figtree Fallback';

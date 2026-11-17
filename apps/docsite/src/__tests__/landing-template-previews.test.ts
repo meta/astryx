@@ -6,6 +6,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PREVIEW_IMAGE_WIDTH,
+  fontFaceRulesOf,
   fontStylesheetOf,
   previewDocument,
   previewMarkup,
@@ -64,6 +65,29 @@ describe('fontStylesheetOf', () => {
   });
 });
 
+describe('fontFaceRulesOf', () => {
+  it('reads the font-face rules of the theme fonts file, without comments', () => {
+    const rules = fontFaceRulesOf(
+      "/* A face */\n@font-face {\n  font-family: 'Figtree';\n  src: url('https://fonts.example/f.woff2') format('woff2');\n}\nbody { margin: 0 }\n",
+    );
+    expect(rules).toBe(
+      "@font-face { font-family: 'Figtree'; src: url('https://fonts.example/f.woff2') format('woff2'); }",
+    );
+    expect(fontFaceRulesOf('body { margin: 0 }')).toBeNull();
+  });
+
+  it('reads every Figtree face of the Neutral theme', () => {
+    const rules = fontFaceRulesOf(
+      fs.readFileSync(
+        path.resolve(docsiteDir, '../../packages/themes/neutral/fonts.css'),
+        'utf8',
+      ),
+    );
+    expect(rules).toContain("font-family: 'Figtree'");
+    expect(rules).toContain('https://fonts.gstatic.com/');
+  });
+});
+
 describe('previewDocument', () => {
   const html = previewDocument(RENDERED, {
     fontStylesheet: 'https://fonts.example/css2?family=Figtree',
@@ -90,6 +114,14 @@ describe('previewDocument', () => {
     expect(previewDocument(RENDERED, {fontStylesheet: null})).toContain(
       '<meta name="robots" content="noindex"><style>',
     );
+  });
+
+  it('puts the font-face rules it is given in the head', () => {
+    const faces =
+      "@font-face { font-family: 'Figtree'; src: url('https://fonts.example/f.woff2'); }";
+    expect(
+      previewDocument(RENDERED, {fontStylesheet: null, fontFaceRules: faces}),
+    ).toContain(`<style>${faces}</style>`);
   });
 
   it('fills the frame and never scrolls', () => {

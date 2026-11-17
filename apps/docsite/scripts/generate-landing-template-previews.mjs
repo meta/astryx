@@ -128,18 +128,32 @@ export function fontStylesheetOf(fontsCss) {
 }
 
 /**
+ * The `@font-face` rules of the theme's `fonts.css`, which name their font
+ * files directly, or null when it has none.
+ * @param {string} fontsCss
+ * @returns {string | null}
+ */
+export function fontFaceRulesOf(fontsCss) {
+  const rules = fontsCss
+    .replace(/\/\*[\s\S]*?\*\//gu, '')
+    .match(/@font-face\s*\{[^}]*\}/gu);
+  return rules ? rules.map(rule => rule.replace(/\s+/gu, ' ')).join('') : null;
+}
+
+/**
  * Turns a rendered page into a preview document. It drops the embedded
  * source, which only `render --reverse` reads, and loads the theme's fonts.
  * It makes the page fill its frame, and lets the URL fragment set the color
  * mode. Search engines must not index the file.
  * @param {string} html
- * @param {{fontStylesheet: string | null}} options
+ * @param {{fontStylesheet: string | null, fontFaceRules?: string | null}} options
  * @returns {string}
  */
-export function previewDocument(html, {fontStylesheet}) {
+export function previewDocument(html, {fontStylesheet, fontFaceRules = null}) {
   const head = [
     '<meta name="robots" content="noindex">',
     fontStylesheet ? `<link rel="stylesheet" href="${fontStylesheet}">` : '',
+    fontFaceRules ? `<style>${fontFaceRules}</style>` : '',
     `<style>${PREVIEW_STYLE}</style>`,
   ].join('');
   return html
@@ -265,9 +279,9 @@ async function main() {
   /** @type {string[]} */
   const slugs = JSON.parse(fs.readFileSync(rowsFile, 'utf8')).flat();
   const iconSets = previewIconSetList(process.env[ICON_SET_SETTING]);
-  const fontStylesheet = fontStylesheetOf(
-    fs.readFileSync(themeFontsFile, 'utf8'),
-  );
+  const themeFonts = fs.readFileSync(themeFontsFile, 'utf8');
+  const fontStylesheet = fontStylesheetOf(themeFonts);
+  const fontFaceRules = fontFaceRulesOf(themeFonts);
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
   fs.rmSync(workDir, {recursive: true, force: true});
@@ -301,7 +315,7 @@ async function main() {
       await render('page.tsx', {cwd: pageDir, out: 'page.html'});
       const html = previewDocument(
         fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
-        {fontStylesheet},
+        {fontStylesheet, fontFaceRules},
       );
       fs.writeFileSync(path.join(outDir, `${slug}.html`), html);
       console.log(

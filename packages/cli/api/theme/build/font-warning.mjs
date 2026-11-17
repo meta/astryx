@@ -437,6 +437,22 @@ export function expandFontVars(value, lookup, depth = 0) {
 }
 
 /**
+ * Whether a family is a metric fallback face: `<family> Fallback`, named
+ * after a family the theme names before it. A theme's own `fonts.css`
+ * defines such a face from fonts already on the device (`local()`), so no
+ * font service has it and an app has nothing to load. Where no stylesheet
+ * defines it, the browser skips it.
+ * @param {string} key the family, lowercased
+ * @param {Set<string>} named the families named before it, lowercased
+ * @returns {boolean}
+ */
+function isMetricFallback(key, named) {
+  return (
+    key.endsWith(' fallback') && named.has(key.slice(0, -' fallback'.length))
+  );
+}
+
+/**
  * Collect the font families a resolved theme names but does not load —
  * every `--font-family-*` token plus every component-override `fontFamily`
  * and the families of a `font` shorthand, each `var()` of the theme's own
@@ -470,6 +486,7 @@ export function collectUnloadedFonts(resolvedTheme, outer = undefined) {
     for (const family of families) {
       const key = family.toLowerCase();
       if (GENERIC_KEYWORDS.has(key) || SYSTEM_FAMILIES.has(key)) continue;
+      if (isMetricFallback(key, seen)) continue;
       if (seen.has(key)) continue;
       seen.add(key);
       unloaded.push(family);

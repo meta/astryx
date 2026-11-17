@@ -588,9 +588,13 @@ export function baseFontsSheet(ctx, data) {
   }
   // The families the sheet loads; with the theme's build at hand, the sheet
   // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  const families = [
+    ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+      decodeURIComponent(m[1].replace(/\+/g, ' ')),
+    ),
+    // A `@font-face` rule names its family itself.
+    ...fontFaceRules(text).map(rule => rule.family),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -627,7 +631,39 @@ export function baseFontsSheet(ctx, data) {
         [...new Set(list)].sort((a, b) => a - b),
       );
   }
+  // A `@font-face` rule names its weight; a range is a variable face.
+  for (const rule of fontFaceRules(text)) {
+    if (rule.weight == null || /\s/.test(rule.weight)) continue;
+    const weight = Number(rule.weight);
+    if (!Number.isInteger(weight)) continue;
+    weights.set(
+      rule.family,
+      [...new Set([...(weights.get(rule.family) ?? []), weight])].sort(
+        (a, b) => a - b,
+      ),
+    );
+  }
   return {spec: sheet, families, remote, weights};
+}
+
+/**
+ * The family and weight of each `@font-face` rule of a stylesheet's text.
+ * @param {string} text
+ * @returns {Array<{family: string, weight: string | null}>}
+ */
+function fontFaceRules(text) {
+  return [
+    ...text
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .matchAll(/@font-face\s*\{([^}]*)\}/gi),
+  ].flatMap(m => {
+    const family = /font-family\s*:\s*['"]?([^'";]+?)['"]?\s*(?:;|$)/i.exec(
+      m[1],
+    )?.[1];
+    if (!family) return [];
+    const weight = /font-weight\s*:\s*([^;]+?)\s*(?:;|$)/i.exec(m[1])?.[1];
+    return [{family: family.trim(), weight: weight ?? null}];
+  });
 }
 
 /**
