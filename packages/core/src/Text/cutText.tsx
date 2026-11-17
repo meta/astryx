@@ -95,17 +95,22 @@ function hasCallerTooltip(anchor: HTMLElement): boolean {
 
 /**
  * The text keyboard focus on `target` should show for `anchor`: `measured`'s
- * text when a box cuts it short, focus is inside the anchor, and no caller
- * tooltip describes the anchor; otherwise `null`.
+ * text when a box cuts it short and focus is inside the anchor; otherwise
+ * `null`. With `yieldsToCallerTooltip` (a Button), a caller tooltip that
+ * describes the anchor also gives `null`.
  */
 export function cutTextFor(
   anchor: HTMLElement,
   measured: HTMLElement,
   target: Element,
+  yieldsToCallerTooltip: boolean,
 ): string | null {
   // React delivers focus from a portal (a header's filter popover) to the
   // anchor's handlers; only focus inside the anchor counts.
-  if (!anchor.contains(target) || hasCallerTooltip(anchor)) {
+  if (
+    !anchor.contains(target) ||
+    (yieldsToCallerTooltip && hasCallerTooltip(anchor))
+  ) {
     return null;
   }
   const text = visibleText(measured);

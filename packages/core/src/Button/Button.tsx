@@ -928,6 +928,7 @@ export function Button({
     anchorRef: buttonRef,
     measureRef: labelRef,
     isEnabled: canShowCutLabel,
+    yieldsToCallerTooltip: true,
   });
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {

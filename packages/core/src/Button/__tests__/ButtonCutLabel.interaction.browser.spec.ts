@@ -84,6 +84,38 @@ test('a keyboard focus that arrives as the page loads shows the tooltip once its
   await expect(page.getByRole('tooltip')).toHaveText(LONG);
 });
 
+test('a press during the load drops a keyboard focus held for it', async ({
+  page,
+}) => {
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  let isRequested = false;
+  await page.route(/cutText[^/]*\.js(\?.*)?$/, async route => {
+    isRequested = true;
+    await held;
+    await route.continue();
+  });
+  await page.goto(story());
+  const button = page.getByRole('button', {name: LONG});
+  await button.waitFor();
+  await expect.poll(() => isRequested).toBe(true);
+  await page.keyboard.press('Tab');
+  await expect(button).toBeFocused();
+  // A press closes a tooltip; the one this focus held for the load too.
+  const box = await button.boundingBox();
+  if (box == null) {
+    throw new Error('no button box');
+  }
+  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  await page.mouse.down();
+  release();
+  await page.waitForTimeout(500);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await page.mouse.up();
+});
+
 test('a hover, or keyboard focus on a fitting label, shows nothing', async ({
   page,
 }) => {

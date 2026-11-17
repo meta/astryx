@@ -37,12 +37,13 @@ function cutTextIn(
   anchorRef: RefObject<HTMLElement | null>,
   measureRef: RefObject<HTMLElement | null> | undefined,
   target: Element,
+  yieldsToCallerTooltip: boolean,
 ): string | null {
   const anchor = anchorRef.current;
   const measured = measureRef?.current ?? anchor;
   return anchor == null || measured == null
     ? null
-    : module.cutTextFor(anchor, measured, target);
+    : module.cutTextFor(anchor, measured, target, yieldsToCallerTooltip);
 }
 
 export interface CutTextOnKeyboardFocus {
@@ -59,8 +60,8 @@ export interface CutTextOnKeyboardFocus {
  * a Button's cut label, a table header cell's cut heading. When keyboard focus
  * reaches the anchor or an element inside it, the loaded
  * module measures `measureRef`'s text; if a box cuts it short, it shows until
- * focus leaves the anchor, Escape, or a press. A caller's own tooltip on the
- * anchor wins. A hover and a touch tap show nothing, and nothing is measured
+ * focus leaves the anchor, Escape, or a press. With `yieldsToCallerTooltip`, a
+ * caller's own tooltip on the anchor wins. A hover and a touch tap show nothing, and nothing is measured
  * at rest. A focus that arrives before the module loads shows once it loads,
  * if focus is still there. Internal: the package does not export it.
  */
@@ -68,17 +69,19 @@ export function useCutTextOnKeyboardFocus({
   anchorRef,
   measureRef,
   isEnabled,
+  yieldsToCallerTooltip = false,
 }: {
   /** The element focus reaches and the tooltip attaches to. */
   anchorRef: RefObject<HTMLElement | null>;
   /** The element whose text is cut; the anchor itself when omitted. */
   measureRef?: RefObject<HTMLElement | null>;
   isEnabled: boolean;
+  /** Shows nothing while a caller's tooltip describes the anchor (Button). */
+  yieldsToCallerTooltip?: boolean;
 }): CutTextOnKeyboardFocus {
   const [cutText, setCutText] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(() => cutTextModule.loaded());
-  // A keyboard focus that arrived before the module loaded.
-  const pendingRef = useRef<Element | null>(null);
+  const heldFocusRef = useRef<Element | null>(null);
   const readModality = useInteractionModalityTrackingFor(anchorRef, isEnabled);
   // Syncs with the module loader: the module loads after the page's first
   // paint, and a focus that arrived before it shows then.
@@ -93,10 +96,18 @@ export function useCutTextOnKeyboardFocus({
           return;
         }
         setLoaded(module);
-        const pending = pendingRef.current;
-        pendingRef.current = null;
-        if (pending?.matches(':focus-visible') === true) {
-          setCutText(cutTextIn(module, anchorRef, measureRef, pending));
+        const held = heldFocusRef.current;
+        heldFocusRef.current = null;
+        if (held?.matches(':focus-visible') === true) {
+          setCutText(
+            cutTextIn(
+              module,
+              anchorRef,
+              measureRef,
+              held,
+              yieldsToCallerTooltip,
+            ),
+          );
         }
       },
       () => {},
@@ -104,7 +115,7 @@ export function useCutTextOnKeyboardFocus({
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, loaded, anchorRef, measureRef]);
+  }, [isEnabled, loaded, anchorRef, measureRef, yieldsToCallerTooltip]);
   const hide = useCallback(() => setCutText(null), []);
   const onFocus = (event: FocusEvent<HTMLElement>) => {
     const target = event.target;
@@ -119,15 +130,17 @@ export function useCutTextOnKeyboardFocus({
       return;
     }
     if (loaded == null) {
-      pendingRef.current = target;
+      heldFocusRef.current = target;
     } else {
-      setCutText(cutTextIn(loaded, anchorRef, measureRef, target));
+      setCutText(
+        cutTextIn(loaded, anchorRef, measureRef, target, yieldsToCallerTooltip),
+      );
     }
   };
   const onBlur = (event: FocusEvent<HTMLElement>) => {
     const next = event.relatedTarget;
     if (!(isElement(next) && anchorRef.current?.contains(next))) {
-      pendingRef.current = null;
+      heldFocusRef.current = null;
       setCutText(null);
     }
   };
@@ -142,6 +155,9 @@ export function useCutTextOnKeyboardFocus({
       ) : null,
     onFocus,
     onBlur,
-    onPointerDown: hide,
+    onPointerDown: () => {
+      heldFocusRef.current = null;
+      hide();
+    },
   };
 }
