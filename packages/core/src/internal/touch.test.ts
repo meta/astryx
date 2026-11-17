@@ -192,6 +192,14 @@ describe('internal/touch', () => {
     }
   });
 
+  it('re-exports the press tracker hook by name', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const module = await import('../gestures/usePressTracker');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.usePressTracker).toBe('function');
+    expect(entry.usePressTracker).toBe(module.usePressTracker);
+  });
+
   it("re-exports by name UIKit's timing table, which Lab's SearchField reads", async () => {
     const entry: Record<string, unknown> = await import('./touch');
     const uikit = await import('../motion/uikit/timing');

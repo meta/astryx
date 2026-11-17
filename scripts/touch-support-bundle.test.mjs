@@ -177,6 +177,7 @@ function exportsOf(entry) {
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
   'useGestureRecognizer',
+  'usePressTracker',
   'useFingerScroll',
   'createMotionEngine',
   'cubicBezier',
