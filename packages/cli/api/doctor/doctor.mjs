@@ -116,6 +116,7 @@ import {
   computerIntegrationsOutside,
   findIconImports,
   findIconPlaceholders,
+  findButtonsWithoutAction,
   iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
@@ -194,6 +195,10 @@ import {
  *   The project's icon sets (AST-084 FR17), or null when they could not be
  *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
+ * @property {{found: Array<{file: string, line: number, column: number, component: 'Button' | 'IconButton', label: string | null, note: string | null}>, files: number}|null} [buttonActions]
+ *   The Core buttons in the project's own source that do nothing when
+ *   pressed, and how many source files were read; null outside a project on
+ *   Core, or when the scan could not run.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
  *   the CLI writes for a missing icon, read only where the icon feature gate
@@ -1576,6 +1581,49 @@ export function checkIconPlaceholders(ctx) {
   };
 }
 
+/** The most buttons a warning names before it counts the rest. */
+const BUTTONS_NAMED = 8;
+
+/**
+ * The Core buttons in the project's own source that do nothing when pressed:
+ * a `Button` or `IconButton` from `@astryxdesign/core` with no `onClick`,
+ * `clickAction`, `href`, or `submit` or `reset` type, or with an empty
+ * handler or a link that goes nowhere (`#`), where nothing around it acts on
+ * a press (see
+ * foundation/discovery/button-actions.mjs). A warning: a person who presses
+ * one gets nothing, and the build still works. Each is named by its file,
+ * line and label.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkButtonActions(ctx) {
+  const scan = ctx.buttonActions;
+  if (scan == null) return null;
+  const id = 'button-actions';
+  const label = 'Button actions';
+  const count = scan.found.length;
+  if (count === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `No Astryx button that does nothing when pressed (${scan.files} source file${scan.files === 1 ? '' : 's'} read).`,
+    };
+  }
+  const named = scan.found.slice(0, BUTTONS_NAMED).map(
+    button =>
+      `${button.file}:${button.line} ${button.label == null ? button.component : `"${button.label}"`}${button.note ? ` (${button.note})` : ''}`,
+  );
+  const rest = count - named.length;
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${count} button${count === 1 ? '' : 's'} ${count === 1 ? 'does' : 'do'} nothing when pressed: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
+    fix: 'Give each one its action: `onClick` (or `clickAction` for async work), `href` to the page it opens, or `type="submit"` inside a form. Remove a button that has no action yet: an empty handler or a `#` link still does nothing.',
+  };
+}
+
 /**
  * The icon imports in the project's own source that do not match its icon
  * sets (AST-084): each file and import, with the icon of the list that draws
@@ -2778,6 +2826,7 @@ export const SYNC_CHECKS = [
   checkIconSets,
   checkIconPlaceholders,
   checkIconImports,
+  checkButtonActions,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
@@ -2992,6 +3041,7 @@ export async function runChecks(options = {}) {
     // Set after the docs checks, below.
     iconPlaceholders: null,
     iconImports: null,
+    buttonActions: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -3021,6 +3071,16 @@ export async function runChecks(options = {}) {
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;
+    }
+  }
+
+  // A project on Core scans its own source for buttons that do nothing.
+  if (readsCore) {
+    try {
+      ctx.buttonActions = findButtonsWithoutAction(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      // A scan that fails leaves the check out.
+      ctx.buttonActions = null;
     }
   }
 

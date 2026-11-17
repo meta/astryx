@@ -43,6 +43,10 @@ import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs'
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+import {
+  buttonsWithoutAction,
+  scanButtonActions,
+} from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
 import {
@@ -311,6 +315,94 @@ export function findIconPlaceholders(projectDir) {
     });
   }
   return found.sort((a, b) => compareText(a.file, b.file));
+}
+
+/**
+ * Test, story and fixture files: code that shows or checks a button, not a
+ * page that a person uses.
+ */
+const NOT_APP_CODE =
+  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__|stories|fixtures|e2e)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+
+/**
+ * The name another module imports a module by: its file name without the
+ * extension, or its folder's name for an `index` file.
+ * @param {string} file
+ */
+function moduleStem(file) {
+  const base = path.basename(file).replace(/\.[cm]?[jt]sx?$/, '');
+  return base === 'index' ? path.basename(path.dirname(file)) : base;
+}
+
+/** @param {string} text */
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The Core buttons in the project's own source that do nothing when pressed
+ * (see `buttonsWithoutAction`), each with its file, line, column, component
+ * and label, and the number of source files read. Test, story and fixture
+ * files are left out. A file reads only as a syntax tree. Read without
+ * executing app code.
+ * @param {string} projectDir
+ * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number}}
+ */
+export function findButtonsWithoutAction(projectDir) {
+  const files = listProjectSourceFiles(projectDir, '').filter(
+    file => !NOT_APP_CODE.test(path.relative(projectDir, file).split(path.sep).join('/')),
+  );
+  /** @type {Map<string, string | null>} */
+  const texts = new Map();
+  const textOf = (/** @type {string} */ file) => {
+    if (!texts.has(file)) {
+      /** @type {string | null} */
+      let text;
+      try {
+        text = readTextFile(file);
+      } catch {
+        text = null;
+      }
+      texts.set(file, text);
+    }
+    return texts.get(file) ?? null;
+  };
+  // An app that routes by the URL hash opens its first page from a `#` link.
+  const hashRouting = files.some(file => /\b(?:HashRouter|createHashRouter)\b/.test(textOf(file) ?? ''));
+  /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
+  const scans = new Map();
+  const scan = (/** @type {string} */ file) => {
+    if (!scans.has(file)) {
+      const text = textOf(file);
+      scans.set(
+        file,
+        text == null
+          ? null
+          : scanButtonActions(text, {
+              isOwnCode: specifier => projectMapsImport(specifier, file),
+              stem: moduleStem(file),
+              hashRouting,
+            }),
+      );
+    }
+    return scans.get(file) ?? null;
+  };
+  // Only a file that imports from Core and names a button is parsed for buttons.
+  const withButtons = files.filter(file => {
+    const text = textOf(file);
+    return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
+  });
+  // A module that renders a component names it as an element, a member or
+  // the end of a module path.
+  const modulesNaming = (/** @type {string[]} */ names) => {
+    const alternatives = names.map(escapeRegExp).join('|');
+    const pattern = new RegExp(`(?:<|\\.)(?:${alternatives})\\b|[/'"](?:${alternatives})['"]`);
+    return files.filter(file => pattern.test(textOf(file) ?? ''));
+  };
+  const found = buttonsWithoutAction({files: withButtons, scan, modulesNaming}).map(each => ({
+    ...each,
+    file: path.relative(projectDir, each.file).split(path.sep).join('/'),
+  }));
+  found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
+  return {found, files: files.length};
 }
 
 /**

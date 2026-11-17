@@ -17,7 +17,7 @@ export const doc = {
     "Check a project's Astryx setup and get a pass/warn/fail report per check. Use it as a CI gate or before debugging a broken install.",
   description:
     'Runs a series of diagnostics: Node version, ' +
-    "@astryxdesign/core install and version alignment with the CLI, whether the app loads Core's component styles (`core-stylesheets`, a warning: a stylesheet or module that imports `@astryxdesign/core/astryx.css` or a page that links it; not checked in an app that loads none and compiles Core from source with `@astryxdesign/build`), installed " +
+    "@astryxdesign/core install and version alignment with the CLI, whether the app loads Core's component styles (`core-stylesheets`, a warning: a stylesheet or module that imports `@astryxdesign/core/astryx.css` or a page that links it; not checked in an app that loads none and compiles Core from source with `@astryxdesign/build`), the Core buttons in the app's own source that do nothing when pressed (`button-actions`, a warning: a `Button` or `IconButton` from `@astryxdesign/core` with no `onClick`, `clickAction`, `href`, or `submit` or `reset` type, or with an empty handler or a link that goes nowhere (`#`), that nothing around it can act on, each named by its file, line and label; test, story and fixture files are not read), installed " +
     'themes and wiring, astryx.config validity, whether every integration ' +
     'astryx.config names loads (a failed one fails the run), integrations linked from ' +
     'package.json without a config entry, core peer dependencies, whether the @astryxdesign/core peer range of each loaded integration includes the installed Core (`integration-core-range`, a warning; added theme packages are checked by `theme-core-peers` instead), ' +
