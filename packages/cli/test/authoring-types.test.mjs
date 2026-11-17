@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {parseDoc} from '../authoring/doctypes/parse.mjs';
-import {AuthoredDocKindSchema} from '../authoring/doctypes/_schema.mjs';
+import {docSchemas} from '../authoring/doctypes/_schema.mjs';
 import {problemsInTopic} from '../foundation/discovery/docs-discovery.mjs';
 import * as satisfiesDocs from './authoring-types/all-kinds.doc.ts';
 
@@ -19,7 +19,7 @@ const DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   'authoring-types',
 );
-const KINDS = AuthoredDocKindSchema.options;
+const KINDS = docSchemas().AuthoredDocKindSchema.options;
 
 const jsdocDocs = await Promise.all(
   fs
