@@ -2015,6 +2015,22 @@ describe('Dialog', () => {
       expect(dialog).toHaveAccessibleName('Share capture');
     });
 
+    it('is named by an aria-label that arrives while a DialogHeader is mounted', () => {
+      function Late({label}: {label?: string}) {
+        return (
+          <Dialog isOpen={true} onOpenChange={() => {}} aria-label={label}>
+            <DialogHeader title="Rename capture" />
+          </Dialog>
+        );
+      }
+      const {rerender} = render(<Late />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<Late label="Share capture" />);
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      expect(dialog).toHaveAccessibleName('Share capture');
+    });
+
     it('prefers a consumer-provided aria-label over the header title', () => {
       render(
         <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Custom name">
