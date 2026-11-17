@@ -491,8 +491,15 @@ const NEUTRAL_STOPS = wordTable(
 );
 /** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
 const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
-/** Neutral tokens a tinted gray draws inside its ramp too: primary ink. */
-const TINTED_INK = new Set(['--color-text-primary', '--color-icon-primary']);
+/** Neutral tokens a tinted gray draws inside its ramp too: its inks. */
+const TINTED_INK = new Set([
+  '--color-text-primary',
+  '--color-icon-primary',
+  // Text on an inverted or dark surface (a toast, a card over the scrim):
+  // tinted with the surface it sits on.
+  '--color-on-dark',
+  '--color-on-light',
+]);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
 const NEUTRAL_TINTS = wordTable(
   Object.fromEntries(
