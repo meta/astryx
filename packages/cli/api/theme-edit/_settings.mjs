@@ -9580,10 +9580,17 @@ async function buildThemeSteps(ctx, slug, data) {
   if (found.length) {
     for (const x of found) {
       const t = theme.components[x.target];
+      // The copy goes in the theme's own rule for that selector, however
+      // its key is written (a bare `selected` is `selected:selected`):
+      // written under the other spelling, it would be a second rule after
+      // the theme's own and win over the colors set there.
+      const key =
+        Object.keys(t).find(k => styleKeyOf(k) === styleKeyOf(x.key)) ??
+        x.key;
       // The base value goes before the variant's own declarations, so a
       // longhand or shorthand the variant sets itself (border-color after
       // a base border) still wins over it.
-      const variant = t[x.key] ?? {};
+      const variant = t[key] ?? {};
       // A setting made for one mode is repeated in the variant's block for
       // that mode.
       const own = x.mode ? (variant[`@${x.mode}`] ?? {}) : variant;
@@ -9596,14 +9603,18 @@ async function buildThemeSteps(ctx, slug, data) {
       const copy = x.state
         ? {...own, [x.state]: {[x.prop]: x.value, ...ownState}}
         : {[x.prop]: x.value, ...own};
-      t[x.key] = x.mode ? {...variant, [`@${x.mode}`]: copy} : copy;
-      const at = x.mode ? t[x.key][`@${x.mode}`] : t[x.key];
+      t[key] = x.mode ? {...variant, [`@${x.mode}`]: copy} : copy;
+      const at = x.mode ? t[key][`@${x.mode}`] : t[key];
       // The variant's own longhands come after the copied shorthand; one
       // the base theme holds would keep the base's earlier place and lose,
       // so it is written as its sides.
-      const baseRule = /** @type {any} */ (base).components?.[x.target]?.[
-        x.key
-      ];
+      const baseRules = /** @type {any} */ (base).components?.[x.target] ?? {};
+      const baseRule =
+        baseRules[
+          Object.keys(baseRules).find(
+            k => styleKeyOf(k) === styleKeyOf(x.key),
+          ) ?? x.key
+        ];
       laterLonghandsAsSides(
         x.state ? at[x.state] : at,
         x.state ? baseRule?.[x.state] : baseRule,

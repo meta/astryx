@@ -10,7 +10,13 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting, indicatorLines, pillDrawnRadios} from './_check.mjs';
+import {
+  BORDER_COLOR_PROP,
+  borderFor,
+  checkSetting,
+  indicatorLines,
+  pillDrawnRadios,
+} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -1174,6 +1180,15 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             ? a.get('base||border-width')
             : a.get(`base||${prop}`));
       if (o && o.light === v.light && o.dark === v.dark) continue;
+      // The see-through border a border color brings to a part that draws
+      // none (set writes it with the color) is that color's line: asked
+      // with it, never a change of its own.
+      if (
+        prop === 'border' &&
+        /\btransparent\b/.test(`${v.light} ${v.dark}`) &&
+        steps.some(st => BORDER_COLOR_PROP.test(String(st.thing)))
+      )
+        continue;
       const fam = familyOf(prop);
       if (!fam) continue;
       // A property a typed value writes is asked: the question wrote it.
@@ -1494,6 +1509,10 @@ function apply(ctx, slug, d, st) {
       [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
+  // A border color on a part that draws no border brings the border it
+  // needs, as set writes it.
+  const edge = unset ? null : borderFor(ctx, slug, d, s);
+  if (edge) d.settings.push(edge);
   const k = keyOf(s);
   const i = d.settings.findIndex(x => keyOf(x) === k);
   if (unset) {
