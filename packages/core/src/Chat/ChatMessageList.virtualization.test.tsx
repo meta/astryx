@@ -648,6 +648,18 @@ describe('ChatMessageList windowing', () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it('turns the browser’s scroll anchoring off on the rows while it windows, and back on after', async () => {
+    const {unmount} = await mount(messages(5000));
+    const rows = body()!;
+    expect(getComputedStyle(rows).getPropertyValue('overflow-anchor')).toBe(
+      'none',
+    );
+    unmount();
+    expect(getComputedStyle(rows).getPropertyValue('overflow-anchor')).not.toBe(
+      'none',
+    );
+  });
+
   it('returns focus to the log when the focused message is removed', async () => {
     await mount(messages(5000));
     flushFrame();
