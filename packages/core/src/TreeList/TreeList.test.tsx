@@ -19,7 +19,15 @@ import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {FOCUS_OUTLINE, focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {focusOutlineInternalStyles} from '../utils/focusOutlineInternal.stylex';
+
+// The ring a plain row draws: only the focus variables its treeitem
+// publishes, with no focus-inside branch.
+const publishedRing = stylex.create({
+  ring: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
+});
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -437,9 +445,12 @@ describe('TreeList', () => {
     expect(
       getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
     ).toBe(FOCUS_OUTLINE);
+    // (Atomic classes only: a debug class names the file that made it.)
     const ringClasses = stylex
-      .props(focusOutlineInternalStyles.published)
-      .className!.split(' ');
+      .props(publishedRing.ring)
+      .className!.split(' ')
+      .filter(cls => !cls.includes('__'));
+    expect(ringClasses.length).toBeGreaterThan(0);
     for (const cls of ringClasses) {
       expect(row.className.split(' ')).toContain(cls);
     }
@@ -476,12 +487,13 @@ describe('TreeList', () => {
     // The classes the focus-inside ring adds over the published one carry
     // its `:has(:focus-visible)` branch; a plain row must not compose them.
     const published = stylex
-      .props(focusOutlineInternalStyles.published)
-      .className!.split(' ');
+      .props(publishedRing.ring)
+      .className!.split(' ')
+      .filter(cls => !cls.includes('__'));
     const focusInside = stylex
       .props(focusOutlineStyles.focusWithinOrPublished)
       .className!.split(' ')
-      .filter(cls => !published.includes(cls));
+      .filter(cls => !cls.includes('__') && !published.includes(cls));
     expect(focusInside.length).toBeGreaterThan(0);
     const rowClasses = row.className.split(' ');
     for (const cls of focusInside) {

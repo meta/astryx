@@ -27,7 +27,6 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {focusOutlineInternalStyles} from '../utils/focusOutlineInternal.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -131,8 +130,14 @@ const styles = stylex.create({
       ':has(:focus-visible)': 2,
     },
   },
-  // The lift for a plain row, whose ring comes only from its treeitem's own
-  // focus: a control in its start or end content rings itself.
+  // A plain row's ring and lift come only from its treeitem's own focus,
+  // through the variables `publishFocusVisibleVars` sets on `wrapper`: a
+  // control in its start or end content rings itself. One focus move shows
+  // one ring.
+  plainRowFocusRing: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
   publishedFocusLift: {
     zIndex: 'var(--_tree-focus-z, auto)',
   },
@@ -756,7 +761,7 @@ export function TreeListItem({
                 // tree's roving focus, so it draws the focus ring when the
                 // treeitem itself has focus.
                 stylex.props(
-                  focusOutlineInternalStyles.published,
+                  styles.plainRowFocusRing,
                   styles.contentWrapper,
                   styles.publishedFocusLift,
                   densityStyles[density],
