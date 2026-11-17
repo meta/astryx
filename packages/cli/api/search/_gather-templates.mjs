@@ -136,6 +136,7 @@ export async function gatherTemplates(cwd) {
       _kind: t.type, // 'page' | 'block'
       _resultName: t.dirName,
       _commandName: commandName,
+      ...(t.isReady === false ? {_notReady: /** @type {const} */ (true)} : {}),
     };
     if (readSource)
       derivedFromSource.set(candidate, {

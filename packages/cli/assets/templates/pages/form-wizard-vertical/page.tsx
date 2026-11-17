@@ -587,9 +587,28 @@ export default function FormWizardVerticalPage() {
       return;
     }
 
-    if (Object.keys(errorsByStep[step]).length === 0 && !isLastStep) {
-      setStep(s => s + 1);
+    if (Object.keys(errorsByStep[step]).length > 0) {
+      return;
     }
+    if (isLastStep) {
+      // An earlier step can still have problems after a jump through the
+      // stepper. Send the person to the first one instead of finishing.
+      const firstBroken = errorsByStep.findIndex(
+        errors => Object.keys(errors).length > 0,
+      );
+      if (firstBroken !== -1) {
+        markAttempted(firstBroken);
+        setStep(firstBroken);
+        return;
+      }
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your audiobook would be submitted for review here',
+        uniqueID: 'submit-review',
+      });
+      return;
+    }
+    setStep(s => s + 1);
   };
 
   const goTo = (index: number) => {
@@ -709,7 +728,17 @@ export default function FormWizardVerticalPage() {
                     types. */}
                 <Text type="label">Publish audiobook</Text>
               </StackItem>
-              <Button label="Cancel" variant="ghost" onClick={() => {}} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving the audiobook flow would return you to the app here',
+                    uniqueID: 'cancel-audiobook',
+                  })
+                }
+              />
               <Button
                 label="Save & exit"
                 variant="secondary"

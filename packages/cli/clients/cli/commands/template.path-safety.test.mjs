@@ -13,6 +13,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {
+  tempFolderOf,
+  tempFolders,
+} from '../../../foundation/fs/path-safety.mjs';
+
+// Where the temp folder holds the home folder (some containers), it takes no
+// scratch copy; path-safety.test.mjs covers that case.
+const tmpTakesScratch = tempFolderOf(os.tmpdir()) !== null;
 
 let tmpDir;
 let templateApi;
@@ -25,6 +33,14 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
   vi.restoreAllMocks();
 });
+
+/**
+ * An absolute path outside the project and outside the system temp folder,
+ * where a scratch copy may go: a folder at the disk's root that is not there.
+ * @param {...string} parts
+ */
+const nowhere = (...parts) =>
+  path.join(path.parse(tmpDir).root, 'astryx-no-such-folder', ...parts);
 
 describe('template path safety', () => {
   it('rejects targetPath with ../ traversal and writes no file outside cwd', async () => {
@@ -44,13 +60,19 @@ describe('template path safety', () => {
   it('refuses an absolute targetPath outside the project and names commands that work', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
-    const absTarget = path.join(tmpDir, 'absolute-out');
+    const absTarget = nowhere('absolute-out');
 
     const err = await templateApi('blank', {targetPath: absTarget, cwd}).catch(
       e => e,
     );
     expect(err.code).toBe('ERR_PATH_TRAVERSAL');
     expect(err.message).toMatch(/outside the project root/i);
+    const [scratchFolder] = tempFolders();
+    expect(err.message).toContain(
+      scratchFolder
+        ? `as a scratch copy in the system temp folder (${scratchFolder})`
+        : 'The template is written only inside the project.',
+    );
     expect(err.suggestions).toEqual([
       {
         name: 'astryx template blank src/pages/blank',
@@ -71,7 +93,7 @@ describe('template path safety', () => {
     fs.mkdirSync(cwd, {recursive: true});
 
     const err = await templateApi('blank', {
-      targetPath: path.join(tmpDir, 'scratch'),
+      targetPath: nowhere('scratch'),
       type: 'page',
       package: '@astryxdesign/core',
       cwd,
@@ -95,7 +117,7 @@ describe('template path safety', () => {
       );
 
       const err = await templateApi('blank', {
-        targetPath: path.join(tmpDir, 'scratch'),
+        targetPath: nowhere('scratch'),
         cwd,
       }).catch(e => e);
       expect(err.code).toBe('ERR_PATH_TRAVERSAL');
@@ -119,7 +141,7 @@ describe('template path safety', () => {
     );
 
     const err = await templateApi('blank', {
-      targetPath: path.join(tmpDir, 'scratch'),
+      targetPath: nowhere('scratch'),
       cwd,
     }).catch(e => e);
     expect(err.suggestions[0].name).toBe(
@@ -153,7 +175,7 @@ describe('template path safety', () => {
       );
 
       const err = await templateApi('blank', {
-        targetPath: path.join(tmpDir, 'scratch'),
+        targetPath: nowhere('scratch'),
         cwd,
       }).catch(e => e);
       expect(err.suggestions[0].name).toBe(
@@ -175,7 +197,7 @@ describe('template path safety', () => {
     fs.writeFileSync(path.join(cwd, 'app', 'blank', 'page.tsx'), 'mine\n');
 
     const err = await templateApi('blank', {
-      targetPath: path.join(tmpDir, 'scratch'),
+      targetPath: nowhere('scratch'),
       cwd,
     }).catch(e => e);
     expect(err.suggestions[0].name).toBe('astryx template blank app/blank-2');
@@ -314,16 +336,83 @@ describe('template path safety', () => {
     expect(fs.readdirSync(outside)).toEqual([]);
   });
 
-  it('refuses a sibling folder whose name starts with the project name', async () => {
-    const cwd = path.join(tmpDir, 'project');
-    fs.mkdirSync(cwd, {recursive: true});
-    const sibling = path.join(tmpDir, 'project-scratch');
+  it.skipIf(!tmpTakesScratch)(
+    'reads a sibling folder whose name starts with the project name as outside it',
+    async () => {
+      const cwd = path.join(tmpDir, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const sibling = path.join(tmpDir, 'project-scratch');
 
-    await expect(
-      templateApi('blank', {targetPath: sibling, cwd}),
-    ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
-    expect(fs.existsSync(sibling)).toBe(false);
-  });
+      // The sibling is in the temp folder, so it takes a scratch copy, named
+      // by its whole path rather than as a folder of the project.
+      const written = await templateApi('blank', {targetPath: sibling, cwd});
+      expect(written.data.outputDir).toBe(sibling);
+      expect(written.data.givenPath).toBeUndefined();
+      expect(fs.readdirSync(cwd)).toEqual([]);
+    },
+  );
+
+  it.skipIf(!tmpTakesScratch)(
+    'writes a scratch copy to a path in the system temp folder, with the checks a project write has',
+    async () => {
+      const cwd = path.join(tmpDir, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const scratch = path.join(tmpDir, 'scratch', 'blank');
+
+      const written = await templateApi('blank', {targetPath: scratch, cwd});
+      expect(written.data.outputDir).toBe(scratch);
+      expect(written.data.fileName).toBe('page.tsx');
+      expect(written.data.givenPath).toBeUndefined();
+      expect(fs.existsSync(path.join(scratch, 'page.tsx'))).toBe(true);
+      expect(fs.readdirSync(cwd)).toEqual([]);
+
+      await expect(
+        templateApi('blank', {targetPath: scratch, cwd}),
+      ).rejects.toMatchObject({code: 'ERR_FILE_EXISTS'});
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes /tmp as a temp folder on a POSIX system, unless it holds the home folder',
+    async () => {
+      const cwd = path.join(tmpDir, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const scratch = fs.mkdtempSync('/tmp/astryx-scratch-');
+      try {
+        const target = path.join(scratch, 'dash');
+        if (tempFolderOf(target) === null) {
+          await expect(
+            templateApi('blank', {targetPath: target, cwd}),
+          ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+          return;
+        }
+        const written = await templateApi('blank', {targetPath: target, cwd});
+        expect(written.data.outputDir).toBe(target);
+      } finally {
+        fs.rmSync(scratch, {recursive: true, force: true});
+      }
+    },
+  );
+
+  it.skipIf(!tmpTakesScratch)(
+    'refuses a scratch copy that a link carries out of the temp folder',
+    async () => {
+      const cwd = path.join(tmpDir, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.symlinkSync(nowhere(), path.join(tmpDir, 'escape'), 'dir');
+
+      await expect(
+        templateApi('blank', {
+          targetPath: path.join(tmpDir, 'escape', 'x'),
+          cwd,
+        }),
+      ).rejects.toMatchObject({
+        code: 'ERR_PATH_TRAVERSAL',
+        message: expect.stringMatching(/out of the temp folder/),
+      });
+      expect(fs.existsSync(nowhere())).toBe(false);
+    },
+  );
 
   it('writes an absolute --cdn path inside the project and refuses one outside', async () => {
     const cwd = path.join(tmpDir, 'project');
@@ -436,9 +525,22 @@ describe('template path text output', () => {
     );
   }, 60_000);
 
+  it.skipIf(!tmpTakesScratch)(
+    'names the whole path of a scratch copy in the temp folder',
+    async () => {
+      const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+      const scratch = path.join(tmpDir, 'astryx_ref');
+      const result = await runCli(['template', 'blank', scratch], cwd);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`Copied template to ${scratch}/page.tsx`);
+      expect(result.stdout).not.toContain('is inside the project');
+    },
+    60_000,
+  );
+
   it('names the commands that work when the path is outside the project', async () => {
     const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
-    const scratch = path.join(tmpDir, 'astryx_dash');
+    const scratch = nowhere('astryx_dash');
     const result = await runCli(['template', 'blank', scratch], cwd);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('is outside the project root');

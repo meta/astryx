@@ -30,9 +30,18 @@
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them
- *   (foundation/suggest/name-index.mjs), each kept while every path it
- *   stamped but the CLI's own files (which its build id covers) is
- *   unchanged, in any command. The commands whose runs keep the other
+ *   (foundation/suggest/name-index.mjs), by css-tree.mjs for what
+ *   `theme build` finds when it checks a theme's pseudo-class keys and token
+ *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), and by
+ *   `theme build` for the JavaScript it compiles from a theme's local
+ *   modules (api/theme/build/self-contained.mjs), each kept while every
+ *   path it stamped but the CLI's own files (which its build id and the
+ *   folder it runs from, both in every entry's key, stand for) is
+ *   unchanged, in any command. Through `persistedValue`, the stored docs
+ *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
+ *   doc's parse by the doc's text and the zod release the parsers load,
+ *   which with the build id are all the parse depends on, in a run that
+ *   keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
@@ -66,9 +75,9 @@ import * as fs from 'node:fs';
 import * as nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT, realDir} from './paths.mjs';
+import {CLI_ROOT, isCliBuildFile, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
@@ -76,11 +85,16 @@ import {jitiCacheDir} from './jiti-cache.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
+import {ownModuleHooks} from './own-modules.mjs';
 import {
+  LISTED,
   PRESENT,
+  RESOLVED,
   lookedUp,
   fileStamp,
   keepState,
+  listingStamp,
+  resolvedNow,
   recordReads,
   recordStates,
   stillInState,
@@ -366,6 +380,15 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
   const realEnv = process.env;
   /** @type {{deregister: () => void} | null} */
   let hooks = null;
+  // An installed CLI resolves imports between its own modules by path while
+  // the recorder is armed (own-modules.mjs). Registered just before the
+  // recorder's hooks, so the recorder still sees each import and each load.
+  const own =
+    withoutRecording(buildId) == null
+      ? null
+      : ownModuleHooks(`${pathToFileURL(CLI_ROOT).href}/`);
+  /** @type {{deregister: () => void} | null} */
+  let ownHooks = null;
   /** @param {string | symbol} name */
   const noteEnv = name => {
     if (typeof name === 'string' && !env.has(name)) {
@@ -405,17 +428,22 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     },
   });
   const disarm = () => {
-    try {
-      hooks?.deregister();
-    } catch {
-      // A hook that cannot be removed is inert: it only notes modules.
+    for (const handle of [hooks, ownHooks]) {
+      try {
+        handle?.deregister();
+      } catch {
+        // A hook that cannot be removed is inert: it notes modules, or
+        // resolves the CLI's own as Node would.
+      }
     }
     hooks = null;
+    ownHooks = null;
     if (process.env === proxy) process.env = realEnv;
   };
   const arm = () => {
     if (hooks) return true;
     try {
+      if (own) ownHooks = registerHooks(own);
       hooks = registerHooks({
         /**
          * @param {string} url
@@ -577,6 +605,18 @@ function entryFile(dir, key, id) {
   return path.join(dir, `gather-${hash}.json`);
 }
 
+/** @type {string | undefined} */
+let cliFolderAnswer;
+
+/**
+ * The real path of the folder this CLI runs from, once per process: a copy
+ * installed in another folder (a patched one) keeps its own entries.
+ * @returns {string}
+ */
+function cliFolder() {
+  return (cliFolderAnswer ??= withoutRecording(() => realDir(CLI_ROOT)));
+}
+
 /**
  * Everything an entry is for, as text: stored in the entry and compared on
  * every read, so an entry copied under another entry's name is not used.
@@ -587,7 +627,8 @@ function entryFile(dir, key, id) {
 function entryKey(key, id) {
   return JSON.stringify([
     FORMAT,
-    id,
+    // The build and the folder it runs from stand for the CLI's own files.
+    [id, cliFolder()],
     process.version,
     process.platform,
     process.arch,
@@ -637,6 +678,12 @@ function staleReason(stamps, env) {
     }
   }
   for (const [file, state] of stamps) {
+    // The CLI's own files are the build id's and the CLI's folder's to stand
+    // for (both are in the entry's key), as for a summary (inCliBuild): they
+    // are kept for the code a derived value depends on, never checked one by
+    // one. A package in the node_modules folder inside the CLI's is not part
+    // of the build, and is checked as any other file.
+    if (inCliBuild(file)) continue;
     if (!stillInState(file, state)) {
       return 'a file or folder it read changed';
     }
@@ -1077,11 +1124,95 @@ export function persistedDerived(key, compute, codec, inputs = []) {
 }
 
 /**
+ * A value that is a function of `key` and of this CLI build alone, kept in
+ * the catalogs folder: the parse of a doc the CLI reads from the stored docs,
+ * by the doc's text. The build and the folder it runs from stand for the
+ * CLI's own code, as in every kept entry, so nothing else is stamped. Kept
+ * only in a run that keeps catalogs (recordRunFor), by an installed CLI whose
+ * cache folder exists, and only when `codec` stores the value as text that
+ * reads back exactly. The entry holds a digest of that text, so a value that
+ * was changed after it was written is a miss. Anywhere else, or on any read
+ * or write error, `compute` runs as before. A `compute` that throws keeps
+ * nothing, so it throws the same way on every run.
+ * @template T, E
+ * @param {unknown[]} key - Everything the value is a function of, besides
+ *   the CLI build; its first item names the kind of value.
+ * @param {() => T} compute
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
+ * @returns {T}
+ */
+export function persistedValue(key, compute, codec) {
+  if (!run) return compute();
+  const id = withoutRecording(buildId);
+  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return compute();
+  const file = entryFile(dir, key, id);
+  const entry = entryKey(key, id);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    const value =
+      stored?.format === FORMAT &&
+      stored.pure === true &&
+      stored.key === entry &&
+      stored.sum === textSum(JSON.stringify(stored.value))
+        ? readBack(() => stored.value, codec)
+        : undefined;
+    if (value !== undefined) {
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return value;
+    }
+  } catch {
+    // No usable entry: computed below.
+  }
+  const value = compute();
+  withoutRecording(() => {
+    try {
+      const body = storedText(codec, value);
+      if (body === undefined) return;
+      const head = JSON.stringify({
+        format: FORMAT,
+        pure: true,
+        key: entry,
+        sum: textSum(body),
+      });
+      // The value's text goes in as checked, as the head's last field.
+      const text = `${head.slice(0, -1)},"value":${body}}`;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evictOldest(dir, isEntry);
+    } catch {
+      // A value that cannot be stored is computed again next time.
+    }
+  });
+  return value;
+}
+
+/**
+ * The digest a value kept by persistedValue is checked against: its JSON
+ * text, as written and as the value read back writes it again.
+ * @param {string | undefined} text
+ * @returns {string | null}
+ */
+function textSum(text) {
+  return text === undefined
+    ? null
+    : createHash('sha256').update(text).digest('hex').slice(0, 32);
+}
+
+/**
  * How old every stamped time must be before a summary is stored. A file
  * system can store times as coarsely as 2 s, so a change within one tick of
  * the last can leave a stamp as it was.
  */
-const SUMMARY_SETTLE_MS = 2000;
+export const SUMMARY_SETTLE_MS = 2000;
 
 /**
  * Whether every stamp in `stamps` was taken longer than
@@ -1092,7 +1223,9 @@ const SUMMARY_SETTLE_MS = 2000;
 function settled(stamps) {
   const limit = Date.now() - SUMMARY_SETTLE_MS;
   return stamps.every(([, stamp]) => {
-    if (stamp === '-') return true;
+    // A folder's listing and a resolved path hold no time.
+    if (stamp === '-' || stamp.startsWith(LISTED) || stamp.startsWith(RESOLVED))
+      return true;
     const [, mtime, ctime] = stamp.split(':').map(Number);
     return mtime < limit && ctime < limit;
   });
@@ -1101,7 +1234,8 @@ function settled(stamps) {
 /**
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
- * `make` stamped has the stamp it was stored with (the CLI's own files are
+ * `make` stamped has the stamp it was stored with, a folder's listing
+ * (read-record.mjs listingStamp) by its entries' names and types (the CLI's own files are
  * covered by the build id instead: inCliBuild), else the one
  * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
@@ -1113,18 +1247,23 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
- * @param {{accept?: (value: T) => boolean}} [options] - `accept`: whether a
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - `accept`: whether a
  *   stored value serves this call, else it is made again and stored over (a
- *   summary that holds more only once a caller asks for it).
+ *   summary that holds more only once a caller asks for it); `keep`: whether
+ *   a value just made is stored at all (a failed or partial answer is not).
  * @returns {T}
  */
-export function persistedSummary(key, make, {accept = () => true} = {}) {
+export function persistedSummary(
+  key,
+  make,
+  {accept = () => true, keep = () => true} = {},
+) {
   const at = summaryAt(key);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 
@@ -1134,21 +1273,21 @@ export function persistedSummary(key, make, {accept = () => true} = {}) {
  * @template T
  * @param {unknown[]} key
  * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
- * @param {{accept?: (value: T) => boolean}} [options] - As for
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - As for
  *   {@link persistedSummary}.
  * @returns {Promise<T>}
  */
 export async function persistedSummaryAsync(
   key,
   make,
-  {accept = () => true} = {},
+  {accept = () => true, keep = () => true} = {},
 ) {
   const at = summaryAt(key);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = await make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 
@@ -1189,7 +1328,7 @@ function storedSummary({file, entry}) {
       Array.isArray(stored.stamps) &&
       stored.stamps.every(
         (/** @type {[string, string]} */ [at, stamp]) =>
-          typeof at === 'string' && fileStamp(at) === stamp,
+          typeof at === 'string' && summaryStampNow(at, stamp) === stamp,
       )
     ) {
       try {
@@ -1207,6 +1346,20 @@ function storedSummary({file, entry}) {
 }
 
 /**
+ * What `at` gives now for a stamp of the kind `stamp` is: a folder's listing
+ * (read-record.mjs listingStamp), where a path resolves (resolvedNow), or a
+ * path's full stamp.
+ * @param {string} at
+ * @param {string} stamp
+ * @returns {string}
+ */
+function summaryStampNow(at, stamp) {
+  if (stamp.startsWith(LISTED)) return listingStamp(at);
+  if (stamp.startsWith(RESOLVED)) return resolvedNow(at);
+  return fileStamp(at);
+}
+
+/**
  * Whether `file` is one of the installed CLI's own files: under its folder,
  * outside the node_modules folder inside it. A summary is kept only by an
  * installed CLI, under its build id (summaryAt), which names the exact code
@@ -1216,10 +1369,7 @@ function storedSummary({file, entry}) {
  * @returns {boolean}
  */
 function inCliBuild(file) {
-  const root = CLI_ROOT + path.sep;
-  return (
-    file.startsWith(root) && !file.startsWith(root + 'node_modules' + path.sep)
-  );
+  return isCliBuildFile(file, CLI_ROOT + path.sep, path.sep);
 }
 
 /**

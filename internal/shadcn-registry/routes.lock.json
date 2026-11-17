@@ -3767,6 +3767,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-paste-as-token-long-paste",
+      "path": "examples/use-chat-paste-as-token/long-paste",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -4169,6 +4174,11 @@
     {
       "name": "hook-use-chat-dictation",
       "path": "hooks/use-chat-dictation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-paste-as-token",
+      "path": "hooks/use-chat-paste-as-token",
       "aliases": []
     },
     {

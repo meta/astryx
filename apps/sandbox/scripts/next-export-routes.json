@@ -814,6 +814,7 @@
     "/templates/useCalendarDaysHookUsage/",
     "/templates/useCalendarNavigationHookUsage/",
     "/templates/useChatDictationHookUsage/",
+    "/templates/useChatPasteAsTokenHookUsage/",
     "/templates/useClickableContainerHookUsage/",
     "/templates/useClipboardHookUsage/",
     "/templates/useCollatorHookUsage/",

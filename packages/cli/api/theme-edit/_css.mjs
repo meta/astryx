@@ -10,8 +10,14 @@
 
 import {createRequire} from 'node:module';
 import {wordTable} from './_tables.mjs';
+import {cssTree, mdnCssProperties} from '../../foundation/runtime/css-tree.mjs';
 
 const require = createRequire(import.meta.url);
+
+// Resolved when this module loads, before a command stats any file, as
+// css-tree is (foundation/runtime/css-tree.mjs).
+const SYNTAX_PATCHES =
+  require.resolve('@csstools/css-syntax-patches-for-csstree');
 
 /**
  * Properties browsers ship that MDN does not list yet (Chrome experiments).
@@ -35,18 +41,11 @@ const NOT_IN_MDN_YET = [
   'window-drag',
 ];
 
-/** @type {any} */
-let tree = null;
 /** css-tree, loaded once. */
-const csstree = () => (tree ??= require('css-tree'));
+const csstree = cssTree;
 
 /** The MDN property data css-tree reads, at the version css-tree pins. */
-const mdnProperties = () =>
-  /** @type {Record<string, {status?: string, initial?: string | string[]}>} */ (
-    createRequire(require.resolve('css-tree/package.json'))(
-      'mdn-data/css/properties.json',
-    )
-  );
+const mdnProperties = mdnCssProperties;
 
 /** @type {ReadonlySet<string> | null} */
 let names = null;
@@ -75,13 +74,26 @@ export function cssProperties() {
   return names;
 }
 
+/** @type {ReadonlySet<string> | null} */
+let vendorNames = null;
+/**
+ * The vendor-prefixed property names css-tree's data lists
+ * (`-webkit-line-clamp`, `-moz-appearance`).
+ * @returns {ReadonlySet<string>}
+ */
+export function vendorProperties() {
+  vendorNames ??= new Set(
+    Object.keys(csstree().lexer.properties).filter(k => /^-[a-z]+-/.test(k)),
+  );
+  return vendorNames;
+}
+
 /**
  * The current specifications' grammar, as patches to css-tree's: the
  * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
  * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
  */
-const syntaxPatches = () =>
-  require('@csstools/css-syntax-patches-for-csstree').next;
+const syntaxPatches = () => require(SYNTAX_PATCHES).next;
 
 /** @type {any} */
 let patched = null;
@@ -235,6 +247,10 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // css-tree's lexer forgives a last word ending in an old browser hack's
+  // escape (`8px\9`, `none\0`); a browser reads the escape as part of the
+  // word (a unit `px` and a tab), so it drops the value.
+  if (/\\[09]\s*$/.test(value)) return null;
   // A color function holding a variable (color-mix(…, var(--x))) is a
   // color whatever the variable holds: it is matched as one, so a value
   // with many of them is read like the same value with plain colors.
@@ -246,8 +262,23 @@ function matchWith(value, match) {
     if (next === value) break;
     value = next;
   }
-  const vars =
-    value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
+  const refs = varReferences(value);
+  const vars = refs.map(r => r.text);
+  /**
+   * The value with each reference replaced by its stand-in, each set apart
+   * by spaces: a reference is its tokens, so the text glued to it
+   * (`var(--x)px`) stays a token of its own, as the browser reads it.
+   * @param {string[]} stands
+   */
+  const standIn = stands => {
+    let out = '';
+    let last = 0;
+    refs.forEach((r, i) => {
+      out += `${value.slice(last, r.at)} ${stands[i]} `;
+      last = r.at + r.text.length;
+    });
+    return out + value.slice(last);
+  };
   /** @param {string} v */
   const tryOne = v => {
     try {
@@ -277,23 +308,37 @@ function matchWith(value, match) {
   // Many variables: each stands for the same kind of value at once.
   if (vars.length > 3) {
     for (const stand of VAR_STANDS_FOR) {
-      let v = value;
-      for (const x of vars) v = v.replace(x, stand);
-      const ast = tryOne(v);
+      const ast = tryOne(standIn(vars.map(() => stand)));
       if (ast) return ast;
     }
     return null;
   }
-  /** @param {string} v @param {number} i @returns {any | null} */
-  const fill = (v, i) => {
-    if (i === vars.length) return tryOne(v);
+  /** @param {string[]} stands @returns {any | null} */
+  const fill = stands => {
+    if (stands.length === vars.length) return tryOne(standIn(stands));
     for (const stand of VAR_STANDS_FOR) {
-      const ast = fill(v.replace(vars[i], stand), i + 1);
+      const ast = fill([...stands, stand]);
       if (ast) return ast;
     }
     return null;
   };
-  return fill(value, 0);
+  return fill([]);
+}
+
+/**
+ * Each var() or env() reference in a value, with where it starts, as CSS
+ * reads one: a function token, so `var(` glued after a letter, a digit, a
+ * dot or a dash (`2var(--x)`, `8pxvar(--x)`) is no reference (CSS reads a
+ * dimension or a name there).
+ * @param {string} value
+ * @returns {Array<{at: number, text: string}>}
+ */
+export function varReferences(value) {
+  return [
+    ...String(value).matchAll(
+      /(?<![\w.-])(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi,
+    ),
+  ].map(m => ({at: /** @type {number} */ (m.index), text: m[0]}));
 }
 
 /**
@@ -433,6 +478,20 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
+/**
+ * A value with each unit split off its number by a space joined to it
+ * (`50 %`, `200 ms`, `8 PX`), for every unit CSS reads (the table above, and
+ * `%`); two numbers (`12 16px`) and a word that is no unit stay apart.
+ * @param {string} value
+ */
+export function unitsJoined(value) {
+  return String(value).replace(
+    /(\d)\s+(%|[a-z]+)(?=$|[\s,/)])/gi,
+    (all, digit, unit) =>
+      unit === '%' || UNIT_TYPES[unit.toLowerCase()] ? `${digit}${unit}` : all,
+  );
+}
+
 /** A value of each type, to match where a math function stands. */
 const TYPE_SAMPLES = wordTable(
   /** @type {Record<string, string>} */ ({

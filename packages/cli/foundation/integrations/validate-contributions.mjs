@@ -652,6 +652,42 @@ function walkNodes(node, visit) {
   }
 }
 
+/**
+ * The node types the template walks judge: what a module declares, renders,
+ * aliases, reads and loads.
+ */
+const JUDGED_NODE_TYPES = new Set([
+  'FunctionDeclaration',
+  'ClassDeclaration',
+  'VariableDeclarator',
+  'JSXMemberExpression',
+  'JSXOpeningElement',
+  'MemberExpression',
+  'OptionalMemberExpression',
+  'CallExpression',
+  'ImportExpression',
+]);
+
+/**
+ * The nodes of a source file's tree that the template walks judge, in the
+ * order {@link walkNodes} visits them, gathered once per validation
+ * (oncePerListing): each walk that reaches the file reads this list instead
+ * of the whole tree.
+ * @param {string} file
+ * @param {any} ast the file's tree (sourceTree)
+ * @returns {any[]}
+ */
+function judgedNodes(file, ast) {
+  return oncePerListing(`judged-nodes\0${file}`, () => {
+    /** @type {any[]} */
+    const nodes = [];
+    walkNodes(ast.program, node => {
+      if (JUDGED_NODE_TYPES.has(node.type)) nodes.push(node);
+    });
+    return nodes;
+  });
+}
+
 /** The extensions a local import may leave off, in the order tried. */
 const LOCAL_MODULE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs'];
 
@@ -893,9 +929,10 @@ function importedNames(file, integration) {
     // Anything this check does not model leaves the names unjudged: what
     // the module renders through a binding, an alias, a member read, a
     // component held in a variable, or a module loaded at runtime.
+    const judged = judgedNodes(current, ast);
     /** @type {Set<string>} functions and classes the module declares */
     const declared = new Set();
-    walkNodes(ast.program, node => {
+    judged.forEach(node => {
       if (
         (node.type === 'FunctionDeclaration' ||
           node.type === 'ClassDeclaration') &&
@@ -916,7 +953,7 @@ function importedNames(file, integration) {
     });
     const from = (/** @type {string} */ name) =>
       bindings.has(name) ? ` (imported from "${bindings.get(name)}")` : '';
-    walkNodes(ast.program, node => {
+    judged.forEach(node => {
       if (node.type === 'JSXMemberExpression') {
         let object = node.object;
         while (object?.type === 'JSXMemberExpression') object = object.object;
