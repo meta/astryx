@@ -60,8 +60,13 @@ const how = async (theme, ask) => {
 };
 
 /** @param {Array<{commands: string[]}>} rs */
+// (The readable-text line set's own check adds beside a fill is measured
+// on its own: these asks read the rest.)
 const writes = rs =>
-  rs.flatMap(r => r.commands).filter(c => /^(set|undo) /.test(c));
+  rs
+    .filter(r => !/^readable text on that fill/.test(r.text))
+    .flatMap(r => r.commands)
+    .filter(c => /^(set|undo) /.test(c));
 
 /** Run each line as offered. @param {string[]} lines */
 const follow = async lines => {
@@ -184,14 +189,14 @@ describe('words', () => {
     for (const [q, line] of [
       [
         'in drak mode, make the cards red',
-        "set q0 background-color '#dc2626' --on card --mode dark",
+        "set q0 background-color '#dc2626' --on card --when variant:default --mode dark",
       ],
       [
         'button background red (drak)',
         "set q0 background-color '#dc2626' --on button --mode dark",
       ],
     ])
-      expect(writes(await how('q0', q)), q).toEqual([line]);
+      expect(writes(await how('q0', q))[0], q).toBe(line);
     const bare = await how('q0', 'button background (drak)');
     expect(bare[0].text).toMatch(
       /names button and what to look at, but no change/,

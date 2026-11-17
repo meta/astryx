@@ -88,6 +88,8 @@ import {
 import {
   checkAppThemes,
   checkThemes,
+  moduleSpecifiers,
+  stringValues,
   themeImportWiring,
   withProviderWiring,
 } from './theme-checks.mjs';
@@ -112,7 +114,9 @@ import {
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
+  findIconImports,
   findIconPlaceholders,
+  iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
@@ -126,8 +130,13 @@ import {
   isLocalThemeOwner,
   readThemeState,
   builtTargetOf,
+  listProjectSourceFiles,
+  readTextFile,
+  doctorStylesheetImports,
+  doctorStylesheetAtRules,
+  builtProjectRoot,
 } from './_adapter.mjs';
-import {checkBuilt} from './built-checks.mjs';
+import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {
@@ -182,12 +191,17 @@ import {
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
  * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
- *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   The project's icon sets (AST-084 FR17), or null when they could not be
+ *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
- *   the CLI writes for a missing icon, read only in a project that sets
- *   `experimental.iconSet`; null otherwise.
+ *   the CLI writes for a missing icon, read only where the icon feature gate
+ *   is on; null otherwise.
+ *   Experimental: may change or be removed in a patch release.
+ * @property {Array<{file: string, imports: Array<{line: number, module: string, export: string, why: 'unlisted'|'earlier'|'unresolved', set: string|null, definitions: string[], replacement: {set: string, module: string, export: string}|null}>}>|null} [iconImports]
+ *   Each file in the project's own source with icon imports that do not
+ *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
@@ -356,6 +370,235 @@ export function checkCoreInstalled(ctx) {
             ? `Install the project's dependencies: \`${install}\`.`
             : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
+  };
+}
+
+/** Core's component styles, the stylesheet an Astryx app imports once. */
+const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
+
+/** Config files a build that compiles Core from source names its plugin in. */
+const SOURCE_BUILD_CONFIGS = [
+  {stem: 'next.config', plugin: 'withAstryx()'},
+  {stem: 'vite.config', plugin: 'astryxStylex()'},
+];
+
+/** The extensions those config files take. */
+const CONFIG_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
+
+/** The PostCSS config files PostCSS reads in JSON. */
+const POSTCSS_JSON_CONFIGS = ['.postcssrc', '.postcssrc.json'];
+
+/** @param {string} name */
+function namesBuildPackage(name) {
+  return (
+    name === '@astryxdesign/build' || name.startsWith('@astryxdesign/build/')
+  );
+}
+
+/**
+ * Every string in a JSON value, object keys included.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function jsonStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(jsonStrings);
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) => [
+      key,
+      ...jsonStrings(child),
+    ]);
+  }
+  return [];
+}
+
+/**
+ * The PostCSS config file that loads a plugin of `@astryxdesign/build`, which
+ * compiles Core's styles into the stylesheet's `@stylex;` rule, or null. A
+ * JavaScript or TypeScript config names it as a string (an import, a
+ * `require()` or a `plugins` key); a JSON config, or `package.json`'s
+ * `postcss` field, as a key or a value.
+ * @param {string} root
+ * @returns {string | null}
+ */
+function postcssConfigLoadingBuild(root) {
+  for (const extension of CONFIG_EXTENSIONS) {
+    const name = `postcss.config${extension}`;
+    for (const config of [name, `.postcssrc${extension}`]) {
+      let source;
+      try {
+        source = readTextFile(path.join(root, config));
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if ([...stringValues(source)].some(namesBuildPackage)) return config;
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const config of [...POSTCSS_JSON_CONFIGS, 'package.json']) {
+    let value;
+    try {
+      value = JSON.parse(readTextFile(path.join(root, config)));
+    } catch {
+      continue;
+    }
+    const postcss = config === 'package.json' ? value?.postcss : value;
+    if (jsonStrings(postcss).some(namesBuildPackage)) return config;
+  }
+  return null;
+}
+
+/**
+ * How an app compiles Core's styles from its source with
+ * `@astryxdesign/build`, so it loads no `astryx.css`: a `next.config` or
+ * `vite.config` that imports the build's plugin (`withAstryx()`,
+ * `astryxStylex()`), a stylesheet with the `@astryx;` rule the Next.js
+ * PostCSS plugin writes the compiled rules into, or one with the `@stylex;`
+ * rule while the PostCSS config loads the build's plugin. An `@stylex;` rule
+ * alone is the app's own StyleX, which still needs Core's prebuilt styles.
+ * Null when it does none of these.
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function sourceBuildSetup(root) {
+  for (const {stem, plugin} of SOURCE_BUILD_CONFIGS) {
+    for (const extension of CONFIG_EXTENSIONS) {
+      const file = path.join(root, `${stem}${extension}`);
+      let source;
+      try {
+        source = readTextFile(file);
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if (
+          [...moduleSpecifiers(source)].some(
+            specifier =>
+              specifier === '@astryxdesign/build' ||
+              specifier.startsWith('@astryxdesign/build/'),
+          )
+        ) {
+          return `${plugin} in ${stem}${extension}`;
+        }
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+    if (!file.endsWith('.css')) continue;
+    let css;
+    try {
+      css = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!/@(?:astryx|stylex)\s*;/iu.test(css)) continue;
+    const rules = doctorStylesheetAtRules(css);
+    const where = path.relative(root, file) || file;
+    if (rules.has('astryx')) return `the \`@astryx;\` rule in ${where}`;
+    if (rules.has('stylex')) {
+      const config = postcssConfigLoadingBuild(root);
+      if (config) {
+        return `the \`@stylex;\` rule in ${where}, with @astryxdesign/build in ${config}`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * {@link sourceBuildSetup} for a project folder, or null without one.
+ * @param {string | null} root
+ * @returns {string | null}
+ */
+function sourceBuildOf(root) {
+  return root ? sourceBuildSetup(root) : null;
+}
+
+/**
+ * The first project file that loads Core's component styles: a stylesheet
+ * that `@import`s them, a module that imports them, or a page that links
+ * them. Each is read as a syntax tree or its tags, so comments never count.
+ * @param {string} root
+ * @returns {{file: string | null, unparsed: number}}
+ */
+function coreStylesheetLoad(root) {
+  let unparsed = 0;
+  for (const file of listProjectSourceFiles(root, '', {
+    stylesheets: true,
+    pages: true,
+  })) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!source.includes('astryx.css')) continue;
+    if (file.endsWith('.css')) {
+      if (doctorStylesheetImports(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+      continue;
+    }
+    if (/\.html?$/u.test(file)) {
+      if (linksCoreStylesheet(source)) return {file, unparsed};
+      continue;
+    }
+    try {
+      if (moduleSpecifiers(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+    } catch {
+      unparsed += 1;
+    }
+  }
+  return {file: null, unparsed};
+}
+
+/**
+ * The app loads Core's component styles. Without them, Astryx components
+ * render unstyled, and nothing else fails: the build passes and the page
+ * loads. An app that loads none but compiles Core's styles from source is
+ * not checked. Read from the project's own source, stylesheets and pages,
+ * never run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreStylesheets(ctx) {
+  if (!ctx.coreDir) return null;
+  const root = projectRootOf(ctx);
+  const label = "Core's component styles loaded";
+  const {file, unparsed} = coreStylesheetLoad(root);
+  if (file) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'pass',
+      message: `${path.relative(root, file) || file} loads ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  const setup = sourceBuildSetup(root);
+  if (setup) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${setup}), so it does not need ${CORE_STYLESHEET}.`,
+    };
+  }
+  return {
+    id: 'core-stylesheets',
+    label,
+    status: 'warn',
+    message: `Found nothing in project source, stylesheets or pages that imports or links ${CORE_STYLESHEET}, Core's component styles. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
+    fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first.",
   };
 }
 
@@ -665,8 +908,8 @@ export function checkImplicitIntegrations(ctx) {
       'themes',
       'docs',
       'codemods',
-      // An experimental root counts only in a project that opts in.
-      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+      // An experimental root counts only where icon features are on.
+      ...(ctx.iconSets ? ['iconSets'] : []),
     ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
@@ -1153,8 +1396,8 @@ export function checkIntegrationCoreRange(ctx) {
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
  * other installed set that was withdrawn, with why.
- * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
- * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project where the
+ * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
@@ -1164,12 +1407,16 @@ export function checkIconSets(ctx) {
   const label = 'Icon sets';
   if (state == null) return null;
   const {sets, withdrawn, choice} = state;
-  // Only a project that opts in with `experimental.iconSet` gets the check.
-  if (!choice.configured) return null;
-  const list = [
-    {selector: choice.configured, status: choice.status, reason: choice.reason},
-    ...(choice.backups ?? []),
-  ];
+  const list = choice.configured
+    ? [
+        {
+          selector: choice.configured,
+          status: choice.status,
+          reason: choice.reason,
+        },
+        ...(choice.backups ?? []),
+      ]
+    : [];
   const installFix =
     'Install the package that ships the set, or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the installed sets).';
   const missing = list.filter(each => each.status === 'missing');
@@ -1211,8 +1458,8 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
-          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
           ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
@@ -1263,22 +1510,36 @@ export function checkIconSets(ctx) {
  */
 function iconUseCommandOf(choice, variant) {
   return iconUseCommand(
-    /** @type {string} */ (choice.configured),
+    /** @type {string} */ (choice.configured ?? choice.set?.name),
     (choice.backups ?? []).map(each => each.selector),
     variant,
   );
 }
 
 /**
+ * The main set the placeholder fixes name: the one `experimental.iconSet`
+ * names, else the only installed set; null when no main set is decided or
+ * icon features are off. The placeholder check, and the source scan it
+ * reads, run only when there is one.
+ * @param {DoctorContext['iconSets']} iconSets
+ * @returns {string | null}
+ */
+export function placeholderMainSet(iconSets) {
+  return iconSets?.choice.configured ?? iconSets?.choice.set?.name ?? null;
+}
+
+/**
  * The placeholder component for a missing icon, still in the project's own
  * source (AST-084): each file and the meanings it stands for, with the commands that give each a
- * real icon. Only a project that sets `experimental.iconSet` gets the check.
+ * real icon. Only a project where the icon feature gate is on, and whose
+ * main set is decided, gets the check.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
 export function checkIconPlaceholders(ctx) {
   const choice = ctx.iconSets?.choice;
-  if (!choice?.configured || ctx.iconPlaceholders == null) return null;
+  const main = placeholderMainSet(ctx.iconSets);
+  if (!choice || !main || ctx.iconPlaceholders == null) return null;
   const id = 'icon-placeholders';
   const label = 'Placeholder icons';
   const found = ctx.iconPlaceholders;
@@ -1290,7 +1551,6 @@ export function checkIconPlaceholders(ctx) {
       message: 'No copied code uses the placeholder for a missing icon.',
     };
   }
-  const main = choice.configured;
   const meanings = [
     ...new Set(found.flatMap(each => each.meanings ?? [])),
   ].sort();
@@ -1313,6 +1573,114 @@ export function checkIconPlaceholders(ctx) {
     status: 'warn',
     message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
     fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
+  };
+}
+
+/**
+ * The icon imports in the project's own source that do not match its icon
+ * sets (AST-084): each file and import, with the icon of the list that draws
+ * the same meaning. An import from a set the list leaves out, or from a set
+ * later in the list than one that draws the same meaning, still renders, so
+ * the check warns, as for a placeholder. An icon-named import of a package
+ * that does not resolve and that package.json does not declare (a set the
+ * project uninstalled) breaks the build, so the check fails, as `icon-sets`
+ * fails for a set the list names that is not installed. Only a project where
+ * the icon feature gate is on, and whose main set is decided, gets the check.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconImports(ctx) {
+  const choice = ctx.iconSets?.choice;
+  const main = choice?.configured ?? choice?.set?.name;
+  if (!choice || !main || ctx.iconImports == null) return null;
+  const id = 'icon-imports';
+  const label = 'Icon imports';
+  const found = ctx.iconImports;
+  if (found.length === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message:
+        'Every icon import in your code comes from the set your list picks for it.',
+    };
+  }
+  const missing = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why === 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  const other = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why !== 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  /**
+   * Each file once, its imports grouped by the module they come from and the
+   * module that replaces them: `file (from → to: Old → New, …; from: Old
+   * (why), …)`.
+   * @param {typeof other} rows
+   */
+  const byFile = rows => {
+    /** @type {Map<string, Map<string, string[]>>} */
+    const files = new Map();
+    for (const row of rows) {
+      const groups = files.get(row.file) ?? new Map();
+      const group = row.replacement
+        ? `${row.module} → ${row.replacement.module}`
+        : row.module;
+      const names = groups.get(group) ?? [];
+      const name = row.replacement
+        ? `${row.export} → ${row.replacement.export}`
+        : row.why === 'unresolved'
+          ? row.export
+          : `${row.export} (${row.definitions.length > 0 ? `no set in your list has "${row.definitions.join('", "')}"` : 'its set maps it to no Astryx meaning'})`;
+      if (!names.includes(name)) names.push(name);
+      groups.set(group, names);
+      files.set(row.file, groups);
+    }
+    return [...files]
+      .map(
+        ([file, groups]) =>
+          `${file} (${[...groups]
+            .map(([group, names]) => `${group}: ${names.join(', ')}`)
+            .join('; ')})`,
+      )
+      .join(', ');
+  };
+  /** @param {number} n @param {string} what */
+  const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
+  /** @param {typeof other} rows */
+  const fileCount = rows => new Set(rows.map(row => row.file)).size;
+  const parts = [];
+  if (missing.length > 0) {
+    parts.push(
+      `${count(missing.length, 'icon import')} in ${count(fileCount(missing), 'file')} name a package that is not installed, so the build fails: ${byFile(missing)}.`,
+    );
+  }
+  if (other.length > 0) {
+    const sets = [...new Set(other.map(row => row.set))].join(', ');
+    parts.push(
+      `${count(other.length, 'icon import')} in ${count(fileCount(other), 'file')} come from ${sets}, not the set your list (experimental.iconSet) picks for that meaning: ${byFile(other)}.`,
+    );
+  }
+  const fixes = [];
+  if (missing.length > 0) {
+    fixes.push(
+      'Replace each import of a package that is not installed with the icon `astryx experimental icon <meaning>` prints; or install that package again, and doctor names the icon of your list that draws the same meaning.',
+    );
+  }
+  if (other.length > 0) {
+    fixes.push(
+      `Import each icon named after → from the module named after →. An icon with no → needs a set in your list that has its meaning, or your own choice of icon: \`${iconUseCommand(main, [...(choice.backups ?? []).map(each => each.selector), '<set>'], choice.variant)}\`.`,
+    );
+  }
+  return {
+    id,
+    label,
+    status: missing.length > 0 ? 'fail' : 'warn',
+    message: parts.join(' '),
+    fix: fixes.join(' '),
   };
 }
 
@@ -2399,6 +2767,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
@@ -2408,6 +2777,7 @@ export const SYNC_CHECKS = [
   checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
+  checkIconImports,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
@@ -2423,6 +2793,7 @@ export const SYNC_CHECKS = [
  */
 const CORE_CHECKS = new Set([
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkVersionAlignment,
   checkPeerDeps,
 ]);
@@ -2447,6 +2818,7 @@ export async function runChecks(options = {}) {
       ...checkBuilt(built, {
         cwd,
         packages: builtIntegrationPackages(built, cwd),
+        sourceBuild: sourceBuildOf(builtProjectRoot(built, cwd)),
       }),
     ];
     const summary = {pass: 0, warn: 0, fail: 0, info: 0};
@@ -2486,7 +2858,7 @@ export async function runChecks(options = {}) {
   let configuredIntegrations = null;
   /** @type {string|null} */
   let projectError = null;
-  /** @type {DoctorContext['iconSets']} */
+  /** @type {Awaited<ReturnType<import('../../foundation/config/project.mjs').Project['iconSets']>> | null} */
   let iconSets = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
@@ -2584,7 +2956,9 @@ export async function runChecks(options = {}) {
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
       try {
-        iconSets = await project.iconSets();
+        iconSets = iconFeatureGate(project).on
+          ? await project.iconSets()
+          : null;
       } catch {
         iconSets = null;
       }
@@ -2617,6 +2991,7 @@ export async function runChecks(options = {}) {
     iconSets,
     // Set after the docs checks, below.
     iconPlaceholders: null,
+    iconImports: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -2636,10 +3011,13 @@ export async function runChecks(options = {}) {
       checkDocsProgressiveDisclosure(ctx),
     ),
   ];
-  // Only a project that names an icon set scans its source for placeholders.
-  if (iconSets?.choice.configured) {
+  // Only a project where icon features are on and a main set is decided
+  // scans its source for placeholders: no other project gets the check.
+  if (iconSets && placeholderMainSet(iconSets)) {
     try {
-      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.iconPlaceholders = findIconPlaceholders(projectDir);
+      ctx.iconImports = findIconImports(projectDir, iconSets);
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;

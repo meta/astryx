@@ -45,6 +45,7 @@ import {
   dependencyInstallFor,
   coreAddCommand,
   packageInstallCommand,
+  packageInstallStep,
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
@@ -181,11 +182,36 @@ function walkAst(value, visit) {
 }
 
 /**
+ * The string values a source file holds, object keys included, read from its
+ * syntax tree, so a commented-out copy never counts. A config names a plugin
+ * package this way (`plugins: {'@acme/postcss': {}}`).
+ * @param {string} source
+ * @returns {Set<string>}
+ */
+export function stringValues(source) {
+  const values = new Set();
+  walkAst(parseModule(source), node => {
+    if (node.type === 'StringLiteral') values.add(node.value);
+    if (
+      node.type === 'TemplateLiteral' &&
+      node.expressions?.length === 0 &&
+      typeof node.quasis?.[0]?.value?.cooked === 'string'
+    ) {
+      values.add(node.quasis[0].value.cooked);
+    }
+  });
+  return values;
+}
+
+/**
+ * The module specifiers a source file imports, re-exports, or loads with
+ * `import()` or `require()`, read from its syntax tree, so a commented-out
+ * or quoted copy never counts.
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
  */
-function moduleSpecifiers(source, options = {}) {
+export function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -1007,6 +1033,19 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
+ * The fix line for a project with no installed theme: the install command in
+ * the project's package manager, or `npm install` with a note when its
+ * lockfiles disagree.
+ * @param {string} cwd
+ * @param {string} run the CLI invocation stem
+ * @returns {string}
+ */
+function themeInstallFix(cwd, run) {
+  const {line, note} = packageInstallStep(['@astryxdesign/theme-neutral'], cwd);
+  return `Install a theme, e.g. \`${line}\`${note ? ` (${note})` : ''}, then add it to the app with \`${run} theme add neutral\`.`;
+}
+
+/**
  * The pass message's list of themes wired by import, each with the file that
  * imports it.
  * @param {Array<{slug: string, file: string, wiredBy?: string}>} wired
@@ -1140,7 +1179,7 @@ export function checkThemes(
       label,
       status: 'warn',
       message: 'No @astryxdesign/theme-* packages are installed.',
-      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral\`.`,
+      fix: themeInstallFix(cwd, run),
     };
   }
   const names = packages.join(', ');
@@ -1361,7 +1400,21 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          // Each cause the findings hold is named: a theme can have both.
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${[
+            ...(unshipped.some(
+              finding => finding.code === 'relative_import_not_shipped',
+            )
+              ? ['it or its stylesheet names a file the package does not ship']
+              : []),
+            ...(unshipped.some(
+              finding => finding.code === 'built_module_imports_typescript',
+            )
+              ? ['it imports TypeScript source']
+              : []),
+          ].join(
+            ', and ',
+          )}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);

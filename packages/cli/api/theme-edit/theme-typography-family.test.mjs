@@ -163,3 +163,59 @@ describe('a weight word after a family whose start the editor knows', () => {
     expect(JSON.stringify(kept)).toContain('Archivo Black');
   }, 120_000);
 });
+
+describe('a family typed alone', () => {
+  it("keeps the base's own fallbacks for a family the base uses", async () => {
+    const pkg = path.join(
+      path.dirname(cwd),
+      'node_modules',
+      '@astryxdesign',
+      'theme-chocolate',
+    );
+    fs.mkdirSync(pkg, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-chocolate',
+        version: '0.0.0',
+        type: 'module',
+        exports: {'./built': './built.js'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'built.js'),
+      `export const chocolateTheme = ${JSON.stringify({
+        name: 'chocolate',
+        __built: true,
+        tokens: {
+          '--font-family-heading':
+            'Fraunces, Georgia, "Times New Roman", serif',
+        },
+      })};\n`,
+    );
+    await themeEditNew('sb', {cwd, like: 'chocolate'});
+    const r = /** @type {any} */ (
+      await themeEditSet('sb', 'font', 'Fraunces', {cwd, on: 'heading'})
+    );
+    expect(JSON.stringify(r.data)).not.toMatch(/Fraunces, system-ui/);
+    const css = fs.readFileSync(path.join(cwd, 'themes/sb/sb.css'), 'utf8');
+    expect(css).toContain(
+      '--font-family-heading: Fraunces, Georgia, "Times New Roman", serif',
+    );
+  }, 240_000);
+
+  it('takes fallbacks of the kind its name says', async () => {
+    for (const [family, stack] of [
+      ['Noto Serif', '"Noto Serif", Georgia, serif'],
+      ['Fira Code', '"Fira Code", ui-monospace, monospace'],
+      ['Albert Sans', '"Albert Sans", system-ui, sans-serif'],
+    ]) {
+      const r = /** @type {any} */ (
+        await themeEditSet('t', 'font', family, {cwd, on: 'heading'})
+      );
+      expect(JSON.stringify(r.data), family).toContain(
+        JSON.stringify(stack).slice(1, -1),
+      );
+    }
+  }, 240_000);
+});

@@ -125,6 +125,15 @@ async function issuesOf(dir) {
 }
 
 /**
+ * The notes validate prints beside its issues for a package.
+ * @param {string} dir
+ * @returns {Promise<Array<{code: string, message: string, next?: boolean}>>}
+ */
+async function notesOf(dir) {
+  return (await validateLocalIntegration(dir)).notes ?? [];
+}
+
+/**
  * The notes validate lists beside its issues, which count nowhere: the layout
  * findings added after the last minor release, each with its fix.
  * @param {string} dir
@@ -1668,10 +1677,19 @@ describe('the manifest', () => {
       [MANIFEST]: manifest({component: './components'}),
     });
 
-    const message = only(await issuesOf(dir), 'unknown_manifest_key');
+    const message = only(await notesOf(dir), 'unknown_manifest_key');
     expect(message).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: rename "component" to "components" in astryx.integration.mjs. If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
-    );
+    ); // A near miss is a `next` note; a key from a newer CLI is a plain one.
+    expect(
+      (await notesOf(dir)).find(note => note.code === 'unknown_manifest_key')
+        ?.next,
+    ).toBe(true);
+    expect(
+      (await issuesOf(dir)).some(
+        issue => issue.code === 'unknown_manifest_key',
+      ),
+    ).toBe(false);
   });
 
   it('says to remove a near-miss key when the manifest already sets the key it suggests', async () => {
@@ -1681,7 +1699,7 @@ describe('the manifest', () => {
       'components/AcmeWidget.tsx': componentSource('AcmeWidget'),
     });
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toBe(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: remove "component" from astryx.integration.mjs; it already sets "components". If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
     );
     const fixed = follow(dir, {
@@ -1709,14 +1727,26 @@ describe('the manifest', () => {
         'docs/a.doc.mjs': topic('a'),
       });
 
-      expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(fix);
+      expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(fix);
+    },
+  );
+
+  it.each([['componant'], ['COMPONENTS']])(
+    'still suggests %s → components, but only one edit away is a next note',
+    async key => {
+      const dir = writePackage({[MANIFEST]: manifest({[key]: './components'})});
+      const note = (await notesOf(dir)).find(
+        n => n.code === 'unknown_manifest_key',
+      );
+      expect(note?.message).toContain('Did you mean `components`?');
+      expect(note?.next).toBeUndefined();
     },
   );
 
   it('keeps the newer-CLI explanation for a key that is no near miss', async () => {
     const dir = writePackage({[MANIFEST]: manifest({playgrounds: './x'})});
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(
       'published against a newer Astryx CLI',
     );
   });

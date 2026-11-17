@@ -96,7 +96,8 @@ describe('how thicker radio checkbox border', () => {
       expect(both.first.some(c => /--on button$/.test(c))).toBe(true);
       const days = await answer("make the date picker's days rounder");
       expect(days.all).toEqual([]);
-      expect(days.text).toMatch(/has no day part/);
+      // (The days are the calendar's: named, and nothing written.)
+      expect(days.text).toMatch(/calendar-day/);
     },
     T,
   );
