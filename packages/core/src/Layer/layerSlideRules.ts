@@ -132,28 +132,6 @@ function spanGeometry(placement: LayerPlacement): string {
     : `inset-block-start:calc(0px - ${LIFT});inset-block-end:${LIFT};align-self:anchor-center;${blockGutter('margin-block-start')}${blockGutter('margin-block-end')}`;
 }
 
-/** The name of the last-resort option for content taller than either side. */
-export function coverRuleName(placement: LayerPlacement): string {
-  return `--astryx-layer-cover-${placement}`;
-}
-
-/**
- * `cover`: the last resort, for content that fits on neither side of the
- * trigger. The placement axis spans the viewport between both gutters, and
- * the box rests on the far edge of its preferred side, so it moves the least
- * distance from its preferred position that brings it inside the viewport.
- * It may cover its trigger. The alignment axis keeps the layer's own
- * geometry. The browser's overflow shift would instead keep the box inside
- * the page's scrollable area, which can run past the viewport.
- */
-function coverRule(placement: LayerPlacement): string {
-  const geometry =
-    placement === 'above' || placement === 'below'
-      ? `inset-block-start:calc(0px - ${LIFT});inset-block-end:${LIFT};${blockGutter('margin-block-start')}${blockGutter('margin-block-end')}align-self:${placement === 'below' ? 'self-end' : 'self-start'};`
-      : `inset-inline-start:0;inset-inline-end:0;${inlineGutter('margin-inline-start')}${inlineGutter('margin-inline-end')}justify-self:${placement === 'end' ? 'self-end' : 'self-start'};`;
-  return `@position-try ${coverRuleName(placement)}{${geometry}}`;
-}
-
 function rule(placement: LayerPlacement, side: Side): string {
   const landing = side === 'same' ? placement : OPPOSITE[placement];
   return `@position-try ${slideRuleName(placement, side)}{${placementGeometry(landing)}${spanGeometry(landing)}}`;
@@ -249,15 +227,13 @@ export function getAnchorClearFallbacks(placement: LayerPlacement): string {
 }
 
 /**
- * Every slide and cover rule, for every placement, and the beside and fit
- * rules.
+ * Every slide rule, for every placement, and the beside and fit rules.
  */
 export function slideRulesCss(): string {
   return [
     ...PLACEMENTS.flatMap(placement => [
       rule(placement, 'same'),
       rule(placement, 'opposite'),
-      coverRule(placement),
     ]),
     besideRule('end'),
     besideRule('start'),

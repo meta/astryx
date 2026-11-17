@@ -297,10 +297,10 @@ describe('useLayer identity', () => {
 });
 
 describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
-  it('gives every layer the two flips, the named slide on the same side and on the opposite side, then the cover', () => {
+  it('gives every layer the flips, then the named slide on the same side and on the opposite side', () => {
     for (const placement of ['above', 'below', 'start', 'end'] as const) {
       expect(getPositionTryFallbacks(placement)).toBe(
-        `flip-block, flip-inline, --astryx-layer-slide-${placement}-same, --astryx-layer-slide-${placement}-opposite, --astryx-layer-cover-${placement}`,
+        `flip-block, flip-inline, flip-block flip-inline, --astryx-layer-slide-${placement}-same, --astryx-layer-slide-${placement}-opposite`,
       );
     }
   });
@@ -334,14 +334,6 @@ describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
     expect(css).toContain(
       'inset-inline-start:0;inset-inline-end:0;justify-self:anchor-center;',
     );
-    // The cover spans the placement axis between both gutters and rests on
-    // the far edge of the preferred side.
-    expect(css).toMatch(
-      /@position-try --astryx-layer-cover-below\{inset-block-start:calc\(0px - [^;]*\);inset-block-end:[^;]*;margin-block-start:[^}]*margin-block-end:[^}]*align-self:self-end;\}/,
-    );
-    expect(css).toMatch(
-      /@position-try --astryx-layer-cover-above\{[^}]*align-self:self-start;\}/,
-    );
   });
 
   it('defaults to above when called without arguments (matches renderContext defaults)', () => {
@@ -354,12 +346,14 @@ describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
   it('produces well-formed, duplicate-free lists of five options with flips first for every placement', () => {
     for (const placement of ['above', 'below', 'start', 'end'] as const) {
       const items = getPositionTryFallbacks(placement).split(', ');
-      expect(items.slice(0, 2)).toEqual(['flip-block', 'flip-inline']);
+      expect(items.slice(0, 3)).toEqual([
+        'flip-block',
+        'flip-inline',
+        'flip-block flip-inline',
+      ]);
       expect(new Set(items).size).toBe(items.length);
-      for (const item of items.slice(2)) {
-        expect(item).toMatch(
-          new RegExp(`^--astryx-layer-(slide|cover)-${placement}(-|$)`),
-        );
+      for (const item of items.slice(3)) {
+        expect(item).toMatch(new RegExp(`^--astryx-layer-slide-${placement}-`));
       }
       // Chromium tries no more than five options.
       expect(items).toHaveLength(5);
@@ -2883,7 +2877,7 @@ describe('useLayer context positioning', () => {
         <Harness placement="below" alignment="start" />,
       );
       expect(style).toContain(
-        'position-try-fallbacks: flip-block, flip-inline, --astryx-layer-slide-below-same',
+        'position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline',
       );
     });
   });

@@ -188,14 +188,13 @@ the app reaches every layer instead of the components that happen to read it.
   scroll container when its content exceeds the cap; it may not cap higher.
 - **FR4 — The runtime's fallback orders.** An anchor-mode layer tries, in order:
   its preferred position; the flip across the placement axis; the flip across
-  the alignment axis; then, while its anchor is in view, a slide
+  the alignment axis; both flips; then, while its anchor is in view, a slide
   along the alignment axis that keeps the layer's size and moves it the least
   distance that brings it inside the gutters, on the preferred side of the
   trigger first and the opposite side second. The slide is a position option
   of its own, not a side effect of the flips failing: a layer wider than the
   room beside its trigger on both sides still reaches the side of the trigger
-  that has room on the placement axis. The slide on the opposite side also
-  serves a layer that needs both flips. Side placements slide along the block
+  that has room on the placement axis. Side placements slide along the block
   axis. The gutter bounds position as well as size on both axes: a layer that
   would end inside a gutter, or under a declared bar, does not fit there and
   the next option is tried; a slid layer keeps the gutter on both edges. On
@@ -206,11 +205,9 @@ the app reaches every layer instead of the components that happen to read it.
   viewport itself, also when the anchor runs past a viewport edge (an anchor
   in a panel that scrolls sideways): an aligned edge meets its anchor's edge
   but never comes closer to the viewport edge than the gutter, and no option
-  fits where the layer would leave the viewport. Content taller than either
-  side can hold is capped to the viewport and takes the last option: it spans
-  the placement axis between both gutters and rests on the far edge of its
-  preferred side, so it moves the least distance that brings it inside the
-  viewport, and it may cover its anchor. A layer that keeps its anchor clear — Tooltip, which
+  fits where the layer would leave the viewport. Content taller than either side can hold
+  is capped to the viewport and shifted into it, keeping its anchor clearance
+  from the edge it meets. A layer that keeps its anchor clear — Tooltip, which
   the hover on its trigger keeps open — never settles over its anchor, and no
   painted frame shows it there. An above or below layer of this kind uses one
   combined list in place of the order above: its preferred position, then the

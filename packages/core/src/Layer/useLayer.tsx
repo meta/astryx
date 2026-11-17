@@ -58,7 +58,6 @@ import {
   ensureSlideRules,
   anchorClearAlignment,
   getAnchorClearFallbacks,
-  coverRuleName,
   slideRuleName,
 } from './layerSlideRules';
 import {
@@ -1179,8 +1178,8 @@ function readPortalWritingContext(
 }
 
 /**
- * Compute the `position-try-fallbacks` list for a placement. Chromium tries no more than five options after the layer's own
- * position.
+ * Compute the `position-try-fallbacks` list for a placement. Chromium tries
+ * no more than five options after the layer's own position.
  *
  * Flips first; they mirror the insets, margins, and self alignment of both
  * axes, so the clearance stays on the anchor side and the gutter on the far
@@ -1192,14 +1191,15 @@ function readPortalWritingContext(
  * never moves to the side of the trigger that has room on the placement axis.
  * A slide option fits wherever the layer fits the viewport; its
  * `anchor-center` alignment keeps the layer's margin box, and so the gutter
- * on both edges, inside the viewport. The opposite slide also serves a layer
- * that needs both flips. Last, the cover option places content that fits on
- * neither side inside the viewport.
+ * on both edges, inside the viewport. Content taller than either side fits
+ * no option, so the browser keeps the base option and its overflow alignment
+ * shifts the box into the viewport, which the software keyboard's cap and
+ * lift build on.
  */
 export function getPositionTryFallbacks(
   placement: LayerPlacement = 'above',
 ): string {
-  return `flip-block, flip-inline, ${slideRuleName(placement, 'same')}, ${slideRuleName(placement, 'opposite')}, ${coverRuleName(placement)}`;
+  return `flip-block, flip-inline, flip-block flip-inline, ${slideRuleName(placement, 'same')}, ${slideRuleName(placement, 'opposite')}`;
 }
 
 /**

@@ -219,14 +219,14 @@ painted surface with the same definition and clamps any minimum of its own
 expression, because a CSS minimum otherwise wins over a maximum.
 
 The fallback order is the runtime's: preferred position; flip across the
-placement axis; flip across the alignment axis; then, while the anchor is
+placement axis; flip across the alignment axis; both; then, while the anchor is
 in view, the slide: named `@position-try` options (`Layer/layerSlideRules.ts`)
 whose insets span the whole alignment axis, same side of the anchor first,
 opposite side second, each carrying the gutter on both alignment-axis edges and
 the clearance-and-gutter pair of the side it lands on, centred on the anchor
 with `anchor-center`, which shifts the box the least distance that brings the
 margin box inside the viewport. A centered layer already slides that way in
-its own position, and the opposite slide serves a layer that needs both flips.
+its own position.
 The slide is its own option because a layer wider than the room on either
 side of its anchor overflows every flipped option on the alignment axis, and
 the browser would otherwise keep the base option and never move the layer to
@@ -236,14 +236,9 @@ the layer's first paint — never inside the layer, where a role-bearing layer's
 text would name them to assistive technology, and never beside it, where they
 would change a parent's last child.
 Content taller than the placement axis can hold on either side is capped to the
-viewport minus both gutters and takes the last option, the cover: its
-placement-axis insets span the viewport between both gutters and it rests on
-the far edge of its preferred side, so it moves the least distance from its
-preferred position that brings it inside the viewport, and it may cover its
-anchor. The browser's own overflow shift is not used for this: it keeps a box
-inside the page's scrollable area, which can run past the viewport. Chromium
-tries no more than five options after a layer's own position, so the standard
-list is the two flips, the two slides and the cover. A layer that keeps its anchor clear (Tooltip) carries
+viewport minus both gutters and shifted into the viewport by the browser; its
+margin box stays inside the viewport, so it keeps its anchor clearance from the
+edge it meets. A layer that keeps its anchor clear (Tooltip) carries
 one combined list from its first frame, in place of the standard list
 (`spec:AST-059` DEC-7): the preferred block side at its own size, then the
 opposite block side at its own size, then beside the anchor on the inline end,
