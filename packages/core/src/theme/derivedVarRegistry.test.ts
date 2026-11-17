@@ -398,6 +398,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // The ::after layer adds it to its offset, so the band starts past the
   // border. It is the layer's geometry, not a property a theme author sets. A
   // theme changes the divider through `--border-width`, which this follows.
+  // A reorder handle's grip length, which the handle sets from its icon
+  // slot's size. A theme changes the grip through the slot, not a property.
+  '--_reorder-grip',
   '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a

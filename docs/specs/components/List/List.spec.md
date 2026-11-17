@@ -112,6 +112,14 @@ Consumer migration instructions belong in consumer docs and release notes.
   and crossing (FR12).
 - Its rows' menus attaching to the row's own `<li>` (FR13); the More actions
   button, focus return, and a plain row's press paint are open (OQ2).
+- The reorder handle's grip length, `useReorderGripLength`, internal to Core
+  and reached through `@astryxdesign/core/internal/reorder`. It gives the
+  length of the size the theme's `list-reorder-handle` slot gives at rest.
+  The handle derives its target and its distance from the row's end from that
+  length, and a Lab collection that keeps room for the handle (ListInput's
+  controls track, TransferList's rows that stay put) derives that room from
+  it. No public module gives a slot's resolved size, so the collections
+  cannot read it any other way.
 
 **Does not own / non-goals**
 
@@ -212,6 +220,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ListItem row paint | Stops at the content (`flush`), reaches past it by the row inset (`padded`, `outset`), or reaches the host edge (`bleed`).                                                              | `component:List/DEC-3`   | Supporting surface | FR3–FR6            |
 | Row content        | The row's first content (its marker, start content, or label) sits inside the row inset (`padded`) or on the host content line when the host inset allows (`flush`, `outset`, `bleed`). | `component:List/DEC-3`   | Prominent          | FR2–FR5            |
 
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision                                                                                                                                                                                                                                                                                                                                                                                                                        | Intent or reason                                                                                                               | Applies to                                                   | Allowed variation                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DD1 | The reorder handle is its grip alone: the `list-reorder-handle` icon, `drag` at the `sm` size by default, in the secondary icon color, with no hover fill. An invisible square target of at least 24 px surrounds the grip; the focus ring's outer edge is the target's edge, and reorder mode fills the target with rounded corners. The target, the ring and the handle's distance from the row's end follow the grip's size. | The handle reads as a quiet grip beside the row's content, not as a button, and its target still meets the WCAG 2.5.8 minimum. | The reorder handle of a reorderable row (`spec:AST-103` FR5) | A theme replaces the grip, and its size, through its icon slot, and its color through the icon color tokens. A coarse pointer keeps its 44 px target. |
+
 ## Family and system relationships
 
 - `architecture:container-padding` owns host publication, eligibility,
@@ -231,6 +247,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   model to list rows, and FR12's motion plays an FR4 role.
 - `spec:AST-105` owns the animated layout handle and its shared motion; List
   adopts it for row updates (FR12).
+- Additive theme surface: a theme maps the reorder handle's grip through
+  `componentIcons['list-reorder-handle']`, a slot that receives `pressed`,
+  true while the row is in reorder mode; with no entry, the grip is the
+  `drag` icon at the `sm` size (`spec:AST-103` DEC-7).
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the

@@ -40,6 +40,7 @@ import {type Reorderable, type ReorderMove} from '@astryxdesign/core';
 import {
   adaptReorderable,
   reorderableOptions,
+  useReorderGripLength,
 } from '@astryxdesign/core/internal/reorder';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -155,14 +156,25 @@ export interface TransferListProps<T extends string = string> extends Omit<
   noResultsText?: string;
 }
 
+// The handle's grip length, which the root publishes.
+const GRIP = 'var(--_reorder-grip, 1rem)';
+
 const styles = stylex.create({
-  // Core List's reorder handle is a small control, 28 px for every pointer,
-  // overlapping the row's end padding by 8 px. A finger's 44 px target is its
-  // invisible hit layer. A row without one keeps its end content clear of
-  // it, so every Remove sits in one column.
+  // Core List's reorder handle is its grip alone, against Remove. It stays
+  // clear of the row's end by its target's reach, less the row's inset, and
+  // further under a coarse pointer. A row without one keeps its Remove clear
+  // of where a handle sits, so every Remove sits in one column. SYNC: core
+  // List/ListReorderHandle.tsx EDGE_GUARD and TOUCH_EDGE_GUARD.
   clearsHandle: {
-    marginInlineEnd: 20,
+    marginInlineEnd: {
+      default: `calc(${GRIP} + max(0px, calc(max(4px, (24px - ${GRIP}) / 2) - var(--_item-inset-inline, 0px))))`,
+      '@media (pointer: coarse)': `calc(${GRIP} + max(0px, calc((44px - ${GRIP}) / 2 - var(--_item-inset-inline, 0px))))`,
+    },
   },
+  // The handle's grip length, from the theme's icon slot.
+  gripLength: (length: string) => ({
+    '--_reorder-grip': length,
+  }),
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -609,6 +621,7 @@ export function TransferList<T extends string = string>({
   // Reordering is off while a search filters the panel. A hidden row could
   // otherwise move past the shown rows.
   const isOrdering = reorderableProp != null && normalizedQuery === '';
+  const gripLength = useReorderGripLength();
   // The owner's object decides which values move and takes each move.
   const owner =
     reorderableProp == null ? undefined : reorderableOptions(reorderableProp);
@@ -788,7 +801,7 @@ export function TransferList<T extends string = string>({
       {...restProps}
       {...mergeProps(
         themeProps('transfer-list'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(styles.root, styles.gripLength(gripLength), xstyle),
         className,
         style,
       )}

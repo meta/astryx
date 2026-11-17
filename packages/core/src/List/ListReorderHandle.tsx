@@ -5,7 +5,8 @@
 /**
  * @file ListReorderHandle.tsx
  * @input The List's reorder session (List/listReorderEngine.tsx, through
- *   ListContext's `reorder`), the translator and theme tokens
+ *   ListContext's `reorder`), the translator, theme tokens and the theme's
+ *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
  *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
@@ -17,16 +18,17 @@
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
  *
- * UIKit's reorder control (iOS 26.2, measured) is three gray lines at the
- * trailing edge of a row in edit mode. A finger held still on it for the
- * scroll view's content-touch delay (150 ms) claims the drag. A flick that
- * starts on it scrolls the table instead. So until the claim, the handle
+ * On iOS 26.2 (measured), a finger held still on a table's reorder control
+ * for the scroll view's content-touch delay (150 ms) claims the drag. A flick
+ * that starts on it scrolls the table instead. So until the claim, the handle
  * leaves the browser everything but double-tap zoom (`manipulation`). That
  * `touch-action` applies only where the primary pointer is coarse. Elsewhere
- * a finger gets the browser's defaults until the hold claims it. The handle is the one element the reorder
- * adds to a row. Its lines are a pseudo-element, and it listens to nothing
- * itself. The session's listeners take its drags. Its keys go through
- * React's.
+ * a finger gets the browser's defaults until the hold claims it. The handle
+ * is the one element the reorder adds to a row. It is its grip alone: the
+ * theme's `list-reorder-handle` icon, by default `drag`, hidden from
+ * assistive technology. An invisible target of at least 24 px surrounds the
+ * grip. The handle listens to nothing itself. The session's listeners take
+ * its drags. Its keys go through React's.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
@@ -58,9 +60,13 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
+import {Icon} from '../Icon/Icon';
+import type {IconVariant} from '../Icon/index';
+import {useComponentIcon} from '../Icon/useIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
+import {REORDER_GRIP_FALLBACK, reorderGripLength} from './ListReorderScope';
 import type {
   ListReorderHandleProps,
   ListReorderRowNameProps,
@@ -73,52 +79,65 @@ import type {
 registerEnglishFallback(english);
 
 /**
- * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * The handle's target with a fine pointer, px: an invisible square round the
+ * grip, at least the WCAG 2.5.8 minimum. A finger's 44 px target is a
+ * coarse-only hit layer, clamped so it never takes from a neighbour
+ * (utils/hitArea.ts). SYNC: utils/hitArea.ts MIN_TOUCH_TARGET.
  */
-const HANDLE_SIZE = 28;
-/** The three lines' height: the handle's share of its row's height. */
-const LINES_HEIGHT = 14;
-/** The lines' length and thickness, and the distance between them. */
-const LINE_WIDTH = 20;
-const LINE_THICKNESS = 2;
-const LINE_GAP = (LINES_HEIGHT - LINE_THICKNESS) / 2;
+const TARGET_SIZE = 24;
+const TOUCH_TARGET_SIZE = 44;
+/** The target's least reach past the grip, px, so the ring clears it. */
+const TARGET_MIN_REACH = 4;
+/**
+ * The grip's length: the slot's icon size, which the handle publishes. Its
+ * target, ring and distance from the row's edge derive from it.
+ */
+const GRIP = 'var(--_reorder-grip, 1rem)';
+/** How far the target reaches past the grip on each side. */
+const TARGET_REACH = `max(${TARGET_MIN_REACH}px, (${TARGET_SIZE}px - ${GRIP}) / 2)`;
+/**
+ * The handle stays clear of the row's inline end by its target's reach, less
+ * the row's own inset. So a list that clips never cuts its target or ring.
+ * Under a coarse pointer, the finger's target reaches further.
+ */
+const INSET = 'var(--_item-inset-inline, 0px)';
+const EDGE_GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
+const TOUCH_EDGE_GUARD = `max(0px, calc((${TOUCH_TARGET_SIZE}px - ${GRIP}) / 2 - ${INSET}))`;
 
 const styles = stylex.create({
   handle: {
-    // Centred on its row, with the lines in its middle. It takes only the
-    // lines' height in the row's layout (the negative block margins). So a
-    // compact row stays compact. The handle and its focus ring reach past
-    // that into the row's padding, never past it. They go no further than the
-    // row's own inline inset, so a flush row's handle stays inside the clip.
+    // Centred on its row: the grip alone, so a compact row stays compact.
+    // A theme's larger icon grows the handle with it.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    width: HANDLE_SIZE,
-    height: HANDLE_SIZE,
-    marginBlock: (LINES_HEIGHT - HANDLE_SIZE) / 2,
-    marginInlineEnd: 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))',
+    minInlineSize: GRIP,
+    minBlockSize: GRIP,
+    marginInlineEnd: {
+      default: EDGE_GUARD,
+      '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
+    },
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
-    // The ring sits inside the handle: the handle reaches the row's inline
-    // end, and the list clips what passes it.
+    backgroundColor: 'transparent',
+    // The ring's outer edge is the target's edge, clear of the grip.
     outlineOffset: {
       default: '0',
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(${TARGET_REACH} - ${focusVars['--focus-outline-width']})`,
     },
-    // Pressed while its row is in reorder mode, as a pressed toggle button
-    // is; in forced colors, the system's highlight.
-    backgroundColor: {
-      default: 'transparent',
-      ':is([aria-pressed="true"])': {
-        default: colorVars['--color-overlay-pressed'],
-        '@media (forced-colors: active)': 'Highlight',
-      },
+    // The target: an invisible square round the grip, so a pointer hits it to
+    // its corners. Only reorder mode fills it (`pressed`). The fill paints
+    // under the grip, inside the handle's own stacking context.
+    isolation: 'isolate',
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: `calc(-1 * ${TARGET_REACH})`,
+      zIndex: -1,
     },
     forcedColorAdjust: {
       default: null,
@@ -146,20 +165,26 @@ const styles = stylex.create({
       default: null,
       '@media (pointer: coarse)': 'transparent',
     },
-    // The three lines: one bar and its two shadows, in the handle's color.
-    // Forced colors keep them (shadows and backgrounds go there otherwise),
-    // drawn in the system's button text.
+  },
+  // Reorder mode fills the target, as a pressed toggle button, and rounds its
+  // corners; in forced colors, the system's highlight.
+  pressed: {
     '::before': {
-      content: '""',
-      display: 'block',
-      width: LINE_WIDTH,
-      height: LINE_THICKNESS,
-      borderRadius: LINE_THICKNESS / 2,
-      backgroundColor: 'currentColor',
-      boxShadow: `0 -${LINE_GAP}px currentColor, 0 ${LINE_GAP}px currentColor`,
+      borderRadius: 4,
+      backgroundColor: {
+        default: colorVars['--color-overlay-pressed'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
       forcedColorAdjust: 'none',
-      pointerEvents: 'none',
     },
+  },
+  // The grip's length, from the slot's icon size.
+  gripLength: (length: string) => ({
+    '--_reorder-grip': length,
+  }),
+  // Presses on the grip land on the handle.
+  grip: {
+    pointerEvents: 'none',
   },
   // The row's own child, in a row without end content. It ends the row, as
   // the end slot would. It aligns as the row's `align` would align that slot.
@@ -172,10 +197,9 @@ const styles = stylex.create({
   },
   // `first-line`: centred on the label's first line, a line of body text at
   // the top of the row's content. Item's first-line slots centre on it too.
-  // Its layout height stays the lines' height (the end margin).
   inRowFirstLine: {
     alignSelf: 'flex-start',
-    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${HANDLE_SIZE}px) / 2)`,
+    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${GRIP}) / 2)`,
   },
 });
 
@@ -298,6 +322,12 @@ export function ListReorderHandle({
     () => controller?.isInMode(ref.current) ?? false,
     () => false,
   );
+  // The theme's grip for the handle's state: reorder mode is `pressed`.
+  const grip = useComponentIcon(
+    'list-reorder-handle',
+    {pressed: isPressed},
+    REORDER_GRIP_FALLBACK,
+  );
   const isEnabled = controller != null && !isDisabled;
   // A finger's target: the shared touch hit area grows the handle's hit
   // layer where the primary pointer is coarse.
@@ -383,11 +413,23 @@ export function ListReorderHandle({
         styles.handle,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
+        styles.gripLength(reorderGripLength(grip.size)),
+        isPressed && styles.pressed,
         rowAlign != null && styles.inRow,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
+      )}>
+      {grip.icon == null ? null : (
+        <Icon
+          icon={grip.icon}
+          // Resolution keeps only a variant the active theme lists.
+          variant={grip.variant as IconVariant | undefined}
+          size={grip.size}
+          color="inherit"
+          xstyle={styles.grip}
+        />
       )}
-    />
+    </button>
   );
 }
 

@@ -38,12 +38,19 @@ import {
   renderHook,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {INSERTION_LINE_THICKNESS} from '../ListReorderHandle';
+import {useReorderGripLength} from '../ListReorderScope';
+import {Icon} from '../../Icon/Icon';
+import {registerIcons, resetIcons} from '../../Icon/globalIconRegistry';
+import type {ComponentIconMap} from '../../Icon/index';
+import {defineTheme} from '../../theme/defineTheme';
+import {Theme} from '../../theme/Theme';
 import {MOUSE_DRAG_SLOP} from '../listReorderEngine';
 import {
   createReorderable,
@@ -161,6 +168,10 @@ const labels = () =>
 
 const handleOf = (label: string) =>
   screen.getByRole('button', {name: `Reorder ${label}`});
+
+/** The elements in `row`, not counting the ones inside its `handle`. */
+const outsideHandle = (row: HTMLElement, handle: HTMLElement) =>
+  row.querySelectorAll('*').length - handle.querySelectorAll('*').length;
 
 /**
  * A button of reorder mode's hint. jsdom never opens a popover, so the hint
@@ -401,14 +412,14 @@ describe('List reorderable', () => {
     const sent = screen.getByText('Sent').closest('li') as HTMLElement;
     const before = [inbox, sent].map(row => row.querySelectorAll('*').length);
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(inbox.querySelectorAll('*').length).toBe(before[0] + 1);
-    expect(sent.querySelectorAll('*').length).toBe(before[1] + 1);
+    expect(outsideHandle(inbox, handleOf('Inbox'))).toBe(before[0] + 1);
+    expect(outsideHandle(sent, handleOf('Sent'))).toBe(before[1] + 1);
     // The handle is the row's own child, after the label.
     expect(handleOf('Inbox').parentElement).toBe(inbox);
     expect(handleOf('Sent').parentElement).toBe(sent);
   });
 
-  it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
+  it('adds one element to a row, the handle, whose grip is the drag icon', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
         <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
@@ -418,10 +429,136 @@ describe('List reorderable', () => {
     const row = screen.getByText('Inbox').closest('li') as HTMLElement;
     const before = row.querySelectorAll('*').length;
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(row.querySelectorAll('*').length).toBe(before + 1);
     const handle = handleOf('Inbox');
-    expect(handle.children).toHaveLength(0);
+    expect(outsideHandle(row, handle)).toBe(before + 1);
+    // The grip is the handle's only content: an icon, hidden from assistive
+    // technology.
+    expect(handle.children).toHaveLength(1);
+    expect(handle.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    expect(handle.querySelector('svg')).not.toBeNull();
     expect(handle.textContent).toBe('');
+  });
+
+  it("draws the icon registry's drag icon as its grip", () => {
+    registerIcons({drag: <svg data-testid="brand-drag" />});
+    try {
+      render(
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>,
+      );
+      expect(handleOf('Inbox')).toContainElement(
+        screen.getByTestId('brand-drag'),
+      );
+    } finally {
+      resetIcons();
+    }
+  });
+
+  it("draws the theme's list-reorder-handle icon as its grip; null draws none and keeps the handle", () => {
+    let themes = 0;
+    const draw = (componentIcons: ComponentIconMap<never>) =>
+      render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-handle-slot-${themes++}`,
+            icons: {menu: <svg data-testid="slot-menu" />},
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+    const {unmount} = draw({'list-reorder-handle': 'menu'});
+    expect(handleOf('Inbox')).toContainElement(screen.getByTestId('slot-menu'));
+    unmount();
+    draw({'list-reorder-handle': null});
+    expect(handleOf('Inbox').querySelector('svg')).toBeNull();
+    expect(handleOf('Inbox')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('draws the drag icon at the sm size when the theme maps nothing to the slot', () => {
+    render(
+      <>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>
+        <span data-testid="drag-sm">
+          <Icon icon="drag" size="sm" />
+        </span>
+      </>,
+    );
+    const grip = handleOf('Inbox').querySelector('svg');
+    expect(grip).not.toBeNull();
+    expect(grip?.outerHTML).toBe(
+      screen.getByTestId('drag-sm').querySelector('svg')?.outerHTML,
+    );
+  });
+
+  it("gives the theme's slot the handle's state: pressed in reorder mode, so a theme can draw another grip there", async () => {
+    const user = userEvent.setup();
+    const states: boolean[] = [];
+    render(
+      <Theme
+        theme={defineTheme({
+          name: 'list-reorder-handle-pressed',
+          icons: {
+            menu: <svg data-testid="grip-at-rest" />,
+            check: <svg data-testid="grip-pressed" />,
+          },
+          componentIcons: {
+            'list-reorder-handle': ({pressed}) => {
+              states.push(pressed);
+              return {icon: pressed ? 'check' : 'menu'};
+            },
+          },
+        })}>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+          <ListItem itemKey="sent" label="Sent" />
+        </List>
+      </Theme>,
+    );
+    const handle = handleOf('Inbox');
+    expect(within(handle).getByTestId('grip-at-rest')).toBeInTheDocument();
+    handle.focus();
+    await user.keyboard('{Enter}');
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    expect(within(handle).getByTestId('grip-pressed')).toBeInTheDocument();
+    // The other row is not in reorder mode.
+    expect(
+      within(handleOf('Sent')).getByTestId('grip-at-rest'),
+    ).toBeInTheDocument();
+    expect(states).toContain(false);
+    expect(states).toContain(true);
+  });
+
+  it("gives the grip's length from the slot's size at rest, for a row that keeps the handle's room", () => {
+    let themes = 0;
+    const lengthWith = (componentIcons: ComponentIconMap<never>) =>
+      renderHook(() => useReorderGripLength(), {
+        wrapper: ({children}: {children: ReactNode}) => (
+          <Theme
+            theme={defineTheme({
+              name: `list-reorder-grip-length-${themes++}`,
+              componentIcons,
+            })}>
+            {children}
+          </Theme>
+        ),
+      }).result.current;
+    expect(renderHook(() => useReorderGripLength()).result.current).toBe(
+      '1rem',
+    );
+    expect(lengthWith({'list-reorder-handle': {size: 'md'}})).toBe('1.25rem');
+    expect(lengthWith({'list-reorder-handle': 'menu'})).toBe('1rem');
+    // Reorder mode's own size does not move the room.
+    expect(
+      lengthWith({
+        'list-reorder-handle': ({pressed}) => (pressed ? {size: 'lg'} : {}),
+      }),
+    ).toBe('1rem');
   });
 
   it('keeps a row the object rejects in place: no handle, and nothing added to it', () => {

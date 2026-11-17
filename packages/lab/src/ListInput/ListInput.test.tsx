@@ -1049,10 +1049,14 @@ describe('ListInput', () => {
     plain.unmount();
     const {container} = renderListInput({reorderable: reorderableFor()});
     const row = container.querySelector('[data-list-input-row]');
-    expect(row).toContainElement(
-      screen.getByRole('button', {name: 'Reorder guest 1'}),
-    );
-    expect(row!.querySelectorAll('*').length - plainCount).toBe(1);
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    expect(row).toContainElement(handle);
+    // The handle's grip is its own icon, so only the handle joins the record.
+    expect(
+      row!.querySelectorAll('*').length -
+        handle.querySelectorAll('*').length -
+        plainCount,
+    ).toBe(1);
   });
 
   it('loads no reorder code without reorderable: the handle comes with the object', () => {
@@ -1066,7 +1070,12 @@ describe('ListInput', () => {
         .split(',')
         .map(name => name.trim())
         .filter(name => name !== '');
-    expect(names?.sort()).toEqual(['ListReorderScope', 'useListReorderScope']);
+    // The grip length reads the theme's icon slot, not the reorder engine.
+    expect(names?.sort()).toEqual([
+      'ListReorderScope',
+      'useListReorderScope',
+      'useReorderGripLength',
+    ]);
     expect(source).not.toMatch(/ListReorderHandle/);
   });
 
