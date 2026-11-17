@@ -311,6 +311,9 @@ function addBlocks(install, themes, addsOther, run, note) {
   return blocks;
 }
 
+/** A whole scoped package name, `@scope/name`. */
+const SCOPED_NAME = /^@[^/\s]+\/[^/\s]+$/;
+
 /**
  * @param {import('commander').Command} program
  */
@@ -330,7 +333,7 @@ export function registerDiscover(program) {
         const query = Array.isArray(words)
           ? words.length > 0
             ? words.join(
-                words.length === 2 && words[0].startsWith('@') ? '/' : ' ',
+                words.length === 2 && SCOPED_NAME.test(words[0]) ? '/' : ' ',
               )
             : undefined
           : words;

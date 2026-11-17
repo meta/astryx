@@ -752,6 +752,16 @@ async function callSource(source, request, label, timeoutMs, iconSets) {
 }
 
 /**
+ * The project's root: the folder that holds its config, or the folder the
+ * project loaded from when it has none.
+ * @param {Project} project
+ * @returns {string}
+ */
+function projectRoot(project) {
+  return project.configPath ? path.dirname(project.configPath) : project.cwd;
+}
+
+/**
  * Where each discover source comes from, in call order: the project's
  * `discover` first, then each integration's in load order, then each a host
  * passed. `key` names a source's saved copies when it differs from `from`.
@@ -764,10 +774,12 @@ function sourceOrigins(project) {
   const origins = [];
   if (typeof project?.config?.discover === 'function') {
     // A project's own source is the project's: its saved copies are kept per
-    // project root, so one project's catalog never answers for another's.
+    // project root, the folder that holds the config, so one project's
+    // catalog never answers for another's and every folder in a project
+    // reads the same copy.
     origins.push({
       from: 'astryx.config',
-      key: `astryx.config\n${realDir(project.cwd)}`,
+      key: `astryx.config\n${realDir(projectRoot(project))}`,
       source: project.config.discover,
     });
   }
@@ -860,7 +872,7 @@ export async function keptSavedSearch(build, valid) {
     persistedGather(
       [
         'discover-saved-search',
-        realDir(project.cwd),
+        realDir(projectRoot(project)),
         optedIntoIconSets(project),
       ],
       () => build(project),

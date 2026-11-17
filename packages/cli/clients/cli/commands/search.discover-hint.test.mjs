@@ -122,6 +122,15 @@ describe('discover reads every word of an unquoted query', () => {
         type: 'discover.item',
         data: {package: '@acme/charts', name: 'BarChart'},
       });
+      // A scope alone is no package name: its words are free text.
+      const scopeOnly = await runCli(
+        ['discover', '@acme', 'charts', '--json'],
+        {cwd: project},
+      );
+      expect(JSON.parse(scopeOnly.stdout)).toMatchObject({
+        type: 'discover.search',
+        data: {query: '@acme charts'},
+      });
       // More than one word after it is free text, searched as one query.
       const more = await runCli(
         ['discover', '@acme/charts', 'bar', 'chart', '--json'],
@@ -279,6 +288,41 @@ describe('search points at discover by the saved catalog copy', () => {
       ).toBe(0);
       expect(await searchIn(other)).toBe(false);
       expect(await searchIn(project)).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reads the project copy from any folder in the project, with the source down',
+    async () => {
+      // A source that fails once the test takes its host down.
+      const down = path.join(tmpDir, 'down');
+      fs.writeFileSync(
+        path.join(project, 'astryx.config.mjs'),
+        config(marker).replace(
+          'async discover() {',
+          `async discover() {
+    if ((await import('node:fs')).existsSync(${JSON.stringify(down)})) throw new Error('host down');`,
+        ),
+      );
+      expect(
+        (await runCli(['discover', '--json'], {cwd: project})).status,
+      ).toBe(0);
+      // The host goes down; a subfolder still reads the copy the project
+      // root saved.
+      fs.writeFileSync(down, '');
+      const src = path.join(project, 'src');
+      fs.mkdirSync(src, {recursive: true});
+      const listed = await runCli(['discover', '--json'], {cwd: src});
+      expect(listed.status).toBe(0);
+      const available = JSON.parse(listed.stdout).meta.available.map(
+        (/** @type {{name: string}} */ entry) => entry.name,
+      );
+      expect(available).toContain('@acme/charts');
+      const search = async (/** @type {string[]} */ words) =>
+        (await runCli(['search', ...words], {cwd: src})).stdout;
+      expect(await search(['bar', 'chart'])).toContain(HINT);
+      expect(await search(['qqzzx'])).not.toContain(HINT);
     },
     TIMEOUT,
   );
