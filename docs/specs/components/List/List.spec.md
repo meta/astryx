@@ -361,7 +361,7 @@ row then needs a second element or a main-thread paint for its press.
 
 **Reference:** `component:List/DEC-7`
 
-**Decider:** cixzhang, 2026-11-17
+**Decider:** `cixzhang`, `2026-11-13 18:40 PT`
 
 A reorderable row's handle draws its grip as the theme's icon
 (`spec:AST-103` DEC-7). That icon's own elements join the row, inside the
