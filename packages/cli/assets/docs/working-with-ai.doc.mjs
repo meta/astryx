@@ -80,7 +80,7 @@ export const docs = {
           items: [
             '`{@command build "<idea>"}`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
             '`{@command template <name> <path>}`: scaffold that template into the project, keep its frame and spacing, and replace its content',
-            '`{@command component <Name>}`: read props and examples for every component used',
+            '`{@command component <Name>}`: read the import, usage and props for every component used (one call can name several; `--detail full` prints the whole doc)',
           ],
         },
         {

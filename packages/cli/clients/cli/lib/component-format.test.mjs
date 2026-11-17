@@ -538,7 +538,7 @@ describe('short answer (compact)', () => {
     expect(out).not.toContain('second paragraph');
     expect(out).toContain("- `size`: `'sm' | 'md'` = `'md'` - Size.");
     expect(out).toContain('Visible label.');
-    expect(out).not.toContain('More text.');
+    expect(out).not.toContain('More text that only the props read prints');
     expect(out).toMatch(/component Widget --props`$/m);
     expect(out).toMatch(/component Widget --detail full`$/m);
   });

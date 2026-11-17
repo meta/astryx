@@ -154,7 +154,7 @@ and remains available through explicit Core package selection.
   as its last line the `--detail full` command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
-  The detail level never changes the JSON. The stdout of `astryx mcp` carries protocol messages only, and
+  The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and
   each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
