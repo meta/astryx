@@ -108,6 +108,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string[]} [drawnAs] - the other targets its element carries where the census drew it (a calendar's nav arrow is a `button` too): a rule on one of them reaches this part
+ * @property {boolean} [alone] - the census drew it on an element carrying no other target too (a Button); a part never drawn alone rides on the parts it is drawn as
  * @property {string} [underInput] - drawn under an invisible native input
  *   laid over it (a checkbox's box), which takes its pointer and focus: the
  *   part that holds that input (empty when none is themed)
@@ -1832,6 +1833,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         : {}),
       tags: [...v.tags],
       ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs].sort()} : {}),
+      ...(v.alone ? {alone: true} : {}),
       ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),

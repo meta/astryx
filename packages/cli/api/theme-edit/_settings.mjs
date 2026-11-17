@@ -154,6 +154,7 @@ import {
   baseThemeFile,
   installLine,
   packageInstalled,
+  sitsOnOf,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -4776,6 +4777,48 @@ function reachedPartsOf(ctx, s) {
 }
 
 /**
+ * The parts the build writes an entry on for a setting: those it writes
+ * (writtenPartsOf), less a member drawn on another member's element that it
+ * writes too (a clickable card on its card, a toggle button on its button).
+ * The host's entry reaches that member on its element already, and an entry
+ * of its own would beat the host's later entries there, so a later look on
+ * cards would stop reaching clickable cards. A member named on its own keeps
+ * its entry.
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
+ * @returns {string[]}
+ */
+export function builtPartsOf(ctx, data, s) {
+  const parts = writtenPartsOf(ctx, data, s);
+  return parts.filter(
+    m => m === s.on || !hostsOf(ctx, m).some(h => parts.includes(h)),
+  );
+}
+
+/**
+ * The parts whose element a part is drawn on: the part its doc target says
+ * it sits on (`sitsOn`), and the parts the census always drew it together
+ * with (a clickable card is never drawn without its card).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function hostsOf(ctx, part) {
+  const out = new Set();
+  const doc = sitsOnOf(ctx.project).get(part);
+  if (doc) out.add(doc);
+  /** @type {any} */
+  const rec = /** @type {any} */ (ctx).C?.MAP?.[part];
+  if (rec && !rec.alone)
+    for (const t of rec.drawnAs ?? []) {
+      // (Of two parts always drawn together, each with no element of its
+      // own, neither is the other's host.)
+      const other = /** @type {any} */ (ctx).C?.MAP?.[t];
+      if (other?.alone) out.add(t);
+    }
+  return [...out];
+}
+
+/**
  * Whether a member of the family a setting reaches draws its thing with the
  * same values as the part named (as Core draws it, at rest or in the
  * setting's state): a value that keeps the named part as it is keeps that
@@ -7331,7 +7374,7 @@ export function compileTheme(ctx, data, base) {
     // (A group's or a family's setting never overwrites a part the theme
     // set the same thing on itself, before or after: the part keeps its
     // own.)
-    const parts = writtenPartsOf(ctx, data, s);
+    const parts = builtPartsOf(ctx, data, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
         // Past 1000px a radius is fully round: the pill tokens apply.

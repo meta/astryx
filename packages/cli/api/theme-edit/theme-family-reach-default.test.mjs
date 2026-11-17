@@ -92,10 +92,13 @@ describe('family reach by default', () => {
     expect(r.data.notes.join(' ')).toMatch(
       /reaches button's family \(button-like\).*toggle-button.*--only/,
     );
-    expect(ruleOf(cssOf('r'), 'toggle-button')).toContain(GRADIENT);
+    // (A toggle button is drawn on its Button: the button's entry reaches it
+    // there, and no entry of its own would block later button looks.)
+    expect(ruleOf(cssOf('r'), 'button')).toContain(GRADIENT);
+    expect(ruleOf(cssOf('r'), 'toggle-button')).not.toContain(GRADIENT);
     // One undo takes the spread back from every part it reached.
     await themeEditUndo('r', {cwd});
-    expect(ruleOf(cssOf('r'), 'toggle-button')).not.toContain(GRADIENT);
+    expect(ruleOf(cssOf('r'), 'button')).not.toContain(GRADIENT);
     const only = await themeEditSet('r', 'background-image', GRADIENT, {
       cwd,
       on: 'button',
@@ -168,7 +171,11 @@ describe('family reach by default', () => {
       only: true,
     });
     expect(undo.data.now).toMatch(/background-image = .*on button\b/);
-    expect(ruleOf(cssOf('d'), 'toggle-button')).toContain(GRADIENT);
+    // (Back to the button's entry, which reaches it on its element.)
+    expect(ruleOf(cssOf('d'), 'toggle-button')).not.toContain(
+      'linear-gradient(red, blue)',
+    );
+    expect(ruleOf(cssOf('d'), 'button')).toContain(GRADIENT);
   }, 240_000);
 
   it("a menu row's hover look reaches each list option in the state that draws the row the pointer is on", async ctx => {

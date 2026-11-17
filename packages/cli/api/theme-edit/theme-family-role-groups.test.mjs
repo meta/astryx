@@ -179,7 +179,9 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
       {cwd, on: 'button'},
     );
     expect(r.data.group?.name).toBe('button-like');
-    expect(ruleOf(cssOf('b'), '.astryx-toggle-button')).toMatch(
+    expect(r.data.parts).toContain('toggle-button');
+    // (Through the Button it is drawn on: the button's entry reaches it.)
+    expect(ruleOf(cssOf('b'), '.astryx-button')).toMatch(
       /linear-gradient\(#ffffff, #e6e6e6\)/,
     );
   }, 240_000);
