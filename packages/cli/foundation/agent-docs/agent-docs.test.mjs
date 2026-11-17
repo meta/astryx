@@ -347,7 +347,7 @@ describe('generateCompressedIndex', () => {
 
   it('ends with the remove line, after any integration lines', () => {
     const REMOVE_LINE =
-      'To remove this block from every agent file, run `astryx init --remove-agents`; do not delete or edit it by hand.';
+      'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
     const endsWith = (/** @type {string} */ block) =>
       block.endsWith(`\n${REMOVE_LINE}\n<!-- ASTRYX:END -->`);
     expect(endsWith(generateCompressedIndex('1.0.0', {topics: []}))).toBe(true);
@@ -1304,6 +1304,23 @@ describe('installAgentDocs', () => {
 
     expect(written).toEqual(['custom/AGENT.md']);
     expect(fs.existsSync(path.join(tmpDir, 'custom', 'AGENT.md'))).toBe(true);
+  });
+
+  it('names the by-hand way out in a block that --remove-agents leaves', async () => {
+    setupCorePackage(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'c', version: '1.0.0'}),
+    );
+    installAgentDocs(tmpDir, {paths: ['custom/AGENT.md']});
+    const file = path.join(tmpDir, 'custom', 'AGENT.md');
+    const {remove} = await import('../../api/init/remove/remove.mjs');
+    await remove({cwd: tmpDir});
+    const left = fs.readFileSync(file, 'utf-8');
+    expect(left).toContain('<!-- ASTRYX:START -->');
+    expect(left).toContain(
+      'from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.\n<!-- ASTRYX:END -->',
+    );
   });
 
   it('onlyReplace: skips files without XDS markers', () => {
