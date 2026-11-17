@@ -665,6 +665,7 @@
     "packages/cli/api/theme-edit/theme-how-clause-subjects.test.mjs": 9.8,
     "packages/cli/api/theme-edit/theme-how-contrast-way-said.test.mjs": 3.3,
     "packages/cli/api/theme-edit/theme-how-corner-positions.test.mjs": 11.0,
+    "packages/cli/api/theme-edit/theme-checks-size.test.mjs": 7.0,
     "packages/cli/api/theme-edit/theme-how-draws-modes-clearly-dark.test.mjs": 4.2,
     "packages/cli/api/theme-edit/theme-how-draws-modes-clearly-light.test.mjs": 7.0,
     "packages/cli/api/theme-edit/theme-how-error-banner-text-weight.test.mjs": 5.0,

@@ -23994,6 +23994,58 @@ export function draftAnswer(ctx, env, question) {
               options: [[set('width', len, f), set('height', len, f)]],
               sequence: true,
             };
+          // ("smaller checkboxes", "bigger radios": a square box that sets
+          // its own width and height and reads no size token is that square
+          // one step, 4px, from the size it draws at rest, as a control
+          // height steps; spacing never reaches it. Core draws the marks
+          // inside it as a share of the box.)
+          // (The theme's own size first: its setting on the part, or on a
+          // group the part is in; else the size Core draws at rest.)
+          const rest = (/** @type {string} */ k) => {
+            const own = [
+              on,
+              one(on),
+              ...Object.keys(FAMILIES).filter(g =>
+                FAMILIES[g].includes(one(on)),
+              ),
+            ]
+              .map(o => partValue(o, k))
+              .find(v => v != null && lengthPx(String(v)) != null);
+            if (own != null) return lengthPx(String(own));
+            const sized = Object.entries(at[k] ?? {}).filter(
+              ([cond, v]) =>
+                !/:/.test(cond) && /^\s*\d*\.?\d+px\s*$/.test(String(v)),
+            );
+            sized.sort(
+              (a, b) => a[0].split(',').length - b[0].split(',').length,
+            );
+            return sized[0] ? lengthPx(String(sized[0][1])) : null;
+          };
+          const now = rest('width');
+          if (
+            !len &&
+            c.dir &&
+            !f.state &&
+            !tallIn(c.text) &&
+            !/\b(?:wide|wider|narrower|width|tall|taller|shorter|height)\b/.test(
+              c.text,
+            ) &&
+            now != null &&
+            rest('height') != null &&
+            !(C.partReads(one(on), 'size') ?? []).length
+          ) {
+            const tallNow = /** @type {number} */ (rest('height'));
+            const step = c.dir === 'less' ? -4 : 4;
+            const [w, h] = [now + step, tallNow + step];
+            if (w > 0 && h > 0)
+              return {
+                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: ${w === h ? `width and height ${w}px` : `width ${w}px and height ${h}px`} (now ${now === tallNow ? `${now}px` : `${now}px by ${tallNow}px`}), one 4px step, as it sets them itself`,
+                options: [
+                  [set('width', `${w}px`, f), set('height', `${h}px`, f)],
+                ],
+                sequence: true,
+              };
+          }
         }
         const tall =
           tallIn(c.text) ??

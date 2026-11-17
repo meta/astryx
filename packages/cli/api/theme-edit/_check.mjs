@@ -3533,13 +3533,20 @@ function borderSetToNone(ctx, data, s, part) {
 export function borderFor(ctx, slug, data, s) {
   if (ctx.unchecked || !s.on || s.source !== 'property') return null;
   if (!BORDER_COLOR_PROP.test(s.thing)) return null;
-  if (CSS_WIDE.includes(String(s.value ?? '').trim().toLowerCase()))
+  if (
+    CSS_WIDE.includes(
+      String(s.value ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  )
     return null;
   const parts = partsOf(ctx, s);
   if (
     !parts.length ||
     parts.some(
-      t => drawsBorderAsked(ctx, data, s, t) || borderSetToNone(ctx, data, s, t),
+      t =>
+        drawsBorderAsked(ctx, data, s, t) || borderSetToNone(ctx, data, s, t),
     )
   )
     return null;
@@ -3569,9 +3576,7 @@ function borderNoneRefusal(ctx, slug, data, s, prop) {
   const parts = partsOf(ctx, s);
   if (!parts.length || parts.some(t => drawsBorderAsked(ctx, data, s, t)))
     return;
-  const none = parts
-    .map(t => borderSetToNone(ctx, data, s, t))
-    .find(Boolean);
+  const none = parts.map(t => borderSetToNone(ctx, data, s, t)).find(Boolean);
   if (!none) return;
   refuse(
     E.ERR_THEME_NO_EFFECT,
@@ -6608,6 +6613,34 @@ function checkOne(
         const spaced = partsOf(ctx, s).filter(
           t => reads(t) || (ctx.C.MAP[t]?.contains ?? []).some(reads),
         );
+        // (A part that sets its own width and height in px, a checkbox's
+        // box or a radio's circle, is sized by them, and Core draws its
+        // marks inside as a share of it: the refusal says so.)
+        const ownBox = (/** @type {string} */ t) => {
+          const at = ctx.C.MAP[t]?.at ?? {};
+          /** @param {string} k */
+          const px = k =>
+            Object.entries(at[k] ?? {})
+              .filter(
+                ([c, x]) =>
+                  !/:/.test(c) && /^\s*\d*\.?\d+px\s*$/.test(String(x)),
+              )
+              .sort(
+                (m, n) => m[0].split(',').length - n[0].split(',').length,
+              )[0]?.[1];
+          const w = px('width');
+          const h = px('height');
+          return w != null && h != null
+            ? `${String(w).trim()} by ${String(h).trim()}`
+            : null;
+        };
+        const boxed = partsOf(ctx, s).map(ownBox);
+        if (!spaced.length && boxed.length && boxed.every(b => b))
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `${s.on} sets its own width and height (${boxed[0]}) and reads no spacing or control size, so spacing changes nothing you see there. Size it with width and height (how "smaller ${s.on}"); its marks are drawn as a share of it.`,
+            {run: [`${HOW} "smaller ${s.on}"`]},
+          );
         if (!spaced.length)
           refuse(
             E.ERR_THEME_NO_EFFECT,
@@ -7971,7 +8004,9 @@ function checkOne(
     const textParts = COLOR_PROP_PARTS;
     // A text, heading or link color is written as the text color tokens
     // its color prop reads, on that part alone (compileTheme), so it shows.
-    const propTokens = partsOf(ctx, s).map(t => colorPropTokens(ctx, t, s.when));
+    const propTokens = partsOf(ctx, s).map(t =>
+      colorPropTokens(ctx, t, s.when),
+    );
     // (A value that is no color is refused below, with the nearest color.)
     const propColor =
       prop === 'color' &&
