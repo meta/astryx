@@ -132,6 +132,7 @@ import {
   writeWrittenRecord,
   familyRamp,
   derivedStatusWords,
+  STATUS_TOKEN,
 } from './_palette.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
@@ -4438,8 +4439,8 @@ const groupTables = new WeakMap();
 /**
  * Every group `--on` takes, by name: the editor's own groups (inputs,
  * menus, …) and the family roles the census shows (button-like, overlays,
- * option-rows, selected-items, accent-fills, inset-fields), each read from
- * the parts' structure.
+ * option-rows, selected-items, accent-fills, inset-fields, status-surfaces,
+ * overlay-headers), each read from the parts' structure.
  * Without a census (no context), the editor's own groups alone.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @returns {Record<string, string[]>}
@@ -4452,7 +4453,12 @@ export function groupsOf(ctx) {
   const table = Object.create(null);
   for (const [name, members] of Object.entries(FAMILIES)) table[name] = members;
   if (ctx?.C?.MAP && ctx.project?.target) {
-    const roles = familyRoles(ctx.C, ctx.project, FAMILIES.inputs ?? []);
+    const roles = familyRoles(
+      ctx.C,
+      ctx.project,
+      FAMILIES.inputs ?? [],
+      Object.values(STATUS_TOKEN),
+    );
     for (const name of GROUP_ROLES)
       if (roles[name]?.length && !ctx.project.target.has(name))
         table[name] = roles[name];
@@ -4469,6 +4475,8 @@ export const GROUP_ROLES = /** @type {const} */ ([
   'selected-items',
   'accent-fills',
   'inset-fields',
+  'status-surfaces',
+  'overlay-headers',
 ]);
 
 /**

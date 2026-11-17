@@ -566,7 +566,7 @@ export function exactTokens(data) {
     .map(x => x.thing);
 }
 
-export {isLookToken};
+export {isLookToken, STATUS_TOKEN};
 
 /** A code color or the overlay scrim. @param {string} token */
 const isCodeToken = token => /^--color-(?:syntax-[a-z]+|overlay)$/.test(token);
