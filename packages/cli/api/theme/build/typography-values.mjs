@@ -14,6 +14,8 @@
  *           build, which warns it at its line: one judge for one file.
  */
 
+import {writtenPrimitive} from './written-values.mjs';
+
 /**
  * A type scale field as the number Core reads, or NaN: a number, or text
  * that is a number; any other value (a boolean, a symbol, an array) is no
@@ -21,31 +23,13 @@
  * @param {unknown} value
  */
 const scaleNumber = value => {
-  const v = primitive(value);
+  const v = writtenPrimitive(value);
   return typeof v === 'number'
     ? v
     : typeof v === 'string' && v.trim() !== ''
       ? Number(v)
       : NaN;
 };
-
-/**
- * A value as the build hands it to Core: a boxed primitive
- * (`new Number(16)`) as its primitive, and a BigInt as its digits, which is
- * how the build writes it.
- * @param {unknown} value
- * @returns {unknown}
- */
-function primitive(value) {
-  if (
-    value instanceof Number ||
-    value instanceof String ||
-    value instanceof Boolean
-  )
-    return value.valueOf();
-  if (typeof value === 'bigint') return String(value);
-  return value;
-}
 
 /**
  * A value the source writes that cannot be known without running it (a
@@ -120,7 +104,7 @@ function nearWeightName(value) {
  * @returns {string | null}
  */
 function weightTextProblem(value) {
-  value = primitive(value);
+  value = writtenPrimitive(value);
   if (typeof value !== 'string' || value === '' || isFontWeight(value))
     return null;
   const near = nearWeightName(value);
@@ -150,7 +134,7 @@ export function isHeadingLevel(key, levels) {
  * @returns {string | null}
  */
 export function typographyValueProblem(key, value) {
-  value = primitive(value);
+  value = writtenPrimitive(value);
   const parts = key.split('.');
   const field = parts.at(-1);
   // A role and the scale are blocks: Core reads their fields, so a plain
@@ -243,7 +227,7 @@ export const missingScaleFieldWhy = field =>
  * @param {unknown} value
  */
 export const typographyBlockWhy = value =>
-  `typography is a block of roles and a scale, such as typography: {body: {family: 'Inter'}}, and Core reads nothing from ${describe(primitive(value))}, so it builds nothing`;
+  `typography is a block of roles and a scale, such as typography: {body: {family: 'Inter'}}, and Core reads nothing from ${describe(writtenPrimitive(value))}, so it builds nothing`;
 
 /**
  * The keys of a role's weights that name a level another key names too
@@ -345,7 +329,7 @@ export function typographyInputProblems(typography, levels = []) {
     }
     for (const [field, value] of Object.entries(fields)) {
       if (value === undefined || value === UNREAD) continue;
-      if (field === 'weights' && !isBlock(primitive(value))) {
+      if (field === 'weights' && !isBlock(writtenPrimitive(value))) {
         const why = typographyValueProblem(`${block}.weights`, value);
         if (why) {
           shapeless.add(block);

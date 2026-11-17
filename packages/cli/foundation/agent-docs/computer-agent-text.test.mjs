@@ -148,7 +148,7 @@ describe('renderComputerAgentText', () => {
   it('gives the build workflow: a project with Astryx installed and init run, the shared template steps, then check and deliver the build', () => {
     const text = renderComputerAgentText({command: 'astryx'});
     expect(text).toContain(
-      'To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version. Run `astryx init` there and follow the agent docs it writes.',
+      'To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). Run `astryx init` there and follow the agent docs it writes.',
     );
     for (const line of [WORKFLOW_TITLE, ...WORKFLOW_STEPS]) {
       expect(text).toContain(line);

@@ -164,6 +164,21 @@ describe('Stepper', () => {
     expect(list).toHaveAttribute('data-orientation', 'vertical');
   });
 
+  it('keeps a vertical step body within its step, whatever the width of its content', () => {
+    render(
+      <Stepper activeStep={0} orientation="vertical">
+        <Step step={0} label="Step 1">
+          <div data-testid="content">Content</div>
+        </Step>
+      </Stepper>,
+    );
+    // The body is a flex item of the step row: without the reset, its
+    // min-content floor lets wide content push it past the step.
+    const body = screen.getByTestId('content').closest('li > div');
+    expect(body).not.toBeNull();
+    expect(getComputedStyle(body as Element).minWidth).toBe('0');
+  });
+
   it('calls onStepClick when a completed step is clicked', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();

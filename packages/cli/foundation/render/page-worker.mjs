@@ -26,15 +26,19 @@
  * (through the global layers.mjs names) is drawn the same way and put where
  * its marker is, with each overlay it opened after it.
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers}
- * @output one message: {ok: true, markup, css, files, texts, logs} or
+ * With `buildScript`, the page's modules and the modules they use are also
+ * bundled for the browser by esbuild (client-bundle.mjs) into one script,
+ * which draws the page over its markup in the browser.
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers, buildScript, esbuild}
+ * @output one message: {ok: true, markup, css, files, texts, logs, script} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Module, {createRequire, register} from 'node:module';
+import Module, {builtinModules, createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
@@ -45,6 +49,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
+import {BundleError, bundleForBrowser} from './client-bundle.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -653,15 +658,20 @@ function aliasPlugin() {
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
+ *
+ * For the browser (`browser`), the same imports load the same way, but the
+ * page keeps its real charts and nothing is recorded: the server render
+ * recorded it already.
  * @param {string} filename
+ * @param {boolean} [browser]
  */
-function pagePlugin(filename) {
+function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
         const spec = /** @type {string} */ (p.node.source.value);
-        if (spec === 'recharts') setChartsAside(p, t);
+        if (spec === 'recharts' && !browser) setChartsAside(p, t);
         const raw = spec.split('?')[0];
         // A stylesheet, image or JSON file imported through a project alias
         // (`@/styles/site.css`) resolves the way modules do.
@@ -722,7 +732,7 @@ function pagePlugin(filename) {
         }
         if (/\.(scss|sass|less)$/i.test(bare)) {
           // Sass and Less need their compiler: say so rather than drop them.
-          skippedCss.push(bare);
+          if (!browser) skippedCss.push(bare);
           p.remove();
           return;
         }
@@ -760,7 +770,7 @@ function pagePlugin(filename) {
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
-            packageCss.push({spec: bare, from: filename});
+            if (!browser) packageCss.push({spec: bare, from: filename});
           }
           p.remove();
           return;
@@ -785,14 +795,17 @@ function pagePlugin(filename) {
         }
       },
       'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        if (browser) return;
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
       JSXText(/** @type {any} */ p) {
+        if (browser) return;
         const v = cleanText(p.node);
         if (v.length >= 2) (fnTexts[fnKey(p)] ??= []).push(v);
       },
       JSXElement(/** @type {any} */ p) {
+        if (browser) return;
         const component = jsxName(p.node);
         if (!/^[A-Z]/.test(component)) return;
         // Only children that are all static text: the whole text must show.
@@ -1041,78 +1054,100 @@ const jiti = createJiti(entry, {
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
-  transform(opts) {
-    // jiti names the file with forward slashes on Windows (`C:/...`), while
-    // `entry`, `root` and the node_modules test use the platform separator.
-    // Without this, no file reads as local there and none is transformed.
-    const filename = opts.filename ? path.normalize(opts.filename) : '';
-    let source = opts.source;
-    if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
-      localFiles.push(filename);
-    }
-    if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-      if (!localFiles.includes(filename)) localFiles.push(filename);
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'module',
-        parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [
-          aliasPlugin(),
-          pagePlugin(filename),
-          ...(source.includes('stylex')
-            ? [
-                [
-                  stylexPlugin,
-                  {
-                    dev: false,
-                    runtimeInjection: false,
-                    treeshakeCompensation: true,
-                    unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                    ...(themeFiles ? {aliases: themeFiles} : {}),
-                  },
-                ],
-              ]
-            : []),
-        ],
-      });
-      const rules = /** @type {any} */ (result?.metadata)?.stylex;
-      if (Array.isArray(rules)) stylexRules.push(...rules);
-      source = result?.code ?? source;
-    } else if (
-      PATHS.length > 0 &&
-      filename &&
-      !filename.includes(NODE_MODULES) &&
-      /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)
-    ) {
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'unambiguous',
-        // The options jiti compiles these files with: JSX only in .jsx and
-        // .tsx files (so `<string>value` stays a type assertion), and legacy
-        // decorators.
-        parserOpts: {
-          plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
-            ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
-          ),
-        },
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [aliasPlugin()],
-      });
-      source = result?.code ?? source;
-    }
-    return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
-  },
+  transform: opts => transformModule(opts),
 });
+
+/**
+ * One of the page's own files, or a file outside them and outside
+ * `node_modules` that a path alias may reach, compiled as the server
+ * compiles it: the page's files with its plugins and StyleX, the other with
+ * its path aliases. The code stays an ES module with its JSX and types. For
+ * the browser (`browser`), the page's files keep their real charts and
+ * record nothing. Null for any other file.
+ * @param {string} source
+ * @param {string} filename
+ * @param {boolean} [browser]
+ * @returns {string | null}
+ */
+function compilePageModule(source, filename, browser = false) {
+  if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    if (!localFiles.includes(filename)) localFiles.push(filename);
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'module',
+      parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [
+        aliasPlugin(),
+        pagePlugin(filename, browser),
+        ...(source.includes('stylex')
+          ? [
+              [
+                stylexPlugin,
+                {
+                  dev: false,
+                  runtimeInjection: false,
+                  treeshakeCompensation: true,
+                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                  ...(themeFiles ? {aliases: themeFiles} : {}),
+                },
+              ],
+            ]
+          : []),
+      ],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    if (Array.isArray(rules)) stylexRules.push(...rules);
+    return result?.code ?? source;
+  }
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      // The options jiti compiles these files with: JSX only in .jsx and
+      // .tsx files (so `<string>value` stays a type assertion), and legacy
+      // decorators.
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [aliasPlugin()],
+    });
+    return result?.code ?? source;
+  }
+  return null;
+}
+
+/**
+ * One module as CommonJS, for the server render: {@link compilePageModule}
+ * for the page's files and the files its aliases reach, then jiti.
+ * @param {import('jiti').TransformOptions} opts
+ * @returns {{code: string}}
+ */
+function transformModule(opts) {
+  // jiti names the file with forward slashes on Windows (`C:/...`), while
+  // `entry`, `root` and the node_modules test use the platform separator.
+  // Without this, no file reads as local there and none is transformed.
+  const filename = opts.filename ? path.normalize(opts.filename) : '';
+  let source = opts.source;
+  if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
+    localFiles.push(filename);
+  }
+  const compiled = filename ? compilePageModule(source, filename) : null;
+  if (compiled !== null) source = compiled;
+  return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
+}
 
 /**
  * @param {string} code
@@ -1251,6 +1286,50 @@ function classify(e) {
 }
 
 /**
+ * One of the page's files for esbuild (client-bundle.mjs), compiled as the
+ * server compiled it; null for a file esbuild loads itself.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserSource(file) {
+  const filename = path.normalize(file);
+  const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * The folder a package import resolves from in the browser bundle when it
+ * must be the copy the server loaded: React, React DOM and StyleX from the
+ * package set outside a project (one copy for every module), and a served
+ * package the importer has no copy of. Null when the importer's own copy
+ * serves.
+ * @param {string} name
+ * @param {string} importerDir
+ * @returns {string | null}
+ */
+function browserPackageDir(name, importerDir) {
+  if (!served) return null;
+  const pkg = packageOf(name);
+  if (pkg in SINGLE_COPY_ALIASES) return served.dir;
+  if (!findNodeModulesPackage(importerDir, pkg) && isServedPackage(pkg, served.integrations)) return served.dir;
+  return null;
+}
+
+/**
+ * A file named for a message: a path from the page's folder for the page's
+ * own files, else the package that holds it.
+ * @param {string} file
+ */
+function describeFile(file) {
+  const at = file.lastIndexOf(NODE_MODULES);
+  if (at < 0) return path.relative(path.dirname(entry), file).split(path.sep).join('/');
+  const parts = file.slice(at + NODE_MODULES.length).split(path.sep);
+  return parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+/**
  * Tell the host what the page is doing, so an end without an answer can say
  * where it ended.
  * @param {string} name
@@ -1342,11 +1421,60 @@ try {
   for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
     if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
   }
+  // The page's script is built first: it compiles every module the page
+  // can load, a lazily imported one included, and their styles join the
+  // stylesheet below.
+  /** @type {{code: string, modules: number} | null} */
+  let script = null;
+  if (workerData.buildScript) {
+    reach("building the page's script");
+    try {
+      const loaded = await import(pathToFileURL(workerData.esbuild).href);
+      script = await bundleForBrowser({
+        esbuild: loaded.default ?? loaded,
+        entry,
+        source: browserSource,
+        // The files compilePageModule compiles: the page's own, and, when
+        // the project has path aliases, every module outside node_modules.
+        isPageFile: file => {
+          const filename = path.normalize(file);
+          return (
+            isLocal(filename) ||
+            (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename))
+          );
+        },
+        resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
+        packageDir: browserPackageDir,
+        builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
+        describe: describeFile,
+        oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
+      });
+    } catch (e) {
+      if (e instanceof BundleError && e.compile !== undefined) {
+        classify(e.compile);
+      } else if (e instanceof BundleError) {
+        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
+      } else {
+        const message = e instanceof Error ? e.message : String(e);
+        fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
+      }
+      throw null;
+    }
+  }
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
     reach('compiling styles');
-    css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+    // A module compiled for the server and again for the browser gives its
+    // rules twice; each rule is written once.
+    const seen = new Set();
+    const rules = stylexRules.filter(rule => {
+      const key = JSON.stringify(rule);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    css = stylexPlugin.processStylexRules(rules, {useLayers: false});
   }
   // Node loads some local modules itself (jiti hands it a plain ES module,
   // such as a built theme), so they never pass the transform that records
@@ -1392,6 +1520,8 @@ try {
     fnTexts,
     screenQueries,
     logs,
+    script: script?.code ?? null,
+    scriptModules: script?.modules ?? 0,
   });
 } catch (e) {
   if (e !== null) classify(e);

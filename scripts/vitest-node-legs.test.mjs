@@ -2,6 +2,7 @@
 
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
@@ -9,7 +10,10 @@ import yaml from 'yaml';
 import {
   JOB_LIMIT_SECONDS,
   LEG_BUDGET_SECONDS,
+  MAIN_WARN_MINUTES,
+  MAX_MAIN_NODE_LEGS,
   MAX_NODE_LEGS,
+  SLOW_RUNNER,
   PER_FILE_SECONDS,
   RECORD_DRIFT,
   SETUP_SECONDS,
@@ -19,8 +23,14 @@ import {
   WATCHDOG_MARGIN_SECONDS,
   nodeFileCost,
   nodeLegFiles,
+  mainNearLimitNotice,
+  overBudgetNotice,
+  planMainNodeLegs,
+  projectedLegMinutes,
   planNodeLegs,
   readDurations,
+  RECORDS,
+  recordProblem,
   stepOutputs,
 } from './vitest-node-legs.mjs';
 import {partitionByDuration} from './vitest-shard-sequencer.mjs';
@@ -84,6 +94,102 @@ describe('the Node leg plan', () => {
     // A file that runs no test in this run costs only its import.
     const idle = nodeFileCost(names, record, {idle: new Set(['t10.test.mjs'])});
     expect(idle('t10.test.mjs')).toBe(PER_FILE_SECONDS);
+  });
+
+  it("plans Main's unit run with the swizzle proof's slices, which run in its Node legs", () => {
+    const mainFiles = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    const slices = mainFiles.filter(file =>
+      /swizzle-proof\.\d+\.test\.mjs$/.test(file),
+    );
+    expect(slices.length).toBeGreaterThan(0);
+    // A pull request's legs leave them out; Main's add exactly them.
+    expect(files.filter(file => slices.includes(file))).toEqual([]);
+    expect(mainFiles.length).toBe(files.length + slices.length);
+    // As many legs as shorten the slowest leg (DEC-17): its longest leg is
+    // the longest at the most legs, and one fewer would be longer.
+    const mainPlan = planMainNodeLegs(mainFiles, seconds);
+    expect(mainPlan.legs).toBeLessThanOrEqual(MAX_MAIN_NODE_LEGS);
+    const cost = nodeFileCost(mainFiles, seconds);
+    const longestAt = count =>
+      Math.max(
+        ...partitionByDuration(mainFiles, count, seconds).map(leg =>
+          leg.reduce((sum, file) => sum + cost(file), 0),
+        ),
+      );
+    expect(mainPlan.longest).toBeCloseTo(longestAt(MAX_MAIN_NODE_LEGS));
+    if (mainPlan.legs > 1)
+      expect(longestAt(mainPlan.legs - 1)).toBeGreaterThan(mainPlan.longest);
+    // The command Main runs plans the same files, and never fails: a plan
+    // past its budget warns and runs the most legs.
+    const out = spawnSync(
+      process.execPath,
+      ['scripts/vitest-node-legs.mjs', 'plan', '--main'],
+      {cwd: ROOT, encoding: 'utf8'},
+    );
+    expect(out.status, out.stderr).toBe(0);
+    expect(out.stdout).toContain(`${mainFiles.length} Node test files`);
+    expect(out.stdout).toContain(`: ${mainPlan.legs} legs,`);
+    expect(out.stdout).not.toContain('::error');
+    if (!mainPlan.fits)
+      expect(out.stdout).toContain('::warning title=Node legs over budget::');
+  });
+
+  it("keeps Main's slowest Node leg under twelve minutes on a runner 1.28 times slower than measured", () => {
+    // On the record Main's planner reads (scripts/vitest-node-durations.json):
+    // a change that grows the suite past the line fails here.
+    expect(SLOW_RUNNER).toBe(1.28);
+    const mainFiles = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    const mainPlan = planMainNodeLegs(mainFiles, seconds);
+    expect(projectedLegMinutes(mainPlan.longest)).toBeCloseTo(
+      (SETUP_SECONDS +
+        (mainPlan.longest / TEST_SECONDS_PER_WALL_SECOND) * 1.28) /
+        60,
+    );
+    expect(projectedLegMinutes(mainPlan.longest)).toBeLessThan(12);
+    expect(mainPlan.fits, mainPlan.reason).toBe(true);
+    expect(mainNearLimitNotice(mainPlan)).toBeNull();
+  });
+
+  it("warns on main's validation, never failing, when Main's slowest leg nears its limit", () => {
+    // The test seconds at which a leg reaches the warning line.
+    const line =
+      ((MAIN_WARN_MINUTES * 60 - SETUP_SECONDS) / SLOW_RUNNER) *
+      TEST_SECONDS_PER_WALL_SECOND;
+    expect(mainNearLimitNotice({legs: 12, longest: line - 1})).toBeNull();
+    expect(mainNearLimitNotice({legs: 12, longest: line + 1})).toMatch(
+      /^::warning title=Main Node legs near their limit::At 12 legs/,
+    );
+  });
+
+  it('gives Main fewer legs only where the slowest file already sets the floor', () => {
+    // Many even files: every leg more shortens the slowest, so the most legs.
+    const even = Object.fromEntries(
+      Array.from({length: 96}, (_, i) => [`even${i}.test.mjs`, 100]),
+    );
+    expect(planMainNodeLegs(Object.keys(even), even).legs).toBe(
+      MAX_MAIN_NODE_LEGS,
+    );
+    // One file longer than all the rest together: two legs reach its floor.
+    const floor = {
+      'huge.test.mjs': 1000,
+      'a.test.mjs': 1,
+      'b.test.mjs': 1,
+      'c.test.mjs': 1,
+    };
+    expect(planMainNodeLegs(Object.keys(floor), floor).legs).toBe(2);
+  });
+
+  it('warns on Main and fails a pull request when a plan is past its budget', () => {
+    const over = {fits: false, reason: 'too slow'};
+    expect(overBudgetNotice(over, {main: true})).toEqual({
+      level: 'warning',
+      line: '::warning title=Node legs over budget::too slow',
+    });
+    expect(overBudgetNotice(over)).toEqual({
+      level: 'error',
+      line: '::error title=Node legs over budget::too slow',
+    });
+    expect(overBudgetNotice({fits: true, reason: ''}, {main: true})).toBeNull();
   });
 
   it('fails loudly, never overfills, when the suite does not fit at the most legs', () => {
@@ -178,5 +284,30 @@ describe('the Node leg plan', () => {
     const cost = nodeFileCost(guards, seconds);
     const share = guards.reduce((sum, file) => sum + cost(file), 0);
     expect(share / plan.total).toBeGreaterThan(0.5);
+  });
+});
+
+describe('a recorded-times file the plan can use', () => {
+  const write = text => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-times-'));
+    const file = path.join(dir, 'vitest-node-durations.json');
+    fs.writeFileSync(file, text);
+    return file;
+  };
+
+  it('accepts a map of seconds per file, and names what is wrong otherwise', () => {
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": 1.5}}'))).toBeNull();
+    expect(recordProblem(write('{"seconds": '))).toMatch(/cannot be read/);
+    expect(recordProblem(write('{"secs": {}}'))).toMatch(/no map of seconds/);
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": "1"}}'))).toMatch(
+      /records "1" seconds for a.test.mjs/,
+    );
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": -1}}'))).toMatch(
+      /records -1 seconds/,
+    );
+  });
+
+  it('holds for the repository records', () => {
+    for (const file of RECORDS) expect(recordProblem(file), file).toBeNull();
   });
 });

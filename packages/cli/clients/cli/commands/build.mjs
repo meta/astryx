@@ -20,6 +20,7 @@ import {
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
+  docText,
   emit,
   formatDeprecation,
   section,
@@ -104,9 +105,9 @@ export function registerBuild(program) {
           /** @type {import('../../../api/build/build.type.mjs').BuildHelpResponse} */ (
             await buildApi(undefined, {cwd: process.cwd()})
           );
-        // The playbook is a document, not a lookup: one doc, always the same
-        // one. Counting it as a result keeps "what did this run answer with"
-        // true for the no-argument form too.
+        // The playbook is a document, not a lookup: one doc, whose theme
+        // wiring follows the project. Counting it as a result keeps "what did
+        // this run answer with" true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
         pointToSearch(options.type, json);
         if (json) {
@@ -210,14 +211,19 @@ export function registerBuild(program) {
           'description',
           'command',
         ],
-        format: {command: formatCliCommand, deprecated: formatDeprecation},
+        format: {
+          command: formatCliCommand,
+          description: docText,
+          deprecated: formatDeprecation,
+        },
       };
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
         format: {
           command: formatCliCommand,
-          description: firstSentence,
+          description: (/** @type {string} */ value) =>
+            docText(firstSentence(value)),
           deprecated: formatDeprecation,
         },
       });
@@ -265,7 +271,7 @@ export function registerBuild(program) {
                     'fit',
                     'command',
                   ],
-                  format: {command: formatCliCommand},
+                  format: {command: formatCliCommand, description: docText},
                 }
               : brief(['name', 'package', 'description', 'command']),
           ),
@@ -313,11 +319,7 @@ export function registerBuild(program) {
           ),
         );
       }
-      out.push(
-        section(
-          'COMPONENTS',
-          `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
-        ),
+      const componentLines = [
         ...(domain.length
           ? [
               records(
@@ -328,8 +330,20 @@ export function registerBuild(program) {
               ),
             ]
           : []),
-        record({frame, foundation}),
-      );
+        ...(frame.length + foundation.length
+          ? [record({frame, foundation})]
+          : []),
+      ];
+      // A section with no lines under it is left out.
+      if (componentLines.length > 0) {
+        out.push(
+          section(
+            'COMPONENTS',
+            `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+          ),
+          ...componentLines,
+        );
+      }
 
       // Last, so it is the line the reader leaves with — and only when the kit
       // was thin enough that "the package has nothing" is the wrong conclusion.
