@@ -20,11 +20,6 @@ const read = name =>
   );
 
 describe('dashboard KPI tiles on a phone', () => {
-  it('dashboard-scorecard keeps two columns below its large tier', () => {
-    const source = read('dashboard-scorecard');
-    expect(source).toMatch(/default: 'repeat\(2, minmax\(0, 1fr\)\)'/);
-  });
-
   for (const name of ['dashboard-cohort-funnel', 'dashboard-alert-rail']) {
     it(`${name} folds its KPI row to two columns on a phone`, () => {
       const source = read(name);
@@ -35,13 +30,7 @@ describe('dashboard KPI tiles on a phone', () => {
       );
       expect(source).toContain('xstyle={kpiGridStyles.grid}');
     });
-  }
 
-  for (const name of [
-    'dashboard-scorecard',
-    'dashboard-cohort-funnel',
-    'dashboard-alert-rail',
-  ]) {
     it(`${name} lets a tile's change wrap under its value`, () => {
       // A half-width tile is too narrow for the value and its change on one
       // line; without wrap the change runs past the tile.

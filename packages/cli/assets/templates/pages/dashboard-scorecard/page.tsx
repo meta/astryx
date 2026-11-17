@@ -161,10 +161,12 @@ const KPIS: Kpi[] = [
   },
 ];
 
-// The scorecard is one flat grid of 6 tiles: 2 columns, then 3 (large) —
-// i.e. 2x3, 3x2. A phone keeps two columns, so the six tiles take three
-// short rows instead of six. The tier is pinned to viewport width rather
-// than derived from tile width via auto-fill, so the breakpoint is explicit.
+// The scorecard is one flat grid of 6 tiles: 1 column (small), 2 (medium),
+// 3 (large) — i.e. 1x6, 2x3, 3x2. The tiers are pinned to viewport width
+// rather than derived from tile width via auto-fill, so the breakpoints are
+// explicit. The ranges are non-overlapping, so exactly one ever matches and
+// the result can't depend on StyleX's at-rule ordering or on source order.
+const SCORECARD_MEDIUM = '@media (min-width: 768px) and (max-width: 1199.98px)';
 const SCORECARD_LARGE = '@media (min-width: 1200px)';
 
 // Overrides Grid's own grid-template-columns. Grid routes its track template
@@ -172,7 +174,8 @@ const SCORECARD_LARGE = '@media (min-width: 1200px)';
 const scorecardStyles = stylex.create({
   grid: {
     gridTemplateColumns: {
-      default: 'repeat(2, minmax(0, 1fr))',
+      default: '1fr',
+      [SCORECARD_MEDIUM]: 'repeat(2, 1fr)',
       [SCORECARD_LARGE]: 'repeat(3, 1fr)',
     },
   },
@@ -465,7 +468,7 @@ function ScorecardTile({kpi, period}: {kpi: Kpi; period: Period}) {
         <Text type="label" color="secondary">
           {kpi.label}
         </Text>
-        <HStack gap={4} vAlign="center" wrap="wrap">
+        <HStack gap={4} vAlign="center">
           <Heading level={2} accessibilityLevel={3}>
             {kpi.value}
           </Heading>
