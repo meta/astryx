@@ -19,6 +19,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
   INITIAL_MEDIA_STATE,
   type MediaPlayerActions,
@@ -159,22 +160,23 @@ export function useMediaPlaybackTime(): number {
     'useMediaPlaybackTime',
     state => state.playbackRate,
   );
+  const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const anchorRef = useRef({time: currentTime, at: 0});
-  const [smoothTime, setSmoothTime] = useState(currentTime);
+  // The smoothed time and the reported time it grew from. A new reported
+  // time, such as after a seek, applies in the same render.
+  const [smooth, setSmooth] = useState({from: currentTime, time: currentTime});
 
-  // Syncs the anchor with each reported time.
+  // Syncs the animation frames' starting point with each reported time.
   useEffect(() => {
     anchorRef.current = {time: currentTime, at: performance.now()};
-    setSmoothTime(currentTime);
   }, [currentTime]);
 
   // Syncs the smoothed time with the animation frames while the media plays.
   useEffect(() => {
     if (
       !isAdvancing ||
-      typeof requestAnimationFrame !== 'function' ||
-      (typeof matchMedia === 'function' &&
-        matchMedia('(prefers-reduced-motion: reduce)').matches)
+      isReducedMotion ||
+      typeof requestAnimationFrame !== 'function'
     ) {
       return;
     }
@@ -182,16 +184,22 @@ export function useMediaPlaybackTime(): number {
     let frame = 0;
     const tick = (now: number) => {
       const {time, at} = anchorRef.current;
-      setSmoothTime(
-        Math.min(time + (Math.max(now - at, 0) / 1000) * playbackRate, end),
-      );
+      setSmooth({
+        from: time,
+        time: Math.min(
+          time + (Math.max(now - at, 0) / 1000) * playbackRate,
+          end,
+        ),
+      });
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [isAdvancing, duration, playbackRate]);
+  }, [isAdvancing, isReducedMotion, duration, playbackRate]);
 
-  return isAdvancing ? smoothTime : currentTime;
+  return isAdvancing && !isReducedMotion && smooth.from === currentTime
+    ? smooth.time
+    : currentTime;
 }
 
 export function formatClock(seconds: number, hasHours = false): string {

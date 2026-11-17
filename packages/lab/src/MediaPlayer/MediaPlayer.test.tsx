@@ -581,6 +581,46 @@ describe('MediaTimeSlider', () => {
     expect(video.muted).toBe(false);
   });
 
+  it('speaks a marker with the time when an arrow step lands within half a step of it', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaTimeSlider markers={[{time: 22, label: 'Ana: love this shot'}]} />
+      </MediaPlayer>,
+    );
+    fakePlayback(container.querySelector('video')!, {duration: 60});
+    const slider = screen.getByRole('slider', {name: 'Seek'});
+    act(() => slider.focus());
+    await user.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}');
+    expect(slider).toHaveAttribute(
+      'aria-valuetext',
+      expect.stringContaining('Ana: love this shot'),
+    );
+  });
+
+  it('reads the timeline position once per hover, not on every pointer move', () => {
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaTimeSlider />
+      </MediaPlayer>,
+    );
+    fakePlayback(container.querySelector('video')!, {duration: 60});
+    const timeline = screen
+      .getByRole('slider', {name: 'Seek'})
+      .closest('[dir="ltr"]')!;
+    const read = vi.spyOn(timeline, 'getBoundingClientRect');
+    fireEvent.pointerEnter(timeline, {pointerType: 'mouse'});
+    for (const clientX of [10, 20, 30]) {
+      fireEvent.pointerMove(timeline, {pointerType: 'mouse', clientX});
+    }
+    expect(read).toHaveBeenCalledTimes(1);
+    fireEvent.scroll(window);
+    fireEvent.pointerMove(timeline, {pointerType: 'mouse', clientX: 40});
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it('draws a dot for each marker once the duration is known', () => {
     const {container} = render(
       <VideoPlayer
@@ -901,6 +941,31 @@ describe('useMediaPlayer', () => {
       video.currentTime = 12;
     });
     expect(screen.getByTestId('time')).toHaveTextContent('12');
+  });
+
+  it('reports a seek in the same render while the media plays', () => {
+    const seen: [reported: number, time: number][] = [];
+    function Readout() {
+      const {state} = useMediaPlayer();
+      const time = useMediaPlaybackTime();
+      seen.push([state.currentTime, time]);
+      return null;
+    }
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <Readout />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video')!;
+    fakePlayback(video, {duration: 60});
+    act(() => {
+      void video.play();
+    });
+    act(() => {
+      video.currentTime = 30;
+    });
+    expect(seen.find(([reported]) => reported === 30)?.[1]).toBe(30);
   });
 
   it('throws outside a MediaPlayer', () => {

@@ -14,7 +14,7 @@
 
 import {
   use,
-  useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -93,6 +93,12 @@ const CHAPTER_GAP = 2;
 const TIMELINE_MARKER_SIZE = 6;
 /** How near, in pixels, the pointer or the value must be to name a marker. */
 const MARKER_REACH = 6;
+/**
+ * How near, in seconds, a marker must be for the timeline to speak it with
+ * the time: half the 5-second arrow key step, so each step speaks the
+ * markers nearest to where it lands.
+ */
+const MARKER_SPOKEN_REACH = 2.5;
 /** Pointer target of a marker that opens a popover. */
 const MARKER_HIT_SIZE = 24;
 /** Width of a marker's popover, which fits a comment thread. */
@@ -337,7 +343,7 @@ export interface MediaPlayButtonProps extends MediaButtonPartProps {
  * @example
  * ```
  * <MediaPlayer label="Episode 12">
- *   <MediaPlayerAudio src="/media/episode-12.mp3" />
+ *   <MediaPlayerElement kind="audio" src="/media/episode-12.mp3" />
  *   <MediaPlayButton variant="primary" />
  * </MediaPlayer>
  * ```
@@ -532,7 +538,8 @@ export interface MediaVolumeProps extends Omit<
   /**
    * Shows a volume slider beside Mute while Mute is hovered or holds focus,
    * and always on touch. Defaults to `true`. The slider never renders where
-   * script cannot set the volume, such as iOS Safari.
+   * the browser ignores script changes to the volume; the device's own volume
+   * controls apply there.
    */
   hasSlider?: boolean;
   /**
@@ -666,6 +673,17 @@ function findMarker(
   return found;
 }
 
+/** The markers within `reach` seconds of `time`, in time order. */
+function findMarkersNear(
+  markers: readonly MediaTimelineMarker[],
+  time: number,
+  reach: number,
+): MediaTimelineMarker[] {
+  return markers
+    .filter(marker => Math.abs(marker.time - time) <= reach)
+    .sort((first, second) => first.time - second.time);
+}
+
 /**
  * A marker with content: a dot on the timeline that jumps to its time and
  * opens its content in a popover.
@@ -782,15 +800,35 @@ export function MediaTimeSlider({
   );
   const markerList = markers ?? [];
 
-  // Syncs the drawn timeline with the width of the timeline element.
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (wrapper == null) {
-      return;
-    }
-    setWidth(wrapper.clientWidth);
-    return observeResize(wrapper, () => setWidth(wrapper.clientWidth));
+  // The timeline's left edge, read once per hover instead of on every pointer
+  // move, because the playhead renders the timeline every frame while the
+  // media plays. A resize or a scroll drops it.
+  const wrapperLeftRef = useRef<number | null>(null);
+  const dropWrapperLeft = useCallback(() => {
+    wrapperLeftRef.current = null;
   }, []);
+  // A callback ref, so a replaced timeline element is measured and observed.
+  const observeWrapper = useCallback(
+    (wrapper: HTMLDivElement | null) => {
+      wrapperRef.current = wrapper;
+      if (wrapper == null) {
+        return undefined;
+      }
+      setWidth(wrapper.clientWidth);
+      const stopObserving = observeResize(wrapper, () => {
+        wrapperLeftRef.current = null;
+        setWidth(wrapper.clientWidth);
+      });
+      return () => {
+        stopObserving();
+        window.removeEventListener('scroll', dropWrapperLeft, {capture: true});
+        if (wrapperRef.current === wrapper) {
+          wrapperRef.current = null;
+        }
+      };
+    },
+    [dropWrapperLeft],
+  );
 
   const travel = Math.max(width - SLIDER_THUMB_SIZE, 0);
   const toX = (time: number) =>
@@ -837,7 +875,8 @@ export function MediaTimeSlider({
     if (event.pointerType === 'touch' || wrapper == null || !isSeekable) {
       return;
     }
-    setPreviewX(event.clientX - wrapper.getBoundingClientRect().left);
+    wrapperLeftRef.current ??= wrapper.getBoundingClientRect().left;
+    setPreviewX(event.clientX - wrapperLeftRef.current);
   };
 
   const commit = () => {
@@ -878,10 +917,20 @@ export function MediaTimeSlider({
   // capture; the slider inside it carries the theme target.
   return (
     <div
-      ref={wrapperRef}
+      ref={observeWrapper}
       dir="ltr"
+      onPointerEnter={() => {
+        wrapperLeftRef.current = null;
+        window.addEventListener('scroll', dropWrapperLeft, {
+          capture: true,
+          passive: true,
+        });
+      }}
       onPointerMove={handlePointerMove}
-      onPointerLeave={() => setPreviewX(null)}
+      onPointerLeave={() => {
+        setPreviewX(null);
+        window.removeEventListener('scroll', dropWrapperLeft, {capture: true});
+      }}
       onKeyDownCapture={handleKeyDownCapture}
       onPointerDownCapture={() => {
         if (isSeekable) {
@@ -982,8 +1031,11 @@ export function MediaTimeSlider({
                 context: chapter.title,
               });
             }
-            const marker = findMarker(markerList, time, markerReachSeconds);
-            if (marker != null) {
+            for (const marker of findMarkersNear(
+              markerList,
+              time,
+              Math.max(markerReachSeconds, MARKER_SPOKEN_REACH),
+            )) {
               spoken = t('@astryx.mediaPlayer.timeValueContext', {
                 value: spoken,
                 context: marker.label,
@@ -1074,9 +1126,14 @@ export function MediaTime({
   } else if (display === 'duration') {
     text = formatClock(duration, hasHours);
   } else if (display === 'remaining') {
-    text = `-${formatClock(Math.max(duration - time, 0), hasHours)}`;
+    text = t('@astryx.mediaPlayer.timeRemaining', {
+      remaining: formatClock(Math.max(duration - time, 0), hasHours),
+    });
   } else {
-    text = `${formatClock(time, hasHours)} / ${formatClock(duration, hasHours)}`;
+    text = t('@astryx.mediaPlayer.timeReadout', {
+      current: formatClock(time, hasHours),
+      duration: formatClock(duration, hasHours),
+    });
   }
   // Times read left to right in every direction, like the timeline.
   return (
@@ -1147,8 +1204,9 @@ MediaCaptionsButton.displayName = 'MediaCaptionsButton';
 
 /**
  * Enters and exits fullscreen. The player's own element goes fullscreen, so
- * the controls come along. iPhone shows the system player instead. It
- * renders nothing where fullscreen is not available.
+ * the controls come along. Where the browser cannot put an element in
+ * fullscreen, the video's own fullscreen presentation takes its place. It
+ * renders nothing where neither is available.
  *
  * @example
  * ```

@@ -12,7 +12,7 @@
  *   parts
  */
 
-import {useEffect, useRef, type RefObject} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {useTranslator} from '@astryxdesign/core/i18n';
@@ -300,15 +300,15 @@ interface SavedCuePosition {
  * move; cues the caption author placed keep their position.
  */
 function useCueLayout(
-  videoRef: RefObject<HTMLVideoElement | null>,
-  barRef: RefObject<HTMLDivElement | null>,
+  video: HTMLVideoElement | null,
+  bar: HTMLDivElement | null,
 ) {
   // Syncs the caption cue positions on the video's text tracks with the bar.
   useEffect(() => {
-    const video = videoRef.current;
     const tracks = video?.textTracks;
     if (
       video == null ||
+      bar == null ||
       tracks == null ||
       typeof tracks.addEventListener !== 'function' ||
       typeof VTTCue === 'undefined'
@@ -327,9 +327,8 @@ function useCueLayout(
           element.addEventListener('load', apply);
         }
       }
-      const bar = barRef.current;
       const height = video.clientHeight;
-      if (bar == null || height <= 0) {
+      if (height <= 0) {
         return;
       }
       // Layout offsets ignore the bar's hide transform, so the line holds
@@ -391,15 +390,15 @@ function useCueLayout(
         cue.line = original.line;
       }
     };
-  }, [videoRef, barRef]);
+  }, [video, bar]);
 }
 
 function VideoControlBar({
-  videoRef,
+  video,
   chapters,
   markers,
 }: {
-  videoRef: RefObject<HTMLVideoElement | null>;
+  video: HTMLVideoElement | null;
   chapters?: readonly MediaTimelineChapter[];
   markers?: readonly MediaTimelineMarker[];
 }) {
@@ -410,12 +409,13 @@ function VideoControlBar({
     'VideoPlayer',
     state => state.error == null && !state.hasStarted,
   );
-  const barRef = useRef<HTMLDivElement | null>(null);
-  useCueLayout(videoRef, barRef);
+  // State, not refs, so a replaced video or bar element is laid out again.
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  useCueLayout(video, bar);
   return (
     <MediaTheme mode="dark">
       <div
-        ref={barRef}
+        ref={setBar}
         dir="ltr"
         data-visible={isControlsVisible ? 'true' : 'false'}
         {...stylex.props(
@@ -465,7 +465,7 @@ export function VideoPlayer({
   xstyle,
   ...rest
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   return (
     <MediaPlayer
       {...rest}
@@ -473,7 +473,7 @@ export function VideoPlayer({
       xstyle={[styles.root, styles.aspectRatio(aspectRatio), xstyle]}>
       <MediaPlayerElement
         kind="video"
-        ref={videoRef}
+        ref={setVideo}
         src={src}
         poster={poster}
         preload={preload}
@@ -493,11 +493,7 @@ export function VideoPlayer({
         ))}
       </MediaPlayerElement>
       <VideoStatusLayer />
-      <VideoControlBar
-        videoRef={videoRef}
-        chapters={chapters}
-        markers={markers}
-      />
+      <VideoControlBar video={video} chapters={chapters} markers={markers} />
     </MediaPlayer>
   );
 }

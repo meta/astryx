@@ -45,9 +45,9 @@ const timelineProps = [
   },
   {
     name: 'markers',
-    type: 'readonly {time: number; label: string}[]',
+    type: 'readonly {time: number; label: string; content?: ReactNode}[]',
     description:
-      'Points of interest, such as timestamped comments, drawn as dots on the timeline. The pointer preview shows the nearest label, and the timeline speaks it when its value reaches the marker.',
+      'Points of interest, such as timestamped comments, drawn as dots on the timeline. The pointer preview shows the nearest label. The timeline speaks a label with the time when its value comes within 2.5 seconds of the marker, half an arrow key step, so stepping through the media speaks every marker. A marker with `content`, such as a CommentThread, is a button that jumps to its time and opens the content in a popover.',
   },
 ];
 
@@ -385,7 +385,7 @@ export const docs = {
           name: 'playsInline',
           type: 'boolean',
           description:
-            'For video, plays inside the page on iPhone instead of opening the system player.',
+            'For video, asks the browser to play inside the page instead of in its own fullscreen player.',
           default: 'true',
         },
         ...styleProps,
@@ -431,7 +431,7 @@ export const docs = {
       displayName: 'Media Volume',
       isHiddenFromOverview: true,
       description:
-        'Mute and volume. Mute switches the sound off and on, and its icon follows the volume. The volume slider opens beside Mute while Mute is hovered or focused, stays open on touch, and shows the volume in a tooltip. It never renders where script cannot set the volume, such as iOS Safari, where the hardware buttons own it. In a container narrower than 480px the slider stays closed.',
+        'Mute and volume. Mute switches the sound off and on, and its icon follows the volume. The volume slider opens beside Mute while Mute is hovered or focused, stays open on touch, and shows the volume in a tooltip. It never renders where the browser ignores script changes to the volume; the device’s own volume controls apply there. In a container narrower than 480px the slider stays closed.',
       props: [
         sizeProp,
         {
@@ -487,7 +487,7 @@ export const docs = {
       displayName: 'Media Fullscreen Button',
       isHiddenFromOverview: true,
       description:
-        'Enters and exits fullscreen with the player’s own element, so the controls come along. iPhone shows the system player instead. It renders nothing where fullscreen is not available.',
+        'Enters and exits fullscreen with the player’s own element, so the controls come along. Where the browser cannot put an element in fullscreen, the video’s own fullscreen presentation takes its place. It renders nothing where neither is available.',
       props: [sizeProp, ...styleProps],
     },
     {
