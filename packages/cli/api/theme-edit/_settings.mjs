@@ -11691,9 +11691,28 @@ function floatingEdgeProblems(ctx, data, res, base) {
     return k == null ? null : String(at[k]);
   };
   const surfaces = last('', /^surfaces$/)?.value ?? null;
+  // A part the theme fills that sits on the page (an info banner made
+  // beige on a cream page) gets the same look, as a note: it may sit on
+  // the page by design, but a fill that barely differs from the page
+  // shows nothing.
+  const filled = [
+    ...new Set(
+      data.settings
+        .filter(
+          x =>
+            x.on &&
+            !x.state &&
+            !x.when &&
+            x.source === 'property' &&
+            /^background(-color)?$/.test(x.thing),
+        )
+        .flatMap(x => partsOf(ctx, x)),
+    ),
+  ].filter(t => !FLOATING_PANELS.includes(t));
   /** @type {ThemeProblem[]} */
   const out = [];
-  for (const t of FLOATING_PANELS) {
+  for (const t of [...FLOATING_PANELS, ...filled]) {
+    const floats = FLOATING_PANELS.includes(t);
     if (!ctx.project.target.has(t) || !map[t]) continue;
     // Its edge as the theme draws it: a border or a shadow of its own, the
     // surfaces dial's, else Core's (and the base theme's) at rest.
@@ -11747,11 +11766,20 @@ function floatingEdgeProblems(ctx, data, res, base) {
       if (!fill || !page || alphaOf(read(fillValue, t, mode)) < 1) continue;
       const r = ratio(fill, page);
       if (r >= FLOATING_SHOWS) continue;
-      out.push({
-        key: `floating|${t}|${mode}`,
-        text: `the ${t} (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
-        fix: `${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
-      });
+      out.push(
+        floats
+          ? {
+              key: `floating|${t}|${mode}`,
+              text: `the ${t} (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
+              fix: `${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
+            }
+          : {
+              key: `filled-on-page|${t}|${mode}`,
+              note: true,
+              text: `the ${t}'s fill (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow, so it barely shows where it sits on the page; to give it an edge: ${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
+              fix: null,
+            },
+      );
       break;
     }
   }
