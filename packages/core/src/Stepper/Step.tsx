@@ -1407,7 +1407,8 @@ export function Step({
 
   // The step paints nothing of its own when disabled, so it carries no
   // `disabled` selector. The current step is also `selected`, the state that
-  // marks the chosen item of tabs, pagination and other selection controls.
+  // marks the chosen item of tabs, navigation items and other selection
+  // controls.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,

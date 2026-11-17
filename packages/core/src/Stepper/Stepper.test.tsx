@@ -1258,6 +1258,31 @@ describe('Stepper', () => {
       expect(list.style.width).toBe('');
     });
 
+    it('marks the compact summary as the selected step', () => {
+      atWidth(320, fourSteps({}));
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      const summaryStep = summary!.querySelector('.astryx-step');
+      expect(summaryStep).toHaveAttribute('data-selected', 'selected');
+      expect(summaryStep).toHaveAttribute('data-progress', 'in-progress');
+      expect(summary!.querySelector('.astryx-step-label')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+      // Only the current step is marked in the collapsed list too.
+      const listSteps = [
+        ...screen
+          .getByRole('list')
+          .querySelectorAll<HTMLElement>('.astryx-step'),
+      ];
+      expect(listSteps.map(el => el.dataset.selected ?? null)).toEqual([
+        null,
+        'selected',
+        null,
+        null,
+      ]);
+    });
+
     it('puts horizontal className on the frame without moving list DOM props or ref', () => {
       const ref = createRef<HTMLOListElement>();
       atWidth(
@@ -2222,8 +2247,8 @@ describe('step-label and step-description theme targets', () => {
 });
 
 describe('current step selected state', () => {
-  // The current step carries the shared `selected` state that tabs,
-  // pagination and other selection controls use, so one theme rule for
+  // The current step carries the shared `selected` state that tabs, side
+  // and top navigation, segmented controls and lists use, so one theme rule for
   // selected items reaches it. `aria-current` stays the accessible cue.
   const parts = (root: ParentNode, target: string) => [
     ...root.querySelectorAll<HTMLElement>(`.astryx-${target}`),
