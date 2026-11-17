@@ -535,15 +535,33 @@ export function makeCompiler(project, parts) {
                 ? 'font-family'
                 : 'font-weight'
         : g && DIRECT[g];
-    if (direct)
-      run.push(
-        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
-      );
     const kids = g
       ? (MAP[target]?.contains ?? [])
           .filter(c => partReads(c, g).length)
           .slice(0, 4)
       : [];
+    // A part that reads no font token of this kind, holding parts that do
+    // (a tab list's tabs size their text from --text-label-size): those
+    // tokens,
+    // set on it, reach each of them; the property set on it directly does
+    // not, since they set it themselves.
+    const kidTokens =
+      reads.length || g !== 'font'
+        ? []
+      : [
+          ...new Set(
+            kids.flatMap(c =>
+              partReads(c, /** @type {string} */ (g))
+                .filter(r => kindOf(r.token) === kindOf(token))
+                .map(r => r.token),
+            ),
+          ),
+        ].slice(0, 3);
+    run.push(...kidTokens.map(t => `${P} set ${theme} ${t} ${v} --on ${target}`));
+    if (direct && !kidTokens.length)
+      run.push(
+        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
+      );
     const what = g
       ? `${target}'s ${g} comes from ${
           reads.length
@@ -553,7 +571,9 @@ export function makeCompiler(project, parts) {
                   r => r.token + fmtWhen(r.when) + statusNote(target, r.token),
                 )
                 .join(', ')
-            : 'no token, so set the property directly'
+            : kidTokens.length
+              ? `no token; the parts inside it read ${kidTokens.join(', ')} for theirs, so set ${kidTokens.length > 1 ? 'those' : 'that'} on ${target}`
+              : 'no token, so set the property directly'
         }`
       : `${target} reads: ${[...allReads(target)].slice(0, 8).join(', ')}`;
     return {
