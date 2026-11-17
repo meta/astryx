@@ -629,7 +629,7 @@ describe('generated files a formatter rewrote', () => {
         'trash',
       ]);
       expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
-      expect(generatedOf('brand')).toContain('close: createElement(TrashIcon');
+      expect(generatedOf('brand')).toContain('close: /* @__PURE__ */ createElement(TrashIcon');
       const added = await json([
         'experimental',
         'icon',

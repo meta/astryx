@@ -1401,6 +1401,7 @@ function generatedStatements(text, label) {
  */
 function normalizedStatement(statement) {
   return statement
+    .replace(PURE_MARK, '')
     .replace(/\s+/gu, ' ')
     .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
     .replace(/([{(]) /gu, '$1')
@@ -1522,6 +1523,29 @@ export function generatedTypesMatch(actual, expected, label) {
 
 /** The local name the generated module gives the set's adapter. */
 const ADAPTER_LOCAL = 'adaptIcon';
+
+/**
+ * A bundler's mark that a call has no side effects (`/* @__PURE__ *\/` or
+ * `/*#__PURE__*\/`), so an app that uses a few icons drops the rest. The
+ * module is written with the marks and read without them, so a module an
+ * older CLI wrote (no marks) reads the same.
+ */
+const PURE_MARK = /\/\*\s*[#@]__PURE__\s*\*\/\s*/gu;
+
+/** The mark the generated module writes before each top-level call. */
+const PURE = '/* @__PURE__ */ ';
+
+/**
+ * A normalized statement as the module writes it: an adapted icon's call
+ * marked pure.
+ * @param {string} statement
+ */
+function writtenStatement(statement) {
+  const adapted = `= ${ADAPTER_LOCAL}(`;
+  return statement.startsWith('export const ') && statement.includes(adapted)
+    ? statement.replace(adapted, `= ${PURE}${ADAPTER_LOCAL}(`)
+    : statement;
+}
 
 export {THEME_MAP_NAME};
 
@@ -1789,7 +1813,7 @@ export function generatedModuleText(
     if (reexport) {
       themeImports.add(`import${reexport.slice('export'.length)}`);
     }
-    return `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
+    return `  ${name}: ${PURE}createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
   };
   if (themeName) {
     const byId = new Map(data.icons.map(icon => [icon.id, icon]));
@@ -1818,7 +1842,7 @@ export function generatedModuleText(
       ...(themeName ? [REACT_IMPORT] : []),
       ...adapterLine,
       ...[...imports, ...themeImports].sort(),
-      ...[...exports].sort(),
+      ...[...exports].sort().map(writtenStatement),
     ].map(terminated),
     ...(themeName
       ? theme.length > 0
