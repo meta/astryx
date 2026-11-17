@@ -21,7 +21,6 @@ import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
-import {realmValue, sharedKey} from '../utils/sharedRealm';
 import {computeOverflow, countRows} from './computeOverflow';
 import {useDevWarning} from './useDevWarning';
 
@@ -93,14 +92,26 @@ export interface UseOverflowReturn {
  * A single-row list's inline bounds, from the measure copy. `collapsed` is
  * the list folded as far as it can fold (the minimum items and the
  * indicator), rounded up to a whole pixel. `rendered` is every item
- * unfolded, exact. Both are 0 until the list measures.
+ * unfolded, exact. `chrome` is the list's own inline padding and border. All
+ * are 0 until the list measures.
  */
 export interface OverflowInlineBounds {
   collapsed: number;
   rendered: number;
+  /** The list's own inline padding and border. */
+  chrome: number;
 }
 
-const NO_INLINE_BOUNDS: OverflowInlineBounds = {collapsed: 0, rendered: 0};
+const NO_INLINE_BOUNDS: OverflowInlineBounds = {
+  collapsed: 0,
+  rendered: 0,
+  chrome: 0,
+};
+
+/** An element's sub-pixel border-box width; its rounded width without layout. */
+function exactWidth(element: HTMLElement): number {
+  return element.getBoundingClientRect().width || element.offsetWidth;
+}
 
 /** The bounds of a single-row set, from sub-pixel widths. */
 function inlineBoundsOf(
@@ -109,6 +120,7 @@ function inlineBoundsOf(
   gap: number,
   minVisibleItems: number,
   collapseFrom: 'start' | 'end',
+  chrome: number,
 ): OverflowInlineBounds {
   const span = (set: ReadonlyArray<number>) =>
     set.reduce((sum, width) => sum + width, 0) +
@@ -123,10 +135,11 @@ function inlineBoundsOf(
     ? span(keptWidths) + (keptWidths.length > 0 ? gap : 0) + indicatorWidth
     : span(widths);
   // Round the folded width up so the trigger never clips. Keep the unfolded
-  // width exact: a floor at that width must not widen a list with room.
+  // width exact: the list's width at it must not widen a list with room.
   return {
     collapsed: Math.ceil(collapsed),
     rendered: span(widths),
+    chrome,
   };
 }
 
@@ -364,122 +377,6 @@ function observedSizeFollowsItems(
 }
 
 /**
- * Whether `parent` lays its children out in one flex row, so a child's width
- * follows its content and the row can hold free space beside it.
- */
-function isSingleFlexRow(parent: Element): boolean {
-  if (typeof getComputedStyle !== 'function') {
-    return false;
-  }
-  const style = getComputedStyle(parent);
-  return (
-    (style.display === 'flex' || style.display === 'inline-flex') &&
-    (style.flexDirection === 'row' || style.flexDirection === 'row-reverse') &&
-    style.flexWrap === 'nowrap'
-  );
-}
-
-/**
- * Lists that may unfold into their flex row's free width. Lists that share a
- * row share its free width, so together they never claim more than it.
- */
-const freeWidthSharers = realmValue(
-  sharedKey('overflow/free-width-sharers', 1),
-  () => new WeakSet<Element>(),
-  value => value instanceof WeakSet,
-);
-
-/**
- * This list's share of the free width in its single flex row. The free
- * width is the row's content width less its in-flow children and gaps. A
- * folded list is only as wide as its folded items, so its own width never
- * shows the room it could unfold into.
- */
-function flexRowFreeWidth(list: HTMLElement): number {
-  const parent = list.parentElement;
-  if (parent == null || !isSingleFlexRow(parent)) {
-    return 0;
-  }
-  const style = getComputedStyle(parent);
-  const px = (value: string) => parseFloat(value) || 0;
-  let used = 0;
-  let count = 0;
-  let sharers = 0;
-  for (const child of parent.children) {
-    if (!(child instanceof HTMLElement)) {
-      continue;
-    }
-    const childStyle = getComputedStyle(child);
-    if (
-      childStyle.display === 'none' ||
-      childStyle.position === 'absolute' ||
-      childStyle.position === 'fixed'
-    ) {
-      continue;
-    }
-    used +=
-      child.getBoundingClientRect().width +
-      px(childStyle.marginLeft) +
-      px(childStyle.marginRight);
-    count += 1;
-    if (freeWidthSharers.has(child)) {
-      sharers += 1;
-    }
-  }
-  const content =
-    parent.getBoundingClientRect().width -
-    px(style.paddingLeft) -
-    px(style.paddingRight) -
-    px(style.borderLeftWidth) -
-    px(style.borderRightWidth);
-  const free = Math.max(
-    0,
-    content - used - px(style.columnGap) * Math.max(0, count - 1),
-  );
-  return free / Math.max(1, sharers);
-}
-
-/**
- * How far a list's box can widen as it shows more items. A list sized by
- * its items shows them at their own widths; one that is not (a caller
- * `width`, a squeeze) has no room to give. Otherwise the room runs up to the
- * list's pixel `max-width`. `shownWidth` is the natural width of what the
- * list shows now.
- */
-function widenRoom(list: HTMLElement, shownWidth: number): number {
-  const style = getComputedStyle(list);
-  const px = (value: string) => parseFloat(value) || 0;
-  const box = list.getBoundingClientRect().width;
-  const content =
-    box -
-    px(style.paddingLeft) -
-    px(style.paddingRight) -
-    px(style.borderLeftWidth) -
-    px(style.borderRightWidth);
-  // A box at its min-width floor (an OverflowList's folded floor) is still
-  // sized by its items: the floor only stops it shrinking further.
-  if (Math.abs(content - shownWidth) > 1 && box > px(style.minWidth) + 1) {
-    return 0;
-  }
-  // Typed OM keeps `auto` for a width nothing sets.
-  if (typeof list.computedStyleMap === 'function') {
-    const width = list.computedStyleMap().get('width');
-    if (width != null && width.toString() !== 'auto') {
-      return 0;
-    }
-  }
-  // A cap the computed style keeps unresolved (a percentage, `calc()`,
-  // `min()`) gives no share, since its room cannot be read.
-  const maxWidth = style.maxWidth;
-  if (maxWidth === 'none') {
-    return Infinity;
-  }
-  return /^[\d.]+px$/.test(maxWidth)
-    ? Math.max(0, parseFloat(maxWidth) - box)
-    : 0;
-}
-
-/**
  * Hook for managing horizontal overflow of a list of items.
  *
  * Renders all items into a hidden measurement container, then calculates
@@ -575,7 +472,6 @@ export function useOverflowInternal(
   const observedElRef = useRef<HTMLElement | null>(null);
   const observedMeasureElRef = useRef<HTMLElement | null>(null);
   const unobserveContainerRef = useRef<(() => void) | null>(null);
-  const unobserveRowRef = useRef<(() => void) | null>(null);
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
 
   const apply = useCallback(
@@ -621,13 +517,8 @@ export function useOverflowInternal(
           parseFloat(parentStyle.paddingRight);
         measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
-        // A list in a single flex row may unfold into the row's free width
-        // (added below, once the items are measured).
         availableWidth = container.offsetWidth;
         recordBorderBox(measuredSizes, container);
-        if (container.parentElement != null && tracksInlineBounds) {
-          recordBorderBox(measuredSizes, container.parentElement);
-        }
       }
       recordBorderBox(measuredSizes, measure);
 
@@ -648,56 +539,44 @@ export function useOverflowInternal(
         return;
       }
 
-      const widths = children.map(child => child.offsetWidth);
+      let widths = children.map(child => child.offsetWidth);
+      let fitIndicatorWidth = indicatorWidth;
+      let chrome = 0;
+      if (tracksInlineBounds) {
+        const style = getComputedStyle(container);
+        const px = (value: string) => parseFloat(value) || 0;
+        chrome =
+          px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth);
+      }
       if (tracksInlineBounds && !observeParent) {
-        // The share goes on the list's sub-pixel width and rounds once, so a
-        // list at the edge of its share does not fold and unfold each frame
-        // (its width and its share trade off, and their sum stays put).
-        const exact = children.map(
-          child => child.getBoundingClientRect().width,
-        );
-        const count = appliedRef.current.visibleCount;
-        const shown =
-          collapseFrom === 'end'
-            ? exact.slice(0, count)
-            : exact.slice(exact.length - count);
-        const indicatorShown = hasIndicator && count < itemCount;
-        const shownWidth =
-          shown.reduce((sum, width) => sum + width, 0) +
-          // The indicator as the list renders it: its count can differ from
-          // the measure copy's.
-          (indicatorShown
-            ? ((collapseFrom === 'start'
-                ? container.firstElementChild
-                : container.lastElementChild
-              )?.getBoundingClientRect().width ?? 0)
-            : 0) +
-          gap * Math.max(0, shown.length + (indicatorShown ? 1 : 0) - 1);
-        const box = container.getBoundingClientRect().width;
-        availableWidth = Math.round(
-          // offsetWidth is the box rounded; this puts its fraction back.
-          container.offsetWidth +
-            (box - Math.round(box)) +
-            Math.min(
-              flexRowFreeWidth(container),
-              widenRoom(container, shownWidth),
-            ),
-        );
+        // The list publishes its unfolded width as its own width. It fits
+        // sub-pixel items in its sub-pixel content box, so a box at that
+        // width holds every item.
+        widths = children.map(exactWidth);
+        fitIndicatorWidth = hasIndicator
+          ? exactWidth(allChildren[allChildren.length - 1])
+          : 0;
+        // Layout snaps a published width to a fraction of a pixel; the
+        // allowance keeps a box at that width holding every item.
+        availableWidth = exactWidth(container) - chrome + 0.05;
       }
       if (tracksInlineBounds) {
         const bounds = inlineBoundsOf(
-          children.map(child => child.getBoundingClientRect().width),
-          hasIndicator
-            ? allChildren[allChildren.length - 1].getBoundingClientRect().width
-            : 0,
+          children.map(exactWidth),
+          hasIndicator ? exactWidth(allChildren[allChildren.length - 1]) : 0,
           gap,
           minVisibleItems,
           collapseFrom,
+          chrome,
         );
         const applied = appliedBoundsRef.current;
         if (
           applied.collapsed !== bounds.collapsed ||
-          applied.rendered !== bounds.rendered
+          applied.rendered !== bounds.rendered ||
+          applied.chrome !== bounds.chrome
         ) {
           appliedBoundsRef.current = bounds;
           setInlineBounds(bounds);
@@ -712,7 +591,7 @@ export function useOverflowInternal(
         widths,
         gap,
         availableWidth,
-        indicatorWidth,
+        indicatorWidth: fitIndicatorWidth,
         minVisibleItems,
         maxVisibleItems,
         maxRows,
@@ -810,8 +689,6 @@ export function useOverflowInternal(
       // Clean up previous observation
       unobserveContainerRef.current?.();
       unobserveContainerRef.current = null;
-      unobserveRowRef.current?.();
-      unobserveRowRef.current = null;
       observedElRef.current = null;
 
       if (el) {
@@ -823,28 +700,9 @@ export function useOverflowInternal(
           measuredSizes,
         );
         observedElRef.current = target;
-        // The row a folded list can unfold into: it widens without the list.
-        const row = el.parentElement;
-        if (
-          !observeParent &&
-          tracksInlineBounds &&
-          row != null &&
-          isSingleFlexRow(row)
-        ) {
-          freeWidthSharers.add(el);
-          const unobserveRow = observeForOverflow(
-            row,
-            measureLatest,
-            measuredSizes,
-          );
-          unobserveRowRef.current = () => {
-            freeWidthSharers.delete(el);
-            unobserveRow();
-          };
-        }
       }
     },
-    [measureLatest, measuredSizes, observeParent, tracksInlineBounds],
+    [measureLatest, measuredSizes, observeParent],
   );
 
   const measureRef = useCallback(

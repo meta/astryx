@@ -500,7 +500,7 @@ export const ContentSizedParent: Story = {
   ),
 };
 
-/** In a wide flex row, a list whose width the caller sets or caps (in pixels or with `calc()`) folds within that width and keeps its trigger. */
+/** In a wide flex row, a list whose width the caller sets or caps (in pixels, with `calc()`, or with a flex basis) folds within that width and keeps its trigger; one set narrower than its folded width holds its folded width. */
 export const CallerLimitedWidth: Story = {
   render: () => {
     const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
@@ -531,29 +531,41 @@ export const CallerLimitedWidth: Story = {
         <div data-testid="width-calc" style={{display: 'flex', marginTop: 8}}>
           {list({maxWidth: 'calc(25% + 30px)'})}
         </div>
+        <div data-testid="basis-narrow" style={{display: 'flex', marginTop: 8}}>
+          {list({flex: '0 0 30px'})}
+        </div>
+        <div data-testid="width-narrow" style={{display: 'flex', marginTop: 8}}>
+          {list({width: 30})}
+        </div>
       </div>
     );
   },
 };
 
-/** In a flex row that narrows and widens again, a list that folds from the start and one that keeps one item unfold again as the row widens. */
+/** In a flex row that narrows and widens again, a list that folds from the start, one that keeps one item, and one whose indicator is plain text unfold again as the row widens. */
 export const RowWidensAfterFold: Story = {
   render: () => {
     const items = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'];
     const list = (props: {
       collapseFrom?: 'start' | 'end';
       minVisibleItems?: number;
+      textIndicator?: boolean;
     }) => (
       <OverflowList
         gap={2}
-        {...props}
-        overflowRenderer={overflowItems => (
-          <Button
-            label={`+${overflowItems.length}`}
-            variant="ghost"
-            size="sm"
-          />
-        )}>
+        collapseFrom={props.collapseFrom}
+        minVisibleItems={props.minVisibleItems}
+        overflowRenderer={overflowItems =>
+          props.textIndicator === true ? (
+            `+${overflowItems.length}`
+          ) : (
+            <Button
+              label={`+${overflowItems.length}`}
+              variant="ghost"
+              size="sm"
+            />
+          )
+        }>
         {items.map(label => (
           <Button key={label} label={label} size="sm" />
         ))}
@@ -566,6 +578,46 @@ export const RowWidensAfterFold: Story = {
         </div>
         <div data-testid="one-kept" style={{display: 'flex', marginTop: 8}}>
           {list({minVisibleItems: 1})}
+        </div>
+        <div
+          data-testid="text-indicator"
+          style={{display: 'flex', marginTop: 8}}>
+          {list({textIndicator: true})}
+        </div>
+      </div>
+    );
+  },
+};
+
+/** A list followed by a button in a flex row: a folded list keeps the width the row gives it, up to its unfolded width, and the button sits after that width. */
+export const FollowedBySibling: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    return (
+      <div
+        data-testid="sibling-frame"
+        style={{
+          width: 900,
+          maxWidth: '100%',
+          resize: 'horizontal',
+          overflow: 'auto',
+          padding: 8,
+        }}>
+        <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+          <OverflowList
+            gap={2}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
+          <Button label="After" size="sm" variant="secondary" />
         </div>
       </div>
     );

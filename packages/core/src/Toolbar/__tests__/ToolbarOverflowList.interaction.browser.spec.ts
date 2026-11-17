@@ -544,12 +544,15 @@ test.describe('a single row’s minimum width', () => {
       }, width);
       await page.waitForTimeout(300);
       return page.evaluate(() =>
-        ['from-start', 'one-kept'].map(id =>
+        ['from-start', 'one-kept', 'text-indicator'].map(id =>
+          // Nodes, not elements: a plain-text indicator is a text node.
           [
             ...(document.querySelector(
               `[data-testid="${id}"] .astryx-overflow-list`,
-            )?.children ?? []),
-          ].map(child => (child as HTMLElement).innerText.trim()),
+            )?.childNodes ?? []),
+          ]
+            .map(node => (node.textContent ?? '').trim())
+            .filter(label => label !== ''),
         ),
       );
     };
@@ -564,6 +567,114 @@ test.describe('a single row’s minimum width', () => {
     });
     for (const labels of wide) {
       expect(labels).toHaveLength(10);
+    }
+  });
+
+  test('a list whose flex basis or width is narrower than its folded width holds that width with its trigger, across frames', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--caller-limited-width&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="width-narrow"] .astryx-overflow-list > *')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(300);
+    for (const testId of ['basis-narrow', 'width-narrow']) {
+      const samples: string[][] = [];
+      for (let frame = 0; frame < 10; frame += 1) {
+        samples.push(
+          await page.evaluate(
+            id =>
+              [
+                ...(document.querySelector(
+                  `[data-testid="${id}"] .astryx-overflow-list`,
+                )?.children ?? []),
+              ].map(child => (child as HTMLElement).innerText.trim()),
+            testId,
+          ),
+        );
+        await page.evaluate(
+          async () =>
+            new Promise<void>(resolve => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            }),
+        );
+      }
+      test.info().annotations.push({
+        type: testId,
+        description: JSON.stringify(samples[0]),
+      });
+      for (const sample of samples) {
+        expect(sample).toEqual(samples[0]);
+      }
+      expect(samples[0]).toEqual(['+6']);
+    }
+  });
+
+  test('a list followed by a button keeps the button whole beside it as the row narrows and widens', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--followed-by-sibling&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="sibling-frame"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const read = async (width: number) => {
+      await page.evaluate(w => {
+        const frame = document.querySelector<HTMLElement>(
+          '[data-testid="sibling-frame"]',
+        );
+        if (frame != null) {
+          frame.style.width = `${w}px`;
+        }
+      }, width);
+      await page.waitForTimeout(300);
+      return page.evaluate(() => {
+        const frame = document.querySelector<HTMLElement>(
+          '[data-testid="sibling-frame"]',
+        );
+        const list = frame?.querySelector<HTMLElement>('.astryx-overflow-list');
+        const after = [...(frame?.querySelectorAll('button') ?? [])].find(
+          button => button.innerText.trim() === 'After',
+        );
+        if (frame == null || list == null || after == null) {
+          throw new Error('missing story parts');
+        }
+        const listBox = list.getBoundingClientRect();
+        const afterBox = after.getBoundingClientRect();
+        const frameBox = frame.getBoundingClientRect();
+        return {
+          labels: [...list.children].map(child =>
+            (child as HTMLElement).innerText.trim(),
+          ),
+          listRight: listBox.right,
+          afterLeft: afterBox.left,
+          afterRight: afterBox.right,
+          frameRight: frameBox.right,
+        };
+      });
+    };
+    const steps = [];
+    for (const width of [900, 300, 900]) {
+      steps.push(await read(width));
+    }
+    test.info().annotations.push({
+      type: 'sibling',
+      description: JSON.stringify(steps),
+    });
+    const [wide, narrow, wideAgain] = steps;
+    expect(wide.labels).toHaveLength(6);
+    expect(narrow.labels.at(-1)).toMatch(/^\+\d+$/);
+    expect(wideAgain.labels).toHaveLength(6);
+    for (const step of steps) {
+      expect(step.afterLeft).toBeGreaterThanOrEqual(step.listRight);
+      expect(step.afterRight).toBeLessThanOrEqual(step.frameRight);
     }
   });
 
