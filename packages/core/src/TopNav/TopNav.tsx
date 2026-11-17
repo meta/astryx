@@ -141,12 +141,16 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  // The end content takes its full width while the heading can yield, but
+  // never more than the bar, so an end item that can narrow (a fluid search
+  // field) narrows instead of pushing the toggle off screen.
   mobileBarEnd: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     flexShrink: 0,
     marginInlineStart: 'auto',
+    maxWidth: '100%',
   },
   // Drawer mode — vertical list of nav items
   drawerItems: {

@@ -3,6 +3,7 @@
 'use client';
 
 import {Fragment, useState, useMemo} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Layout, LayoutHeader, LayoutContent} from '@astryxdesign/core/Layout';
 import {TopNav} from '@astryxdesign/core/TopNav';
@@ -20,7 +21,7 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Button} from '@astryxdesign/core/Button';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Card} from '@astryxdesign/core/Card';
-import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {StackItem, VStack, HStack} from '@astryxdesign/core/Stack';
 import {useHotkeys} from '@astryxdesign/core/hooks';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
@@ -74,6 +75,12 @@ const FILE_TREE: TreeListItemData[] = [
 type MenuEntry = [label: string, shortcut: string];
 
 const MENU_WIDTH = 280;
+
+// The search asks for 240px and is the one bar item that narrows on a phone,
+// so the actions and the menu button stay in view.
+const searchStyles = stylex.create({
+  field: {width: 240},
+});
 
 const MENUS: {label: string; groups: MenuEntry[][]}[] = [
   {
@@ -228,18 +235,21 @@ export default function ShellNav() {
             }
             endContent={
               <>
-                <Stack onClick={() => setIsPaletteOpen(true)}>
+                <StackItem
+                  size="fill"
+                  xstyle={searchStyles.field}
+                  onClick={() => setIsPaletteOpen(true)}>
                   <TextInput
                     label="Search files and commands"
                     isLabelHidden
                     size="sm"
-                    width={240}
+                    width="100%"
                     startIcon={MagnifyingGlassIcon}
                     placeholder="Search files and commands…"
                     value=""
                     onChange={() => {}}
                   />
-                </Stack>
+                </StackItem>
                 <IconButton
                   label="Run project"
                   tooltip="Run"
@@ -253,17 +263,19 @@ export default function ShellNav() {
                     })
                   }
                 />
-                <Button
-                  label="Share"
-                  variant="secondary"
-                  onClick={() =>
-                    // Demo only: replace this toast with the call that performs the action.
-                    showToast({
-                      body: 'Demo: sharing would start here',
-                      uniqueID: 'share',
-                    })
-                  }
-                />
+                <StackItem>
+                  <Button
+                    label="Share"
+                    variant="secondary"
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: sharing would start here',
+                        uniqueID: 'share',
+                      })
+                    }
+                  />
+                </StackItem>
               </>
             }
           />
