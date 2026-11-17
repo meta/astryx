@@ -414,6 +414,16 @@ export const docsZh = {
           'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
       },
       {
+        guidance: true,
+        description:
+          '要打开某一行（进入详情页或打开侧边面板），用 renderCell 在该行的主单元格中放一个 Link 或 Button。Table 没有行点击属性。<tr> 上的点击处理程序无法通过键盘或屏幕阅读器访问，所以不要把它作为打开行的唯一方式。renderCell 列会让开启虚拟化的 Table 渲染所有行。',
+      },
+      {
+        guidance: true,
+        description:
+          '当筛选或搜索可能导致没有行时，设置 emptyState 说明情况并提供出路，例如带“清除筛选”Button 的 EmptyState。',
+      },
+      {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',

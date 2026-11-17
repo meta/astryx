@@ -172,13 +172,14 @@ export const docsZh = {
       name: 'getIsItemSelectable',
       type: '(item: T) => boolean',
       description:
-        '返回行是否应显示复选框。不可选择的行在选择单元格中不渲染任何内容。',
+        '返回 false 表示该行永远不可选择（没有复选框，选择单元格为空）；getIsItemEnabled 则显示禁用的复选框。用于只读系统行等。此 hook 不改变全选：你的 onSelectAll 和 getIsAllSelected 必须跳过这些行。useTableSelectionState 会替你处理。',
       default: '() => true',
     },
     {
       name: 'getIsItemEnabled',
       type: '(item: T) => boolean',
-      description: '返回行复选框是否可交互。禁用的行显示禁用状态的复选框。',
+      description:
+        '返回 false 表示可选择行的复选框显示但被禁用，并保持当前选中状态；getIsItemSelectable 则移除复选框。用于锁定或忙碌的行等。此 hook 不改变全选：你的 onSelectAll 不得添加或移除这些行。useTableSelectionState 会替你处理。',
       default: '() => true',
     },
     {
