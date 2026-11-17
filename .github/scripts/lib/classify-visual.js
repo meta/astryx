@@ -683,8 +683,27 @@ function styleContextLines(source, jsx) {
     words.push(word);
     if (words.length > 4) words.shift();
   };
-  const markLines = (from, to) => {
-    for (let at = from; at <= to; at += 1) covered.add(at);
+  // Covered lines are skipped in one step: `nextOpen` points from a covered
+  // line to the next line that may not be, compressed as it is followed, so
+  // marking a range costs its uncovered lines and nothing for lines already
+  // covered, however ranges nest or repeat.
+  const nextOpen = new Map();
+  const firstOpen = at => {
+    let end = at;
+    while (nextOpen.has(end)) end = nextOpen.get(end);
+    while (nextOpen.has(at) && nextOpen.get(at) !== end) {
+      const after = nextOpen.get(at);
+      nextOpen.set(at, end);
+      at = after;
+    }
+    return end;
+  };
+  const markLines = (from, to, onLine) => {
+    for (let at = firstOpen(from); at <= to; at = firstOpen(at)) {
+      covered.add(at);
+      nextOpen.set(at, at + 1);
+      if (onLine) onLine(at);
+    }
   };
   const top = () => stack[stack.length - 1];
   const countLines = (from, to) => {
@@ -1092,7 +1111,8 @@ function styleContextLines(source, jsx) {
   // another that it reads. Per name, the lowest and highest line it is read
   // as style decide every binding of it at once (`min < from || max > to`),
   // and its unmarked bindings wait in two lists sorted by `from` and by
-  // `to`, so each binding is marked or passed over once: the marking takes
+  // `to`, so each binding is marked or passed over once, and a line is
+  // marked once however many ranges hold it (markLines): the marking takes
   // time near linear in the file.
   const namesAt = new Map();
   const byName = new Map();
@@ -1141,9 +1161,7 @@ function styleContextLines(source, jsx) {
   }
   const done = new Set();
   const pending = [];
-  const markLine = at => {
-    if (covered.has(at)) return;
-    covered.add(at);
+  const readsAt = at => {
     for (const name of namesAt.get(at) ?? []) {
       const state = stateOf(name);
       if (at < state.min || at > state.max) {
@@ -1164,11 +1182,11 @@ function styleContextLines(source, jsx) {
       for (const binding of bindingsOf.get(entry.calls) ?? []) {
         if (done.has(binding)) continue;
         done.add(binding);
-        for (let at = binding.from; at <= binding.to; at += 1) markLine(at);
+        markLines(binding.from, binding.to, readsAt);
       }
       return;
     }
-    for (let at = entry.from; at <= entry.to; at += 1) markLine(at);
+    markLines(entry.from, entry.to, readsAt);
   };
   for (const binding of bindings) if (binding.typed) settle(binding);
   for (const name of byName.keys()) pending.push(name);

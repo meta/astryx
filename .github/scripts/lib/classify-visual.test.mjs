@@ -980,6 +980,29 @@ describe('CSS-named keys count only in a style context', () => {
     expect(performance.now() - started).toBeLessThan(10_000);
   });
 
+  it('marks deeply nested functions and style properties quickly', () => {
+    const count = 27000;
+    const functions = [
+      ...Array.from({length: count}, (_, i) => `function f${i}() {`),
+      'return {width: 1};',
+      ...Array.from({length: count}, () => '}'),
+      'const styles = stylex.create({x: f0()});',
+    ].join('\n');
+    const properties = [
+      'const props = {',
+      ...Array.from({length: 85000}, () => 'style: {'),
+      'width: 1',
+      ...Array.from({length: 85000}, () => '}'),
+      '};',
+    ].join('\n');
+    for (const source of [functions, properties]) {
+      const started = performance.now();
+      expect(styleContextLines(source, false)).not.toBeNull();
+      // Marking every nested range in full took minutes on these inputs.
+      expect(performance.now() - started).toBeLessThan(10_000);
+    }
+  });
+
   it('marks a long chain of named objects in time near linear in the file', () => {
     const count = 20000;
     const source = [
