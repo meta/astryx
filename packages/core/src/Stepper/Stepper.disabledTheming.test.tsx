@@ -177,7 +177,9 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     const items = screen.getAllByRole('listitem');
     for (const item of items) {
       const indicator = item.querySelector('.astryx-step-indicator');
+      const bar = item.querySelector('.astryx-step-bar');
       expect(indicator).toHaveAttribute('data-disabled', 'disabled');
+      expect(bar).toHaveAttribute('data-disabled', 'disabled');
       expect(item).not.toHaveAttribute('data-disabled');
     }
   });
