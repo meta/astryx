@@ -20,6 +20,7 @@ import {
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
+import {resolveLocalModule} from '../../foundation/discovery/module-exports.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
@@ -33,6 +34,7 @@ import {
 import {
   ThemeImportError,
   resolveThemeImports,
+  themePackageDir,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   findThemeProject,
@@ -73,6 +75,19 @@ export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
  */
 export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
+}
+
+/**
+ * Whether a theme's owner is installed, by the rule `theme add` applies
+ * (`themePackageDir`): a local theme is in the project, and a package
+ * theme's package (a bundled theme's own, such as
+ * `@astryxdesign/theme-neutral`) is installed. A local theme `theme add`
+ * still refuses until it is built.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} projectDir
+ */
+export function themeOwnerInstalled(theme, projectDir) {
+  return theme.source === 'local' || themePackageDir(theme, projectDir) != null;
 }
 
 /**
@@ -1629,3 +1644,31 @@ export function requireThemeCoreDir(cwd) {
 export function fetchCarriedThemeCoreDir(cwd) {
   return findCarriedCoreDir(cwd, {fetch: true});
 }
+
+/**
+ * How a theme build reads the theme's local modules to compile them into a
+ * self-contained built module (build/self-contained.mjs): each file's text,
+ * whether a file exists, a relative import's file as an app's bundler
+ * resolves it, and the Babel plugins that compile TypeScript and JSX.
+ * @type {import('./build/self-contained.mjs').LocalModuleFiles}
+ */
+export const localModuleFiles = {
+  read: file => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  },
+  exists: file => fs.existsSync(file),
+  resolve: (specifier, fromFile, extensions) =>
+    resolveLocalModule(specifier, fromFile, {bundler: true, extensions}),
+  // Resolved on first use: most builds compile nothing.
+  get plugins() {
+    const require = createRequire(import.meta.url);
+    return {
+      typescript: require.resolve('@babel/plugin-transform-typescript'),
+      jsx: require.resolve('@babel/plugin-transform-react-jsx'),
+    };
+  },
+};

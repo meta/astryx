@@ -100,6 +100,16 @@ const readinessStyles = stylex.create({
     display: 'flex',
     justifyContent: 'flex-end',
   },
+  // A closed `<dialog>` the page displays itself, in the document's flow. It
+  // never opens, so it never enters the top layer.
+  inFlowDialog: {
+    position: 'static',
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-3'],
+    margin: 0,
+    padding: spacingVars['--spacing-4'],
+  },
 });
 
 const PROJECT_ACTIONS = [
@@ -1701,6 +1711,30 @@ export const SubMenuHeaderChoice: Story = {
         </DropdownMenu>
         <output data-testid="match">{match}</output>
       </div>
+    );
+  },
+};
+
+/**
+ * A menu in a native `<dialog>` that the page displays closed, as a card. The
+ * layer opens one commit after the press, still within it. The menu then
+ * takes focus, and `onClick` fires once.
+ */
+export const InClosedInFlowDialog: Story = {
+  render: ({presentation: _, ...args}: StoryArgs) => {
+    const [clicks, setClicks] = useState(0);
+    return (
+      <dialog {...stylex.props(readinessStyles.inFlowDialog)}>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          {...args}
+          onClick={() => setClicks(count => count + 1)}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+          <DropdownMenuItem label="Duplicate" onClick={() => {}} />
+          <DropdownMenuItem label="Delete" onClick={() => {}} />
+        </DropdownMenu>
+        <output data-testid="clicks">{clicks}</output>
+      </dialog>
     );
   },
 };

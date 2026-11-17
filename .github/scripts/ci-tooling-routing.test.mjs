@@ -473,6 +473,7 @@ describe('Node-tooling CI routing', () => {
       'pr-interaction',
       'pr-interaction-webkit',
       'pr-component-a11y-contracts',
+      'a11y-dependent-audits-plan',
       'pr-a11y-dependent-audits',
     ]);
     expect(ci.jobs.build.needs).toEqual([
@@ -489,9 +490,10 @@ describe('Node-tooling CI routing', () => {
       'pull-requests': 'read',
     });
     // A release-branch pull request is spec-only, but its join still runs to
-    // require the release bump's own validation.
+    // require the release bump's own validation; so does a change only to the
+    // recorded Node test times, which the Node leg plan's check gates.
     expect(testJoin.if).toBe(
-      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'",
+      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'",
     );
     expect(testJoin.env).toMatchObject({
       RELEASE_BUMP: '${{ steps.scope.outputs.release_bump }}',

@@ -16,7 +16,7 @@ export const doc = {
   summary:
     'Find an icon by meaning in the installed icon sets, read one icon, or list the sets.',
   description:
-    "Reads every installed icon set's data file, never the icon modules. With words it ranks icons by meaning: an icon definition the set's `map` names the icon for, then exact matches on its id or words, then a word that starts with the query, then partial matches; equal scores keep the project's set first, then integration load order; within a set, a whole-id name match before an id-part one and a meaning match by its tag position; then id order. With `<set>/<id>` it reads one icon with every variant's import line. With `list` it lists the installed sets, how many icon definitions each one's `map` covers (built-in and all of Astryx's) and its own definitions, and any set withdrawn and why. Experimental: it may change or be removed in a patch release.",
+    "Reads every installed icon set's data file, never the icon modules. With words it ranks icons by meaning: an icon definition the set's `map` names the icon for, then exact matches on its id or words, then a word that starts with the query, then partial matches, and for a query of several words that none of those answer, the icons that carry some of its words, rarer words counting more within a set. A word written as an export name (`SearchIcon`) also reads as its words, and the reading with the better match answers. Equal scores keep the project's set first, then integration load order; within a set, a whole-id name match before an id-part one and a meaning match by its tag position; then id order. With `<set>/<id>` it reads one icon with every variant's import line. With `list` it lists the installed sets, how many icon definitions each one's `map` covers (built-in and all of Astryx's) and its own definitions, and any set withdrawn and why. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'icon(query?: string, options?: IconOptions): Promise<IconSearchResponse | IconDetailResponse | IconListResponse>',
@@ -69,7 +69,7 @@ export const doc = {
     {
       type: 'icon.search',
       description:
-        'The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score. No match is an empty list.',
+        "The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score. No match is an empty list. When the project picks a look (`experimental.iconVariant`), a match from a set in the project's list has the module, export, and import of that look; one whose icon lacks the look keeps its own and names both looks in `look` ({asked, used}). With no icon set installed, `reason` says so, `definitions` lists the Astryx icon definitions that match ({name, builtIn, description}), built-in ones first, since Core draws those by name, and `next` says how to get a set.",
     },
     {
       type: 'icon.detail',
@@ -89,7 +89,7 @@ export const doc = {
     {
       type: 'icon.list',
       description:
-        "The project's icon-set state, each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers, and each withdrawn set with its reason.",
+        "The project's icon-set state, each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers, and each withdrawn set with its reason. `next` is present when two or more sets are installed and none is the main set, with the command that chooses one, or when no set is installed, with how to get one.",
     },
   ],
   throws: [

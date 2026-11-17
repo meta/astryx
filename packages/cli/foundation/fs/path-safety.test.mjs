@@ -9,6 +9,8 @@ import {
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
+  tempFolderOf,
+  tempFolders,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -349,4 +351,87 @@ describe('assertWithin allowAbsolute', () => {
       'ERR_PATH_TRAVERSAL',
     );
   });
+});
+
+describe('tempFolderOf', () => {
+  const tmpdir = process.env.TMPDIR;
+  const home = process.env.HOME;
+  afterEach(() => {
+    if (tmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = tmpdir;
+    if (home === undefined) delete process.env.HOME;
+    else process.env.HOME = home;
+  });
+  /** @param {string} root @param {string} at */
+  const inside = (root, at) => {
+    const rel = path.relative(root, at);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  // In some containers the home folder is in /tmp, which then takes no
+  // scratch copy.
+  const tmpHoldsHome =
+    process.platform !== 'win32' &&
+    ['/tmp', fs.realpathSync('/tmp')].some(tmp =>
+      [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
+    );
+
+  it('names the system temp folder that holds a path, and nothing for any other path', () => {
+    expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
+      path.resolve(os.tmpdir()),
+    );
+    expect(
+      tempFolderOf(
+        path.join(path.parse(os.tmpdir()).root, 'astryx-no-such-folder'),
+      ),
+    ).toBeNull();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'takes /tmp on a POSIX system, unless /tmp holds the home folder',
+    () => {
+      expect(tempFolderOf('/tmp/astryx/x')).toBe(tmpHoldsHome ? null : '/tmp');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'lists the temp folder and /tmp once each',
+    () => {
+      process.env.TMPDIR = '/tmp';
+      expect(tempFolders()).toEqual(tmpHoldsHome ? [] : ['/tmp']);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes a TMPDIR inside the home folder, and leaves out one that holds it',
+    () => {
+      process.env.TMPDIR = path.join(os.homedir(), 'tmp');
+      expect(tempFolders()).toContain(path.join(os.homedir(), 'tmp'));
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolders()).not.toContain(path.dirname(os.homedir()));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'compares real locations, so a link cannot open the home folder or the disk',
+    () => {
+      const users = path.join(tmpDir, 'users');
+      fs.mkdirSync(path.join(users, 'joe'), {recursive: true});
+      fs.symlinkSync(path.join(users, 'joe'), path.join(tmpDir, 'home'), 'dir');
+      process.env.HOME = path.join(tmpDir, 'home');
+      process.env.TMPDIR = users;
+      expect(tempFolders()).not.toContain(users);
+
+      fs.symlinkSync('/', path.join(tmpDir, 'root'), 'dir');
+      process.env.TMPDIR = path.join(tmpDir, 'root');
+      expect(tempFolders()).not.toContain(path.join(tmpDir, 'root'));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'is no temp folder when it holds the home folder',
+    () => {
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolderOf(path.join(os.homedir(), 'notes'))).toBeNull();
+    },
+  );
 });

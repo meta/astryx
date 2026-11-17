@@ -30,6 +30,7 @@ import {
   parseCliCommandField,
   parseIntegrationBase,
   unknownIntegrationKeys,
+  ignoredIntegrationFields,
 } from '../../authoring/integration/schema.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
 import {findManifestPaths, MANIFEST_BASENAMES} from './manifest-paths.mjs';
@@ -38,6 +39,7 @@ export {findManifestPaths, MANIFEST_BASENAMES};
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
 import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
+import {unknownCapabilityKeys} from '../bases/steps.mjs';
 
 /**
  * A fully-resolved, loaded integration. Identity (`name`, `version`) comes from
@@ -56,10 +58,14 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [themeProvider]
+ *   the manifest's provider component that wires every theme under `themes`
  * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
  * @property {{light: string, dark?: string}} [logo] the manifest's logo
  *   paths as written, relative to the package root
+ * @property {import('../../authoring/integration/type').BaseDeclaration} [base]
+ *   present when the package is a base
  * @property {{append?: readonly string[]}} [agentDocs]
  * @property {string} [cliCommand] the command this package's users run the
  *   CLI with; read by the picker in foundation/env (see cli-command.mjs)
@@ -85,6 +91,9 @@ import {resolveProviders} from './provider-resolution.mjs';
  *   declares, before any is filled in (providerId from the package name)
  * @property {string[]} [__unknownKeys] manifest keys this CLI does not know —
  *   surfaced as a warning; the rest of the manifest still contributes
+ * @property {Array<{field: string, why: string}>} [__ignoredFields] manifest
+ *   fields this CLI drops because it cannot use them (an optional hint, such
+ *   as a themeProvider prop that names no prop) — surfaced as a warning
  * @property {boolean} [__autolinked] loaded because the project declares the
  *   package as a dependency and it ships a manifest, with no astryx.config
  *   entry naming it — see foundation/integrations/autolink.mjs
@@ -209,7 +218,7 @@ function parseDiscoverSourceExport(value, label) {
  * @param {string} file absolute manifest path
  * @param {string} [label] used in error messages
  * @param {{fresh?: boolean}} [options]
- * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string}>}
+ * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], ignoredFields: Array<{field: string, why: string}>, declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string}>}
  */
 export async function loadManifest(
   file,
@@ -270,7 +279,8 @@ export async function loadManifest(
       ...(agentDocs == null ? {} : {agentDocs}),
       ...(cliCommand == null ? {} : {cliCommand}),
     },
-    unknownKeys: unknownIntegrationKeys(raw),
+    unknownKeys: [...unknownIntegrationKeys(raw), ...unknownCapabilityKeys(raw)],
+    ignoredFields: ignoredIntegrationFields(raw),
     declaredKeys:
       raw != null && typeof raw === 'object' ? Object.keys(raw) : [],
     debug:
@@ -438,6 +448,8 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
@@ -458,6 +470,7 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     ({
       manifest,
       unknownKeys,
+      ignoredFields,
       declaredKeys,
       debug: debugHandler,
       gapReport: gapReportHandler,
@@ -501,14 +514,17 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     codemods: resolveRoot(manifest.codemods),
     docs: resolveRoot(manifest.docs),
     themes: resolveRoot(manifest.themes),
+    themeProvider: manifest.themeProvider,
     iconSets: resolveRoot(manifest.experimental?.iconSets),
     issuesUrl: manifest.issuesUrl,
     logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
+    base: manifest.base,
     __cliCommandError: cliCommandError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __debug: debugHandler,
     __gapReport: gapReportHandler,
@@ -560,6 +576,8 @@ export async function loadIntegrations(
     let manifest;
     /** @type {string[]} */
     let unknownKeys;
+    /** @type {Array<{field: string, why: string}>} */
+    let ignoredFields;
     /** @type {string[]} */
     let declaredKeys;
     /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
@@ -580,6 +598,7 @@ export async function loadIntegrations(
       ({
         manifest,
         unknownKeys,
+        ignoredFields,
         declaredKeys,
         debug: debugHandler,
         gapReport: gapReportHandler,
@@ -630,14 +649,17 @@ export async function loadIntegrations(
       codemods: resolveRoot(manifest.codemods),
       docs: resolveRoot(manifest.docs),
       themes: resolveRoot(manifest.themes),
+      themeProvider: manifest.themeProvider,
       iconSets: resolveRoot(manifest.experimental?.iconSets),
       issuesUrl: manifest.issuesUrl,
       logo: manifest.logo,
       agentDocs: manifest.agentDocs,
       cliCommand: manifest.cliCommand,
+      base: manifest.base,
       __cliCommandError: cliCommandError,
       __agentDocsError: agentDocsError,
       __unknownKeys: unknownKeys,
+      __ignoredFields: ignoredFields,
       __declaredKeys: declaredKeys,
       __debug: debugHandler,
       __gapReport: gapReportHandler,

@@ -9,129 +9,154 @@
  */
 
 import {z} from 'zod';
-import {AuthoredDocGraphFields} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').TemplateDoc} TemplateDoc */
 /** @typedef {import('./type.js').PageTemplateDoc} PageTemplateDoc */
 /** @typedef {import('./type.js').BlockTemplateDoc} BlockTemplateDoc */
 
-const previewSchema = z
-  .object({
-    image: z.string().optional(),
-    aspectRatio: z.string().optional(),
-  })
-  .strict();
+function buildSchemas() {
+  const previewSchema = z
+    .object({
+      image: z.string().optional(),
+      aspectRatio: z.string().optional(),
+    })
+    .strict();
 
-const registryIdentitySchema = z
-  .object({
-    slug: z
-      .string()
-      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-      .optional(),
-    aliases: z
-      .array(
+  const registryIdentitySchema = z
+    .object({
+      slug: z
+        .string()
+        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+        .optional(),
+      aliases: z
+        .array(
+          z
+            .string()
+            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/),
+        )
+        .optional(),
+    })
+    .strict();
+
+  const baseTemplateFields = {
+    ...docSchemas().AuthoredDocGraphFields,
+    name: z.string().min(1, 'name is required'),
+    displayName: z.string().min(1).optional(),
+    description: z.string().min(1, 'description is required').optional(),
+    keywords: z.array(z.string().min(1)).optional(),
+    category: z.string().optional(),
+    componentsUsed: z.array(z.string()).optional(),
+    preview: previewSchema.optional(),
+    isReady: z.boolean().optional(),
+    icons: z
+      .record(
         z
           .string()
-          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/),
+          .regex(/^[$A-Z_a-z][$\w]*$/u, 'icons keys are imported names'),
+        z
+          .string()
+          .regex(
+            /^[a-z][a-zA-Z0-9]*$/u,
+            'icons values are icon definition names',
+          ),
       )
       .optional(),
-  })
-  .strict();
+    scaffold: z.boolean().optional(),
+    isHiddenFromOverview: z.boolean().optional(),
+    registry: registryIdentitySchema.optional(),
+    replaces: z
+      .string()
+      .min(1, 'replaces must name a Core template id')
+      .optional(),
+  };
 
-const baseTemplateFields = {
-  ...AuthoredDocGraphFields,
-  name: z.string().min(1, 'name is required'),
-  displayName: z.string().min(1).optional(),
-  description: z.string().min(1, 'description is required').optional(),
-  keywords: z.array(z.string().min(1)).optional(),
-  category: z.string().optional(),
-  componentsUsed: z.array(z.string()).optional(),
-  preview: previewSchema.optional(),
-  isReady: z.boolean().optional(),
-  icons: z
-    .record(
-      z.string().regex(/^[$A-Z_a-z][$\w]*$/u, 'icons keys are imported names'),
-      z
-        .string()
-        .regex(
-          /^[a-z][a-zA-Z0-9]*$/u,
-          'icons values are icon definition names',
-        ),
-    )
-    .optional(),
-  scaffold: z.boolean().optional(),
-  isHiddenFromOverview: z.boolean().optional(),
-  registry: registryIdentitySchema.optional(),
-  replaces: z
-    .string()
-    .min(1, 'replaces must name a Core template id')
-    .optional(),
-};
+  const pageTemplateSchema = z
+    .object({...baseTemplateFields, type: z.literal('page')})
+    .strict();
+  const blockTemplateSchema = z
+    .object({
+      ...baseTemplateFields,
+      type: z.literal('block'),
+      exampleFor: z.string().min(1).optional(),
+      alsoExampleFor: z.array(z.string()).optional(),
+      alsoShowcaseFor: z.array(z.string()).optional(),
+      aspectRatio: z.number().positive().optional(),
+      scale: z.number().positive().optional(),
+      isShowcase: z.boolean().optional(),
+    })
+    .strict();
 
-const pageTemplateSchema = z
-  .object({...baseTemplateFields, type: z.literal('page')})
-  .strict();
-const blockTemplateSchema = z
-  .object({
-    ...baseTemplateFields,
-    type: z.literal('block'),
-    exampleFor: z.string().min(1).optional(),
-    alsoExampleFor: z.array(z.string()).optional(),
-    alsoShowcaseFor: z.array(z.string()).optional(),
-    aspectRatio: z.number().positive().optional(),
-    scale: z.number().positive().optional(),
-    isShowcase: z.boolean().optional(),
-  })
-  .strict();
+  /**
+   * Templates as they load. Integration templates already published omit
+   * `displayName` and `aspectRatio` and group themselves under their own
+   * `category`, so the loader accepts those (template discovery falls back to an
+   * aspect ratio of 1). The published `TemplateDoc` keeps asking authors for all
+   * three; `IntegrationTemplateDoc`, for an integration package's templates,
+   * takes the package's own `category`.
+   *
+   * @typedef {Omit<PageTemplateDoc, 'displayName' | 'category'>
+   *   & {displayName?: string, category?: string}} LoadedPageTemplateDoc
+   * @typedef {Omit<BlockTemplateDoc, 'displayName' | 'aspectRatio' | 'category'>
+   *   & {displayName?: string, aspectRatio?: number, category?: string}} LoadedBlockTemplateDoc
+   */
+
+  /**
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').MutuallyAssignable<
+   *     import('../../_shared/contract.js').NamedFields<z.infer<typeof pageTemplateSchema>>,
+   *     import('../../_shared/contract.js').NamedFields<LoadedPageTemplateDoc>
+   *   >
+   * >} _PageTemplateDocDriftLock
+   */
+
+  /**
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').MutuallyAssignable<
+   *     import('../../_shared/contract.js').NamedFields<z.infer<typeof blockTemplateSchema>>,
+   *     import('../../_shared/contract.js').NamedFields<LoadedBlockTemplateDoc>
+   *   >
+   * >} _BlockTemplateDocDriftLock
+   */
+
+  const templateEnvelopeSchema = z
+    .discriminatedUnion('type', [pageTemplateSchema, blockTemplateSchema])
+    .superRefine((template, context) => {
+      if (
+        template.type === 'block' &&
+        template.isShowcase &&
+        !template.exampleFor
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['exampleFor'],
+          message: 'exampleFor is required when isShowcase is true',
+        });
+      }
+    });
+
+  return {
+    previewSchema,
+    registryIdentitySchema,
+    baseTemplateFields,
+    pageTemplateSchema,
+    blockTemplateSchema,
+    templateEnvelopeSchema,
+  };
+}
+
+/** @type {ReturnType<typeof buildSchemas> | undefined} */
+let builtSchemas;
 
 /**
- * Templates as they load. Integration templates already published omit
- * `displayName` and `aspectRatio` and group themselves under their own
- * `category`, so the loader accepts those (template discovery falls back to an
- * aspect ratio of 1). The published `TemplateDoc` keeps asking authors for all
- * three; `IntegrationTemplateDoc`, for an integration package's templates,
- * takes the package's own `category`.
- *
- * @typedef {Omit<PageTemplateDoc, 'displayName' | 'category'>
- *   & {displayName?: string, category?: string}} LoadedPageTemplateDoc
- * @typedef {Omit<BlockTemplateDoc, 'displayName' | 'aspectRatio' | 'category'>
- *   & {displayName?: string, aspectRatio?: number, category?: string}} LoadedBlockTemplateDoc
+ * This parser's schemas, built when it first parses, not when this module
+ * loads: most runs load the module and never call it.
+ * @returns {ReturnType<typeof buildSchemas>}
  */
-
-/**
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').MutuallyAssignable<
- *     import('../../_shared/contract.js').NamedFields<z.infer<typeof pageTemplateSchema>>,
- *     import('../../_shared/contract.js').NamedFields<LoadedPageTemplateDoc>
- *   >
- * >} _PageTemplateDocDriftLock
- */
-
-/**
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').MutuallyAssignable<
- *     import('../../_shared/contract.js').NamedFields<z.infer<typeof blockTemplateSchema>>,
- *     import('../../_shared/contract.js').NamedFields<LoadedBlockTemplateDoc>
- *   >
- * >} _BlockTemplateDocDriftLock
- */
-
-const templateEnvelopeSchema = z
-  .discriminatedUnion('type', [pageTemplateSchema, blockTemplateSchema])
-  .superRefine((template, context) => {
-    if (
-      template.type === 'block' &&
-      template.isShowcase &&
-      !template.exampleFor
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['exampleFor'],
-        message: 'exampleFor is required when isShowcase is true',
-      });
-    }
-  });
+function schemas() {
+  return (builtSchemas ??= buildSchemas());
+}
 
 /**
  * Validate an unknown value as a stamped template doc, or throw. The zod schema
@@ -143,7 +168,7 @@ const templateEnvelopeSchema = z
  * @returns {TemplateDoc}
  */
 export function parseTemplate(input, label = 'template') {
-  const result = templateEnvelopeSchema.safeParse(input);
+  const result = schemas().templateEnvelopeSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

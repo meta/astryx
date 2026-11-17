@@ -259,7 +259,9 @@ function sourceLineAttributes(lines: MarkdownSourceLines | undefined):
 export interface MarkdownProps<
   Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly [],
 > extends BaseProps<HTMLElement> {
+  /** Reaches the root element: a `div` in block display, a `span` in inline display. */
   ref?: React.Ref<HTMLDivElement> | React.Ref<HTMLSpanElement>;
+  /** The Markdown source to render. */
   children: string;
   /**
    * Display type. Markdown defaults to block.
@@ -267,6 +269,10 @@ export interface MarkdownProps<
    * @default 'block'
    */
   display?: TextDisplay;
+  /**
+   * Spacing between block-level elements. Each block target reflects it.
+   * @default 'default'
+   */
   density?: 'default' | 'compact';
   /**
    * The HTML heading level that markdown `#` maps to.
@@ -276,7 +282,19 @@ export interface MarkdownProps<
    * @default 1
    */
   headingLevelStart?: 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+   * Streaming mode: parses incrementally and fades in each newly arrived
+   * chunk. Under reduced motion the text shows at once.
+   * @default false
+   */
   isStreaming?: boolean;
+  /**
+   * Called when a default link is clicked. Return `false` to prevent the
+   * default navigation. A custom `link` renderer replaces the default link
+   * and does not receive this handler. A destination that the shared navigation rule
+   * rejects, and every `data:` URL, renders as plain text and never reaches
+   * this handler.
+   */
   onLinkClick?: (
     href: string,
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -297,6 +315,7 @@ export interface MarkdownProps<
    * Max width for prose content (paragraphs, headings, lists, blockquotes).
    * Tables and code blocks are unconstrained and can expand to the full
    * container width. Use for readable line lengths in wide layouts.
+   * @default 680
    *
    * @example
    * ```
@@ -307,22 +326,24 @@ export interface MarkdownProps<
   /**
    * Alignment of prose content within the container when `contentWidth`
    * is narrower than the available space.
-   * - 'start': left-aligned (default)
+   * - 'start': aligned to the inline start (the right edge in right-to-left)
    * - 'center': centered
    * @default 'start'
    */
   contentAlign?: 'start' | 'center';
-  components?: Partial<MarkdownComponents>;
   /**
-   * Plugins that transform text patterns into custom React elements.
-   * Applied to text nodes after parsing — code blocks, inline code, and math
-   * are unaffected. Patterns are matched in order; first match wins
-   * for overlapping ranges.
+   * Custom renderers for rendered Markdown parts. Supplying `math` opts into
+   * `$…$` and `$$…$$` parsing. Each renderer owns its own output and
+   * accessible semantics.
    */
+  components?: Partial<MarkdownComponents>;
   /** Ordered syntax, immutable transforms, and typed extension renderers. */
   plugins?: Plugins;
   /**
-   * Legacy text-match renderers. Unchanged and independent from `plugins`.
+   * Legacy text-match renderers, independent from `plugins`. Each turns
+   * matches in parsed prose text into custom React elements. Code blocks,
+   * inline code, and math are unaffected. Patterns are matched in order;
+   * the first match wins for overlapping ranges.
    */
   inlinePlugins?: MarkdownInlinePlugin[];
   /**

@@ -9,7 +9,7 @@
  * @input global-local.shared.mjs
  * @output Vitest tests
  * @position packages/cli/test; the first of three files of the table's rows,
- *   with global-local.rows-16-39 and global-local.rows-40-58
+ *   with global-local.rows-16-39 and global-local.rows-40-59
  */
 
 import {describe, expect, it} from 'vitest';
@@ -40,7 +40,9 @@ import {
   noCliHint,
   outsideLine,
   readState,
+  ownWorld,
   run,
+  runAsync,
   useGlobalLocalHooks,
 } from './global-local.shared.mjs';
 
@@ -84,7 +86,7 @@ describe.skipIf(!POSIX)(
       const dir = makeProject({core: '9.0.1'});
       const r = run(g.bin, ['--version'], {cwd: dir, pc});
       expect(r.stdout).toBe('9.0.0');
-      expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
+      expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1', {exact: true})]);
       // Once a day per project.
       expect(run(g.bin, ['--version'], {cwd: dir, pc}).lines).toEqual([]);
       const json = run(g.bin, ['docs', '--json'], {cwd: dir, pc});
@@ -108,55 +110,134 @@ describe.skipIf(!POSIX)(
       expect(run(g.bin, ['--version'], {cwd: same, pc}).lines).toEqual([]);
     });
 
-    it('G5 a fresh clone, nothing installed: the copy that started the run answers, naming the Core its lockfile records, writing nothing there', () => {
-      const pc = computer();
-      const g = globalCli('npm', '9.0.0', {root: pc.home});
-      const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});
-      writeJson(path.join(dir, 'package-lock.json'), {
-        lockfileVersion: 3,
-        packages: {
-          '': {dependencies: {'@astryxdesign/core': '^9.0.0'}},
-          'node_modules/@astryxdesign/core': {version: '9.0.1'},
-        },
-      });
-      const before = filesIn(dir);
-      const r = run(g.bin, ['--version'], {cwd: dir, pc});
-      expect(r.stdout).toBe('9.0.0');
-      expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
-      // A command that reads Core uses the answering release's own Core; when
-      // it cannot be downloaded, the error says so for this project.
-      const offline = run(g.bin, ['component', 'Button', '--json'], {
-        cwd: dir,
-        pc,
-      });
-      const error = JSON.parse(offline.stdout);
-      expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
-      expect(error.error).toMatch(
-        /^This project has no Core installed, and Core 9\.0\.0 could not be downloaded \(.+\)\. Install the project's dependencies, then run again\.$/u,
-      );
-      expect(error.error).not.toMatch(/Outside a project/u);
-      expect(filesIn(dir)).toEqual(before);
-    });
+    // G5 and the render below each wait out the CLI's bounded npm retry
+    // against the unreachable registry, so they run side by side, each in its
+    // own world.
+    it(
+      'G5 a fresh clone, nothing installed: the copy that started the run answers, naming the Core its lockfile records, writing nothing there',
+      {concurrent: true},
+      ownWorld(async () => {
+        const pc = computer();
+        const g = globalCli('npm', '9.0.0', {root: pc.home});
+        const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});
+        writeJson(path.join(dir, 'package-lock.json'), {
+          lockfileVersion: 3,
+          packages: {
+            '': {dependencies: {'@astryxdesign/core': '^9.0.0'}},
+            'node_modules/@astryxdesign/core': {version: '9.0.1'},
+          },
+        });
+        const before = filesIn(dir);
+        const r = await runAsync(g.bin, ['--version'], {cwd: dir, pc});
+        expect(r.stdout).toBe('9.0.0');
+        expect(r.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
+        // A command that reads Core uses the answering release's own Core; when
+        // it cannot be downloaded, the error says so for this project.
+        const offline = await runAsync(
+          g.bin,
+          ['component', 'Button', '--json'],
+          {
+            cwd: dir,
+            pc,
+          },
+        );
+        const error = JSON.parse(offline.stdout);
+        expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
+        expect(error.error).toMatch(
+          /^This project has no Core installed, and Core 9\.0\.0 could not be downloaded \(.+\)\. Install the project's dependencies, then run again\.$/u,
+        );
+        expect(error.error).not.toMatch(/Outside a project/u);
+        expect(filesIn(dir)).toEqual(before);
 
-    it("outside a project, a render whose page needs Core says the answering release's Core could not be downloaded", () => {
-      const pc = computer();
-      const g = globalCli('npm', '9.0.0', {root: pc.home});
-      const dir = tempDir('page');
-      fs.writeFileSync(
-        path.join(dir, 'page.jsx'),
-        'import {Button} from \'@astryxdesign/core\';\nexport default () => <Button label="Go" />;\n',
-      );
-      const r = run(g.bin, ['experimental', 'render', 'page.jsx', '--json'], {
-        cwd: dir,
-        pc,
-      });
-      const error = JSON.parse(r.stdout);
-      expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
-      expect(error.error).toMatch(
-        /^Core 9\.0\.0 could not be (?:installed|downloaded).*\. Outside a project, commands that read Core use the Core of the release that answers; run again when the package registry can be reached\.$/u,
-      );
-      expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
-    });
+        // A fresh clone that declares the CLI gets it by installing its
+        // dependencies: adding the CLI again would replace the version the
+        // project declares.
+        const declares = makeProject({
+          declare: {
+            '@astryxdesign/core': '9.0.1',
+            '@astryxdesign/cli': '9.0.1',
+          },
+        });
+        writeJson(path.join(declares, 'package-lock.json'), {
+          lockfileVersion: 3,
+          packages: {
+            '': {
+              dependencies: {
+                '@astryxdesign/core': '9.0.1',
+                '@astryxdesign/cli': '9.0.1',
+              },
+            },
+            'node_modules/@astryxdesign/core': {version: '9.0.1'},
+            'node_modules/@astryxdesign/cli': {version: '9.0.1'},
+          },
+        });
+        const declared = await runAsync(g.bin, ['--version'], {
+          cwd: declares,
+          pc,
+        });
+        expect(declared.lines).toEqual([
+          'astryx: this project has no Astryx CLI installed; answered by CLI 9.0.0 while its Core is 9.0.1. To install the CLI this project declares, run: npm install',
+        ]);
+        const doctor = JSON.parse(
+          (await runAsync(g.bin, ['doctor', '--json'], {cwd: declares, pc}))
+            .stdout,
+        );
+        expect(
+          doctor.data.checks.find(
+            (/** @type {any} */ c) => c.id === 'version-alignment',
+          ),
+        ).toMatchObject({
+          status: 'warn',
+          fix: 'To install the CLI this project declares, run: npm install.',
+        });
+
+        // A CLI named only as a peer dependency is not installed by every
+        // package manager, so the advice still adds it.
+        const peer = project(tempDir('peer'), {'@astryxdesign/core': '9.0.1'});
+        writeJson(path.join(peer, 'package.json'), {
+          name: 'peer',
+          private: true,
+          dependencies: {'@astryxdesign/core': '9.0.1'},
+          peerDependencies: {'@astryxdesign/cli': '9.0.1'},
+        });
+        installCore(peer, '9.0.1');
+        const peerRun = await runAsync(g.bin, ['--version'], {
+          cwd: peer,
+          pc,
+        });
+        expect(peerRun.lines).toEqual([
+          noCliHint('9.0.0', '9.0.1', {exact: true}),
+        ]);
+      }),
+    );
+
+    it(
+      "outside a project, a render whose page needs Core says the answering release's Core could not be downloaded",
+      {concurrent: true},
+      ownWorld(async () => {
+        const pc = computer();
+        const g = globalCli('npm', '9.0.0', {root: pc.home});
+        const dir = tempDir('page');
+        fs.writeFileSync(
+          path.join(dir, 'page.jsx'),
+          'import {Button} from \'@astryxdesign/core\';\nexport default () => <Button label="Go" />;\n',
+        );
+        const r = await runAsync(
+          g.bin,
+          ['experimental', 'render', 'page.jsx', '--json'],
+          {
+            cwd: dir,
+            pc,
+          },
+        );
+        const error = JSON.parse(r.stdout);
+        expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
+        expect(error.error).toMatch(
+          /^Core 9\.0\.0 could not be (?:installed|downloaded).*\. Outside a project, commands that read Core use the Core of the release that answers; run again when the package registry can be reached\.$/u,
+        );
+        expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
+      }),
+    );
 
     it("in a fresh clone, doctor names the lockfile's Core as the daily hint and notice do", () => {
       const pc = computer();
@@ -226,7 +307,7 @@ describe.skipIf(!POSIX)(
       );
       expect(r.notice).toEqual([
         'A new release of Astryx is available: 9.0.1 → 9.0.7',
-        `To upgrade, run: cd ${app} && npm install @astryxdesign/core@9.0.7 @astryxdesign/cli@9.0.7, then cd ${app} && npx astryx upgrade --from 9.0.1 --apply`,
+        `To upgrade, run: cd ${app} && npm install -E @astryxdesign/core@9.0.7 @astryxdesign/cli@9.0.7, then cd ${app} && npx astryx upgrade --from 9.0.1 --apply`,
       ]);
       const doctor = JSON.parse(
         run(g.bin, ['doctor', '--json'], {cwd: tool, pc}).stdout,
@@ -383,7 +464,7 @@ describe.skipIf(!POSIX)(
       const r = run(g.bin, ['--version'], {cwd: member, pc});
       const all = [...r.lines, ...r.notice].join('\n');
       expect(all).not.toContain(`cd ${root}`);
-      expect(r.lines).toContain(noCliHint('9.0.0', '9.0.5'));
+      expect(r.lines).toContain(noCliHint('9.0.0', '9.0.5', {exact: true}));
     });
 
     it('G6 the installed Core wins over a lockfile that disagrees, for the release a project whose CLI cannot start gets', () => {
