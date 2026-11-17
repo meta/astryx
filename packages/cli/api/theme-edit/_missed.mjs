@@ -9,7 +9,7 @@
  * @position api/theme-edit — imported by _edit.mjs and _how.mjs
  */
 
-import {COMMON_STATES} from './_tables.mjs';
+import {COMMON_STATES, P} from './_tables.mjs';
 import {
   autoMediaSide,
   baseComponent,
@@ -21,7 +21,8 @@ import {
   pillShapes,
 } from './_settings.mjs';
 import {borderlessSurfaces} from './_check.mjs';
-import {parseColor, ratio, splitTop} from './_color.mjs';
+import {hex, parseColor, ratio, splitTop} from './_color.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
@@ -47,6 +48,40 @@ export function missedSteps(ctx, data, res, base) {
   // The modes the theme draws (a dark-only theme's dark), each one res
   // holds.
   const modes = modesOf(data).filter(m => res[m]);
+  /**
+   * What the accent tint a selected look takes draws in dark, said with
+   * the line: a dark tint can be a strong block of the accent (a soft
+   * coral's is a deep red). A strong one (OKLCH chroma 0.1 or more) the
+   * theme does not set itself comes with the line for a softer one: the
+   * tint halfway to the dark page.
+   */
+  const darkTintWords = () => {
+    if (!modes.includes('dark')) return '';
+    const tint = parseColor(String(res.dark?.['--color-accent-muted'] ?? ''));
+    const page = parseColor(
+      String(res.dark?.['--color-background-body'] ?? ''),
+    );
+    if (!tint || !page) return '';
+    const set = data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === '--color-accent-muted' &&
+        !x.on &&
+        !x.state &&
+        !x.when,
+    );
+    const strong = !set && hexToOklch(hex(tint)).C >= 0.1;
+    const soft = hex(
+      /** @type {[number, number, number]} */ (
+        tint.map((v, i) => Math.round((v + page[i]) / 2))
+      ),
+    );
+    return `; in dark the accent tint draws ${hex(tint)}${
+      strong
+        ? `, a strong block of the accent; for a softer one first: ${P} set ${data.name} --color-accent-muted '${soft}' --mode dark`
+        : ''
+    }`;
+  };
   /** @param {string} token */
   const changed = token =>
     modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
@@ -722,7 +757,7 @@ export function missedSteps(ctx, data, res, base) {
           kind: 2,
           part: p,
           state: st,
-          why: `${st}, it keeps the base's fill (${inState[0].token})`,
+          why: `${st}, it keeps the base's fill (${inState[0].token})${darkTintWords()}`,
           aspect: 'background',
           steps: [
             {

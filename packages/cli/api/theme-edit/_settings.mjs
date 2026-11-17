@@ -11659,10 +11659,24 @@ function trackContrastProblems(ctx, data, res, base) {
         const now = reads(fi, tr, page);
         const was = btr && bfi && basePage ? reads(bfi, btr, basePage) : null;
         if (now >= 3 || (was != null && was <= now)) continue;
-        // The fix moves the side the theme moved: the track when its color
-        // is not the base's (a border it follows), else the fill, on that
-        // part alone, so the color it shows elsewhere stays.
-        const trackMoved = !btr || hex(btr.rgb) !== hex(tr.rgb);
+        // The fix moves the side the theme moved: the track when the theme
+        // gives it a fill, sets the token it reads, or moved its color
+        // another way (a border it follows), else the fill, on that part
+        // alone, so the color it shows elsewhere stays. (A gray dial only
+        // tints the track with the surfaces: the fill moves then.)
+        const grayTinted = data.settings.some(
+          x => x.source === 'dial' && x.thing === 'neutral' && !x.on,
+        );
+        const trackMoved =
+          Boolean(ownFill(track, mode, trackWhen)) ||
+          data.settings.some(
+            x =>
+              x.source === 'token' &&
+              x.thing === trackToken &&
+              !x.state &&
+              (!x.mode || x.mode === mode),
+          ) ||
+          (!grayTinted && (!btr || hex(btr.rgb) !== hex(tr.rgb)));
         const fillGround = inside
           ? ground
           : /** @type {[number, number, number]} */ (page);

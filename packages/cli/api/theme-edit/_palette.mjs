@@ -2338,8 +2338,38 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     return ref(id, m, b.stop);
   };
 
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   * @param {string} token @param {string} id
+   */
+  const nearCore = (token, id) => {
+    const core = String(tokenDefaults[token] ?? '').trim();
+    const halves = /^light-dark\((.*)\)$/i.exec(core);
+    const parts = halves ? splitTop(halves[1], ',') : [core];
+    return each(m => {
+      const target = parseColor(
+        String(parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+      );
+      const best = target
+        ? stops.reduce((x, y) =>
+            perceptualDelta(ref(id, m, y).color, hex(target)) <
+            perceptualDelta(ref(id, m, x).color, hex(target))
+              ? y
+              : x,
+          )
+        : stops[Math.floor(stops.length / 2)];
+      return ref(id, m, best);
+    });
+  };
+
   const neutral = fams.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -2687,6 +2717,16 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
       }),
     );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it (its
+    // text takes the readable side of Core's media surface).
+    if (word === 'error')
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
     if (names.onMuted) {
       const onMuted = /** @type {string} */ (names.onMuted);
       put(
