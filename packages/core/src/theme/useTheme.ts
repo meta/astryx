@@ -352,9 +352,17 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
       attributeFilter: ['href', 'media', 'disabled', 'rel', 'name', 'content'],
     });
     document.addEventListener('load', onStylesheetLoad, true);
+    // A root whose color-scheme follows the reader through a media query
+    // changes with the reader's preference, with no DOM change.
+    const preference =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
+    preference?.addEventListener?.('change', notifyRootSchemeChange);
     rootScheme.stop = () => {
       observer.disconnect();
       document.removeEventListener('load', onStylesheetLoad, true);
+      preference?.removeEventListener?.('change', notifyRootSchemeChange);
     };
   }
   return () => {

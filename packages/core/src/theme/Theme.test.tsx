@@ -149,18 +149,16 @@ describe('Theme', () => {
       );
     }
     // A system root on a page whose scheme the engine does not report leaves
-    // the reader's preference to decide, and a nested Theme never writes it.
-    const nested = render(
+    // the reader's preference to decide.
+    const unreported = render(
       <Theme theme={testTheme} mode="system">
-        <Theme theme={testTheme} mode="dark">
-          <span>child</span>
-        </Theme>
+        <span>child</span>
       </Theme>,
     );
     expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
       false,
     );
-    nested.unmount();
+    unreported.unmount();
     // A system root on a page that names no scheme draws light, and on a
     // page that names both the reader's preference decides.
     const real = window.getComputedStyle.bind(window);
@@ -178,9 +176,12 @@ describe('Theme', () => {
       },
     );
     try {
+      // A nested Theme that forces dark never changes what the root names.
       const page = render(
         <Theme theme={testTheme} mode="system">
-          <span>child</span>
+          <Theme theme={testTheme} mode="dark">
+            <span>child</span>
+          </Theme>
         </Theme>,
       );
       expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
@@ -198,6 +199,58 @@ describe('Theme', () => {
       );
     } finally {
       vi.restoreAllMocks();
+    }
+  });
+
+  it('names the page scheme again when the reader changes their preference, on a root that follows it through a media query', () => {
+    const real = window.getComputedStyle.bind(window);
+    let prefersDark = false;
+    const query = Object.assign(new EventTarget(), {
+      media: '(prefers-color-scheme: dark)',
+      get matches() {
+        return prefersDark;
+      },
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+    });
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => query),
+    );
+    // The host's root follows the reader: `@media (prefers-color-scheme:
+    // dark) {:root {color-scheme: dark}}`.
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = real(element, pseudo);
+        if (element === document.documentElement) {
+          Object.defineProperty(style, 'colorScheme', {
+            configurable: true,
+            get: () => (prefersDark ? 'dark' : 'light'),
+          });
+        }
+        return style;
+      },
+    );
+    try {
+      render(
+        <Theme theme={testTheme} mode="system">
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'light',
+      );
+      act(() => {
+        prefersDark = true;
+        query.dispatchEvent(new Event('change'));
+      });
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'dark',
+      );
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
     }
   });
 
