@@ -107,6 +107,7 @@
  * @property {Array<{family: string, run: string[]}>} [fontNotLoaded] - The open fonts this set names whose package is not installed, each with the command that installs it; the previews and the app draw the next font in the stack until then. Left out when every one loads. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
+ * @property {ThemeEditProblem[]} [leftProblems] - Problems the theme had that this change moved but left failing (a fill made darker, still not dark enough), each with what it was and the command that fixes it; left out when none. The text output says them under the new problems.
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
