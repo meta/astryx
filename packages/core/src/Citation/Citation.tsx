@@ -39,6 +39,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Citation/Citation.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -194,6 +199,13 @@ export function Citation({
   'data-testid': testId,
   ...rest
 }: CitationProps): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && source == null) {
+    throw devPropError(
+      'Citation',
+      'source',
+      "is required, for example source={{title: 'Annual report', url: 'https://example.com/report'}}. Citation does not read children.",
+    );
+  }
   const t = useComponentTranslator();
   const title = source.title ?? String(number);
   const href =
