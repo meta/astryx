@@ -57,8 +57,13 @@ const how = async (theme, ask) => {
 };
 
 /** @param {Array<{commands: string[]}>} rs */
+// (The readable-text line set's own check adds beside a fill is measured
+// on its own: these asks read the rest.)
 const writes = rs =>
-  rs.flatMap(r => r.commands).filter(c => /^(set|undo) /.test(c));
+  rs
+    .filter(r => !/^readable text on that fill/.test(r.text))
+    .flatMap(r => r.commands)
+    .filter(c => /^(set|undo) /.test(c));
 
 /** Run each line as offered. @param {string[]} lines */
 const follow = async lines => {

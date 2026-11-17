@@ -45,6 +45,7 @@ import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {useToast} from '@astryxdesign/core/Toast';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   PencilIcon,
   DocumentDuplicateIcon,
@@ -590,11 +591,14 @@ function getColumns({
   onEdit,
   onDuplicate,
   onDemo,
+  onDelete,
 }: {
   onEdit: (task: TaskRow) => void;
   onDuplicate: (task: TaskRow) => void;
   /** Says what a menu action would do, for actions this demo does not perform. */
   onDemo: (task: TaskRow, action: string) => void;
+  /** Asks before the destructive Delete issue action. */
+  onDelete: (task: TaskRow) => void;
 }): TableColumn<TaskRow>[] {
   return [
     {
@@ -727,7 +731,7 @@ function getColumns({
             {
               label: 'Delete issue',
               icon: TrashIcon,
-              onClick: () => {},
+              onClick: () => onDelete(task),
             },
           ]}
         />
@@ -915,6 +919,8 @@ export default function DataTableTemplate() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
+  const {show: showConfirm, hide: hideConfirm} = confirm;
   const columns = useMemo(
     () =>
       getColumns({
@@ -936,8 +942,22 @@ export default function DataTableTemplate() {
             body: `Demo: ${action} ${task.taskId} would happen here`,
             uniqueID: `${action}-${task.taskId}`,
           }),
+        onDelete: task =>
+          showConfirm({
+            title: `Delete ${task.taskId}?`,
+            description: "This demo won't delete anything.",
+            actionLabel: 'Delete issue',
+            onAction: () => {
+              hideConfirm();
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: ${task.taskId} would be deleted here`,
+                uniqueID: `delete-${task.taskId}`,
+              });
+            },
+          }),
       }),
-    [showToast],
+    [showToast, showConfirm, hideConfirm],
   );
   const [powerSearchFilters, setPowerSearchFilters] = useState<
     ReadonlyArray<PowerSearchFilter>
@@ -1179,6 +1199,7 @@ export default function DataTableTemplate() {
           }
         />
       </Dialog>
+      {confirm.element}
     </>
   );
 }
