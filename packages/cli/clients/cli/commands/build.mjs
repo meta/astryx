@@ -271,7 +271,7 @@ export function registerBuild(program) {
                     'fit',
                     'command',
                   ],
-                  format: {command: formatCliCommand},
+                  format: {command: formatCliCommand, description: docText},
                 }
               : brief(['name', 'package', 'description', 'command']),
           ),

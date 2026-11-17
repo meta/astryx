@@ -2,7 +2,7 @@
 
 /**
  * A template doc that writes a command with a `{@command …}` token never
- * prints the token: `astryx template`, `astryx build` and `astryx search`
+ * prints that token: `astryx template`, `astryx build` and `astryx search`
  * show the command with the project's command name in text and as the bare
  * `astryx …` command in JSON (spec:AST-081 FR5). A template's source prints
  * byte for byte.
@@ -122,6 +122,13 @@ describe('astryx build', () => {
     expect(text.stdout).toContain('zebra-roster');
     expect(text.stdout).not.toContain('{@command');
     expect(text.stdout).toContain(`\`${RUN} docs icons\``);
+    const verbose = await runCli(
+      ['build', 'zebra roster board', '--verbose'],
+      dir,
+    );
+    expect(verbose.code).toBe(0);
+    expectText(verbose.stdout);
+    expect(verbose.stdout).not.toContain('`astryx docs icons`');
     const json = await runCli(['build', 'zebra roster board', '--json'], dir);
     expect(json.code).toBe(0);
     expect(json.stdout).toContain('zebra-roster');
