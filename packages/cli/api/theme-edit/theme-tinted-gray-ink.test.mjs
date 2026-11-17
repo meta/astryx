@@ -81,4 +81,11 @@ describe('primary ink of a gray', () => {
       '#ffffff',
     ]);
   }, 240_000);
+
+  it('a slate gray tints the text an inverted surface reads too', () => {
+    // Its inverted and dark surfaces take the tint, so the text on them does.
+    for (const token of ['--color-on-dark', '--color-on-light'])
+      for (const c of halves('slate', token))
+        expect(c, token).not.toMatch(/^#(?:000000|ffffff)$/);
+  });
 });
