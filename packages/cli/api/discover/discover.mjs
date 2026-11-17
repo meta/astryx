@@ -44,12 +44,6 @@ import {
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
-import {
-  availableEntries,
-  catalogState,
-  searchItems,
-  withLatest,
-} from './_catalog-view.mjs';
 import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -57,9 +51,10 @@ import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 
 const DEFAULT_LIMIT = 20;
 
-// The list, detail, doc and item leaves load only for an answer that needs
-// them: search's discover line imports this module on every search and
-// needs none of them.
+// The catalog view and the list, detail, doc and item leaves load only for
+// an answer that needs them: search's discover line imports this module on
+// every search and, with a kept record, needs none of them.
+const catalogView = () => import('./_catalog-view.mjs');
 const listLeaf = () => import('./list/list.mjs');
 const detailLeaf = () => import('./detail/detail.mjs');
 const docLeaf = () => import('./detail/doc/doc.mjs');
@@ -196,7 +191,7 @@ export async function wouldAnswer(query, {type} = {}) {
 }
 
 /**
- * @typedef {{packages: import('./_adapter.mjs').InstalledPackage[], items: import('./_catalog-view.mjs').SearchItem[]} | {packages: null}} SavedSearchInput
+ * @typedef {{packages: Array<{name: string, components: string[]}>, items: Array<Pick<import('./_catalog-view.mjs').SearchItem, 'kind' | 'name' | 'title' | 'summary' | 'description' | 'keywords' | 'packageDescription'>>} | {packages: null}} SavedSearchInput
  */
 
 /**
@@ -225,14 +220,31 @@ async function savedSearchInput(project) {
     declarations,
     official.packages,
   );
-  return {
+  const {searchItems} = await catalogView();
+  const items = searchItems(
     packages,
-    items: searchItems(
-      packages,
-      catalog,
-      declaredDependencies(project),
-      declarations.any,
-    ),
+    catalog,
+    declaredDependencies(project),
+    declarations.any,
+  );
+  // Only what the ranking reads is kept: the smaller the record, the less a
+  // search spends reading it back.
+  return {
+    packages: packages.map(pkg => ({
+      name: pkg.name,
+      components: pkg.components,
+    })),
+    items: items.map(item => ({
+      kind: item.kind,
+      name: item.name,
+      ...(item.title ? {title: item.title} : {}),
+      ...(item.summary ? {summary: item.summary} : {}),
+      ...(item.description ? {description: item.description} : {}),
+      ...(item.keywords?.length ? {keywords: item.keywords} : {}),
+      ...(item.packageDescription
+        ? {packageDescription: item.packageDescription}
+        : {}),
+    })),
   };
 }
 
@@ -262,6 +274,8 @@ function isSavedSearchInput(value) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
+  const {availableEntries, catalogState, searchItems, withLatest} =
+    await catalogView();
   // An experimental kind is read only in a project where it is on (spec:AST-017
   // FR27); only then does `--type` take it, or an error name it.
   const kinds =
@@ -454,7 +468,7 @@ export async function discover(query, options = {}) {
     ? integrations.find(p => p.name === target.name)
     : undefined;
   if (installedPkg && target.item && !target.version) {
-    const resolved = findComponent([installedPkg], target.item);
+    const resolved = await findComponent([installedPkg], target.item);
     if (resolved) {
       const {docFromResult} = await docLeaf();
       return await docFromResult(resolved, {lang, zh});

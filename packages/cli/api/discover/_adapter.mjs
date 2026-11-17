@@ -30,7 +30,6 @@ import {
   projectAddCommand,
 } from '../../foundation/release/notices.mjs';
 import {hostedRun} from '../../foundation/runtime/package-root.mjs';
-import {scanAllPackages, findComponentInPackages} from './_package-scanner.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {collectIdentities} from '../../foundation/integrations/contribution-inventory.mjs';
 import {
@@ -219,6 +218,7 @@ export async function discoverPackages(project) {
     return {packages: [], configured: loadedIntegrations.length > 0, project};
   }
 
+  const {scanAllPackages} = await import('./_package-scanner.mjs');
   const packages = scanAllPackages(
     [],
     /** @type {ScannedPackage[]} */ (/** @type {unknown} */ (explicitPackages)),
@@ -862,7 +862,8 @@ export function savedCatalog(
  * @returns {Promise<T | null>}
  */
 export async function keptSavedSearch(build, valid) {
-  const project = await Project.load();
+  // The project the run already loaded, when it did: search loads it first.
+  const project = Project.lastLoaded() ?? (await Project.load());
   const cacheDir = defaultCacheDir();
   const copies = sourceOrigins(project)
     .filter(origin => origin.source != null)
@@ -878,7 +879,9 @@ export async function keptSavedSearch(build, valid) {
         optedIntoIconSets(project),
       ],
       () => build(project),
-      {...EXACT_CODEC, valid},
+      // Plain strings and arrays: kept and read back as they are, with no
+      // walk over the record on every search.
+      {encode: value => value, decode: value => value, valid},
     )
   );
 }
@@ -1336,9 +1339,10 @@ export function toEntry(pkg) {
  * Locate a component's doc file within the given packages (case-insensitive).
  * @param {ScannedPackage[]} packages
  * @param {string} name
- * @returns {ComponentResolution | null}
+ * @returns {Promise<ComponentResolution | null>}
  */
-export function findComponent(packages, name) {
+export async function findComponent(packages, name) {
+  const {findComponentInPackages} = await import('./_package-scanner.mjs');
   return findComponentInPackages(packages, name);
 }
 

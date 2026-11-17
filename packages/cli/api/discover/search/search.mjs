@@ -43,6 +43,8 @@ import {compareText} from '../../../foundation/text/compare-text.mjs';
 /**
  * @typedef {import('../_package-scanner.mjs').ScannedPackage} ScannedPackage
  * @typedef {import('../_catalog-view.mjs').SearchItem} SearchItem
+ * @typedef {Pick<SearchItem, 'kind' | 'name' | 'title' | 'summary' | 'description' | 'keywords' | 'packageDescription'>} RankItem
+ *   what the ranking reads of an item
  */
 
 const KIND_ORDER = ['package', ...DISCOVER_KINDS];
@@ -52,7 +54,7 @@ const KIND_ORDER = ['package', ...DISCOVER_KINDS];
  * is another name. The words of its name are derived keywords, so a word
  * inside a camelCase name counts (`chart` in `SalesChart`). Its summary,
  * or a package's own description, is its description.
- * @param {SearchItem} item
+ * @param {RankItem} item
  * @param {string} [packageText] the description of the item's package
  */
 function candidateOf(item, packageText) {
@@ -90,7 +92,7 @@ function domainOf(kind) {
  * package's description. The package's description only adds words the
  * item's own text lacks: an item must match some query word in its own text.
  * Null for no match.
- * @param {SearchItem} item
+ * @param {RankItem} item
  * @param {{term: string, tokens: string[], words: string[]}} query
  * @returns {{matched: number, total: number, score: number} | null}
  */
@@ -135,6 +137,38 @@ function queryOf(query) {
 const byMatch = (a, b) => b.matched - a.matched || b.score - a.score;
 
 /**
+ * How many times each letter appears in a word.
+ * @param {string} word
+ * @returns {Map<string, number>}
+ */
+function letterCounts(word) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const letter of word) counts.set(letter, (counts.get(letter) ?? 0) + 1);
+  return counts;
+}
+
+/**
+ * How many letters of `text` a word with these letter counts also has, each
+ * letter counted as often as both have it.
+ * @param {Map<string, number>} counts
+ * @param {string} text
+ * @returns {number}
+ */
+function sharedLetters(counts, text) {
+  const left = new Map(counts);
+  let shared = 0;
+  for (const letter of text) {
+    const n = left.get(letter) ?? 0;
+    if (n > 0) {
+      shared++;
+      left.set(letter, n - 1);
+    }
+  }
+  return shared;
+}
+
+/**
  * A quick test that leaves out only items search's scorer cannot match, so
  * ranking scores far fewer of them. A word of the query, or a synonym search
  * reads for it, matches only text that holds one of its forms, less its last
@@ -144,9 +178,9 @@ const byMatch = (a, b) => b.matched - a.matched || b.score - a.score;
  * is the keyword `multiselect`). A typo, which search reads only in a query
  * of one word or one identifier, needs a name or keyword within three
  * letters in length of the query, one of its words, or a synonym search
- * reads for one. A query of stopwords alone tests nothing.
+ * reads for one, and sharing all but three of its letters. A query of stopwords alone tests nothing.
  * @param {ReturnType<typeof queryOf>} words
- * @returns {(item: SearchItem) => boolean}
+ * @returns {(item: RankItem) => boolean}
  */
 function mayMatch({term, tokens}) {
   if (tokens.length === 0) return () => true;
@@ -164,17 +198,23 @@ function mayMatch({term, tokens}) {
     }
   }
   const fuzzy = tokens.length <= 1 || !/\s/.test(term);
-  const lengths = [term, ...tokens, ...synonyms]
-    .map(word => word.length)
-    .filter(length => length >= 5);
+  const typed = [term, ...tokens, ...synonyms]
+    .map(word => word.toLowerCase())
+    .filter(word => word.length >= 5)
+    .map(word => ({word, letters: letterCounts(word)}));
+  // Within three edits of a word means within three letters of its length
+  // and sharing all but three of its letters.
   /** @param {string | undefined} text */
-  const nearLength = text =>
-    text != null &&
-    lengths.some(
-      length =>
-        Math.abs(text.length - length) <= 3 &&
-        Math.min(text.length, length) >= 5,
+  const nearLength = text => {
+    if (text == null || text.length < 5) return false;
+    const lower = text.toLowerCase();
+    return typed.some(
+      ({word, letters}) =>
+        Math.abs(lower.length - word.length) <= 3 &&
+        sharedLetters(letters, lower) >=
+          Math.max(lower.length, word.length) - 3,
     );
+  };
   return item => {
     const text = [
       item.name,
@@ -239,9 +279,11 @@ function rankItems(items, words, {type, only}) {
  * Whether search() would list any match for `query`: the same installed
  * components and items, ranked and cut the same way, with no rule of its
  * own. Search's discover line reads it.
- * @param {ScannedPackage[]} packages installed packages
+ * @param {Array<{name: string, components: string[]}>} packages installed
+ *   packages, as far as their names and components
  * @param {string} query
- * @param {{items?: SearchItem[], type?: string}} opts
+ * @param {{items?: RankItem[], type?: string}} opts
+ *   the items, as far as the ranking reads them
  * @returns {boolean}
  */
 export function answersAny(packages, query, {items = [], type}) {
@@ -261,7 +303,7 @@ export function answersAny(packages, query, {items = [], type}) {
 
 /**
  * Every installed component, as an item search ranks.
- * @param {ScannedPackage[]} packages
+ * @param {Array<{name: string, components: string[]}>} packages
  * @returns {SearchItem[]}
  */
 function installedComponentsOf(packages) {
