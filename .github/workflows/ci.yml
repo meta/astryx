@@ -68,7 +68,8 @@ permissions: {}
 # classifier) and skips its work, reporting success, when nothing in its scope
 # changed; anything undecidable runs everything. The one scope job,
 # swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
-# start only when the change proves a target.
+# start only when the change proves a target, and on a pull request only with
+# the `ci:run-swizzle` label: the proof runs on main (spec:AST-110/DEC-3).
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -206,8 +207,7 @@ jobs:
         continue-on-error: true
         working-directory: .ci-admission
         run: |
-          node scripts/vitest-node-legs.mjs plan --github-output \
-            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+          node scripts/vitest-node-legs.mjs plan --github-output
 
       # Another run's admission reads from this step's name how many jobs this
       # run adds at full width (count.mjs).
@@ -222,11 +222,11 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}
 
@@ -289,11 +289,11 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}
 
@@ -1555,15 +1555,19 @@ jobs:
           fi
           exit "$rc"
 
-  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
-  # each, beside the Node legs rather than inside them. When a change reaches
-  # every copy, its slices take about 2,300 s of test time, more than the Node
-  # legs hold under their limit with the rest of the suite. This job reads the
-  # proof's scope first, with Node alone and nothing installed; the legs start
-  # only when the change proves a target, as each slice decides. `test`
-  # requires this job, and the legs whenever the scope is not `none`.
+  # The swizzle proof (spec:AST-110 FR7) runs on main: Main's Node legs prove
+  # the targets each validated main commit affects, and the release re-check
+  # proves every target before a cut (spec:AST-110/DEC-3). A pull request runs
+  # it only with the `ci:run-swizzle` label (run-labels), for a change to the
+  # swizzle tooling; it then runs in legs of its own, one slice each, beside
+  # the Node legs rather than inside them. When a change reaches every copy,
+  # its slices take about 2,300 s of test time, more than the Node legs hold
+  # under their limit with the rest of the suite. This job reads the proof's
+  # scope first, with Node alone and nothing installed; the legs start only
+  # when the change proves a target, as each slice decides. `test` requires
+  # this job, and the legs whenever the scope is not `none`.
   swizzle-proof-scope:
-    needs: [admission, heavy-ci]
+    needs: [admission, heavy-ci, run-labels]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1587,17 +1591,23 @@ jobs:
 
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: (github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
 
-      # A docsite-only or spec-only change runs no Node test, so no slice.
+      # A pull request without the ci:run-swizzle label proves no target here:
+      # main proves them. A docsite-only or spec-only change runs no Node
+      # test, so no slice.
       - name: Decide the proof's scope
         id: proof
         env:
+          OPTED_OUT: ${{ github.event_name == 'pull_request' && needs.run-labels.outputs.swizzle != 'true' }}
           SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
         run: |
-          if [ "$SPECIALIZED" = true ]; then
+          if [ "$OPTED_OUT" = true ]; then
+            echo "The swizzle proof runs on main: Main's Node legs prove the targets each main commit affects, and the release re-check proves every target. A pull request that changes the swizzle tooling runs it here with the ci:run-swizzle label."
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          elif [ "$SPECIALIZED" = true ]; then
             echo "Specialized PR lane: the swizzle proof proves no target"
             echo 'mode=none' >> "$GITHUB_OUTPUT"
           else
@@ -1610,10 +1620,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # All eight legs at once when admission found room for them, else two
-      # at a time, as the Node legs (admission's `leg-widths`).
-      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
-      # One leg per swizzle-proof.<n>.test.mjs file.
+      # One leg per swizzle-proof.<n>.test.mjs file. The ci:run-swizzle label
+      # adds all eight legs to the run's admission (label-legs), so they start
+      # together.
       matrix:
         slice: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
@@ -1621,12 +1630,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Another run's admission counts at most this many live legs of this
-      # matrix: GitHub lists the legs max-parallel holds back as queued, but
-      # they hold no runner (count.mjs AT_ONCE_STEP).
-      - name: Run at most ${{ strategy.max-parallel }} legs at once
-        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
-
       - uses: actions/checkout@v7
         timeout-minutes: 8
         with:
@@ -1958,6 +1961,7 @@ jobs:
       visual: ${{ steps.decide.outputs.visual }}
       a11y: ${{ steps.decide.outputs.a11y }}
       rtl: ${{ steps.decide.outputs.rtl }}
+      swizzle: ${{ steps.decide.outputs.swizzle }}
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
