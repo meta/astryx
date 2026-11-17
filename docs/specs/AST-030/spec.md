@@ -395,7 +395,12 @@ they are separately named.
   as a whole is also held to its five oldest pull requests and forty heavy runs
   a day. Engineering owners listed in `.github/ENGOWNERS`, as the pull request's
   base commit lists them, are exempt from all of these limits, the shared
-  login's included, and so are bot accounts. A held suite's check fails with
+  login's included, and so are bot accounts. Apart from these limits, an author has at most three
+  pull-request CI runs active at once, engineering owners included; a run over
+  that cap waits until one of that author's runs finishes, and is not turned
+  away at its longest wait (DEC-31). A `release-critical`
+  pull request's run is outside that cap, as it is outside these limits
+  (DEC-30). A held suite's check fails with
   "Queued behind your 15 oldest PRs: runs on a push once it is among them, or at
   the pre-merge re-run.", "Queued behind the shared login's 5 oldest PRs: runs
   on a push once it is among them, or at the pre-merge re-run." or "Daily
@@ -494,20 +499,21 @@ they are separately named.
   minutes added to time to green. A flag asks the reviewer to weigh the cost;
   it fails no check.
 
-- **FR20 — An agent lane's push runs the fast checks; the heavy suites run when
-  it is ready and before merge.** A push to a ready pull request authored by the
-  shared agent login, into `main`, in its run's first attempt, runs only
-  typecheck in the CI workflow (lint keeps its own workflow), unless its trusted
-  classification is spec-only or Lab-only (FR26); the path-filtered workflows
-  (FR14) are
-  unaffected. Its heavy jobs skip, and the required contexts `test`, `build` and `docsite-test` (FR7)
-  report failure with "Heavy CI deferred: runs when marked ready and before
-  merge", never success, so nothing merges on that run; the PR report says the
-  same. Marking the pull request ready, opening or reopening it, and any later
-  attempt of its run (the pre-merge re-run of all jobs) run every suite at that
-  head. A release merge-back, a release-branch pull request, every other
-  author, the review and spec gates (FR15) and the heavy-suite caps (FR16) are
-  unaffected (DEC-14).
+- **FR20 — A push runs the fast checks; the heavy suites run when review
+  passes and before merge.** A push to a pull request into `main` from any
+  author (the shared agent login, engineering owners and forks alike), in its
+  run's first attempt, runs only typecheck in the CI workflow (lint keeps its
+  own workflow) until the review and spec gates (FR15) pass at that head,
+  unless its trusted classification is spec-only or Lab-only (FR26); the
+  path-filtered workflows (FR14) are unaffected. Its heavy jobs skip, and the
+  required contexts `test`, `build` and `docsite-test` (FR7) report failure
+  with "Heavy CI deferred: runs when review passes and before merge", never
+  success, so nothing merges on that run; the PR report says the same. The
+  first head at which the review and spec gates pass, and any later attempt of
+  its run (the pre-merge re-run of all jobs), run every suite at that head.
+  Marking the pull request ready, opening it and reopening it start no heavy
+  suite. A release merge-back, a release-branch pull request and the
+  heavy-suite caps (FR16) are unaffected (DEC-14, DEC-31).
 
 - **FR21 — Main's full unit run is about hourly and always finishes.** The
   Main workflow runs its unit suites (every Vitest project of every package,
@@ -747,6 +753,12 @@ Outside the classifier-routed workflows, the Internal Registry dependency check,
 the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
 The nightly perf lane is the one scheduled measurement outside them (FR18).
+
+FR20's deferral for every author and FR16's three-run cap per author (DEC-31)
+are not yet enforced by the CI workflows: today the deferral covers only the
+shared agent login and starts the heavy suites when a pull request is marked
+ready, and a run over an author's running pull requests is turned away at its
+longest wait.
 
 ## Verification
 
@@ -1067,6 +1079,10 @@ job's check run of the same name is ambiguous to branch protection); deferring
 spec-only changes (their heavy jobs already do nothing, and every push would
 then need a re-run to merge).
 
+Amended by DEC-31: the deferral covers every author, and the heavy suites
+start at the first head whose review gates pass instead of when the pull
+request is marked ready.
+
 ### DEC-15 — Main's unit suites run about hourly, in full, to completion
 
 **Reference:** `spec:AST-030/DEC-15`
@@ -1086,6 +1102,10 @@ Rejected: running the unit suites on main's push cadence with a scope (a
 scoped run on main would miss the cross-change break it exists for);
 cancelling an older unit run for a newer push (a run that never finishes
 covers nothing).
+
+Amended by DEC-31: a pull-request run over its author's three-run cap
+(FR16) waits for one of that author's runs to finish instead of stopping at
+its longest wait.
 
 ### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
 
@@ -1479,6 +1499,25 @@ or a fix forward never waits behind ordinary pull requests. The owner's words:
 Rejected: queueing release-critical pull requests ahead of others inside
 DEC-16's wait (a full CI still delays them), and running a reduced suite for
 them (a release change needs its full checks).
+
+### DEC-31 — Heavy CI runs once review passes, and an author runs at most three at once
+
+**Reference:** `spec:AST-030/DEC-31`
+**Decider:** `cixzhang`, `2026-11-17 07:57 PT`
+
+Most heavy runs are on heads that never merge, and a few authors' runs can
+hold most of CI's room while approved pull requests wait. Two rules answer
+that. First, for every author, the heavy suites run only at
+the heads that decide a merge: the first head whose review and spec gates
+pass, and the pre-merge re-run; marking ready, opening and reopening no longer
+start them, and typecheck and lint still run on every push (FR20, amending
+DEC-14). Second, an author has at most three pull-request CI runs active at
+once, engineering owners included, which FR16's owner exemption no longer
+covers; a run over that cap waits for one of that author's own runs to finish
+rather than being turned away after twelve minutes (FR16, amending DEC-16).
+
+Rejected: letting main-red and flaky-test fixes skip the queue as
+`release-critical` pull requests do (DEC-30).
 
 ## Open questions
 
