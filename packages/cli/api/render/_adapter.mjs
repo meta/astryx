@@ -46,12 +46,13 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {component} from '../component/component.mjs';
+import {propAugmentationPoint} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -454,6 +455,8 @@ function servedSet(input) {
   }
 }
 
+const CORE_PACKAGE = '@astryxdesign/core';
+
 /** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
 const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
 
@@ -461,9 +464,12 @@ const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
  * A warning for each string a page gives a Core component's prop that the
  * prop's closed union does not hold (`<Button variant="danger">`): the
  * component draws its default look, and nothing else says so. The union
- * comes from the component's docs, the props `astryx component <Name>`
- * reads; a component or prop with no doc entry, or a prop whose type is not
- * a closed union, is not checked.
+ * comes from Core's own docs for the component in the page's Core, the props
+ * `astryx component <Name> --package @astryxdesign/core` reads, so an
+ * integration that replaces the component does not change it. A component or
+ * prop with no doc entry, a prop whose type is not a closed union, and a prop
+ * whose values a theme can widen by declaration merging
+ * (`interface ButtonVariantMap`) are not checked.
  * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
  * @param {string} dir the page's folder, whose Core the docs come from
  * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
@@ -474,12 +480,13 @@ async function propValueWarnings(values, dir) {
   /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
   const warnings = [];
   const seen = new Set();
+  const coreDir = values.length ? findCoreDir(dir) : null;
   for (const v of values) {
     if (!docs.has(v.component)) {
       /** @type {any[] | null} */
       let props = null;
       try {
-        const answer = /** @type {any} */ (await component(v.component, {cwd: dir, props: true}));
+        const answer = /** @type {any} */ (await component(v.component, {cwd: dir, package: CORE_PACKAGE, props: true}));
         props = Array.isArray(answer?.data) ? answer.data : null;
       } catch {
         // A component the docs do not describe is not checked.
@@ -488,6 +495,7 @@ async function propValueWarnings(values, dir) {
     }
     const prop = docs.get(v.component)?.find(p => p?.name === v.prop);
     if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
+    if (propAugmentationPoint(coreDir, v.component, v.prop)) continue;
     const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
     if (allowed.includes(v.value)) continue;
     const key = `${v.file}:${v.line}:${v.component}:${v.prop}:${v.value}`;

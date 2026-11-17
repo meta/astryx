@@ -661,6 +661,26 @@ function aliasPlugin() {
 }
 
 /**
+ * The Core component a JSX element name draws, when the page imports it from
+ * Core: `<Button>` from `import {Button} from '@astryxdesign/core/Button'`, or
+ * `<Core.Button>` from `import * as Core from '@astryxdesign/core'`. Null for
+ * any other element.
+ * @param {any} name the element's JSX name node
+ * @param {any} scope the element's Babel scope
+ * @returns {string | null}
+ */
+function coreComponentOf(name, scope) {
+  const local = name.type === 'JSXIdentifier' ? name : name.type === 'JSXMemberExpression' ? name.object : null;
+  if (local?.type !== 'JSXIdentifier') return null;
+  const spec = scope.getBinding(local.name)?.path;
+  const source = spec?.parent?.source ? String(spec.parent.source.value) : '';
+  if (source !== '@astryxdesign/core' && !source.startsWith('@astryxdesign/core/')) return null;
+  if (name.type === 'JSXMemberExpression') return spec.isImportNamespaceSpecifier() ? name.property.name : null;
+  if (!spec.isImportSpecifier()) return null;
+  return spec.node.imported.type === 'Identifier' ? spec.node.imported.name : spec.node.imported.value;
+}
+
+/**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
@@ -806,13 +826,9 @@ function pagePlugin(filename, browser = false) {
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
       JSXOpeningElement(/** @type {any} */ p) {
-        if (browser || p.node.name.type !== 'JSXIdentifier') return;
-        const binding = p.scope.getBinding(p.node.name.name);
-        const spec = binding?.path;
-        if (!spec?.isImportSpecifier()) return;
-        const source = String(spec.parent.source.value);
-        if (source !== '@astryxdesign/core' && !source.startsWith('@astryxdesign/core/')) return;
-        const component = spec.node.imported.type === 'Identifier' ? spec.node.imported.name : spec.node.imported.value;
+        if (browser) return;
+        const component = coreComponentOf(p.node.name, p.scope);
+        if (!component) return;
         for (const attr of p.node.attributes) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
           const value =

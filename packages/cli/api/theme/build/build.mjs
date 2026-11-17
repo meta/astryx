@@ -74,6 +74,11 @@ import {
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {
+  AUGMENTATION_OVERRIDES,
+  componentHasAugmentableInterface as componentDeclaresInterface,
+  overrideAugmentationPoint,
+} from '../../../foundation/discovery/core-augmentation-points.mjs';
+import {
   CLI_ROOT,
   findCoreDir,
   findInstalledPackage,
@@ -1912,60 +1917,6 @@ function coreSrcPath() {
   return coreRoot ? path.join(coreRoot, 'src') : null;
 }
 
-/**
- * Read the type declarations `@astryxdesign/core/<Component>` exposes so we can
- * check whether a given augmentation-target interface actually exists before
- * generating a module augmentation against it.
- *
- * Reads the shipped `dist/<Component>/index.d.ts` (what a consumer's TypeScript
- * actually sees), falling back to the `src/<Component>/index.ts` in the
- * monorepo. Returns the file contents, or '' if nothing is found.
- */
-/** @type {Map<string, string>} */
-const _componentDeclCache = new Map();
-/**
- * @param {string} pascalName
- * @param {{includeTypes?: boolean}} [options]
- * @returns {string}
- */
-function readComponentDeclarations(pascalName, options = {}) {
-  const includeTypes = options.includeTypes === true;
-  const cacheKey = `${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
-  if (_componentDeclCache.has(cacheKey)) {
-    return _componentDeclCache.get(cacheKey) ?? '';
-  }
-  let contents = '';
-  const coreRoot = resolveCoreRoot();
-  if (coreRoot) {
-    const candidateSets = [
-      [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
-      [path.join(coreRoot, 'src', pascalName, 'index.ts')],
-    ];
-    if (includeTypes) {
-      candidateSets[0].push(
-        path.join(coreRoot, 'dist', pascalName, 'types.d.ts'),
-      );
-      candidateSets[1].push(path.join(coreRoot, 'src', pascalName, 'types.ts'));
-    }
-    for (const files of candidateSets) {
-      if (fs.existsSync(files[0])) {
-        for (const file of files) {
-          try {
-            if (fs.existsSync(file)) {
-              contents += fs.readFileSync(file, 'utf-8') + '\n';
-            }
-          } catch {
-            // ignore
-          }
-        }
-        if (contents) break;
-      }
-    }
-  }
-  _componentDeclCache.set(cacheKey, contents);
-  return contents;
-}
-
 /** @type {Map<string, Array<{moduleName: string, interfacePrefix: string}>>} */
 const _augmentationTargetCache = new Map();
 
@@ -2040,28 +1991,20 @@ async function resolveAugmentationTargetCandidates(componentName) {
 }
 
 /**
- * Determine whether `@astryxdesign/core/<Component>` exports an interface named
- * `interfaceName` that can be augmented via module augmentation.
- *
- * Only interfaces are extension points — closed literal-union types (e.g.
- * `HeadingType`, `ButtonSize`) are NOT augmentable, so a generated augmentation
- * against them is dead code. We check that the name is exported (directly or
- * re-exported) as a type/interface.
+ * Whether the Core beside the CLI declares `interfaceName` in
+ * `@astryxdesign/core/<Component>` ({@link componentDeclaresInterface}).
  * @param {string} pascalName
  * @param {string} interfaceName
  * @param {{includeTypes?: boolean}} [options]
  * @returns {boolean}
  */
 function componentHasAugmentableInterface(pascalName, interfaceName, options) {
-  const decl = readComponentDeclarations(pascalName, options);
-  if (!decl) return false;
-  // Require an actual interface declaration in this public subpath, not just a
-  // type re-export. Module augmentation only widens consumers that import the
-  // module where the interface is declared; augmenting a barrel that re-exports
-  // the type (e.g. Field re-exporting FieldStatusVariantMap) creates a dead
-  // sibling interface for consumers of the real FieldStatus subpath.
-  const re = new RegExp(String.raw`\binterface\s+${interfaceName}\b`);
-  return re.test(decl);
+  return componentDeclaresInterface(
+    resolveCoreRoot(),
+    pascalName,
+    interfaceName,
+    options,
+  );
 }
 
 /**
@@ -2087,37 +2030,15 @@ function isComponentValueAugmentationPoint(pascalName, interfaceName) {
 }
 
 /**
- * Extension points whose public module and interface do not follow the usual
- * `<Component><Prop>Map` convention. TextType reads CustomTextTypes from the
- * theme module, so both classification and declaration emission must resolve
- * this same public augmentation point.
- *
- * @type {Record<string, {moduleName: string, interfaceName: string, includeTypes?: boolean}>}
- */
-const AUGMENTATION_OVERRIDES = {
-  'text.type': {
-    moduleName: 'theme',
-    interfaceName: 'CustomTextTypes',
-    includeTypes: true,
-  },
-};
-
-/**
  * Resolve the public module/interface that can widen a component prop value.
  * @param {string} component
  * @param {string} prop
  * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
  */
 async function resolveAugmentationTarget(component, prop) {
-  const override = AUGMENTATION_OVERRIDES[`${component}.${prop}`];
-  if (override) {
-    return componentHasAugmentableInterface(
-      override.moduleName,
-      override.interfaceName,
-      {includeTypes: override.includeTypes},
-    )
-      ? {moduleName: override.moduleName, interfaceName: override.interfaceName}
-      : null;
+  const pascalName = toPascalCase(component);
+  if (Object.hasOwn(AUGMENTATION_OVERRIDES, `${pascalName}.${prop}`)) {
+    return overrideAugmentationPoint(resolveCoreRoot(), pascalName, prop);
   }
 
   const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);

@@ -19,6 +19,7 @@ import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
+import {COMPONENT_REPLACES_CLI} from '../../foundation/integrations/cli-requirement.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -150,16 +151,19 @@ describe('render(): page to one HTML file', () => {
     put(
       'values.tsx',
       `import {Button as Action} from '@astryxdesign/core/Button';
+import * as Core from '@astryxdesign/core';
 import {Text} from '@astryxdesign/core';
-function Own(props: {variant: string}) { return <span>{props.variant}</span>; }
-const kind = 'danger';
+function Own(props: {size: string}) { return <span>{props.size}</span>; }
+const size = 'huge';
 export default function Page() {
   return (
     <main>
-      <Action label="Delete" variant="danger" />
+      <Action label="Delete" size="huge" />
       <Action label="Save" variant="primary" size={'lg'} />
-      <Action label="Maybe" variant={kind} />
-      <Own variant="danger" />
+      <Action label="Maybe" size={size} />
+      <Core.Button label="Go" size="xl" />
+      <Core.Text>Plain</Core.Text>
+      <Own size="huge" />
       <Text>Plain</Text>
     </main>
   );
@@ -169,8 +173,91 @@ export default function Page() {
     const answer = /** @type {any} */ (await render('values.tsx', {cwd: dir, out: 'values.html'}));
     const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
     expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
-      'values.tsx:8: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive.',
+      'values.tsx:9: Button has no size "huge"; its sizes are sm, md, lg.',
+      'values.tsx:12: Button has no size "xl"; its sizes are sm, md, lg.',
     ]);
+  });
+
+  it('does not warn for a value a theme can add to a Core prop', async () => {
+    put(
+      'widened.tsx',
+      `import {Button} from '@astryxdesign/core/Button';
+import {Banner} from '@astryxdesign/core/Banner';
+
+declare module '@astryxdesign/core/Button' {
+  interface ButtonVariantMap {
+    'primary-muted': true;
+  }
+}
+
+export default function Page() {
+  return (
+    <main>
+      <Button label="Save" variant="primary-muted" />
+      <Banner status="neutral" title="Heads up" />
+    </main>
+  );
+}
+`,
+    );
+    const answer = /** @type {any} */ (await render('widened.tsx', {cwd: dir, out: 'widened.html'}));
+    expect(answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value')).toEqual([]);
+  });
+
+  it("checks a Core component against Core's docs where an integration replaces it", async () => {
+    const own = makeLinkedFixture('astryx-render-replaced-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+    try {
+      const pkg = path.join(path.dirname(own), 'node_modules', '@acme', 'buttons');
+      fs.mkdirSync(path.join(pkg, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@acme/buttons',
+          version: '1.0.0',
+          exports: {'./components/*': './components/*.tsx'},
+          peerDependencies: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
+        }),
+      );
+      fs.writeFileSync(path.join(pkg, 'astryx.integration.mjs'), "export default {components: './components'};\n");
+      fs.writeFileSync(
+        path.join(pkg, 'components', 'AcmeButton.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeButton',
+          displayName: 'AcmeButton',
+          import: '@acme/buttons/components/AcmeButton',
+          replaces: 'Button',
+          keywords: ['acme'],
+          usage: {description: 'AcmeButton for Acme apps.'},
+          props: [{name: 'size', type: "'tiny' | 'giant'", description: 'Size.'}],
+        })};\n`,
+      );
+      fs.writeFileSync(path.join(pkg, 'components', 'AcmeButton.tsx'), 'export function AcmeButton() { return null; }\n');
+      const manifest = path.join(own, 'package.json');
+      const project = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+      project.dependencies = {...project.dependencies, '@acme/buttons': '1.0.0'};
+      fs.writeFileSync(manifest, JSON.stringify(project));
+      fs.writeFileSync(
+        path.join(own, 'page.tsx'),
+        `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return (
+    <main>
+      <Button label="Save" size="lg" />
+      <Button label="Delete" size="giant" />
+    </main>
+  );
+}
+`,
+      );
+      const answer = /** @type {any} */ (await render('page.tsx', {cwd: own}));
+      const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+      expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+        'page.tsx:6: Button has no size "giant"; its sizes are sm, md, lg.',
+      ]);
+    } finally {
+      removeLinkedFixture(own);
+    }
   });
 
   it('gives the page back byte for byte', async () => {
