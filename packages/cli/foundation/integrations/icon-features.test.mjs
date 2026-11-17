@@ -39,6 +39,19 @@ describe('iconFeatureGate', () => {
     ).toEqual({on: true, reason: 'iconSet'});
   });
 
+  it('the package being authored turns nothing on; experimental.iconSet still does', () => {
+    const authored = {...pack, __local: true};
+    expect(
+      iconFeatureGate({config: {}, loadedIntegrations: [authored]}),
+    ).toEqual({on: false, reason: null});
+    expect(
+      iconFeatureGate({
+        config: {experimental: {iconSet: 'glyphs'}},
+        loadedIntegrations: [authored],
+      }),
+    ).toEqual({on: true, reason: 'iconSet'});
+  });
+
   it('a package that failed to load, or lost a provider conflict, turns nothing on', () => {
     expect(
       iconFeatureGate({

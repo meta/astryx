@@ -12,7 +12,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
+import {
+  writeIconPackage,
+  writeIconSetProject,
+} from '../../../test-utils/icon-set-fixture.mjs';
 
 const SLOW = 60_000;
 
@@ -76,6 +79,36 @@ describe('docs icons with icon sets', () => {
       expect(
         data.sections.map((/** @type {any} */ each) => each.id),
       ).not.toContain('installed-icon-set');
+    },
+    SLOW,
+  );
+
+  it(
+    'in the icon-set package being authored: no section and no doctor icon checks, unless its astryx.config sets experimental.iconSet',
+    async () => {
+      const cwd = path.join(tmp, 'authoring', 'glyphs');
+      writeIconPackage(cwd);
+      /** @param {any} data */
+      const sectionIds = data =>
+        data.sections.map((/** @type {any} */ each) => each.id);
+      const docsIndex = async () =>
+        JSON.parse(
+          (await runCli(['docs', 'icons', '--index', '--json'], cwd)).stdout,
+        ).data;
+      const doctorChecks = async () =>
+        JSON.parse(
+          (await runCli(['doctor', '--json'], cwd)).stdout,
+        ).data.checks.map((/** @type {any} */ check) => check.id);
+
+      expect(sectionIds(await docsIndex())).not.toContain('installed-icon-set');
+      expect(await doctorChecks()).not.toContain('icon-sets');
+      expect(await doctorChecks()).not.toContain('icon-placeholders');
+
+      fs.writeFileSync(
+        path.join(cwd, 'astryx.config.mjs'),
+        "export default {experimental: {iconSet: 'glyphs'}};\n",
+      );
+      expect(sectionIds(await docsIndex())).toContain('installed-icon-set');
     },
     SLOW,
   );
