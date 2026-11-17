@@ -364,9 +364,9 @@ removal, the shared focus owner may use temporary programmatic-only focusability
 as FR22 specifies without adding a lasting tab stop or stealing caller-moved
 focus. Native Table structure, header scope, sort/selection/expansion semantics
 remain independently owned; the shared pipeline never confers correctness on a
-module's output. A composed `module:Table/useTableTreegrid` replaces the native
-table role with `treegrid` for a tree table and owns its row focus and keys; the
-Scroll region rule above is unchanged.
+module's output. An active `module:Table/useTableTreegrid` (its FR1) replaces
+the native table role with `treegrid` for a tree table and owns its row focus
+and keys; the Scroll region rule above is unchanged.
 
 ## Design relationships
 
