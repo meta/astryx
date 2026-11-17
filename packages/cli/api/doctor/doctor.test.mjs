@@ -429,10 +429,22 @@ describe("the check that the app loads Core's component styles", () => {
       },
     ],
     [
-      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}`,
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in postcss.config.mjs`,
       {
         'src/app/globals.css':
           "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        'postcss.config.mjs':
+          "export default {plugins: {'@astryxdesign/build/postcss': {}}};\n",
+      },
+    ],
+    [
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in .postcssrc.json`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        '.postcssrc.json': JSON.stringify({
+          plugins: {'@astryxdesign/build/postcss': {}},
+        }),
       },
     ],
   ])(
@@ -445,6 +457,16 @@ describe("the check that the app loads Core's component styles", () => {
       });
     },
   );
+
+  it('warns an app whose `@stylex;` rule is its own StyleX, with no PostCSS plugin of @astryxdesign/build', () => {
+    const own = app({
+      'src/app/globals.css':
+        "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+      'postcss.config.mjs':
+        "export default {plugins: {'@stylexjs/postcss-plugin': {}}};\n",
+    });
+    expect(checkCoreStylesheets(ctx(own))?.status).toBe('warn');
+  });
 
   it('passes an app that loads it beside a StyleX rule of its own', () => {
     const stylex = app({

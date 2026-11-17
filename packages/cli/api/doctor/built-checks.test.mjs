@@ -168,6 +168,25 @@ describe('built-astryx-styles', () => {
     expect(check('page').styles?.status).toBe('pass');
   });
 
+  it("passes a page that links Core's stylesheet, but not a link in a comment", () => {
+    const link =
+      '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@astryxdesign/core@0.7.16/dist/astryx.css" />';
+    write({
+      'dist/index.html': `<!doctype html><head>${link}</head><script type="module" src="/assets/index.js"></script>`,
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(check('dist').styles).toMatchObject({
+      status: 'pass',
+      message:
+        "index.html links @astryxdesign/core/astryx.css, Core's component styles.",
+    });
+    write({
+      'dist/index.html': `<!doctype html><head><!-- ${link} --></head><script type="module" src="/assets/index.js"></script>`,
+    });
+    expect(check('dist').styles?.status).toBe('warn');
+  });
+
   it("counts a source file or stylesheet that imports Core's stylesheet before any build", () => {
     write({
       'app/src/index.css':

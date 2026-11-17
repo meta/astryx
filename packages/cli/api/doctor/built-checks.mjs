@@ -127,6 +127,31 @@ const CORE_STYLES_MARK = /@layer\s+astryx-base\s*\{/;
 const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
 
 /**
+ * A page's link to Core's component styles: the package's file, from a
+ * package CDN (`…/@astryxdesign/core@<version>/dist/astryx.css`) or an
+ * installed copy.
+ */
+const CORE_STYLESHEET_HREF =
+  /@astryxdesign\/core(?:@[^/"'\s]+)?\/(?:dist\/)?astryx\.css(?:[?#"'\s]|$)/u;
+
+/**
+ * Whether a page links Core's component styles: a `<link>` whose `rel` is a
+ * stylesheet and whose `href` names the package's `astryx.css`. Comments
+ * never count.
+ * @param {string} html
+ */
+export function linksCoreStylesheet(html) {
+  const text = html.replace(/<!--[\s\S]*?-->/gu, ' ');
+  for (const tag of text.matchAll(/<link\b[^>]*>/giu)) {
+    const attributes = tag[0];
+    if (!/\brel\s*=\s*["']?[^"'>]*\bstylesheet\b/iu.test(attributes)) continue;
+    const href = /\bhref\s*=\s*(["'])([^"']*)\1/iu.exec(attributes)?.[2];
+    if (href && CORE_STYLESHEET_HREF.test(href)) return true;
+  }
+  return false;
+}
+
+/**
  * Raw elements the rubric names a component for (`astryx docs
  * is-my-code-good`, "Common component replacements"), with that owner.
  * @type {Readonly<Record<string, string>>}
@@ -212,6 +237,7 @@ const ICON_PACKAGES = [
  * @property {string[]} coreStyles those with Core's component styles
  * @property {string[]} coreStyleImports source files and stylesheets that
  *   import Core's component styles, which a build then carries
+ * @property {string[]} coreStyleLinks pages that link Core's component styles
  * @property {BuiltFinding[]} findings
  * @property {boolean} truncated whether the file limit cut the read short
  * @property {number} unread source files over the size limit, unreadable, or
@@ -621,6 +647,7 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
     styleFiles: 0,
     coreStyles: [],
     coreStyleImports: [],
+    coreStyleLinks: [],
     findings: [],
     truncated,
     unread: 0,
@@ -657,6 +684,9 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
       if (ext === '.css' || ext === '.html' || ext === '.htm') {
         scan.styleFiles++;
         if (CORE_STYLES_MARK.test(styles)) scan.coreStyles.push(rel);
+      }
+      if ((ext === '.html' || ext === '.htm') && linksCoreStylesheet(raw)) {
+        scan.coreStyleLinks.push(rel);
       }
       // A stylesheet that imports an Astryx package's CSS, as the
       // getting-started setup does, uses Astryx.
@@ -779,6 +809,14 @@ function coreStylesCheck(scan, target, cwd, sourceBuild) {
       label,
       status: 'pass',
       message: `Core's component styles are in ${scan.coreStyles.slice(0, 3).join(', ')}${scan.coreStyles.length > 3 ? ` and ${scan.coreStyles.length - 3} more` : ''}.`,
+    };
+  }
+  if (scan.coreStyleLinks.length > 0) {
+    return {
+      id: 'built-astryx-styles',
+      label,
+      status: 'pass',
+      message: `${scan.coreStyleLinks[0]} links ${CORE_STYLESHEET}, Core's component styles.`,
     };
   }
   if (scan.coreStyleImports.length > 0) {

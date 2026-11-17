@@ -358,8 +358,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   warns (`built-astryx-styles`) when output that uses Astryx carries none of
   Core's component styles; that warning becomes a failure in the next minor
   release, as its own `[breaking]` change. An app that compiles Core's styles
-  from source (`withAstryx()`, `astryxStylex()`, or an `@astryx;` or
-  `@stylex;` rule) gets neither warning.
+  from source (`withAstryx()`, `astryxStylex()`, an `@astryx;` rule, or an
+  `@stylex;` rule with `@astryxdesign/build` in the PostCSS config) gets
+  neither warning.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

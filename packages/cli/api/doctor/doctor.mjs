@@ -89,6 +89,7 @@ import {
   checkAppThemes,
   checkThemes,
   moduleSpecifiers,
+  stringValues,
   themeImportWiring,
   withProviderWiring,
 } from './theme-checks.mjs';
@@ -134,7 +135,7 @@ import {
   doctorStylesheetAtRules,
   builtProjectRoot,
 } from './_adapter.mjs';
-import {checkBuilt} from './built-checks.mjs';
+import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {
@@ -370,14 +371,6 @@ export function checkCoreInstalled(ctx) {
 /** Core's component styles, the stylesheet an Astryx app imports once. */
 const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
 
-/**
- * A page's link to Core's component styles: the package's file, from a
- * package CDN (`…/@astryxdesign/core@<version>/dist/astryx.css`) or an
- * installed copy.
- */
-const CORE_STYLESHEET_HREF =
-  /@astryxdesign\/core(?:@[^/"'\s]+)?\/(?:dist\/)?astryx\.css(?:[?#"'\s]|$)/u;
-
 /** Config files a build that compiles Core from source names its plugin in. */
 const SOURCE_BUILD_CONFIGS = [
   {stem: 'next.config', plugin: 'withAstryx()'},
@@ -387,12 +380,82 @@ const SOURCE_BUILD_CONFIGS = [
 /** The extensions those config files take. */
 const CONFIG_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
 
+/** The PostCSS config files PostCSS reads in JSON. */
+const POSTCSS_JSON_CONFIGS = ['.postcssrc', '.postcssrc.json'];
+
+/** @param {string} name */
+function namesBuildPackage(name) {
+  return (
+    name === '@astryxdesign/build' || name.startsWith('@astryxdesign/build/')
+  );
+}
+
+/**
+ * Every string in a JSON value, object keys included.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function jsonStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(jsonStrings);
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) => [
+      key,
+      ...jsonStrings(child),
+    ]);
+  }
+  return [];
+}
+
+/**
+ * The PostCSS config file that loads a plugin of `@astryxdesign/build`, which
+ * compiles Core's styles into the stylesheet's `@stylex;` rule, or null. A
+ * JavaScript or TypeScript config names it as a string (an import, a
+ * `require()` or a `plugins` key); a JSON config, or `package.json`'s
+ * `postcss` field, as a key or a value.
+ * @param {string} root
+ * @returns {string | null}
+ */
+function postcssConfigLoadingBuild(root) {
+  for (const extension of CONFIG_EXTENSIONS) {
+    const name = `postcss.config${extension}`;
+    for (const config of [name, `.postcssrc${extension}`]) {
+      let source;
+      try {
+        source = readTextFile(path.join(root, config));
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if ([...stringValues(source)].some(namesBuildPackage)) return config;
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const config of [...POSTCSS_JSON_CONFIGS, 'package.json']) {
+    let value;
+    try {
+      value = JSON.parse(readTextFile(path.join(root, config)));
+    } catch {
+      continue;
+    }
+    const postcss = config === 'package.json' ? value?.postcss : value;
+    if (jsonStrings(postcss).some(namesBuildPackage)) return config;
+  }
+  return null;
+}
+
 /**
  * How an app compiles Core's styles from its source with
  * `@astryxdesign/build`, so it loads no `astryx.css`: a `next.config` or
  * `vite.config` that imports the build's plugin (`withAstryx()`,
- * `astryxStylex()`), or a stylesheet with the `@astryx;` or `@stylex;` rule
- * the compiled rules are written into. Null when it does neither.
+ * `astryxStylex()`), a stylesheet with the `@astryx;` rule the Next.js
+ * PostCSS plugin writes the compiled rules into, or one with the `@stylex;`
+ * rule while the PostCSS config loads the build's plugin. An `@stylex;` rule
+ * alone is the app's own StyleX, which still needs Core's prebuilt styles.
+ * Null when it does none of these.
  * @param {string} root
  * @returns {string | null}
  */
@@ -432,13 +495,14 @@ export function sourceBuildSetup(root) {
     }
     if (!/@(?:astryx|stylex)\s*;/iu.test(css)) continue;
     const rules = doctorStylesheetAtRules(css);
-    const rule = rules.has('astryx')
-      ? '@astryx;'
-      : rules.has('stylex')
-        ? '@stylex;'
-        : null;
-    if (rule)
-      return `the \`${rule}\` rule in ${path.relative(root, file) || file}`;
+    const where = path.relative(root, file) || file;
+    if (rules.has('astryx')) return `the \`@astryx;\` rule in ${where}`;
+    if (rules.has('stylex')) {
+      const config = postcssConfigLoadingBuild(root);
+      if (config) {
+        return `the \`@stylex;\` rule in ${where}, with @astryxdesign/build in ${config}`;
+      }
+    }
   }
   return null;
 }
@@ -450,23 +514,6 @@ export function sourceBuildSetup(root) {
  */
 function sourceBuildOf(root) {
   return root ? sourceBuildSetup(root) : null;
-}
-
-/**
- * Whether a page links Core's component styles: a `<link>` whose `rel` is a
- * stylesheet and whose `href` names the package's `astryx.css`. Comments
- * never count.
- * @param {string} html
- */
-function linksCoreStylesheet(html) {
-  const text = html.replace(/<!--[\s\S]*?-->/gu, ' ');
-  for (const tag of text.matchAll(/<link\b[^>]*>/giu)) {
-    const attributes = tag[0];
-    if (!/\brel\s*=\s*["']?[^"'>]*\bstylesheet\b/iu.test(attributes)) continue;
-    const href = /\bhref\s*=\s*(["'])([^"']*)\1/iu.exec(attributes)?.[2];
-    if (href && CORE_STYLESHEET_HREF.test(href)) return true;
-  }
-  return false;
 }
 
 /**
