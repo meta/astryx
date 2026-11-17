@@ -27,6 +27,7 @@ import {
   pageColorNote,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
+import {pixelScale, readTraits} from './_picture-traits.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
 import {
   editedThemes,
@@ -115,7 +116,7 @@ function dialHelp(key, env) {
  * setting (a dial's rungs, a token's type and readers, a CSS property), an
  * aspect (text, corners...: the whole-theme tokens and dial), `colors` (how
  * the theme's colors are made), a plain-words question (exact commands), a
- * PNG picture (its main colors, or the color at points), or with `list` a
+ * PNG picture (its main colors and the look's traits measured from it, or the color at points), or with `list` a
  * list of dials, tokens, parts, groups or CSS properties.
  * @experimental
  * @param {string} subject a part, group, setting, aspect, question, or PNG file; with `list`, a filter
@@ -292,8 +293,16 @@ async function answer(subject, options, cwd, blindSaid = false) {
       };
     return {kind: 'list', subject: t, ...(await listItems(kind, t, cwd))};
   }
-  if (isPicture(t, cwd))
-    return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  if (isPicture(t, cwd)) {
+    const {traits, ...read} = pictureColors(t, cwd, at, count);
+    if (!traits) return {kind: 'picture', subject: t, ...read};
+    return {
+      kind: 'picture',
+      subject: t,
+      ...read,
+      ...(await pictureLook(cwd, options.theme, traits)),
+    };
+  }
   // What runs instead: the same subject without the picture option (a
   // real command), never a made-up file name.
   const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
@@ -2142,8 +2151,10 @@ function pictureColors(file, cwd, at, count) {
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
+  /** @type {Buffer} */
+  let bytes;
   try {
-    pic = decodePng(fs.readFileSync(abs));
+    pic = decodePng((bytes = fs.readFileSync(abs)));
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
@@ -2175,6 +2186,8 @@ function pictureColors(file, cwd, at, count) {
     };
   }
   const colors = mainColors(pic, count ?? 14);
+  // The look's traits, measured from the same pixels.
+  const traits = colors.length ? readTraits(pic, pixelScale(bytes)) : null;
   // Every pixel see-through: no color shows, as with a 0-pixel picture.
   if (!colors.length)
     throw new AstryxError(
@@ -2188,5 +2201,56 @@ function pictureColors(file, cwd, at, count) {
     height: pic.height,
     colors,
     points: null,
+    traits,
+  };
+}
+
+/**
+ * The commands that make a picture's measured look, each checked as `set`
+ * checks it: one result per trait, saying where it was read and how sure.
+ * A trait the theme already sets keeps the theme's own value (what was typed
+ * wins) and is named with the picture's reading instead.
+ * @param {string} cwd
+ * @param {string | undefined} name the theme asked for
+ * @param {ReturnType<typeof readTraits>} read
+ */
+async function pictureLook(cwd, name, read) {
+  const ctx = await context(cwd);
+  const env = await howTheme(ctx, cwd, name);
+  const own = env.data.settings;
+  /** @type {Array<{text: string, commands: string[], refused?: Array<{command: string, why: string, run?: string[]}>}>} */
+  const results = [];
+  const unsure = read.unsure.map(u => ({
+    text: `${u.trait} on ${u.on}: ${u.why}`,
+    ...(u.options ? {options: u.options.map(o => `${P} ${o.replace(/^set my /, `set ${env.slug} `)}`)} : {}),
+  }));
+  for (const tr of read.traits) {
+    const step = tr.step;
+    const kept = own.find(s => s.thing === step.thing && (s.on ?? null) === (step.on ?? null));
+    if (kept) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
+        options: [render(step, env.slug)],
+      });
+      continue;
+    }
+    const {commands, refused} = checked(env, [[step]]);
+    results.push({
+      text: `${tr.trait} on ${tr.on}: ${tr.value}, read from ${tr.read}${tr.sure === 'about' ? ' (about: few boxes)' : ''}`,
+      commands,
+      ...(refused.length ? {refused} : {}),
+    });
+  }
+  return {
+    theme: env.slug,
+    themeChosenBy: env.chosenBy,
+    ...(env.note ? {themeNote: env.note} : {}),
+    look: {
+      source: 'picture',
+      scale: read.scale,
+      traits: read.traits.map(({step, ...tr}) => tr),
+    },
+    results,
+    unsure,
   };
 }
