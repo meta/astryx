@@ -389,12 +389,16 @@ export const NEUTRAL_STOPS = ownTable({
   ),
 });
 /**
- * Neutral tokens a tinted gray draws inside its ramp too: primary ink.
+ * Neutral tokens a tinted gray draws inside its ramp too: its inks.
  * @type {ReadonlyArray<string>}
  */
 const TINTED_INK = Object.freeze([
   '--color-text-primary',
   '--color-icon-primary',
+  // Text on an inverted or dark surface (a toast, a card over the scrim):
+  // tinted with the surface it sits on.
+  '--color-on-dark',
+  '--color-on-light',
 ]);
 /**
  * Neutral tokens whose shade stays inside the ramp, off its white and black ends.
