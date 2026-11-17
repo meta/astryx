@@ -50,8 +50,8 @@ const tooltipModule = createModuleLoader(
 // The page's texts share one preload. It waits a frame and a task for the
 // paint, then loads the module once. A failed load lets the next text try
 // again, as the module loader does.
-let preload: Promise<{Tooltip: TooltipComponent}> | null = null;
-async function loadAfterNextPaint(): Promise<{Tooltip: TooltipComponent}> {
+let preload: ReturnType<typeof tooltipModule.load> | null = null;
+async function loadAfterNextPaint(): ReturnType<typeof tooltipModule.load> {
   preload ??= new Promise<void>(resolve => {
     requestAnimationFrame(() => {
       setTimeout(resolve, 0);
@@ -346,14 +346,14 @@ export function useCutTextOnKeyboardFocus({
     () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
   );
   const readModality = useInteractionModalityTrackingFor(anchorRef, isEnabled);
-  // Syncs with the module loader: the tooltip loads after the first render,
-  // so keyboard focus shows it at once.
+  // Syncs with the module loader: the tooltip loads after the first paint,
+  // so keyboard focus shows it at once and the first frame waits for nothing.
   useEffect(() => {
     if (!isEnabled || Tooltip != null) {
       return;
     }
     let isCurrent = true;
-    tooltipModule.load().then(
+    loadAfterNextPaint().then(
       loaded => {
         if (isCurrent) {
           setTooltip(() => loaded.UndescribedTooltip);
