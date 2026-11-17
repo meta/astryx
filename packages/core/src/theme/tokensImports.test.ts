@@ -2,10 +2,12 @@
 
 /**
  * @file tokensImports.test.ts
- * @input The source of theme/tokens.ts, theme/useTheme.ts, Icon, Button and
- *   every module they import
+ * @input The source of theme/tokens.ts, theme/useTheme.ts, Icon, Button, the
+ *   Button, Icon, Link and IconButton package entries, and every module they
+ *   import
  * @output Token resolution, and so a first load that renders an Icon or a
- *   Button, imports no theme-rule generator
+ *   Button, imports no theme-rule generator, also when every export of a
+ *   component entry is kept
  * @position Source boundary test of packages/core/src/theme/tokens.ts
  *
  * The walk follows static imports only: a type-only import is erased, and a
@@ -21,6 +23,9 @@ import ts from 'typescript';
 import {describe, expect, it} from 'vitest';
 
 const SRC = path.resolve(__dirname, '..');
+const PACKAGE_EXPORTS: Record<string, {source: string}> = JSON.parse(
+  fs.readFileSync(path.resolve(SRC, '../package.json'), 'utf8'),
+).exports;
 
 type Names = ReadonlySet<string> | 'all';
 
@@ -169,6 +174,18 @@ describe('the theme tokens first load', () => {
       'theme/generateThemeRules.ts',
     );
   });
+
+  // A host that lends a whole entry to other bundles keeps every export of
+  // it, so nothing that entry exports may reach the generator.
+  it.each(['./Button', './Icon', './Link', './IconButton'])(
+    'every export of the %s entry imports no theme-rule generator',
+    entry => {
+      const source = path.resolve(SRC, '..', PACKAGE_EXPORTS[entry].source);
+      expect(firstLoadModules(path.relative(SRC, source))).not.toContain(
+        'theme/generateThemeRules.ts',
+      );
+    },
+  );
 
   it('follows a re-export when an importer uses its name', () => {
     // Theme.tsx takes generateThemeCSS through defineTheme's re-export.
