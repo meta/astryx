@@ -424,6 +424,12 @@ describe('discover.search leaf, word by word', () => {
     expect(anyAvailableNamed(items, 'zzqqxx')).toBe(false);
     // One shared word is not enough.
     expect(anyAvailableNamed(items, 'bar zzqqxx')).toBe(false);
+    // A name typed with its words joined answers the query, as in discover.
+    expect(anyAvailableNamed(items, 'barchart')).toBe(true);
+    // The package's description adds the words the item's own text lacks.
+    expect(anyAvailableNamed(items, 'employee typeahead')).toBe(true);
+    // It never answers on its own.
+    expect(anyAvailableNamed(items, 'employee directory')).toBe(false);
     // A synonym search reads answers its word: "grid" is a table word.
     expect(
       anyAvailableNamed(

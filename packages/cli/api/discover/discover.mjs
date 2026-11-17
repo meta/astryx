@@ -168,7 +168,7 @@ export function answersQueries(project) {
 }
 
 /**
- * Whether a package the project could add has an item that carries a word of
+ * Whether a package the project could add has an item that answers the whole
  * `query` (see anyAvailableNamed), by the saved copies of the discover
  * sources' catalogs alone: no source is called. Null when no source has a
  * saved copy, so nothing is known. The search command reads it to point at

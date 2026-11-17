@@ -109,6 +109,22 @@ describe('discover reads every word of an unquoted query', () => {
     },
     TIMEOUT,
   );
+
+  it(
+    'opens an item from a package path and its item typed as two words',
+    async () => {
+      const r = await runCli(
+        ['discover', '@acme/charts', 'BarChart', '--json'],
+        {cwd: project},
+      );
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(JSON.parse(r.stdout)).toMatchObject({
+        type: 'discover.item',
+        data: {package: '@acme/charts', name: 'BarChart'},
+      });
+    },
+    TIMEOUT,
+  );
 });
 
 describe('search points at discover by the saved catalog copy', () => {

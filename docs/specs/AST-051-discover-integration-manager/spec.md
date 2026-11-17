@@ -97,8 +97,8 @@ discover sources follow it except where this record says otherwise.
   the list of matches, even when one name matches exactly or only one item
   matches, so the response type depends on the form of the query and never on
   what the project has. Every word typed after `discover` is part of the
-  query. The query MUST match word by word, with the word scorer `astryx
-search` uses: an item matches by the words of its name, title, summary,
+  query; after a package path, the next word is its item (FR3). The query
+  MUST match word by word, with the word scorer `astryx search` uses: an item matches by the words of its name, title, summary,
   and keywords, and its package's description adds only words the item's own
   text lacks. When an item matches every word, only such items are listed.
   Matches are ranked by how many words they match, then by how strongly
@@ -107,9 +107,10 @@ search` uses: an item matches by the words of its name, title, summary,
   its package. One item opens by its package path (FR3). When nothing
   matches, the not-found error MUST suggest the first Core component or hook
   that `astryx search` gives for the query, through the lookups'
-  other-command hint, when search answers the whole query with it by a name
-  or keyword: one word at search's keyword strength, or every word of a
-  longer query. It suggests nothing more when search gives no such entry.
+  other-command hint, after its own near names, when search answers the
+  whole query with it by a name or keyword: one word at search's keyword
+  strength, or every word of a longer query. It suggests nothing more when
+  search gives no such entry.
 - **FR5 — Filters follow the CLI's existing options.** `--type <kind>` keeps one
   kind (`component`, `template`, `doc`, `theme`, `codemod`, `agent-doc`): in the
   list, packages that add it; in a search, items of that kind. `--installed`
@@ -222,11 +223,15 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   saved copy of a discover source's full catalog exists (FR8), search MUST
   print that line only when an item of a package the project could add, from
   those copies or from the official packages no source covers (FR11),
-  answers every word of the query by its own text (name, title, summary, or
-  keywords), each word or a synonym search reads for it, in any form the
-  word scorer counts as the same word. When no saved copy exists, search prints the line. Search MUST
-  NOT call a discover source to decide; it reads only the saved copies and
-  the official list. Its JSON output carries no such line.
+  answers the whole query, as discover's every-word tier counts words: its
+  name or title is the query with its words joined, or each word of the
+  query, or a synonym search reads for it, is a word of the item's name,
+  title, summary, or keywords, with its package's description adding words
+  its own text lacks, in any form the word scorer counts as the same word.
+  The item's own text answers at least one word. When no saved copy exists,
+  search prints the line. Search MUST NOT call a discover source to decide;
+  it reads only the saved copies and the official list. Its JSON output
+  carries no such line.
 
 ### Platform support
 

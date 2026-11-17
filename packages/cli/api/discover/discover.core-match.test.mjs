@@ -20,7 +20,7 @@ vi.mock('./_adapter.mjs', async orig => {
           name: '@acme/widgets',
           category: '@acme/widgets',
           version: '1.0.0',
-          components: ['AlphaWidget'],
+          components: ['AlphaWidget', 'Beta'],
           dir: '/virtual/widgets',
           astryx: {},
           docsDir: '/virtual/widgets/docs',
@@ -125,6 +125,22 @@ describe('discover miss names Core match', () => {
     expect((await discover('zzdrag dropzz').catch(e => e)).suggestions).toEqual(
       [{name: 'astryx component FileInput', reason: 'a component'}],
     );
+  });
+
+  it("adds the hint after discover's own near names, never in place of one", async () => {
+    results = [
+      {
+        domain: 'component',
+        name: 'Dialog',
+        package: '@astryxdesign/core',
+        score: 90,
+      },
+    ];
+    const err = await discover('Betz').catch(e => e);
+    expect(err.suggestions).toEqual([
+      {name: '@acme/widgets/Beta', reason: 'similar name'},
+      {name: 'astryx component Dialog', reason: 'a component'},
+    ]);
   });
 
   it('keeps the miss as it is when search gives no Core component or hook', async () => {

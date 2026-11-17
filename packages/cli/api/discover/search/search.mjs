@@ -30,6 +30,7 @@ import {
 } from '../../search/_query.mjs';
 import {SYNONYM_INDEX} from '../../search/_synonyms.mjs';
 import {
+  joined,
   sameTermWord,
   spellIdentifiers,
   termWords,
@@ -128,37 +129,51 @@ function queryOf(query) {
 }
 
 /**
- * Whether an item a project could add answers every word of `query`, as an
- * item in discover's every-word tier does: each word, or a synonym search
- * reads for it, is a word of the item's name, title, summary, or keywords,
- * or a package's own description, in any form search counts as the same
- * word (plural, stem). One shared word is too weak a sign that discover has
- * what the reader asked for. It reads each word once, so it costs far less
- * than ranking every item.
+ * Whether an item a project could add answers the whole query by its words,
+ * the way discover's every-word tier counts them: its name or title is the
+ * query with its words joined (`barchart` is BarChart), or each word of the
+ * query, or a synonym search reads for it, is a word of the item's name,
+ * title, summary, or keywords, with its package's description adding words
+ * its own text lacks, in any form search counts as the same word (plural,
+ * stem). As in rank(), the item's own text must answer at least one word.
+ * It reads words and does not run search's scorer, so it counts no match
+ * that search finds only by a word's start, a typo, or a joined keyword.
  * @param {SearchItem[]} items
  * @param {string} query
  * @param {{type?: import('../../../authoring/discover/type').DiscoverKind}} [opts]
  * @returns {boolean}
  */
 export function anyAvailableNamed(items, query, {type} = {}) {
+  const whole = joined(query);
   // Each word of the query, with the synonyms search reads for it: any one
   // of them answers the word.
   const wanted = queryOf(query)
     .tokens.flatMap(token => wordsOf(token))
     .map(word => [word, ...(SYNONYM_INDEX.get(word) ?? [])].map(termWords));
-  if (wanted.length === 0) return false;
+  if (wanted.length === 0 || whole === '') return false;
+  /** @param {string[]} words @param {typeof wanted[number]} forms */
+  const answers = (words, forms) =>
+    forms.some(t => words.some(w => sameTermWord(t, w)));
   return items.some(item => {
     if (item.installed || (type != null && item.kind !== type)) return false;
-    const words = [
+    if (
+      joined(item.name) === whole ||
+      (item.title && joined(item.title) === whole)
+    ) {
+      return true;
+    }
+    const own = [
       item.name,
       item.title,
       item.summary,
       item.description,
       ...(item.keywords ?? []),
     ].flatMap(text => (text == null ? [] : wordsOf(text)));
-    return wanted.every(forms =>
-      forms.some(t => words.some(w => sameTermWord(t, w))),
-    );
+    if (!wanted.some(forms => answers(own, forms))) return false;
+    const all = item.packageDescription
+      ? [...own, ...wordsOf(item.packageDescription)]
+      : own;
+    return wanted.every(forms => answers(all, forms));
   });
 }
 

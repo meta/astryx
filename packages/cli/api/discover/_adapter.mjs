@@ -1286,7 +1286,8 @@ export async function loadValidatedDoc(result, {lang, zh}) {
 /**
  * The not-found error with Core's match for the query in its suggestions:
  * the first Core component or hook `astryx search` gives in `cwd`, as the
- * lookups' shared hint (foundation/suggest/other-command.mjs) names it, when
+ * lookups' shared hint (foundation/suggest/other-command.mjs) names it, after
+ * discover's own near names, when
  * search answers the whole query with it by a name or keyword: one word at
  * search's keyword strength, or every word of a longer query
  * (api/search/_score.mjs). A Core entry search found only through prose, or
@@ -1302,7 +1303,7 @@ export async function withCoreMatch(err, query, cwd) {
     const [
       {search, tokenizeQuery, spellIdentifiers},
       {FULL_COVERAGE_SCORE, STRONG_TOKEN_SCORE},
-      {hintFor, withOtherCommand, MATCH_TIER},
+      {hintFor, MATCH_TIER},
     ] = await Promise.all([
       import('../search/search.mjs'),
       import('../search/_score.mjs'),
@@ -1320,14 +1321,14 @@ export async function withCoreMatch(err, query, cwd) {
         : STRONG_TOKEN_SCORE;
     if (!core || core.score < strong) return err;
     const command = /** @type {'component' | 'hook'} */ (core.domain);
+    // The hint names another command, so it follows discover's own near
+    // names rather than taking the place of one.
     return new AstryxError(
       err.message,
-      withOtherCommand(
-        err.suggestions,
-        hintFor(command, core.name, undefined, MATCH_TIER.words),
-        query,
-        {from: command},
-      ),
+      [
+        ...(err.suggestions ?? []),
+        hintFor(command, core.name, undefined, MATCH_TIER.words).hint,
+      ],
       err.code,
     );
   } catch {

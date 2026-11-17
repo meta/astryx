@@ -27,7 +27,13 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
-import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
+import {
+  emit,
+  formatDeprecation,
+  section,
+  text,
+  records,
+} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -215,8 +221,8 @@ function withNotReadyKind(result) {
 
 /**
  * Whether the saved copy of a discover catalog has a package the project
- * could add with an item that carries a word of `query`, or null when that is
- * not known. No discover source is called. Never throws.
+ * could add with an item that answers the whole `query`, as discover's
+ * every-word tier counts words, or null when that is not known. No discover source is called. Never throws.
  * @param {Project | undefined} project
  * @param {string} query
  * @param {string | undefined} type
@@ -236,7 +242,8 @@ async function addableMatch(project, query, type) {
  * Search reads only what is installed. Point at `discover` for the packages
  * that could add more, except for hooks, which no integration adds. When the
  * saved copy of a discover catalog says no package the project could add
- * matches, discover has nothing to add, so the line is left out.
+ * answers the whole query, discover has nothing to add, so the line is left
+ * out.
  * @param {string} run - The caller's CLI invocation prefix.
  * @param {string} query
  * @param {string | undefined} type
