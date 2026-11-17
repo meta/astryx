@@ -11,11 +11,14 @@
  * to an app; each surface that prints such a step asks here first.
  *
  * @input  a folder
- * @output whether it is outside a project
+ * @output whether it is outside a project, or outside any package
  * @position foundation/env — read by the setup reminder, init, doctor, upgrade,
- *   and the theme, search, discover, and integration-check surfaces.
+ *   the theme, search, discover, and integration-check surfaces, and the
+ *   commands that refuse to run outside a project.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {runChoice} from '../release/run-context.mjs';
 
 /**
@@ -29,5 +32,28 @@ export function isOutsideProject(cwd = process.cwd()) {
   } catch {
     // A folder the release choice cannot read keeps its in-project output.
     return false;
+  }
+}
+
+/**
+ * True when `cwd` is outside any project and no package.json is at or above
+ * it: where a command that writes to a project or package refuses to run. A
+ * folder with a package.json at or above it is a package being authored,
+ * even before it declares Astryx.
+ * @param {string} [cwd]
+ * @returns {boolean}
+ */
+export function isOutsideAnyPackage(cwd = process.cwd()) {
+  return isOutsideProject(cwd) && !hasPackageJsonAbove(cwd);
+}
+
+/**
+ * Is there a package.json in `dir` or a folder above it?
+ * @param {string} dir
+ */
+function hasPackageJsonAbove(dir) {
+  for (let at = path.resolve(dir); ; at = path.dirname(at)) {
+    if (fs.existsSync(path.join(at, 'package.json'))) return true;
+    if (path.dirname(at) === at) return false;
   }
 }

@@ -24,11 +24,27 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
 import {hostedRun, recordResolved} from '../runtime/package-root.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * Whether `target`, a path or a file URL, names one of the CLI's own files:
+ * one inside the CLI's folder, outside the node_modules folder inside it. In
+ * an installed CLI, its build id stands for exactly these files (AST-081 FR7).
+ * @param {string} target
+ * @param {string} root - the CLI's folder in the same form, ending in `sep`
+ * @param {string} sep - the separator of that form
+ * @returns {boolean}
+ */
+export function isCliBuildFile(target, root, sep) {
+  return (
+    target.startsWith(root) && !target.startsWith(`${root}node_modules${sep}`)
+  );
+}
 
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
@@ -121,6 +137,19 @@ export function requireCoreDir(startDir = process.cwd()) {
 }
 
 /**
+ * The Core whose components, hooks, and docs this run reads: as
+ * {@link requireCoreDir} in a run on Core, and null in a run on another
+ * base, which reads no Core content. Each content reader treats null as no
+ * Core items and answers from the run's integrations alone.
+ *
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function coreContentDir(startDir = process.cwd()) {
+  return currentNonCoreBase() ? null : requireCoreDir(startDir);
+}
+
+/**
  * An Error carrying a stable error code, which the JSON envelope and every
  * command's error output read the way they read an API error's.
  * @param {string} message
@@ -151,6 +180,8 @@ export function findCarriedCoreDir(startDir, {fetch = false} = {}) {
  * @returns {{dir: string | null, unavailable: string | null, version?: string, reason?: string}}
  */
 function carriedCoreFor(startDir, fetch = false) {
+  // A run whose base is not Core never reads Core, so it never fetches one.
+  if (currentNonCoreBase()) return {dir: null, unavailable: null};
   const carried = carriedCore({fetch: false});
   if (!carried.dir && !fetch) return carried;
   if (runChoice(startDir).copy === 'project') {
@@ -169,6 +200,18 @@ function carriedCoreFor(startDir, fetch = false) {
  * @returns {string | null}
  */
 export function findProjectCoreDir(startDir = process.cwd()) {
+  // A run whose base is not Core reads no Core, even one the project installs.
+  if (currentNonCoreBase()) return null;
+  return installedProjectCoreDir(startDir);
+}
+
+/**
+ * The project's installed @astryxdesign/core, whatever base the run reads:
+ * the lookup that decides the run's base.
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function installedProjectCoreDir(startDir = process.cwd()) {
   const near = findNearbyCoreDir(startDir);
   if (near) return near;
   // A folder deeper than that reach still belongs to the project the walk to
@@ -301,7 +344,9 @@ export function homeFolder() {
  * @returns {boolean}
  */
 export function climbsOut(rel) {
-  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+  return (
+    rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`)
+  );
 }
 
 /**
@@ -691,14 +736,57 @@ function findNearbyCoreDir(startDir) {
  * @returns {string|null}
  */
 function findPnpPackage(startDir, name) {
-  if (!process.versions.pnp) return null;
+  const api = pnpApi(startDir);
+  if (!api) return null;
   try {
     const from = path.resolve(startDir);
-    const api = createRequire(path.join(from, 'noop.js'))('pnpapi');
     const dir = api.resolveToUnqualified(name, path.join(from, '/'));
     return dir && fs.existsSync(path.join(dir, 'package.json')) ? dir : null;
   } catch {
-    // The project does not declare it, or this is not a PnP process after all.
+    // The project does not declare it.
+    return null;
+  }
+}
+
+/**
+ * Does the workspace or package that holds `startDir` depend on `name`, by
+ * Yarn's Plug'n'Play runtime? Yarn then runs that package's commands from
+ * `startDir`, as a package runner runs a command it finds in
+ * `node_modules/.bin`. False outside a PnP process.
+ *
+ * @param {string} startDir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function pnpDependsOn(startDir, name) {
+  const api = pnpApi(startDir);
+  if (!api) return false;
+  try {
+    const from = path.join(path.resolve(startDir), '/');
+    const locator = api.findPackageLocator(from);
+    const info = locator ? api.getPackageInformation(locator) : null;
+    return Boolean(info?.packageDependencies?.get(name));
+  } catch {
+    // The runtime cannot place the folder.
+    return false;
+  }
+}
+
+/**
+ * The Plug'n'Play runtime's API, asked from `startDir`; null outside a PnP
+ * process.
+ *
+ * @param {string} startDir
+ * @returns {any}
+ */
+function pnpApi(startDir) {
+  if (!process.versions.pnp) return null;
+  try {
+    return createRequire(path.join(path.resolve(startDir), 'noop.js'))(
+      'pnpapi',
+    );
+  } catch {
+    // Not a PnP process after all.
     return null;
   }
 }
@@ -902,9 +990,11 @@ export function discoverExternalPackages(startDir = process.cwd()) {
  * List available component directories in packages/core/src.
  * Component directories are capitalized (`Button`, `Dialog`); lowercase
  * directories hold shared infrastructure and are never listed.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
+ * @returns {string[]}
  */
 export function listComponents(coreDir) {
+  if (coreDir == null) return [];
   const srcDir = path.join(coreDir, 'src');
   if (!fs.existsSync(srcDir)) return [];
 

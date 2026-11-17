@@ -110,6 +110,19 @@ describe.skipIf(process.platform === 'win32')("Node's compile cache", () => {
     expect(fs.readdirSync(tmp)).toEqual([]);
   });
 
+  it('leaves a compile cache Node already uses as it is, making no folder of its own', () => {
+    const tmp = path.join(work, 'node-cache');
+    const own = path.join(work, 'node-cache-own');
+    fs.mkdirSync(tmp);
+    const off = run(path.join(work, 'off-node-cache'), {
+      NODE_DISABLE_COMPILE_CACHE: '1',
+    });
+    expect(run(tmp, {NODE_COMPILE_CACHE: own})).toEqual(off);
+    expect(fs.readdirSync(tmp)).toEqual([]);
+    // Node's own cache took the CLI's modules.
+    expect(fs.readdirSync(own).length).toBeGreaterThan(0);
+  });
+
   it('is off with NODE_DISABLE_COMPILE_CACHE, which makes no folder either', () => {
     const tmp = path.join(work, 'disabled');
     fs.mkdirSync(tmp);

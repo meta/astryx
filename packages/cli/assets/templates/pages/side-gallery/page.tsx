@@ -99,7 +99,7 @@ export default function SideGalleryTemplate() {
       height="fill"
       contentWidth={1400}
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <Grid columns={{minWidth: 360, repeat: 'fit'}} gap={8} align="center">
             {/* Left side: Text + CTA */}
             <VStack gap={6} vAlign="center">
@@ -119,7 +119,7 @@ export default function SideGalleryTemplate() {
               </VStack>
 
               <HStack gap={3} vAlign="center">
-                <Button label="Explore" variant="primary" />
+                <Button label="Explore" variant="primary" href="#" />
               </HStack>
 
               <VStack gap={4}>

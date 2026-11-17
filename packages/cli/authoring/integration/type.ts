@@ -38,6 +38,20 @@ export interface AstryxIntegration {
    *  lower-kebab theme directory contains a source module and mandatory
    *  same-stem, strongly typed `.doc.mjs` descriptor. */
   themes?: string;
+  /** The one provider component that wires every theme under `themes` into
+   *  an app, when the package wires its themes itself rather than through
+   *  Astryx's `Theme`. `export` is the component's named export and `from`
+   *  the module specifier an app imports it from. Doctor counts a theme as
+   *  wired when the app renders that component; `theme list` names it. Each
+   *  theme's stylesheet stays the one its package exports for it. */
+  themeProvider?: {
+    export: string;
+    from: string;
+    /** The provider's prop that takes a theme object, when it takes one. */
+    themeProp?: string;
+    /** The provider's prop that takes a color mode; only with themeProp. */
+    modeProp?: string;
+  };
   /** Experimental contribution roots (spec:AST-017 FR27).
    *  @experimental Their shape may change or be removed in a patch release. */
   experimental?: {
@@ -73,6 +87,40 @@ export interface AstryxIntegration {
    *  `astryx doctor` warns. An invalid value is ignored with a warning; the
    *  rest of the manifest still loads. JSON output keeps commands bare. */
   cliCommand?: string;
+  /** Makes this package a base: a component library that stands in for
+   *  Core in a project that uses it. `adapters` maps a capability to the
+   *  module, relative to the package, that performs its platform steps; the
+   *  steps the module exports are the steps the base serves. `base: {}`
+   *  declares a base that serves content only. Core is a base too; the CLI
+   *  holds its declaration. See `astryx docs authoring`. */
+  base?: BaseDeclaration;
+}
+
+/** A capability a base declares one adapter module for. */
+export type BaseCapability =
+  'themes' | 'templates' | 'render' | 'icons' | 'setup';
+
+/** A platform step, named `<capability>.<step>`. The list is closed and
+ *  append-only; a command declares the steps it cannot run without. */
+export type BaseStep =
+  | 'themes.targets'
+  | 'themes.compile'
+  | 'themes.appModule'
+  | 'themes.template'
+  | 'themes.scaffold'
+  | 'themes.checks'
+  | 'templates.skeleton'
+  | 'templates.standalonePage'
+  | 'render.page'
+  | 'render.reverse'
+  | 'icons.appModule'
+  | 'setup.guide';
+
+/** What a base declares in its integration manifest. */
+export interface BaseDeclaration {
+  /** One module path per capability, relative to the package. A capability
+   *  this CLI does not know is ignored, so a newer base still loads. */
+  adapters?: Record<string, string>;
 }
 
 /**

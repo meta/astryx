@@ -205,6 +205,7 @@ describe('a picture never waits on a network', () => {
                  });
                  fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(asked));
                },
+               async evaluate() {},
                async screenshot({path}) { fs.writeFileSync(path, 'x'); },
              }; },
              async close() {},

@@ -58,14 +58,68 @@ function inputSurfaces(themeDef) {
 }
 
 /**
+ * The private variables in a tokens map that hold exactly what Core derives
+ * from the map's own public tokens (a duration's pre-tempo copy) or the
+ * value it reads with none set (a tempo of 1): a map spread from a defined
+ * theme's `tokens` carries them, and they change nothing, so they are no
+ * write of the author's.
+ * @param {Record<string, unknown>} tokens
+ * @param {((input: any) => any) | undefined} defineTheme Core's defineTheme
+ * @returns {Set<string>}
+ */
+export function derivedPrivateCopies(tokens, defineTheme) {
+  const names = Object.keys(tokens).filter(name => name.startsWith('--_'));
+  if (names.length === 0 || typeof defineTheme !== 'function') return new Set();
+  /** @type {Record<string, unknown>} */
+  let derived;
+  try {
+    derived =
+      defineTheme({
+        name: 'derived-private-copies',
+        tokens: Object.fromEntries(
+          Object.entries(tokens).filter(([name]) => !name.startsWith('--_')),
+        ),
+      })?.tokens ?? {};
+  } catch {
+    return new Set();
+  }
+  /** @type {Record<string, unknown>} */
+  let unset = {};
+  try {
+    unset = defineTheme({name: 'derived-private-copies'})?.tokens ?? {};
+  } catch {
+    // No theme without tokens: only derived copies count.
+  }
+  return new Set(
+    names.filter(name =>
+      [derived[name], unset[name]].includes(String(tokens[name])),
+    ),
+  );
+}
+
+/**
+ * Why a tokens map that carries Core's own copies (so it was spread from a
+ * defined theme's `tokens`) also sets another private variable: it comes
+ * with the spread, not from the author.
+ * @param {string} name
+ * @param {Set<string>} copies the map's Core copies, as `derivedPrivateCopies` finds them
+ */
+export function spreadPrivateVarMessage(name, copies) {
+  return `${name} is a private variable (--_*) that a defined theme's tokens carry, as they carry Core's own copies such as ${[...copies][0]}: the map is spread from one, so spread only the tokens you change, or extend that theme with extends`;
+}
+
+/**
  * Validate that authored theme input does not directly set private (`--_*`)
  * custom properties. Derived private variables emitted by the compiler are not
- * part of the input object and are valid.
+ * part of the input object and are valid, and so is a private variable that
+ * holds exactly the copy Core derives (`derivedPrivateCopies`).
  *
  * @param {Record<string, any>} themeDef
+ * @param {{defineTheme?: (input: any) => any}} [options] Core's defineTheme,
+ *   to tell Core's own copies
  * @returns {string[]}
  */
-export function validatePrivateVars(themeDef) {
+export function validatePrivateVars(themeDef, {defineTheme} = {}) {
   /** @type {string[]} */
   const errors = [];
 
@@ -78,11 +132,17 @@ export function validatePrivateVars(themeDef) {
       if (!values || typeof values !== 'object' || Array.isArray(values)) {
         continue;
       }
+      const copies =
+        field === 'tokens'
+          ? derivedPrivateCopies(values, defineTheme)
+          : new Set();
       for (const name of Object.keys(values)) {
-        if (!name.startsWith('--_')) continue;
+        if (!name.startsWith('--_') || copies.has(name)) continue;
         errors.push(
-          `${surface.name} ${field} sets private var "${name}". ` +
-            'Private vars (--_*) are internal; use a public token or standard CSS property instead.',
+          copies.size > 0
+            ? `${surface.name} ${field}: ${spreadPrivateVarMessage(name, copies)}.`
+            : `${surface.name} ${field} sets private var "${name}". ` +
+                'Private vars (--_*) are internal; use a public token or standard CSS property instead.',
         );
       }
     }
