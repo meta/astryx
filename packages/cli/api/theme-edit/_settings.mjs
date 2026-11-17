@@ -4904,6 +4904,28 @@ function keepShades(pal, kept) {
 }
 
 /**
+ * A text color set on a part reaches the text inside it that reads the
+ * text tokens (a checkbox label in a selected table row): the block sets the
+ * primary and secondary text tokens to that color too, unless it sets them
+ * itself. Each nested block (a pseudo-class, a mode's block) is handled the
+ * same way.
+ * @param {Record<string, any>} b - written in place
+ */
+function textColorReachesInside(b) {
+  if (!b || typeof b !== 'object') return;
+  const color = b.color;
+  if (
+    typeof color === 'string' &&
+    !/^(?:inherit|currentcolor|unset|initial|revert)$/i.test(color.trim())
+  )
+    for (const token of ['--color-text-primary', '--color-text-secondary'])
+      if (!(token in b)) b[token] = color;
+  for (const [k, v] of Object.entries(b))
+    if ((k.startsWith(':') || k.startsWith('@')) && v && typeof v === 'object')
+      textColorReachesInside(v);
+}
+
+/**
  * A border color carried to a frame's strength: its hue and chroma at the
  * lightness where it reads on the ground as the frame does. Null for a gray
  * border (it lends no color) or one that cannot reach that strength.
@@ -7771,8 +7793,18 @@ export function compileTheme(ctx, data, base) {
   for (const [target, keys] of Object.entries(theme.components ?? {}))
     for (const [key, b] of Object.entries(
       /** @type {Record<string, any>} */ (keys),
-    ))
+    )) {
       laterLonghandsAsSides(b, baseBlocks[target]?.[key]);
+      // A selected part that holds other parts (a table row and its
+      // cells' labels): its text color reaches the text inside it.
+      if (
+        key === 'selected' &&
+        /** @type {string[]} */ (
+          /** @type {any} */ (ctx.C?.MAP?.[target])?.contains ?? []
+        ).length
+      )
+        textColorReachesInside(b);
+    }
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
