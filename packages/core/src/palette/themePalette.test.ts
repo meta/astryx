@@ -124,6 +124,14 @@ describe('themePalette', () => {
     expect(themePalette(input)).toEqual(a);
     expect(Object.isFrozen(a)).toBe(true);
     expect(Object.isFrozen(a.tokens)).toBe(true);
+    expect(Object.isFrozen(a.components)).toBe(true);
+    for (const [part, blocks] of Object.entries(a.components)) {
+      expect(Object.isFrozen(blocks), part).toBe(true);
+      for (const lift of Object.values(blocks)) {
+        expect(Object.isFrozen(lift), part).toBe(true);
+        expect(Object.isFrozen(lift['@light']), part).toBe(true);
+      }
+    }
   });
 
   it('builds a theme for random seeds, settings and recipes', () => {
@@ -235,7 +243,7 @@ describe("themePalette's reading of Core's defaults", () => {
         input.vibrancy = Math.floor(next() * 101);
       }
       const recipe = next() < 0.5 ? PALETTE_RECIPE_V2 : PALETTE_RECIPE;
-      const palette = themePalette({...input, recipe} as ThemePaletteInput);
+      const palette = themePalette({...input, recipe});
       const dials = PALETTE_DIALS.filter(d => input[d] !== undefined).map(
         id => {
           const read = parseColor(String(input[id]));

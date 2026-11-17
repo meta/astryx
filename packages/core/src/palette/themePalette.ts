@@ -163,6 +163,13 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
     kind: 'theme-palette',
     recipe,
     tokens: Object.freeze(tokens),
-    components: Object.freeze(components),
+    components: Object.freeze(
+      Object.fromEntries(
+        Object.entries(components).map(([part, blocks]) => [
+          part,
+          Object.freeze(blocks),
+        ]),
+      ),
+    ),
   });
 }

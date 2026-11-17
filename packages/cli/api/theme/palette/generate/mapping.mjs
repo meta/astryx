@@ -1061,6 +1061,18 @@ export function anchorDarkFills(
   }
   return next.families;
 }
+/** An accent or status fill at its seed's stop, before dark mode is settled. */
+export const fillAt =
+  /**
+   * @param {number} stop
+   * @returns {PaletteFill}
+   */
+  stop => ({
+    stop,
+    dark: false,
+    why: '',
+    ratio: 0,
+  });
 /**
  * The generation request for color settings with no palette config of the
  * author's: one family per setting in setting order, each seed anchored
@@ -1094,7 +1106,7 @@ export function planPaletteRequest(dials, options, context) {
   for (const dial of dials) {
     const {family, stop} = dialFamily(dial, config, modes);
     if (dial.id !== 'neutral') {
-      fills[dial.id] = {stop, dark: false, why: '', ratio: 0};
+      fills[dial.id] = fillAt(stop);
     }
     config.families.push(family);
   }

@@ -82,6 +82,7 @@
 
 import {defineTheme} from '@astryxdesign/core/theme';
 // import {palette} from './palette.generated';
+// import {themePalette} from '@astryxdesign/core/palette';
 // import {dracula} from '@astryxdesign/core/theme/syntax';
 // import {neutralTheme} from '@astryxdesign/theme-neutral';
 

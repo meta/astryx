@@ -57,13 +57,14 @@ import {
   TEXT_STOP,
   VIBRANCY_DEFAULT,
   anchorDarkFills,
+  dialFamily,
+  fillAt,
   grownGrays,
   isGray,
   mapPalette,
   nearestShade,
   paletteToken,
   sameColor,
-  seedStop,
   shade,
 } from '../theme/palette/generate/mapping.mjs';
 /**
@@ -769,13 +770,11 @@ function planPalette(cwd, slug, data, base) {
       notes.push(
         `${file}: the ${f.id} seed ${old.seed} there is replaced by your ${f.id} setting, ${f.seed}`,
       );
-    const gray = isGray(f.seed);
+    const {family: made, stop} = dialFamily(f, config, modes);
+    // The setting's family as a fresh palette has it; of the author's
+    // family, a chromatic kind stays.
     const kind =
-      neutral || gray
-        ? 'neutral'
-        : old.kind === 'chromatic'
-          ? 'chromatic'
-          : undefined;
+      made.kind ?? (old.kind === 'chromatic' ? 'chromatic' : undefined);
     if (
       old.kind === 'neutral' &&
       !kind &&
@@ -785,25 +784,8 @@ function planPalette(cwd, slug, data, base) {
       notes.push(
         `${file}: the ${f.id} kind "neutral" is dropped: your ${f.id} is not a gray, and a neutral kind turns its shades gray where no exact color holds them`,
       );
-    const stop = seedStop(
-      f.seed,
-      config,
-      kind === 'neutral' ? 'neutral' : 'chromatic',
-    );
-    // White and black already end every ramp, so a neutral of either holds
-    // no anchor of its own.
-    const ends =
-      neutral &&
-      (sameColor(f.seed, PALETTE_WHITE) || sameColor(f.seed, PALETTE_BLACK));
     /** @type {any[]} */
-    const mine = ends
-      ? []
-      : (neutral ? modes : modes.filter(m => m === 'light')).map(m => ({
-          mode: m,
-          stop,
-          color: f.seed,
-          policy: 'exact',
-        }));
+    const mine = made.anchors ?? [];
     /** @type {any[]} */
     const kept = [];
     const anchors = Array.isArray(old.anchors) ? old.anchors : [];
@@ -844,7 +826,7 @@ function planPalette(cwd, slug, data, base) {
     const out = {
       ...old,
       id: f.id,
-      name: old.name ?? f.id[0].toUpperCase() + f.id.slice(1),
+      name: old.name ?? made.name,
       seed: f.seed,
       ...(kind ? {kind} : {}),
       anchors: [...mine, ...kept].sort((a, b) =>
@@ -870,16 +852,14 @@ function planPalette(cwd, slug, data, base) {
       const mine = fams.find(x => x.id === f.id);
       if (!mine) return null;
       const {family, stop} = familyOf(f, mine);
-      if (mine.id !== 'neutral')
-        fills[mine.id] = {stop, dark: false, why: '', ratio: 0};
+      if (mine.id !== 'neutral') fills[mine.id] = fillAt(stop);
       return family;
     })
     .filter(Boolean);
   for (const f of fams)
     if (!families.some(x => x?.id === f.id)) {
       const {family, stop} = familyOf(null, f);
-      if (f.id !== 'neutral')
-        fills[f.id] = {stop, dark: false, why: '', ratio: 0};
+      if (f.id !== 'neutral') fills[f.id] = fillAt(stop);
       families.push(family);
     }
   if (!families.length) return null;
