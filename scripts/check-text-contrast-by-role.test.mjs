@@ -115,10 +115,10 @@ function ruleSelector(part, key) {
  * card of a variant, itself inside an optional ancestor part, merged. The
  * selectors are matched on elements, as the browser matches them.
  */
-function insideCard(theme, part, key, variant, ancestor) {
+function insideCard(theme, part, key, variant, ancestors = []) {
   const root = document.createElement('div');
   let parent = root;
-  if (ancestor) {
+  for (const ancestor of ancestors) {
     const outer = partElement(...ancestor);
     parent.append(outer);
     parent = outer;
@@ -201,12 +201,23 @@ const NESTED = {
 /** Core's selector for a striped table's painted rows. */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
-/** Parts with a fill of their own that a card can sit inside. */
+/**
+ * The parts with a fill of their own that a card can sit inside, as chains
+ * from the outermost: a dialog, or a dialog inside another coloured card.
+ */
 const CARD_ANCESTORS = [
-  ['section', 'variant:section'],
-  ['dialog', 'base'],
-  ['card', 'variant:default'],
-  ['layout-content', 'base'],
+  [['section', 'variant:section']],
+  [['dialog', 'base']],
+  [['card', 'variant:default']],
+  [['layout-content', 'base']],
+  [
+    ['card', 'variant:blue'],
+    ['dialog', 'base'],
+  ],
+  [
+    ['card', 'variant:pink'],
+    ['popover', 'base'],
+  ],
 ];
 
 /** Parts drawn on the accent tint, with their own rule's key. */
@@ -333,7 +344,7 @@ function rows() {
             ])
               push({
                 ...base,
-                where: `${where} in a ${variant} card inside a ${ancestor.join(' ')}`,
+                where: `${where} in a ${variant} card inside ${ancestor.map(a => a.join(' ')).join(' > ')}`,
                 role,
                 text: at(tokens, role),
                 layers,

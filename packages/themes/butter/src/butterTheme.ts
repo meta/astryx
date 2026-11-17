@@ -162,11 +162,15 @@ function ruleSelector(part: string, key: string): string {
 const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
   variant => `.astryx-card[data-variant="${variant}"]`,
 ).join(', ')})`;
-const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} :is(${OWN_FILL_RULES.filter(
-  ([, , selector]) => !selector,
-)
+const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
   .map(([part, key]) => ruleSelector(part, key))
-  .join(', ')}) *))`;
+  .join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
+/**
+ * The same one level down: a coloured card inside a part with its own fill
+ * that itself sits in a coloured card.
+ */
+const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
 
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
@@ -505,18 +509,27 @@ export const butterTheme = defineTheme({
       selected: {
         '--color-text-secondary': LIFTED_ON_PAGE,
         [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
       },
     },
     'tree-list-item': {
       selected: {
         '--color-text-secondary': LIFTED_ON_PAGE,
         [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
       },
     },
     citation: {
       'variant:number': {
         '--color-text-secondary': LIFTED_ON_PAGE,
         [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
       },
     },
     'file-input': {
