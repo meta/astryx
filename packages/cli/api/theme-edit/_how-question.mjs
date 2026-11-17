@@ -553,6 +553,14 @@ function colorsIn(c) {
     .map(([, v]) => v);
 }
 
+/** A pronoun or a chat word ("button it", "cards thx", "plz"). */
+const PRONOUN_WORD =
+  /^(?:it|its|me|my|you|your|ur|we|us|our|they|them|their|this|that|these|those|thx|thanks|thank|plz|pls|please|lol|okay|ok|yeah|yes|hey|hi)$/;
+
+/** A joining or helping word ("buttons with", "cards should"). */
+const JOINING_WORD =
+  /^(?:and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/;
+
 /**
  * A clause that forbids a change ("don't make buttons rounder", "inputs
  * shouldn't be round"): it changes nothing and says what stays.
@@ -7323,7 +7331,7 @@ export function draftAnswer(ctx, env, question) {
     !clauses.some(c => c.parts.length > 0) &&
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   const lookSaid =
-    /\b(?:theme|look|feel|vibe|style|palette|brand|branding)\b/.test(q) ||
+    /\b(?:theme|look|feel|vibe|style|palette|brand(?:ed|ing)?)\b/.test(q) ||
     lookList;
   const namesAPart = clauses.some(c => c.parts.length > 0);
   for (let i = clauses.length - 1; i >= 0; i--) {
@@ -7343,14 +7351,21 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       continue;
-    if (
-      !lookSaid &&
-      (c.colors.length > 1 ||
-        !/^\s*(?:a|an|the)?\s*(?:(?:light|dark|deep|rich|bright|pale|soft)\s+)?[a-z-]+\s*[.!]?\s*$/.test(
-          c.text,
-        ))
-    )
-      continue;
+    // (A color said with only an ask's verb, a pronoun and joining words
+    // around it is said alone too: "make it blue", "it should be blue".)
+    const alone = c.text
+      .replace(/[.!,]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .every(
+        w =>
+          valueWord(w) ||
+          new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
+          verbWord(w) ||
+          PRONOUN_WORD.test(w) ||
+          JOINING_WORD.test(w),
+      );
+    if (!lookSaid && (c.colors.length > 1 || !alone)) continue;
     // (A look's own colors, "a sand palette", paint no part: only a part's
     // paint keeps the color off the dials.)
     const paints = c.aspects.some(
@@ -7393,6 +7408,27 @@ export function draftAnswer(ctx, env, question) {
       c.colors = [];
       clauses.splice(i + 1, 0, ...dials);
     }
+  }
+  // "blue accent buttons", "#0057ff brand actions": the color said right
+  // before the theme's color word is that color (the accent is blue), and
+  // the part takes the accent as it is; the color is never dropped.
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const c = clauses[i];
+    if (!c.parts.length || !c.colors.length || c.except) continue;
+    const role = /\b(?:accent|brand)\b/.exec(c.text);
+    if (!role) continue;
+    const before = colorsFound(c.text).filter(
+      ([at, , typed]) =>
+        at < (role.index ?? 0) &&
+        !typed &&
+        c.text.slice(at, role.index).trim().split(/\s+/).length <= 2,
+    );
+    const said = before.length ? before[before.length - 1][1] : null;
+    if (!said) continue;
+    const dial = clausesOf(`accent ${said}`, lex.parts);
+    if (dial.length !== 1) continue;
+    c.colors = c.colors.filter(x => x !== said);
+    clauses.splice(i + 1, 0, ...dial);
   }
   // "make the brown content area deep green": a color said before the part,
   // with another after it, says how the part looks now; the one after is
@@ -24453,14 +24489,10 @@ export function draftAnswer(ctx, env, question) {
         ),
       ) ||
       /(?:ly|er|est|ed|ing)$/.test(w) ||
-      // (A pronoun or a chat word: "button it", "cards thx", "plz".)
-      /^(?:it|its|me|my|you|your|ur|we|us|our|they|them|their|this|that|these|those|thx|thanks|thank|plz|pls|please|lol|okay|ok|yeah|yes|hey|hi)$/.test(
-        w,
-      ) ||
-      // (A joining or helping word: "buttons with", "cards should".)
-      /^(?:and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/.test(
-        w,
-      ),
+      // (A pronoun or a chat word: "button it", "cards thx", "plz"; a
+      // joining or helping word: "buttons with", "cards should".)
+      PRONOUN_WORD.test(w) ||
+      JOINING_WORD.test(w),
     );
   }
 
