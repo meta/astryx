@@ -660,6 +660,15 @@ function chroma(hex) {
 }
 
 /**
+ * A step as the command words after the prefix, for the theme `my`.
+ * @param {Trait['step']} st
+ */
+function stepText(st) {
+  const v = /^[\w.%-]+$/.test(st.value) ? st.value : `"${st.value}"`;
+  return `set my ${st.thing} ${v}${st.on ? ` --on ${st.on}` : ''}`;
+}
+
+/**
  * The pixel density a PNG says it was saved at: 2 for a 144-dpi (Retina)
  * screenshot, 1 for 72 or 96 dpi or when it names none.
  * @param {Buffer} bytes
@@ -706,8 +715,9 @@ export function readTraits(pic, scale = 1) {
       if (!b.round && b.edge <= 2 * scale && b.w >= 10 * scale) groups.checks.push(b);
     }
     else if (b.w >= 0.9 * W) continue;
-    // (A control holds text; a solid shape with none is a letter's core.)
-    else if (b.h >= 16 * scale && b.h <= 64 * scale && b.w >= 1.2 * b.h && b.w <= 8 * b.h && b.text !== 'none')
+    // (A control holds text, or is an empty field far wider than tall; a
+    // solid shape with neither is a letter's core.)
+    else if (b.h >= 16 * scale && b.h <= 64 * scale && b.w >= 1.2 * b.h && b.w <= 12 * b.h && (b.text !== 'none' || b.w >= 5 * b.h))
       groups[b.text === 'centered' ? 'button-like' : 'inputs'].push(b);
     else if (b.h > 64 * scale && b.w >= 120 * scale) groups.containers.push(b);
   }
@@ -872,6 +882,21 @@ export function readTraits(pic, scale = 1) {
         });
     }
   }
+  // Controls are told apart from badges and tags only by seeing more than
+  // one kind of them (buttons with labels and inputs with text at the
+  // start); a picture with one kind (a crop of badges) writes no control
+  // trait and says why.
+  const kinds = ['button-like', 'inputs'].filter(g => groups[g].length).length;
+  if (kinds < 2)
+    for (const t of traits.filter(x => x.on === 'button-like' || x.on === 'inputs')) {
+      traits.splice(traits.indexOf(t), 1);
+      unsure.push({
+        trait: t.trait,
+        on: t.on,
+        why: `${t.read} read ${t.value}, but only one kind of control shows, so this crop cannot tell controls from badges; send a full page`,
+        options: [stepText(t.step)],
+      });
+    }
   unsure.push({trait: 'font', on: 'theme', why: 'the typeface is not read from pictures; set the family you want with `set my font`'});
   return {traits, unsure, scale, boxes: read.boxes.length, lines: lines.length};
 }
