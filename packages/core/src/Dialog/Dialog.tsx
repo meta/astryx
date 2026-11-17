@@ -313,9 +313,33 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
+  // Each corner as the theme gives it (a logical corner first, else the
+  // physical corner it is in this direction, else the one radius).
   innerCorners: {
-    '--_container-corner-block-start': 'var(--_dialog-radius)',
-    '--_container-corner-block-end': 'var(--_dialog-radius)',
+    '--_container-corner-start-start': {
+      default:
+        'var(--_dialog-radius-start-start, var(--_dialog-radius-top-left, var(--_dialog-radius)))',
+      ':dir(rtl)':
+        'var(--_dialog-radius-start-start, var(--_dialog-radius-top-right, var(--_dialog-radius)))',
+    },
+    '--_container-corner-start-end': {
+      default:
+        'var(--_dialog-radius-start-end, var(--_dialog-radius-top-right, var(--_dialog-radius)))',
+      ':dir(rtl)':
+        'var(--_dialog-radius-start-end, var(--_dialog-radius-top-left, var(--_dialog-radius)))',
+    },
+    '--_container-corner-end-start': {
+      default:
+        'var(--_dialog-radius-end-start, var(--_dialog-radius-bottom-left, var(--_dialog-radius)))',
+      ':dir(rtl)':
+        'var(--_dialog-radius-end-start, var(--_dialog-radius-bottom-right, var(--_dialog-radius)))',
+    },
+    '--_container-corner-end-end': {
+      default:
+        'var(--_dialog-radius-end-end, var(--_dialog-radius-bottom-right, var(--_dialog-radius)))',
+      ':dir(rtl)':
+        'var(--_dialog-radius-end-end, var(--_dialog-radius-bottom-left, var(--_dialog-radius)))',
+    },
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {

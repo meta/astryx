@@ -339,11 +339,13 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // windowed Table includes the parent padding that it bleeds across.
   '--_table-bleed-block-start',
   '--_table-bleed-block-end',
-  // The container-padding record's corner geometry: a rounded Card, Dialog,
-  // or BottomSheet hands its block-edge radius to the shared corner
-  // publication beside container().
-  '--_container-corner-block-start',
-  '--_container-corner-block-end',
+  // The container-padding record's corner geometry: a rounded Card or Dialog
+  // hands the radius of each of its corners to the shared corner publication
+  // beside container().
+  '--_container-corner-start-start',
+  '--_container-corner-start-end',
+  '--_container-corner-end-start',
+  '--_container-corner-end-end',
   // The container-padding record's block-edge bleed: a padding publisher
   // gives its block padding only to a direct first or last Table.
   '--_container-bleed-block-start',

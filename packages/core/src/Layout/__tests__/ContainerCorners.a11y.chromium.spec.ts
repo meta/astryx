@@ -5,8 +5,8 @@
  * @file ContainerCorners.a11y.chromium.spec.ts
  * @input Built ContainerCorners stories and real Chromium keyboard input
  * @output Evidence that a full-bleed child takes the corner of the rounded
- *   container it reaches, minus the padding it keeps, and that its focus
- *   ring stays whole at that corner
+ *   container it reaches, minus the padding it keeps, each corner as the
+ *   theme gives it, and that its focus ring stays whole at that corner
  * @position Real-engine proof for container corner geometry; jsdom cannot
  *   resolve inherited custom properties into a used radius or paint a ring
  */
@@ -294,6 +294,52 @@ test.describe('Container corners (Chromium)', () => {
       '0px',
       '0px',
       '0px',
+    ]);
+  });
+
+  test('a table that fills a Card whose theme rounds only the top takes each corner as the card draws it', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-rounded-top', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['12px', '12px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
+    await tabTo(page, TABLE_REGION);
+    expect(
+      await ringPixelsOnCornerDiagonal(
+        page,
+        TABLE_REGION,
+        TABLE_REGION,
+        'top-left',
+      ),
+    ).toBeGreaterThan(0);
+  });
+
+  test('a logical corner a theme rounds reaches the table at that corner in a right-to-left page', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-start-corner-rtl', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['0px', '20px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
+  });
+
+  test('in a Dialog whose theme rounds only the bottom, only the last bleeding row takes corners', async ({
+    page,
+  }) => {
+    await mount(page, 'bleed-list-in-dialog-with-rounded-bottom', LIST_ROWS);
+    const count = await page.locator(LIST_ROWS).count();
+    expect(await radii(page, LIST_ROWS, 0)).toEqual([
+      '0px',
+      '0px',
+      '0px',
+      '0px',
+    ]);
+    expect(await radii(page, LIST_ROWS, count - 1)).toEqual([
+      '0px',
+      '0px',
+      '16px',
+      '16px',
     ]);
   });
 });

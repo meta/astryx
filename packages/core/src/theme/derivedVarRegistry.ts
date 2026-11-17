@@ -33,6 +33,15 @@ export interface DerivedVarEntry {
    * element both reads the var and applies the property, e.g. Chat/DropdownMenu).
    */
   replaces?: boolean;
+  /**
+   * A `borderRadius` entry whose component also reads each corner on its
+   * own: the theme pipeline writes every corner of the radius to
+   * `<var>-top-left`, `-top-right`, `-bottom-right` and `-bottom-left` (from
+   * the shorthand or a physical longhand) and to `<var>-start-start`, …
+   * (from a logical longhand), so a radius of different corners reaches what
+   * the component hands each corner to (a full-bleed child of a Card).
+   */
+  corners?: boolean;
 }
 
 /**
@@ -48,7 +57,7 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
   'bottom-sheet': [{property: 'padding', expand: 'container'}],
   button: [{property: 'borderRadius', vars: ['--_button-radius']}],
   card: [
-    {property: 'borderRadius', vars: ['--_card-radius']},
+    {property: 'borderRadius', vars: ['--_card-radius'], corners: true},
     {property: 'padding', expand: 'container'},
   ],
   'chat-composer': [
@@ -59,16 +68,24 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
   ],
   dialog: [
-    {property: 'borderRadius', vars: ['--_dialog-radius']},
+    {property: 'borderRadius', vars: ['--_dialog-radius'], corners: true},
     {property: 'padding', expand: 'container'},
   ],
   drawer: [{property: 'padding', expand: 'container'}],
   'context-menu': [
-    {property: 'borderRadius', vars: ['--_dropdown-menu-radius']},
+    {
+      property: 'borderRadius',
+      vars: ['--_dropdown-menu-radius'],
+      corners: true,
+    },
     {property: 'padding', vars: ['--_dropdown-menu-padding']},
   ],
   'dropdown-menu': [
-    {property: 'borderRadius', vars: ['--_dropdown-menu-radius']},
+    {
+      property: 'borderRadius',
+      vars: ['--_dropdown-menu-radius'],
+      corners: true,
+    },
     {property: 'padding', vars: ['--_dropdown-menu-padding']},
   ],
   field: [{property: 'borderRadius', vars: ['--_field-radius']}],

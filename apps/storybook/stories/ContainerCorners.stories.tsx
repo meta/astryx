@@ -4,7 +4,7 @@
  * @file ContainerCorners.stories.tsx
  * @input Card, Dialog, BottomSheet, Section, Table, and List
  * @output Stories where a full-bleed child meets, or stops short of, a
- *   rounded container corner
+ *   rounded container corner, including corners a theme gives different radii
  * @position Storybook evidence for container corner geometry. The
  *   ContainerCorners Chromium spec reads these stories.
  */
@@ -19,6 +19,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Table} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
 const meta: Meta = {
   title: 'Core/ContainerCorners',
@@ -244,4 +245,69 @@ export const TableInBottomSheet: Story = {
       </BottomSheet>
     );
   },
+};
+
+/** A theme that rounds only a Card's top corners. */
+const roundedTopCard = defineTheme({
+  name: 'container-corners-rounded-top-card',
+  components: {card: {base: {borderRadius: '12px 12px 0 0'}}},
+});
+
+/** A theme that rounds only a Card's start-start corner, written logically. */
+const startCornerCard = defineTheme({
+  name: 'container-corners-start-corner-card',
+  components: {card: {base: {borderRadius: 0, borderStartStartRadius: '20px'}}},
+});
+
+/** A theme that rounds only a Dialog's bottom corners. */
+const roundedBottomDialog = defineTheme({
+  name: 'container-corners-rounded-bottom-dialog',
+  components: {dialog: {base: {borderRadius: '0 0 16px 16px'}}},
+});
+
+/**
+ * A theme gives the Card's corners different radii: the table that fills it
+ * takes each corner as the card draws it.
+ */
+export const TableInCardWithRoundedTop: Story = {
+  render: () => (
+    <Theme theme={roundedTopCard} mode="light">
+      <div style={{width: 360}}>
+        <Card>
+          <OrdersTable />
+        </Card>
+      </div>
+    </Theme>
+  ),
+};
+
+/**
+ * The same Card's start-start corner, written as a logical corner, in a
+ * right-to-left page: the table rounds the top-right corner, where the card
+ * does.
+ */
+export const TableInCardWithStartCornerRtl: Story = {
+  render: () => (
+    <Theme theme={startCornerCard} mode="light">
+      <div dir="rtl" style={{width: 360}}>
+        <Card>
+          <OrdersTable />
+        </Card>
+      </div>
+    </Theme>
+  ),
+};
+
+/**
+ * A theme rounds only the Dialog's bottom corners: the first bleeding row
+ * stays square and the last takes the bottom corners.
+ */
+export const BleedListInDialogWithRoundedBottom: Story = {
+  render: () => (
+    <Theme theme={roundedBottomDialog} mode="light">
+      <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+        <BleedList />
+      </Dialog>
+    </Theme>
+  ),
 };

@@ -93,10 +93,34 @@ const styles = stylex.create({
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
-  // A full-bleed child reaches under the border, so it takes the outer radius.
+  // A full-bleed child reaches under the border, so it takes the outer radius,
+  // each corner as the theme gives it (a logical corner first, else the
+  // physical corner it is in this direction, else the one radius).
   corners: {
-    '--_container-corner-block-start': 'var(--_card-radius)',
-    '--_container-corner-block-end': 'var(--_card-radius)',
+    '--_container-corner-start-start': {
+      default:
+        'var(--_card-radius-start-start, var(--_card-radius-top-left, var(--_card-radius)))',
+      ':dir(rtl)':
+        'var(--_card-radius-start-start, var(--_card-radius-top-right, var(--_card-radius)))',
+    },
+    '--_container-corner-start-end': {
+      default:
+        'var(--_card-radius-start-end, var(--_card-radius-top-right, var(--_card-radius)))',
+      ':dir(rtl)':
+        'var(--_card-radius-start-end, var(--_card-radius-top-left, var(--_card-radius)))',
+    },
+    '--_container-corner-end-start': {
+      default:
+        'var(--_card-radius-end-start, var(--_card-radius-bottom-left, var(--_card-radius)))',
+      ':dir(rtl)':
+        'var(--_card-radius-end-start, var(--_card-radius-bottom-right, var(--_card-radius)))',
+    },
+    '--_container-corner-end-end': {
+      default:
+        'var(--_card-radius-end-end, var(--_card-radius-bottom-right, var(--_card-radius)))',
+      ':dir(rtl)':
+        'var(--_card-radius-end-end, var(--_card-radius-bottom-left, var(--_card-radius)))',
+    },
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {

@@ -15,8 +15,9 @@ import * as stylex from '@stylexjs/stylex';
 
 /**
  * Corner publication for a rounded padding publisher (Card, Dialog). The host
- * sets `--_container-corner-block-start` and `--_container-corner-block-end` to
- * the radius at each block edge.
+ * sets `--_container-corner-start-start`, `-start-end`, `-end-start` and
+ * `-end-end` to the radius of each of its corners, so a radius of different
+ * corners reaches the child as it is drawn.
  *
  * A corner goes only to the host's first or last child when that child reads
  * corners (it carries `data-container-corner`). A reader deeper inside could
@@ -27,28 +28,28 @@ export const containerCornerStyles = stylex.create({
     '--container-corner-start-start': {
       default: '0px',
       ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_container-corner-block-start, 0px)',
+        default: 'var(--_container-corner-start-start, 0px)',
         ':has(> * [data-container-corner])': '0px',
       },
     },
     '--container-corner-start-end': {
       default: '0px',
       ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_container-corner-block-start, 0px)',
+        default: 'var(--_container-corner-start-end, 0px)',
         ':has(> * [data-container-corner])': '0px',
       },
     },
     '--container-corner-end-start': {
       default: '0px',
       ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_container-corner-block-end, 0px)',
+        default: 'var(--_container-corner-end-start, 0px)',
         ':has(> * [data-container-corner])': '0px',
       },
     },
     '--container-corner-end-end': {
       default: '0px',
       ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_container-corner-block-end, 0px)',
+        default: 'var(--_container-corner-end-end, 0px)',
         ':has(> * [data-container-corner])': '0px',
       },
     },
