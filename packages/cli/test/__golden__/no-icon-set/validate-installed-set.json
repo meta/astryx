@@ -317,7 +317,6 @@
             "words": [
               "<text>",
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -325,7 +324,6 @@
             "name": "bank",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>"
             ]
@@ -369,7 +367,6 @@
             "name": "bookmarkAdd",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>"
             ]
@@ -479,8 +476,6 @@
             "words": [
               "<text>",
               "<text>",
-              "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -497,7 +492,6 @@
             "name": "conversation",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>",
@@ -564,7 +558,6 @@
             "words": [
               "<text>",
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -572,7 +565,6 @@
             "name": "discount",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -601,7 +593,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -628,7 +619,6 @@
             "name": "emoji",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -729,7 +719,6 @@
             "name": "folderAdd",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>"
             ]
           },
@@ -974,7 +963,6 @@
               "<text>",
               "<text>",
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1002,7 +990,6 @@
               "<text>",
               "<text>",
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1010,7 +997,6 @@
             "name": "notificationOff",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>",
@@ -1146,7 +1132,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1154,7 +1139,6 @@
             "name": "refresh",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1383,7 +1367,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1391,7 +1374,6 @@
             "name": "thumbsUp",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1440,7 +1422,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1476,7 +1457,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1493,7 +1473,6 @@
             "name": "userRemove",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>"
             ]

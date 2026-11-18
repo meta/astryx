@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'thumbsDown',
   description: 'Give negative feedback.',
-  words: ['dislike', 'bad', 'hand thumb down'],
+  words: ['dislike', 'bad'],
 };

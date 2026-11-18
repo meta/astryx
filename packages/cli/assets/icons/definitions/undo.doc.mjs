@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'undo',
   description: 'Undo the last change.',
-  words: ['revert', 'back', 'arrow uturn left'],
+  words: ['revert', 'back'],
 };

@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'moreHorizontal',
   description: 'Open more actions for an item.',
-  words: ['more', 'overflow', 'actions', 'ellipsis', 'ellipsis horizontal'],
+  words: ['more', 'overflow', 'actions', 'ellipsis'],
   builtIn: true,
 };

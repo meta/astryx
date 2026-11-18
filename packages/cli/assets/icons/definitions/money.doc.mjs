@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'money',
   description: 'Money, prices or payments.',
-  words: ['price', 'payment', 'cost', 'currency', 'currency dollar'],
+  words: ['price', 'payment', 'cost', 'currency'],
 };

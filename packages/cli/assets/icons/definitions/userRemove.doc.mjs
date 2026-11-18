@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'userRemove',
   description: 'Remove a person from a group, chat, or team.',
-  words: ['remove person', 'user minus', 'kick'],
+  words: ['remove person', 'kick'],
 };

@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'chevronsLeft',
   description: 'Jump to the first item or page.',
-  words: ['first', 'start', 'chevron double left'],
+  words: ['first', 'start'],
   builtIn: true,
 };
