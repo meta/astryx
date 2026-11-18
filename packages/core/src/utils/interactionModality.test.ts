@@ -224,6 +224,41 @@ describe('interactionModality', () => {
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
   });
 
+  it('keeps hearing a second window across a release and hold in one commit', async () => {
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const secondDocument = host.contentDocument as Document;
+    const secondWindow = secondDocument.defaultView as Window;
+    const tracker = await loadTracker();
+    const ring = () =>
+      secondDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    const first = secondDocument.createElement('button');
+    const next = secondDocument.createElement('button');
+    secondDocument.body.append(first, next);
+    try {
+      let release = tracker.__trackInteractionModalityInForTest(secondDocument);
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      expect(ring()).toBe('0');
+
+      // An object-ref consumer releases and holds again after a commit.
+      release();
+      release = tracker.__trackInteractionModalityInForTest(secondDocument);
+      await Promise.resolve();
+      expect(ring()).toBe('0');
+
+      // Focus leaves the window, then comes back by keyboard to another
+      // element: the rings show on that first stop.
+      vi.spyOn(secondDocument, 'activeElement', 'get').mockReturnValue(first);
+      secondWindow.dispatchEvent(new FocusEvent('blur'));
+      vi.restoreAllMocks();
+      next.dispatchEvent(new FocusEvent('focusin', {bubbles: true}));
+      expect(ring()).toBe('');
+      release();
+    } finally {
+      host.remove();
+    }
+  });
+
   it("drops a second document's ring override with its last consumer, but not across a release and hold in one commit", async () => {
     const secondDocument = document.implementation.createHTMLDocument();
     const tracker = await loadTracker();
