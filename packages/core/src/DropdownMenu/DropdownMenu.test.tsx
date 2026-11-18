@@ -929,6 +929,40 @@ describe('DropdownMenu', () => {
     expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
   });
 
+  it('keeps an open sub-menu of the sheet by its id when a row is inserted above it', async () => {
+    const user = userEvent.setup();
+    let insert: () => void = () => {};
+    function Growing() {
+      const [hasArchive, setHasArchive] = useState(false);
+      insert = () => setHasArchive(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            ...(hasArchive
+              ? [{id: 'archive', label: 'Archive', items: [{label: 'Old'}]}]
+              : []),
+            {id: 'projects', label: 'Projects', items: [{label: 'Docs'}]},
+          ]}
+        />
+      );
+    }
+    render(<Growing />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'Projects'}));
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    act(() => insert());
+
+    expect(
+      await screen.findByRole('button', {name: 'Docs'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Old'})).toBeNull();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
