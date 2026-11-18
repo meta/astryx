@@ -46,6 +46,14 @@ shared icon names under FR17.
   host platform or its own libraries for them.
 - Adding Astryx React Native screens to an existing native iOS or Android app
   (brownfield) is not a v0 target.
+- Equivalent internal implementations remain valid when they satisfy this
+  contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
+  topology belong in architecture or implementation unless callers or
+  interoperating systems intentionally depend on that exact mechanism as a public
+  protocol. In that case, state who depends on it and why an equivalent
+  implementation would not satisfy the contract.
 
 ## Requirements
 
