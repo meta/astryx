@@ -166,10 +166,15 @@ and remains available through explicit Core package selection.
   from it.** Help text, the README command and error-code tables, and the
   manifest are generated. None of them is written by hand. Every command and
   subcommand's `CommandDoc` declares `outsideProject`, which the manifest
-  publishes (`spec:AST-081` FR4). A component doc's optional
-  `playground.mobile` holds the props of its render at a phone viewport,
-  merged over `defaults`; the theme editor's part census renders it as the
-  component's mobile layout.
+  publishes (`spec:AST-081` FR4). A `CommandDoc` marks text that names other
+  commands or options as `pointers`: a command's pointers follow its summary,
+  and an option's `pointers` are the parts that continue its description,
+  each plain text or a pointer with the command paths it names. Help leaves
+  out a pointer when the run's base does not serve every path it names; the
+  manifest, `astryx docs`, and search read the whole text. A component doc's
+  optional `playground.mobile` holds the props of its render at a phone
+  viewport, merged over `defaults`; the theme editor's part census renders it
+  as the component's mobile layout.
 - **INV8 — Exit codes do not depend on the output mode.** The same condition
   exits the same way with and without `--json`, so a command works as a gate
   without parsing stdout.
