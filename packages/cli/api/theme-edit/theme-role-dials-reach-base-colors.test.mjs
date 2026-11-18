@@ -3,7 +3,7 @@
 /**
  * @file A role color the theme sets (accent, success, warning, danger,
  * info) reaches the parts where the base theme draws that role on its own:
- * butter's success badge and progress fill in its written-out green, its
+ * butter's success badge in its written-out green, its progress fill, its
  * nav links in its own blue, stone's success banner pointed at its green.
  * The parts take the theme's color, the missed list stops listing them, and
  * a color the theme sets on the part itself stays.

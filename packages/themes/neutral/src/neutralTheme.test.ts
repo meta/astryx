@@ -657,6 +657,12 @@ describe('neutral progress fill', () => {
     });
   });
 
+  it('reads secondary text at stop 30 in light mode', () => {
+    expect(neutralTheme.tokens['--color-text-secondary']).toBe(
+      lightDark(light[30], dark[65]),
+    );
+  });
+
   it.each([
     {name: 'light', track: light[85], fill: light[30]},
     {name: 'dark', track: dark[35], fill: dark[75]},

@@ -5024,7 +5024,7 @@ const ROLE_OF_DIAL = /** @type {const} */ ({
  * token) must be written onto a part for it to show, because the base theme
  * draws that role there on its own:
  * - a variant named for the role in a color of the base's palette written
- *   out (butter's success badge, stone's success progress fill) points at
+ *   out (butter's success badge) points at
  *   the role's token, as Core draws that variant;
  * - a role token the base points at another token on a part (stone's
  *   success banner at its green) takes the theme's own value there

@@ -215,6 +215,9 @@ describe('butter progress fills', () => {
         backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
       });
       // Secondary text in light mode is stop 45.
+      expect(butterTheme.tokens['--color-text-secondary']).toBe(
+        `light-dark(${neutral.light[45]}, ${neutral.dark[70]})`,
+      );
       expect(contrast(neutral.light[45], track.light)).toBeGreaterThanOrEqual(
         3,
       );

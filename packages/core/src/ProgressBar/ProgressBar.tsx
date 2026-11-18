@@ -132,8 +132,8 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * inside the filled area uses the color that reads on the fill (on-accent
    * on an accent fill, the surface color on the others), while a mark still
    * out on the bare track uses
-   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, which
-   * dims everything it draws). Each mark's required `label` names it for
+   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, whose
+   * track and fill dim). Each mark's required `label` names it for
    * assistive tech and is revealed via a `Tooltip` on hover/focus. Ignored when
    * `isIndeterminate` is true.
    */

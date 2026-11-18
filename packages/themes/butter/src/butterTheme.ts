@@ -729,8 +729,7 @@ export const butterTheme = defineTheme({
     },
 
     // Progress bar — pale track in light, warm brown in dark. Status fills take
-    // the theme's status roles, which reach 3:1 on that track; the banner stops
-    // read at about 1.2:1 to 2.6:1 on it in light mode.
+    // the theme's status roles, which reach 3:1 on that track.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),

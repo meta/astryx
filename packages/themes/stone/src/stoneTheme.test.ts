@@ -161,6 +161,9 @@ describe('stone strong status contrast', () => {
         backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
       });
       // Secondary text in light mode is stop 40.
+      expect(stoneTheme.tokens['--color-text-secondary']).toBe(
+        `light-dark(${neutral.light[40]}, ${neutral.dark[70]})`,
+      );
       expect(
         contrast(neutral.light[40], neutral.light[85]),
       ).toBeGreaterThanOrEqual(3);

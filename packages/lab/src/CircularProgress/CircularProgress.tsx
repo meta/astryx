@@ -134,8 +134,9 @@ export interface CircularProgressProps extends BaseProps<HTMLDivElement> {
    */
   isIndeterminate?: boolean;
   /**
-   * When true, the circular progress is visually disabled — the ring and
-   * text use disabled colors. Use for canceled or inactive operations.
+   * When true, the circular progress is visually disabled: the ring takes the
+   * neutral fill and the whole ring, center content included, draws at half
+   * opacity. Use for canceled or inactive operations.
    * @default false
    */
   isDisabled?: boolean;

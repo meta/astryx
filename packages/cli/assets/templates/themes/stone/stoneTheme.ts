@@ -403,8 +403,8 @@ export const stoneTheme = defineTheme({
       },
     },
 
-    // A mark on a fill is light ink on the mid-tone light fills and dark ink
-    // on the pale dark fills.
+    // A mark on a fill is light ink on the dark light-mode fills (stops 30 and
+    // 40) and dark ink on the pale dark-mode fills.
     'progress-bar-mark': {
       'placement:fill+variant:accent': {
         backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
