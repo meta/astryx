@@ -42,6 +42,12 @@ export interface OutsidePressOptions {
    */
   readonly onPan?: () => void;
   /**
+   * A touch or pen press outside that pans past the shared pan distance is a
+   * gesture, not a press: its lift calls no `onOutside`. Ignored with
+   * `closesOnPan` or `onPan`.
+   */
+  readonly ignoresPans?: boolean;
+  /**
    * Called as each press the watch follows begins, with whether it is
    * inside. The watch then judges no lift: a press that starts and ends
    * outside calls no `onOutside` and counts no dismissal. Each shadow root
@@ -81,35 +87,47 @@ export function outsideDismissalCount(doc: Document): number {
  *   watched.
  * @param isInside - Whether a press with this composed path is inside.
  * @param onOutside - Called once for each press that starts and ends outside,
- *   as native light dismiss does. With `closesOnPan`, also when that press
- *   pans or is cancelled.
+ *   as native light dismiss does, with the event that ended it. With
+ *   `closesOnPan`, also when that press pans or is cancelled. Returning
+ *   `false` means the layer stays open, so the press is not counted as an
+ *   outside dismissal.
  * @returns Stops watching.
  */
 export function watchOutsidePress(
   owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
-  onOutside: () => void,
+  onOutside: (event: PointerEvent) => unknown,
   {
     pointerTypes,
     closesOnPan = false,
     onPan,
     onPress,
+    ignoresPans = false,
     root = null,
   }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
   const reportPan = closesOnPan ? undefined : onPan;
-  const followsPans = closesOnPan || reportPan != null;
+  const skipsPans = ignoresPans && !closesOnPan && reportPan == null;
+  const followsPans = closesOnPan || reportPan != null || skipsPans;
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
   const follows = (event: PointerEvent) =>
     pointerTypes == null || pointerTypes.includes(event.pointerType);
-  const close = () => {
+  const dismiss = (event: PointerEvent) => {
+    // Count the dismissal before the owner closes, so a backdrop handler
+    // that runs during the close already reads it.
+    const count = outsideDismissalCount(doc);
+    noteOutsideDismissal(doc);
+    if (onOutside(event) === false) {
+      outsideDismissals.set(doc, count);
+    }
+  };
+  const close = (event: PointerEvent) => {
     startedOutside = false;
     panStart = null;
-    noteOutsideDismissal(doc);
-    onOutside();
+    dismiss(event);
   };
 
   // Capture phase, so a press whose target stops propagation is still seen.
@@ -130,9 +148,10 @@ export function watchOutsidePress(
     startedOutside = !isInside(event.composedPath());
     onPress?.(!startedOutside);
     if (followsPans) {
-      panStart = startedOutside
-        ? {id: event.pointerId, x: event.clientX, y: event.clientY}
-        : null;
+      panStart =
+        startedOutside && !(skipsPans && event.pointerType === 'mouse')
+          ? {id: event.pointerId, x: event.clientX, y: event.clientY}
+          : null;
     }
   };
   const handleMove = (event: PointerEvent) => {
@@ -157,7 +176,12 @@ export function watchOutsidePress(
         }
         return;
       }
-      close();
+      if (skipsPans) {
+        startedOutside = false;
+        panStart = null;
+        return;
+      }
+      close(event);
     }
   };
   const judgeUp = (event: PointerEvent) => {
@@ -173,8 +197,7 @@ export function watchOutsidePress(
     startedOutside = false;
     panStart = null;
     if (wasOutside && !isInside(event.composedPath())) {
-      noteOutsideDismissal(doc);
-      onOutside();
+      dismiss(event);
     }
   };
   // The document and each root see a lift inside a deeper closed root as a
@@ -208,7 +231,7 @@ export function watchOutsidePress(
       return;
     }
     if (closesOnPan && panStart?.id === event.pointerId) {
-      close();
+      close(event);
     } else if (!closesOnPan) {
       startedOutside = false;
       panStart = null;
@@ -256,7 +279,7 @@ export interface OutsidePressWatch {
   start: (
     owner: Element,
     isInside: (path: ReadonlyArray<EventTarget>) => boolean,
-    onOutside: () => void,
+    onOutside: (event: PointerEvent) => unknown,
     options?: OutsidePressOptions,
   ) => void;
   /** Stop watching; does nothing when no watch is running. */
