@@ -6,7 +6,8 @@
  * button red for destructive actions" the destructive button's, "heading
  * style: bold" the headings'; "from the images" is no picture to match;
  * "works in light and dark" is both modes on a one-mode theme; a look is
- * named for a brand only when it says so ("stripe-like").
+ * named for a thing by position ("stripe-like", "whatsapp theme"), and a
+ * describing word keeps its meaning ("a calm theme").
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -120,10 +121,20 @@ describe("a part said beside a mode, a role or a look is that part's", () => {
     );
   });
   it('a look named for a brand asks for its colors; a feel word is only not taken', async () => {
-    const brand = await how('q0', 'a stripe-like look');
-    expect(brand.some(r => /never guesses a brand's colors/.test(r.text))).toBe(
-      true,
-    );
+    // (By position: a word the editor does not hold, said as a look's
+    // name, names a thing.)
+    for (const ask of [
+      'a stripe-like look',
+      'whatsapp theme',
+      'a spotify look',
+      'make it look like Apple',
+    ]) {
+      const brand = await how('q0', ask);
+      expect(
+        brand.some(r => /never guesses a brand's colors/.test(r.text)),
+        ask,
+      ).toBe(true);
+    }
     const calm = await how('q0', 'a calm theme');
     expect(calm.some(r => /never guesses a brand's colors/.test(r.text))).toBe(
       false,

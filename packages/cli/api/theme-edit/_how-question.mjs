@@ -12916,11 +12916,12 @@ export function draftAnswer(ctx, env, question) {
     String.raw`^(?:${PRODUCT_WORDS}|themes?|everything|everywhere|ui|whole|all|overall|global|globally|it|them|they|this|that|these|those|mine|ours)$`,
   );
   /** A word that describes rather than names ("clean", "warmer", "Stripe-like"). */
+  /** The describing words of a look ("clean", "calm", "roomy"). */
+  const DESCRIBING =
+    /^(?:clean|flat|bold|calm|soft|warm|cool|crisp|sharp|round|neat|plain|simple|fresh|modern|sleek|elegant|subtle|vivid|muted|pastel|neon|retro|dense|compact|roomy|airy|tight|loose|thin|thick|big|small|large|tiny|huge|light|dark|bright|pale|deep|rich|pure|solid|clear|strong|faint|new|old|nice|good|great|more|less|least|most|fewer|very|super|extra|much|way|slightly|bit|little|lot|too|so|quite|really|also|just|only|now|then|still|even)$/;
   const describes = (/** @type {string} */ w) =>
     /(?:y|ful|ish|ive|al|ic|ous|less|like|est|ern|ed|ing|er|ly)$/.test(w) ||
-    /^(?:clean|flat|bold|calm|soft|warm|cool|crisp|sharp|round|neat|plain|simple|fresh|modern|sleek|elegant|subtle|vivid|muted|pastel|neon|retro|dense|compact|roomy|airy|tight|loose|thin|thick|big|small|large|tiny|huge|light|dark|bright|pale|deep|rich|pure|solid|clear|strong|faint|new|old|nice|good|great|more|less|least|most|fewer|very|super|extra|much|way|slightly|bit|little|lot|too|so|quite|really|also|just|only|now|then|still|even)$/.test(
-      w,
-    );
+    DESCRIBING.test(w);
   /**
    * The subject a clause names that how does not know: the words leading
    * it (after its politeness and its verb) up to its first look, value,
@@ -28213,7 +28214,7 @@ export function draftAnswer(ctx, env, question) {
   // way, parts among them or not: "page loud and fast: black background,
   // …, heavy condensed headings" names "fast".)
   const lookAsk =
-    /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b|\b[a-z]+-like\b|\blooks?\s+(?:like|as)\b/.test(
+    /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b|\b[a-z]+-like\b|\blooks?\s+(?:like|as)\b|\ban?\s+[a-z]+\s+(?:look|style)\b/.test(
       q,
     ) || q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
@@ -28263,13 +28264,30 @@ export function draftAnswer(ctx, env, question) {
     // look", names something how cannot see: its colors are asked for,
     // never guessed.)
     const lookWrites = result.some(r => r.options.some(o => o.length));
-    const namedFor = notTaken.filter(
-      w =>
-        !lookWrites &&
-        new RegExp(
-          String.raw`\b${w.replace(/-like$/, '')}-like\b|\b(?:like|as)\s+${w}\b`,
-        ).test(q.toLowerCase()),
+    // (By position, never a list of brands: a word said as a look's name,
+    // "<word> theme", "<word>-like", "like <word>", that the editor's own
+    // words do not hold (a dial's help, a feel, a describing word) names
+    // a thing; a word it holds keeps its meaning, "a calm theme".)
+    const dialWords = new Set(
+      Object.values(DIALS).flatMap(
+        d =>
+          `${d.help ?? ''} ${d.words ?? ''}`.toLowerCase().match(/[a-z]+/g) ??
+          [],
+      ),
     );
+    const namedFor = notTaken.filter(w => {
+      const word = w.replace(/-like$/, '');
+      if (
+        lookWrites ||
+        dialWords.has(word) ||
+        DESCRIBING.test(word) ||
+        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly)$/.test(word)
+      )
+        return false;
+      return new RegExp(
+        String.raw`\b${word}(?:-like)?\s+(?:theme|look|style|vibe)\b|\b${word}-like\b|\b(?:like|as)\s+${word}\b`,
+      ).test(q.toLowerCase());
+    });
     if (namedFor.length)
       result.push({
         text: `how does not know what ${namedFor.map(w => `"${w.replace(/-like$/, '')}"`).join(', ')} looks like and never guesses a brand's colors: give them as hex (the accent, the page, the text), with its font and how round its corners are, and how writes each`,
