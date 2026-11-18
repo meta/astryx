@@ -21805,10 +21805,39 @@ export function draftAnswer(ctx, env, question) {
                 const w = splitTop(String(x), ' ').map(y => y.trim());
                 return [w[0], w[1] ?? w[0]];
               });
-              const hs = pairs.map(x => x[0]).join(' ');
-              const vs = pairs.map(x => x[1]).join(' ');
+              const one = (/** @type {string[]} */ xs) =>
+                xs.every(x => x === xs[0]) ? xs[0] : xs.join(' ');
+              const hs = one(pairs.map(x => x[0]));
+              const vs = one(pairs.map(x => x[1]));
               return hs === vs ? hs : `${hs} / ${vs}`;
             };
+            // (A radius of four is physical and the corner longhands are
+            // logical: a radius of four only when the corners named are the
+            // top, the bottom or all four, which are the same in either
+            // direction. Else each corner's logical longhand.)
+            const sameEitherWay =
+              named.corners.length === 4 ||
+              (named.corners.length === 2 &&
+                (named.corners.every(k => k.startsWith('start-')) ||
+                  named.corners.every(k => k.startsWith('end-'))));
+            /** @param {Record<string, string | null>} at @param {string[]} keys */
+            const writeAll = (at, keys) =>
+              ALL.every(k => at[k] != null) && sameEitherWay
+                ? [
+                    set(
+                      'border-radius',
+                      radiusOf(ALL.map(k => String(at[k]))),
+                      {...f, ...modeOf(c)},
+                    ),
+                  ]
+                : ['start-start', 'start-end', 'end-start', 'end-end']
+                    .filter(k => at[k] != null && keys.includes(k))
+                    .map(k =>
+                      set(`border-${k}-radius`, String(at[k]), {
+                        ...f,
+                        ...modeOf(c),
+                      }),
+                    );
             const nowAt =
               ownNow != null
                 ? fourOf(String(ownNow).trim())
@@ -21891,12 +21920,10 @@ export function draftAnswer(ctx, env, question) {
               return {
                 text: `${sideWords(named.corners)} on ${on}: already rounded (now ${nowSaid}); ${sideWords(others)} stay as they are. To square ${sideWords(others)} too, as "only" says, run this line`,
                 options: [
-                  [
-                    set('border-radius', radiusOf(squared), {
-                      ...f,
-                      ...modeOf(c),
-                    }),
-                  ],
+                  writeAll(
+                    Object.fromEntries(ALL.map((k, n) => [k, squared[n]])),
+                    others,
+                  ),
                 ],
                 offer: true,
               };
@@ -21909,24 +21936,13 @@ export function draftAnswer(ctx, env, question) {
             // (Every corner written: one radius of four, top-left first,
             // clockwise, as CSS gives them, elliptical where a corner has
             // two radii. Else the longhands of the corners that change.)
-            const every = ALL.every(k => target[k] != null);
             /** @type {Step[]} */
-            const steps = every
-              ? [
-                  set(
-                    'border-radius',
-                    radiusOf(ALL.map(k => String(target[k]))),
-                    {...f, ...modeOf(c)},
-                  ),
-                ]
-              : changing.map(k =>
-                  set(`border-${k}-radius`, String(target[k]), {
-                    ...f,
-                    ...modeOf(c),
-                  }),
-                );
+            const steps = writeAll(
+              target,
+              ALL.every(k => target[k] != null) ? ALL : changing,
+            );
             return {
-              text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}, ${squareRest && others.length ? `${sideWords(others)} square` : 'the other corners as they are'}`,
+              text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}${!others.length ? '' : squareRest ? `, ${sideWords(others)} square` : ', the other corners as they are'}`,
               options: [steps],
               ...(steps.length > 1 ? {sequence: true} : {}),
             };
