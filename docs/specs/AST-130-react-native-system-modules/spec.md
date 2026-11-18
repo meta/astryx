@@ -237,8 +237,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   - `getRunOverride()` (feature `run-override`) answers the run's own override
     synchronously, or `null` when the saved choice is in force, so the first
     render matches the first frame.
-  - With the configuration plugin's `appearance.launchLinkParameter` set
-    (default: off), a link on one of the app's own schemes whose named query
+  - With `appearance.launchLinkParameter` set in the app's configuration
+    (default: off), which the generated native project carries
+    (`spec:AST-112/FR4`), a link on one of the app's own schemes whose named query
     parameter is `light`, `dark` or `system` applies that appearance natively
     as a run-only override at cold launch only: when the first activity is
     created on Android, and when the app's first window scene connects on iOS,
@@ -329,7 +330,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     Simulator and an emulator without a camera; `null` where the platform does
     not say.
   - A permission the app did not declare answers `not-declared` and shows no
-    prompt; the configuration plugin declares it when the app opts the
+    prompt. The generated native project declares it when the app opts the
     capability in (`spec:AST-112/FR4`).
   - Where the module is absent, Android answers through React Native's
     `PermissionsAndroid` (which reads `undetermined` until a `request` in this
