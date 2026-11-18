@@ -110,8 +110,8 @@ export default function FormSimplePage() {
     <Center role="main" axis="horizontal">
       <VStack hAlign="center" width="100%">
         <Section
-          maxWidth={800}
           width="100%"
+          maxWidth={800}
           padding={6}
           paddingBlock={10}
           variant="section">
