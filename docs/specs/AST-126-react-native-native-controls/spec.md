@@ -66,7 +66,7 @@ control:
 | `AstryxNativeSlider`        | `@react-native-community/slider` wraps UISlider and Android's seek bar, with the thumb on the UI thread.                                                                         | The capability gap is small. Astryx adds a throttled value stream with a separate commit, a controlled value that snaps back (FR9), accessibility value words and step, and right-to-left mirroring; the main reasons are the dependency set and Stage parity. OQ1.                   |
 | `AstryxNativeTextField`     | React Native's `TextInput` is already UITextField or EditText: keyboard, IME, selection and autofill are the system's.                                                           | No gap in text editing: the library's default TextInput uses React Native's `TextInput`. The native piece adds only the system's box: UITextField's rounded or filled style and Material 3's outlined TextInputLayout, with status colours and an SF Symbol. OQ1.                     |
 | `AstryxSegmentedControl`    | `@react-native-segmented-control/segmented-control` wraps UISegmentedControl on iOS and draws its own on Android.                                                                | UISegmentedControl's titles stay one size at every text size; Astryx's control scales its titles with Dynamic Type, grows with them, and hands back to the drawn control before a title would be cut (FR6). Icons come from Astryx icon names, and the selection is controlled (FR9). |
-| `AstryxDatePicker` (view)   | `@react-native-community/datetimepicker` wraps UIDatePicker (compact, inline, spinner).                                                                                          | Values cross as ISO wall-clock strings, never `Date` objects, so a date never shifts a day across time zones (DEC-4). The view sits inside the library's date sheet and field (FR7), with the theme's accent and mode.                                                                |
+| `AstryxDatePicker` (view)   | `@react-native-community/datetimepicker` wraps UIDatePicker (compact, inline, spinner).                                                                                          | Values cross as ISO wall-clock strings, never `Date` objects, so the picked calendar day stays the same in every time zone (DEC-4). The view sits inside the library's date sheet and field (FR7), with the theme's accent and mode.                                                  |
 | `AstryxDatePicker` (module) | The same package shows Android's date and time dialogs, including a Material design option.                                                                                      | Material 3's date range dialog, results instead of rejections (`spec:AST-112/FR6`), presentation from the calling surface, one dialog at a time, and ISO strings in both directions.                                                                                                  |
 | `AstryxPasteControl`        | `expo-clipboard`'s paste button wraps UIPasteControl on iOS 16 and later.                                                                                                        | No capability gap. Astryx owns it for the dependency set, Stage parity, the theme's fill and radius on the control, and so that PasteButton draws it with PasteButton's API (FR8). OQ1.                                                                                               |
 
@@ -170,9 +170,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     Symbol drawn before the label; the library resolves its icon names to it.
   - Android draws a Material 3 button: filled, tonal or text by variant, the
     theme's error colour for `destructive`. It draws no icon.
-  - The control's own touch tracking decides a press. On iOS the button stops
-    tracking once the finger travels further than the library's press slop, the
-    same distance the drawn Button uses. Every completed activation calls
+  - The system control decides when a touch is a press. On iOS a touch that
+    moves further than the drawn Button's press distance is not a press. Every completed activation calls
     `onPress` once.
 - **FR4 — Native slider.** `NativeSlider` takes `value`, `min`, `max`, `step`
   (0: continuous), `onChange`, `onChangeEnd`, `onSlidingChange`,
@@ -185,8 +184,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     lifts, when the touch is cancelled, and after each accessibility increment
     or decrement. `onSlidingChange` hears `true` when a drag starts and `false`
     when it ends.
-  - `step` snaps the thumb as it moves. A `value` that arrives while the thumb
-    is held applies on release.
+  - `step` snaps the thumb as it moves. During a drag the finger controls the
+    thumb; a new `value` from the caller takes effect when the drag ends.
   - `isRTL` mirrors the slider: the minimum is at the right edge and the track
     fills from the right.
   - `showsValueIndicator` asks for a floating value label; iOS has none and
@@ -217,12 +216,12 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   `layout` (`hug`, `fill`), `size`, `isDisabled`, the appearance props of FR11,
   `accessibilityLabel`, and `onFittingSize`.
   - iOS draws UISegmentedControl. A segment draws its title, or with
-    `isTitleHidden` its SF Symbol; UIKit draws one or the other, not both.
+    `isTitleHidden` its SF Symbol. A segment never shows both.
   - `hug` sizes each segment to its content; `fill` gives every segment the
     same width.
   - Titles scale with Dynamic Type, and the control grows with them.
     `onFittingSize` reports the control's fitting size, so the library draws its
-    own segments when the titles do not fit (FR2). A title is never cut.
+    own segments when the titles do not fit (FR2). Every title shows in full.
   - The selected segment keeps UIKit's fill and title colours unless the theme
     paints them (FR11).
   - Android has no host; `SegmentedControl` draws its own segments there.
@@ -234,37 +233,41 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     `wheels`) or a `pill` drawn like the compact picker. With a value and
     `compact`, the field row shows UIDatePicker's compact pill with its own
     popover. Otherwise the pill opens the library's sheet: the inline calendar
-    or a time list, or the wheels, with Cancel leading and Done trailing; Done
-    commits. A range opens a sheet with Starts and Ends rows that bound each
+    or a time list, or the wheels, with a Cancel button at the start and a Done
+    button at the end; only Done changes the value. A range opens a sheet with Starts and Ends rows that bound each
     other. The view takes the locale, first weekday, minute interval, hour
     cycle, bounds, and the appearance props of FR11.
   - Android: `openDate`, `openDateRange` and `openTime` show Material 3's date,
     date range and time dialogs over the calling surface's activity (a
-    request's `rootTag`, else the top-most). Every option has a default:
-    `openDate({})` opens at today with the platform's words. A `dateTime` field
-    is two dialogs, date then time; a dismissed step keeps the value.
+    request's `rootTag`, else the activity in front). Every option has a
+    default: `openDate({})` opens on today's date with Material's button
+    labels. A `dateTime` field
+    is two dialogs, date then time; dismissing either dialog leaves the value
+    unchanged.
   - A dialog call resolves the picked value, `cancelled` when the person backs
     out, `unavailable` when no dialog can show at that moment (no activity, or one
     already showing), `invalid-value` when the dialog returns none, `not-linked` or
     `no-module` when the module is absent, or `error`. It never rejects. A field
     shows one dialog at a time.
   - A failure other than `cancelled` reaches the field's `onError`; without
-    one, a development build warns. The field never does nothing silently.
+    one, a development build warns. A failed open is always visible to the
+    caller.
   - The library plays its `select` haptic when a pick commits from a surface
     that played no system feedback (the compact pill's calendar, the inline
-    calendar, the dialogs), never after the wheels, which tick.
+    calendar, the dialogs). The wheels give their own system feedback, so no
+    library haptic follows them.
 - **FR8 — System paste control.** `NativePasteControl` takes `onPaste`,
   `acceptedTypes` (a subset of `text`, `url`, `image`; default `text`),
   `isDisabled`, `foregroundTint`, `backgroundTint`, `cornerRadius` (negative:
   the system capsule), `displayMode` (`iconAndLabel`, `label`), the appearance
   props of FR11 and `accessibilityHint`.
-  - iOS 16 and later draw UIPasteControl. The person's tap on the system's own
-    control is the permission, so iOS shows no paste prompt.
-  - What was pasted reaches JavaScript only as `onPaste`, once per paste, the
-    most specific accepted kind first: `{type: 'url', url}`, then
-    `{type: 'image', uri, width, height}`, then `{type: 'text', text}`. An image
-    is a PNG file under the app's temporary folder, valid until the next launch;
-    the app copies what it keeps. Nothing reads the pasteboard (DEC-5).
+  - iOS 16 and later draw UIPasteControl. A tap on it grants access to the
+    pasteboard for that one paste, so iOS asks no paste question.
+  - Each paste calls `onPaste` once with one value, in this order of
+    preference among the accepted kinds: `{type: 'url', url}`,
+    `{type: 'image', uri, width, height}`, `{type: 'text', text}`. An image
+    arrives as a PNG file in the app's temporary folder. The file can disappear
+    at the app's next launch, so an app that keeps the image copies it. Nothing reads the pasteboard (DEC-5).
   - The system enables the control only while the pasteboard holds an accepted
     kind. Its words and glyph are always the system's.
   - The view is never served to a preview project; PasteButton draws its
@@ -276,17 +279,18 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   shows the person's change at once, and the caller's value stays the truth.
   - Slider: after each commit the wrapper renders once more; when the caller's
     `value` still differs from the committed value, it sends
-    `restoreValue(value)` and the thumb goes back.
+    `restoreValue(value)`, which moves the thumb to the caller's value.
   - SegmentedControl: after each tap the wrapper renders once more; when
     `selectedIndex` still differs from the tapped index, it sends
-    `restoreSelectedIndex(index)` and the control snaps back.
+    `restoreSelectedIndex(index)`, which selects the caller's segment again.
   - TextField: every change the field reports carries a count, and the wrapper
     sends the latest count it has seen back as `mostRecentEventCount` with
     `text`. The field applies `text` only when it has seen every change it sent,
     so an older value never overwrites a keystroke. This is
     React Native's own `TextInput` scheme.
-- **FR10 — A control sizes itself.** A Fabric component without a measure
-  function has no intrinsic size, so every control reports its fitting size
+- **FR10 — A control sizes itself.** React Native's layout engine has no
+  measurement of its own for these views, so every control reports its fitting
+  size
   with `onIntrinsicSize` whenever its content, size, text size or style changes,
   and the wrapper sizes the view with it.
   - Before the first report, the view takes the platform control's height for
@@ -342,8 +346,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     image segment, its label.
   - Date picker view: the label and hint reach the picker. The dialogs are
     Material's own.
-  - Paste control: its spoken name is the system's ("Paste"), so a screen
-    reader user knows what the tap grants; only the hint is settable.
+  - Paste control: VoiceOver reads the system's own name for it ("Paste"),
+    which an app cannot replace; an app can set only the hint.
   - Host-level props (custom actions, escape, hidden, live region, modal) stay
     on the host view on both platforms.
   - Text follows the person's text size: Button and TextField fonts scale with
@@ -513,9 +517,9 @@ moves a date near midnight.
 **Reference:** `spec:AST-126/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
 
-The person's tap on UIPasteControl is the permission, so the content reaches
-JavaScript only as `onPaste`. No read call exists beside it, and nothing reads
-the pasteboard before the tap.
+A tap on UIPasteControl grants one paste without a system question. The
+pasted content reaches JavaScript only through `onPaste`. The control has no
+read call, and no code reads the pasteboard before the tap.
 
 ## Open questions
 
