@@ -454,7 +454,11 @@ works on is `spec:AST-040` FR9's.
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
-    and in such a run says that it keeps none;
+    and in such a run says that it keeps none. Text output prints the row's
+    brief in place of that message: the folder, its entry count and size, the
+    `doctor --json` command that prints the whole message, and the command
+    that removes the catalogs folder and, when it exists, the transpile
+    folder;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
     topics and codemods, a TypeScript config, a built theme artifact, and the
