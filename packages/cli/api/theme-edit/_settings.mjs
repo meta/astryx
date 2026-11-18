@@ -4621,6 +4621,46 @@ function drawnAlike(ctx, s, member) {
 }
 
 /**
+ * The part of a component that holds its controls side by side and frames
+ * them as one strip (a pager's control row around its page cells), when a
+ * part draws no edge of its own and its edges are those controls': a part
+ * of the same component inside it that draws every one of them again and
+ * again (a slider's track and thumb, drawn once each, sit in no such row)
+ * and draws no border itself. Null when there is none (a date and time field's two
+ * boxes sit in no such row). A border or corners asked of the part belong
+ * on this row: on each control they would box each one apart.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function rowFrameOf(ctx, part) {
+  const componentOf = (/** @type {string} */ t) =>
+    ctx.project.target.get(t)?.component;
+  const component = componentOf(part);
+  if (!component) return null;
+  const edges = roundedPartsInside(ctx, part);
+  const own = edges.filter(t => t !== part && componentOf(t) === component);
+  if (!own.length) return null;
+  const contains = (/** @type {string} */ t) =>
+    /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []);
+  return (
+    contains(part)
+      .filter(
+        t =>
+          !edges.includes(t) &&
+          componentOf(t) === component &&
+          !Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k =>
+            /^border(?!.*radius)/.test(k),
+          ) &&
+          own.every(e =>
+            /** @type {string[]} */ (ctx.C.MAP[t]?.repeats ?? []).includes(e),
+          ),
+      )
+      .sort((a, b) => contains(a).length - contains(b).length)[0] ?? null
+  );
+}
+
+/**
  * The parts that draw a part's border: the part itself, or, when it draws
  * none of its own and its edges are the borders of parts inside it (a date
  * and time field's date and time boxes), those parts. Only pieces that draw
@@ -4633,7 +4673,9 @@ function drawnAlike(ctx, s, member) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const inner = cornerParts(ctx, part).filter(
+  const frame = rowFrameOf(ctx, part);
+  if (frame) return [frame];
+  const inner = roundedPartsInside(ctx, part).filter(
     t => t !== part && drawsBorder(ctx, t),
   );
   return inner.length ? inner : [part];
@@ -14228,13 +14270,28 @@ export const DIAL_RADII = [
 export function cornerParts(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [part];
-  const inner = (rec.contains ?? []).filter(
+  const frame = rowFrameOf(ctx, part);
+  if (frame) return [frame];
+  const inner = roundedPartsInside(ctx, part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * The parts of a part's own inside it that round their own corners (a
+ * date and time field's two boxes, a pager's cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+function roundedPartsInside(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [];
+  return (rec.contains ?? []).filter(
     (/** @type {string} */ t) =>
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
   );
-  return inner.length ? inner : [part];
 }
 
 /** The table boxes CSS draws no padding on: rows, row groups and columns. */

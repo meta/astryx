@@ -124,6 +124,7 @@ import {
   radiusTokenOf,
   borderParts,
   cornerParts,
+  rowFrameOf,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -8094,6 +8095,17 @@ function checkOne(
     ) {
       const part = partsOf(ctx, s)[0];
       const inner = borderParts(ctx, part).filter(t => t !== part);
+      const frame = Object.keys(ctx.C.MAP[part]?.own ?? {}).some(k =>
+        /^border(?!.*radius)/.test(k),
+      )
+        ? null
+        : rowFrameOf(ctx, part);
+      if (frame)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part} draws no border of its own; its controls sit side by side in ${frame}, which frames them as one strip, so set ${prop} on ${frame}. A border on each control would box each one apart.`,
+          {run: [setLine(slug, prop, v, {...s, on: frame, only: undefined})]},
+        );
       if (inner.length)
         refuse(
           E.ERR_THEME_NO_EFFECT,
@@ -8760,6 +8772,25 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
+  const frame = rowFrameOf(ctx, parts[0]);
+  if (frame)
+    refuse(
+      E.ERR_THEME_NO_EFFECT,
+      `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. Its controls sit side by side in ${frame}, which frames them as one strip: its corners show once it has a border. Corners on each control would round each one apart.`,
+      // (Its corners show once it has an edge: with one the theme gave it,
+      // the corners go there; without, how lists the border and fill it
+      // takes, since the person names that edge.)
+      {
+        run: data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^(background|border|box-shadow|outline)/.test(x.thing) &&
+            partsOf(ctx, x).includes(frame),
+        )
+          ? [setLine(slug, s.thing, s.value || 'round', {...s, on: frame})]
+          : [`${HOW} ${frame}`],
+      },
+    );
   refuse(
     E.ERR_THEME_NO_EFFECT,
     `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. To round ${s.on} itself, give it a background or a border first, then set its corners.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,

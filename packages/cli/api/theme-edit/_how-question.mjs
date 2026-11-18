@@ -68,6 +68,7 @@ import {
   DIAL_RADII,
   borderParts,
   cornerParts,
+  rowFrameOf,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12532,6 +12533,10 @@ export function draftAnswer(ctx, env, question) {
     if (c.aspects.some(a => a === 'border' || a === 'corners'))
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
+        // (A row that frames the part's controls as one strip takes both,
+        // so its corners follow its border.)
+        const frame = rowFrameOf(ctx, p.on);
+        if (frame) return [{...p, on: frame}];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')
