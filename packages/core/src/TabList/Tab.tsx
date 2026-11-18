@@ -111,6 +111,9 @@ const pressedOverlayImage = 'var(--_press-paint-image)';
 const styles = stylex.create({
   base: {
     position: 'relative',
+    // The hover and press layer sits under the label, inside this stacking
+    // context. Above the label, a tinted or strong overlay would wash it out.
+    isolation: 'isolate',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -137,6 +140,7 @@ const styles = stylex.create({
   },
   hoverBg: {
     position: 'absolute',
+    zIndex: -1,
     inset: 0,
     margin: 'auto',
     width: '100%',
