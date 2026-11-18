@@ -29,7 +29,9 @@ const REPO = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(REPO, 'package.json'));
 const esbuild = require('esbuild');
 const {
+  APP_EXTERNALS,
   eagerText,
+  extractAtRef,
   gzipBytes,
   reachableChunks,
   sizeBuildOptions,
@@ -122,12 +124,14 @@ export const CORE_BOUNDARIES = {
     'Tooltip/tooltipPresentInterest',
     'Layer/layerScopedContext',
   ],
-  // The shared internal touch modules, and the layer's touch tap recognizer.
+  // The shared internal touch modules, the layer's touch trigger, and the
+  // gesture counter, which holds the touch tap recognizer.
   touchModules: [
     /^gestures\//,
     /^motion\//,
     /^internal\/touch$/,
     /^Layer\/useTouchTrigger$/,
+    /^Layer\/gestureCounter$/,
   ],
   capabilities: [
     ...tablePluginCapabilities(REPO),
@@ -391,13 +395,7 @@ function buildOptions(root) {
     // esbuild reads no tsconfig for a file under node_modules, where the base
     // source sits, so the JSX transform is set here as the tsconfig sets it.
     jsx: 'automatic',
-    external: [
-      'react',
-      'react/*',
-      'react-dom',
-      'react-dom/*',
-      '@stylexjs/stylex',
-    ],
+    external: APP_EXTERNALS,
   };
 }
 
@@ -942,46 +940,13 @@ function extractBaseSource(ref) {
     `base-${process.pid}`,
   );
   fs.rmSync(base, {recursive: true, force: true});
-  fs.mkdirSync(base, {recursive: true});
-  const archive = execFileSync(
-    'git',
-    [
-      'archive',
-      '--format=tar',
-      ref,
-      '--',
-      CORE_SRC,
-      'packages/core/package.json',
-    ],
-    {
-      cwd: REPO,
-      maxBuffer: 1024 * 1024 * 1024,
-    },
-  );
-  execFileSync('tar', ['-x', '-C', base], {input: archive});
-  // Generated source is not in git. The base takes head's copy of each such
-  // file it lacks.
-  const generated = execFileSync(
-    'git',
-    [
-      'ls-files',
-      '--others',
-      '--ignored',
-      '--exclude-standard',
-      '-z',
-      '--',
-      CORE_SRC,
-    ],
-    {cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
-  )
-    .split('\0')
-    .filter(Boolean);
-  for (const file of generated) {
-    const target = path.join(base, file);
-    if (fs.existsSync(target)) continue;
-    fs.mkdirSync(path.dirname(target), {recursive: true});
-    fs.copyFileSync(path.join(REPO, file), target);
-  }
+  extractAtRef({
+    repo: REPO,
+    ref,
+    target: base,
+    paths: [CORE_SRC, 'packages/core/package.json'],
+    generatedFrom: CORE_SRC,
+  });
   return base;
 }
 

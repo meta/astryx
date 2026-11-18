@@ -344,3 +344,28 @@ describe('theme add of a theme with one color mode', () => {
     expect(JSON.parse(r.stdout).data.themes[0].mode).toBe('dark');
   });
 });
+
+describe('theme remove of the only added theme with one color mode', () => {
+  it('marks themeModes in JSON and text, and the wiring to drop passes the mode', async () => {
+    const dir = app('export const colorModes = ["dark"];\n');
+    expect((await add(dir, false)).status).toBe(0);
+    const json = await runCli(['theme', 'remove', 'ocean', '--json'], dir);
+    expect(json.status, json.stderr).toBe(0);
+    expect(JSON.parse(json.stdout).data.change).toMatchObject({
+      moduleRemoved: true,
+      themeModes: true,
+    });
+
+    const textDir = app('export const colorModes = ["dark"];\n');
+    expect((await add(textDir, false)).status).toBe(0);
+    const text = await runCli(['theme', 'remove', 'ocean'], textDir);
+    expect(text.status, text.stderr).toBe(0);
+    expect(text.stdout).toMatch(/^themeModes:\s+true$/m);
+    expect(text.stdout).toContain(
+      "import {themes, defaultThemeSlug, themeModes} from './astryx-themes';",
+    );
+    expect(text.stdout).toContain(
+      "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>",
+    );
+  });
+});

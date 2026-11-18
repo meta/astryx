@@ -338,7 +338,10 @@ describe('preview add', () => {
     fs.writeFileSync(path.join(pkgDir, 'index.css'), '');
     try {
       const show = await themeEditShow('brand', {cwd});
-      expect(show.data.notes.join(' ')).toContain("import '@fontsource/inter'");
+      // A package with no stylesheet per weight loads through its index.
+      expect(show.data.notes.join(' ')).toContain(
+        "import '@fontsource/inter/index.css'",
+      );
       expect(read(route)).toContain('import "@fontsource/inter/index.css";');
     } finally {
       fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {

@@ -1226,10 +1226,16 @@ describe('the interaction proof legs in ci.yml', () => {
     const workScopes = Object.keys(join.env).filter(name =>
       /^\$\{\{ needs\.[\w-]+\.outputs\.mode \}\}$/.test(join.env[name]),
     );
+    // A lane that starts only when its plan counts a leg (the dependent
+    // audits) passes with that count set to one leg.
+    const workCounts = Object.keys(join.env).filter(name =>
+      /^\$\{\{ needs\.[\w-]+\.outputs\.count \}\}$/.test(join.env[name]),
+    );
     const passing = {
       ...Object.fromEntries(laneResults.map(([name]) => [name, 'success'])),
       ...Object.fromEntries(scopes.map(name => [name, 'false'])),
       ...Object.fromEntries(workScopes.map(name => [name, 'all'])),
+      ...Object.fromEntries(workCounts.map(name => [name, '1'])),
       RELEASE_BUMP: 'false',
       RELEASE_BUMP_RESULT: 'skipped',
     };

@@ -23,6 +23,10 @@ const script = action.runs.steps.find(step =>
   step.uses?.startsWith('actions/github-script@'),
 ).with.script;
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+// The release-critical label check, run for real against the stub GitHub.
+const RUN_LABELS_MODULE = path.join(root, '.github/scripts/run-labels.cjs');
+const runLabels = await import(RUN_LABELS_MODULE);
+const nodeUrl = await import('node:url');
 
 const isCaps = step =>
   step.uses?.startsWith('./') &&
@@ -59,20 +63,42 @@ async function check({
   runs = [],
   attempt = '1',
   engowners = ENGOWNERS,
+  labelers = {},
+  permissions = {},
 } = {}) {
-  const messages = {failed: [], warning: []};
+  const messages = {failed: [], warning: [], notice: []};
   const core = {
     setFailed: message => messages.failed.push(message),
     warning: message => messages.warning.push(message),
+    notice: message => messages.notice.push(message),
   };
   const github = {
-    // The author's open non-draft PRs, oldest first.
-    graphql: async () => {
+    graphql: async query => {
+      // Who applied each label, newest last (run-labels.cjs).
+      if (query.includes('timelineItems'))
+        return {
+          repository: {
+            pullRequest: {
+              timelineItems: {
+                nodes: Object.entries(labelers).map(([name, login]) => ({
+                  actor: {login},
+                  label: {name},
+                })),
+              },
+            },
+          },
+        };
+      // The author's open non-draft PRs, oldest first.
       if (open instanceof Error) throw open;
       return {search: {nodes: open}};
     },
     rest: {
       repos: {
+        getCollaboratorPermissionLevel: async ({username}) => {
+          const permission = permissions[username];
+          if (permission instanceof Error) throw permission;
+          return {data: {permission: permission ?? 'none'}};
+        },
         // The roster is read from the base commit only.
         getContent: async ({path: file, ref}) => {
           if (file !== '.github/ENGOWNERS' || ref !== 'base-sha')
@@ -108,11 +134,18 @@ async function check({
   };
   const saved = process.env.GITHUB_RUN_ATTEMPT;
   process.env.GITHUB_RUN_ATTEMPT = attempt;
+  process.env.RUN_LABELS_MODULE = RUN_LABELS_MODULE;
   try {
-    await new AsyncFunction('github', 'context', 'core', script)(
-      github,
-      context,
-      core,
+    // The script loads modules with `import()`, which a function built here
+    // cannot call; the test passes them in.
+    await new AsyncFunction(
+      'github',
+      'context',
+      'core',
+      'importModule',
+      script.replaceAll('await import(', 'await importModule('),
+    )(github, context, core, async specifier =>
+      specifier === 'node:url' ? nodeUrl : runLabels,
     );
   } finally {
     if (saved === undefined) delete process.env.GITHUB_RUN_ATTEMPT;
@@ -351,6 +384,43 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
     expect(failed.warning[0]).toContain('running the heavy suite');
   });
 
+  it('never holds a pull request labelled release-critical by someone with write access (spec:AST-030 DEC-30)', async () => {
+    const labelled = pullRequestContext({labels: [{name: 'release-critical'}]});
+    const over = {open: [...older15(), me], runs: runsOn(100)};
+    const trusted = await check({
+      ...over,
+      context: labelled,
+      labelers: {'release-critical': 'maintainer'},
+      permissions: {maintainer: 'write'},
+    });
+    expect(trusted.failed).toEqual([]);
+    // A label someone without write access applied last, no readable label
+    // event, or a failed lookup holds it as an unlabelled one.
+    for (const trust of [
+      {labelers: {'release-critical': 'reader'}, permissions: {reader: 'read'}},
+      {labelers: {}, permissions: {}},
+      {
+        labelers: {'release-critical': 'maintainer'},
+        permissions: {maintainer: new Error('lookup failed')},
+      },
+    ]) {
+      expect(
+        (await check({...over, context: labelled, ...trust})).failed,
+      ).toEqual([QUEUED]);
+    }
+    // Another label changes nothing.
+    expect(
+      (
+        await check({
+          ...over,
+          context: pullRequestContext({labels: [{name: 'ci:run-visual'}]}),
+          labelers: {'ci:run-visual': 'maintainer'},
+          permissions: {maintainer: 'write'},
+        })
+      ).failed,
+    ).toEqual([QUEUED]);
+  });
+
   it('loads every local action from the merge commit, never from a checkout of the pull request head', () => {
     // A head that predates a local action does not have it. Only the setup
     // action, the pull request's own toolchain, may come from its head.
@@ -408,6 +478,12 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
     for (const [id, job] of heavyJobs) {
       const caps = job.steps.findIndex(isCaps);
       expect(job.steps[caps - 1].uses, id).toMatch(/^actions\/checkout@/);
+      // A sparse checkout brings the release-critical label check's scripts.
+      const sparse = job.steps[caps - 1].with?.['sparse-checkout'];
+      if (sparse)
+        expect(String(sparse).split('\n'), id).toEqual(
+          expect.arrayContaining(['.github/scripts/lib']),
+        );
       // The engineering-owner roster is read with contents: read.
       expect(job.permissions, id).toMatchObject({
         actions: 'read',

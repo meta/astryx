@@ -10,7 +10,14 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  appleFaceGeneric,
+  collectUnloadedFonts,
+  systemFontFamilies,
+} from '../theme/build/font-warning.mjs';
+
+export {appleFaceGeneric, systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -116,6 +123,11 @@ export const CORNERS = [
   ['pill', 9999],
 ];
 /**
+ * The step `corners more` and `less` take between round and pill: half as
+ * round again as round, so one step more from round is not a pill.
+ */
+export const ROUND_TO_PILL_STEP = `${(CORNERS.find(([n]) => n === 'round')?.[1] ?? 16) * 1.5}px`;
+/**
  * The density words, the one table every reading of room uses: words for
  * more room (roomy), for less (dense), and complaints that there is too
  * little (crowded). An ask names the density it wants; after "too" the
@@ -133,6 +145,7 @@ export const DENSITY = /** @type {const} */ ({
     'relaxed',
     'comfortable',
     'sparse',
+    'padded',
     'generous',
     'spread out',
   ],
@@ -214,46 +227,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'segoe ui light',
-      'segoe ui semilight',
-      'segoe ui semibold',
-      'segoe ui black',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */
@@ -275,7 +251,9 @@ export const oneSystemOf = family =>
  * @param {string} family without quotes
  */
 export const isDesktopFamily = family =>
-  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+  isSystemFamily(family) &&
+  !ONE_SYSTEM_FAMILIES.has(familyKey(family)) &&
+  !appleFaceGeneric(family);
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:
@@ -433,6 +411,33 @@ export const SURFACES = wordTable(
     },
   }),
 );
+/**
+ * The panels that float over the page (menus, popovers, dialogs): under
+ * `surfaces flat` they keep their own fill and a hairline edge
+ * ({@link FLOATING_SURFACES}), since a panel over content needs an edge to
+ * be seen.
+ */
+export const FLOATING_PANELS = [
+  'dialog',
+  'popover',
+  'drawer',
+  'hover-card',
+  'dropdown-menu',
+  'selector-popup',
+];
+
+/** A rung of the `surfaces` dial as the floating panels take it, where it differs. */
+export const FLOATING_SURFACES = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    flat: {
+      borderStyle: 'solid',
+      borderWidth: '1px',
+      borderColor: 'var(--color-border)',
+      boxShadow: 'none',
+    },
+  }),
+);
+
 /** The parts the `surfaces` dial moves. */
 export const SURFACE_PARTS = [
   'card',
@@ -460,6 +465,8 @@ export const TYPE_STYLES =
  * @property {string} values - The values it takes, `|`-separated.
  * @property {string[]} examples - Commands after the prefix; `my` is the theme.
  * @property {string} words - Words `how` matches to the dial.
+ * @property {'px'} [unit] - The unit its `<number>` is in: the number typed
+ *   with that unit (`24px`, `24 PX`) is the same number (dialNumber).
  */
 
 /** @type {Record<string, Dial>} */
@@ -467,10 +474,13 @@ export const DIALS = wordTable({
   corners: {
     help:
       'How round corners are. Rungs: ' +
-      CORNERS.map(
-        ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
-      ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      CORNERS.flatMap(([n, v]) => [
+        ...(n === 'pill'
+          ? [`${ROUND_TO_PILL_STEP} (the step between round and pill)`]
+          : []),
+        `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
+      ]).join(', ') +
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -502,7 +512,7 @@ export const DIALS = wordTable({
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: "The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background follows it too, at the official theme's page shade of the gray; a colored gray's pale shades fade toward white as a gray scale's do, so the page and the cards on it carry only a faint tint of it. For a clearly tinted page (cream, a pale blue) or a white one, set --color-background-body to that color (with --mode light in a theme with both modes), which then keeps its color. From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color (\"#64748b\") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.",
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -541,11 +551,11 @@ export const DIALS = wordTable({
   },
   font: {
     help:
-      'The typeface. System presets (always show): ' +
+      'The typeface. System presets (fonts systems ship, so no package loads them; a system with none of a stack shows its own font of that kind, and a picture says when this machine draws a serif, monospace or cursive stack in a font of another kind): ' +
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +
-      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded, comic, any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. An open font loads only once its package is installed (the result of set names the install line for your package manager, and the closest font that needs no install); any other font must be loaded by the app.',
+      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded (Nunito, an open font: it loads once its package is installed, and until then shows Varela Round or the system font), any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. An open font loads only once its package is installed (the result of set names the install line for your package manager, and the closest font that needs no install); any other font must be loaded by the app.',
     values: `${[...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].join('|')}|"<family or stack>"`,
     examples: [
       'set my font mono',
@@ -575,7 +585,7 @@ export const DIALS = wordTable({
       'heading headings title titles display headline bold heavy weight tracking letter spacing tight',
   },
   surfaces: {
-    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill. outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once.',
+    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill (menus, popovers and dialogs, which float over the page, keep their own fill and a hairline border instead). outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once.',
     values: Object.keys(SURFACES).join('|'),
     examples: ['set my surfaces outlined', 'set my surfaces raised'],
     words:
@@ -600,6 +610,7 @@ export const DIALS = wordTable({
       TEXT_SIZE.map(([n, v]) => `${n} (${v}px)`).join(', ') +
       ', or a number of pixels from 10 to 32. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: 'small|medium|large|larger|more|less|<number>',
+    unit: 'px',
     examples: ['set my text-size small', 'set my text-size more'],
     words: 'text size font size small big large scale',
   },
@@ -806,6 +817,7 @@ export const DESIGN = wordTable(
     gradient: '"linear-gradient(#ffffff, #d1d5db)"',
     glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
     bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
+    'sunken bevel': '"inset 1px 1px 0 #9ca3af, inset -1px -1px 0 #ffffff"',
     raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
     flat: 'none',
     sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
@@ -828,6 +840,145 @@ export const CARD_LIKE = ['clickable-card', 'selectable-card'];
 export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
+
+/**
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
+ */
+export const CSS_PSEUDO_CLASSES = new Set([
+  'active',
+  'active-view-transition',
+  'active-view-transition-type',
+  'any-link',
+  'autofill',
+  'blank',
+  'buffering',
+  'checked',
+  'closed',
+  'current',
+  'default',
+  'defined',
+  'dir',
+  'disabled',
+  'empty',
+  'enabled',
+  'first',
+  'first-child',
+  'first-of-type',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'fullscreen',
+  'future',
+  'has',
+  'has-slotted',
+  'heading',
+  'host',
+  'host-context',
+  'hover',
+  'in-range',
+  'indeterminate',
+  'interest-source',
+  'interest-target',
+  'invalid',
+  'is',
+  'lang',
+  'last-child',
+  'last-of-type',
+  'left',
+  'link',
+  'local-link',
+  'modal',
+  'muted',
+  'not',
+  'nth-child',
+  'nth-col',
+  'nth-last-child',
+  'nth-last-col',
+  'nth-last-of-type',
+  'nth-of-type',
+  'only-child',
+  'only-of-type',
+  'open',
+  'optional',
+  'out-of-range',
+  'past',
+  'paused',
+  'picture-in-picture',
+  'placeholder-shown',
+  'playing',
+  'popover-open',
+  'read-only',
+  'read-write',
+  'required',
+  'right',
+  'root',
+  'scope',
+  'seeking',
+  'stalled',
+  'state',
+  'target',
+  'target-after',
+  'target-before',
+  'target-current',
+  'target-within',
+  'user-invalid',
+  'user-valid',
+  'valid',
+  'visited',
+  'volume-locked',
+  'where',
+  'xr-overlay',
+]);
+
+/**
+ * The pseudo-elements of CSS (the `::name` forms browsers ship), by name: the
+ * names a part's `::name` block is read against. The four CSS 2 ones also
+ * take one colon.
+ */
+export const CSS_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'backdrop',
+  'before',
+  'checkmark',
+  'column',
+  'cue',
+  'cue-region',
+  'details-content',
+  'file-selector-button',
+  'first-letter',
+  'first-line',
+  'grammar-error',
+  'highlight',
+  'marker',
+  'part',
+  'picker',
+  'picker-icon',
+  'placeholder',
+  'scroll-button',
+  'scroll-marker',
+  'scroll-marker-group',
+  'search-text',
+  'selection',
+  'slotted',
+  'spelling-error',
+  'target-text',
+  'view-transition',
+  'view-transition-group',
+  'view-transition-image-pair',
+  'view-transition-new',
+  'view-transition-old',
+]);
+
+/** The pseudo-elements CSS 2 wrote with one colon, which browsers still read. */
+export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'before',
+  'first-letter',
+  'first-line',
+]);
 
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
@@ -870,3 +1021,16 @@ for (const table of [
   MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);

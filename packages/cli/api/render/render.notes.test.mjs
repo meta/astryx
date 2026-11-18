@@ -143,17 +143,19 @@ describe('a rendered file describes itself', () => {
       runs: ['Q3 report', 'Revenue grew in every region.', 'Users', '100', 'Uptime', '99%'],
     });
     // The record keeps the text encoded: a find-and-replace over the page's
-    // text changes only the markup.
-    expect(html.split('Revenue grew in every region.')).toHaveLength(2);
+    // text never changes it.
+    const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
+    expect(html.slice(start, html.indexOf('</script>', start))).not.toContain('Revenue grew in every region.');
     expect(source.markup?.sha256).toBe(sha256(/** @type {string} */ (renderedMarkupOf(html))));
   });
 
-  it('ends with a short note after the embedded source', () => {
-    const lines = html.trimEnd().split('\n');
-    expect(lines.at(-1)).toBe('</body></html>');
-    expect(lines.at(-2)).toBe(
-      `<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental render --reverse report.html -->`,
-    );
+  it("puts a short note after the embedded source, then the page's script", () => {
+    const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
+    const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
+    expect(after.startsWith(
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental render --reverse report.html -->\n<script>`,
+    )).toBe(true);
+    expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });
 
   it('puts an explicit title in the render-again command, and names packages to install outside a project', async () => {

@@ -3,29 +3,102 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsDense = {
-  description: 'make/change a theme (experimental theme editor): astryx experimental theme editor new <name> --like neutral; editor set|how; theme add <name>; after each change look: experimental theme editor show <name> --png (takes pictures of real components); not done until you have looked. denser/roomier app = theme: editor set <name> spacing tight|roomy, not page code. one kind of part (sidebar, its selected item, form gaps) = theme too: editor how "<ask>" names set … --on <part>. no app yet: experimental theme preview app <dir> = starter app showing the theme. use + create themes: see use-a-theme and author-a-theme.',
+  description:
+    'how themes work: wrap app in a theme; create/change one (also denser/roomier, one kind of part): astryx experimental theme editor new <name> --like neutral; steps follow, then publish a theme for other teams.',
   sections: [
+    {
+      section: 'Make or change a theme',
+      title: 'Make or change a theme',
+      content: [
+        {
+          type: 'prose',
+          text: 'make/change a theme (experimental theme editor): astryx experimental theme editor new <name> --like neutral; editor set|how; theme add <name>.',
+        },
+      ],
+    },
+    {
+      section: 'Look after each change',
+      title: 'Look after each change',
+      content: [
+        {
+          type: 'prose',
+          text: 'after each change look: experimental theme editor show <name> --png (takes pictures of real components); not done until you have looked.',
+        },
+      ],
+    },
+    {
+      section: 'A denser or roomier app',
+      title: 'A denser or roomier app',
+      content: [
+        {
+          type: 'prose',
+          text: 'denser/roomier app = theme: editor set <name> spacing tight|roomy, not page code.',
+        },
+      ],
+    },
+    {
+      section: 'One kind of part',
+      title: 'One kind of part',
+      content: [
+        {
+          type: 'prose',
+          text: 'one kind of part (sidebar, its selected item, form gaps) = theme too: editor how "<ask>" names set … --on <part>.',
+        },
+      ],
+    },
+    {
+      section: 'No app yet',
+      title: 'No app yet',
+      content: [
+        {
+          type: 'prose',
+          text: 'experimental theme preview app <dir> = starter app showing the theme. use + create themes: see use-a-theme and author-a-theme.',
+        },
+      ],
+    },
+    {
+      section: 'Share a theme with other teams',
+      title: 'Share a theme with other teams',
+      content: [
+        {
+          type: 'prose',
+          text: 'publish a theme for other teams: ship it in a package (theme in its themes folder, built with {@command theme build}, published like any package); another team installs it, runs {@command theme add <name> --package <package>}. {@link generic:add-a-theme}.',
+        },
+      ],
+    },
     {
       section: 'Wrap your app in a theme',
       title: 'Quick start',
       content: [
-        {type: 'prose', text: "Install a theme, wrap in `<Theme>` (`import {Theme} from '@astryxdesign/core/theme'`). {@link generic:use-a-theme} for full guide."},
+        {
+          type: 'prose',
+          text: "Install a theme, wrap in `<Theme>` (`import {Theme} from '@astryxdesign/core/theme'`). {@link generic:use-a-theme} for full guide.",
+        },
       ],
     },
     {
       section: 'Create a custom theme',
       title: 'Custom themes',
       content: [
-        {type: 'prose', text: '`defineTheme` + token overrides + component overrides. {@link generic:author-a-theme} for full guide.'},
+        {
+          type: 'prose',
+          text: '`defineTheme` + token overrides + component overrides. {@link generic:author-a-theme} for full guide.',
+        },
         null,
-        {type: 'prose', text: "new palette: `astryx theme palette generate palette.config.json --out palette.generated.ts` → review + commit module and receipt → `import {palette} from './palette.generated';` → map semantic tokens to stable stops such as `palette.neutral.light[100]` / `palette.neutral.dark[15]`. regeneration updates mapped roles; generation does not rewrite the theme."},
+        {
+          type: 'prose',
+          text: "new palette: `astryx theme palette generate palette.config.json --out palette.generated.ts` → review + commit module and receipt → `import {palette} from './palette.generated';` → map semantic tokens to stable stops such as `palette.neutral.light[100]` / `palette.neutral.dark[15]`. regeneration updates mapped roles; generation does not rewrite the theme.",
+        },
       ],
     },
     {
       section: 'Icon sizes',
       title: 'Icon sizes',
       content: [
-        {type: 'prose', text: "theme sets each Icon size's glyph dimension: `width` + `height` on `components.icon['size:sm']` (or xsm/md/lg); semantic names + SVG components alike. px or rem only: a semantic icon takes its font size from the dimension, so em also grows its box. unstyled: xsm/sm/md/lg = 12/16/20/24px at 16px root, scale w/ root font size (rem keeps it). size names are fixed."},
+        {
+          type: 'prose',
+          text: "theme sets each Icon size's glyph dimension: `width` + `height` on `components.icon['size:sm']` (or xsm/md/lg); semantic names + SVG components alike. px or rem only: a semantic icon takes its font size from the dimension, so em also grows its box. unstyled: xsm/sm/md/lg = 12/16/20/24px at 16px root, scale w/ root font size (rem keeps it). size names are fixed.",
+        },
         null,
       ],
     },
@@ -33,14 +106,20 @@ export const docsDense = {
       section: 'Dark mode',
       title: 'Dark mode',
       content: [
-        {type: 'prose', text: "[light, dark] tuples, mode='system'. A one-mode theme exports `colorModes`; wire `mode={themeModes[defaultThemeSlug] ?? 'system'}`. {@link generic:use-a-theme} for full guide."},
+        {
+          type: 'prose',
+          text: "[light, dark] tuples, mode='system'. A one-mode theme exports `colorModes`; wire `mode={themeModes[defaultThemeSlug] ?? 'system'}`. {@link generic:use-a-theme} for full guide.",
+        },
       ],
     },
     {
       section: 'Integration themes',
       title: 'Integration themes',
       content: [
-        {type: 'prose', text: 'Install integration. `astryx theme add` imports, and `theme eject` forks source. {@link generic:use-a-theme} for full guide.'},
+        {
+          type: 'prose',
+          text: 'Install integration. `astryx theme add` imports, and `theme eject` forks source. {@link generic:use-a-theme} for full guide.',
+        },
       ],
     },
   ],

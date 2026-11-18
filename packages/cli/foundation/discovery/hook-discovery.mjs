@@ -23,6 +23,12 @@ const RELATED_HOOKS_RE = /(?:^|\n) {0,4}relatedHooks:\s*\[([^\]]*)\]/;
 // Matches the top-level `category: 'categoryName'` field in a hook .doc.mjs file.
 const CATEGORY_RE = /(?:^|\n) {0,4}category:\s*['"]([^'"]+)['"]/;
 
+// Matches the top-level `keywords: [...]` field in a hook .doc.mjs file.
+const KEYWORDS_RE = /(?:^|\n) {0,4}keywords:\s*\[([^\]]*)\]/;
+
+// One quoted string in a list of strings.
+const QUOTED_RE = /'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g;
+
 /**
  * Read the `category` field from a hook's .doc.mjs file (synchronous).
  * @param {string} docPath
@@ -74,7 +80,7 @@ function hookNameFromFile(fileName) {
  * Returns Record<category, hookName[]> similar to discoverComponents.
  * Categories from HookDoc.category: focus, layout, animation, interaction, data, media, streaming
  * Hooks without a category go in 'Other'.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] the hooks to read; the others are
  *   left out, and their docs are not read
  * @param {Set<string>} [tops] the top folders of `src` outside `hooks` to
@@ -82,42 +88,11 @@ function hookNameFromFile(fileName) {
  * @returns {Record<string, string[]>}
  */
 export function discoverHooks(coreDir, keep = () => true, tops) {
-  const srcDir = path.join(coreDir, 'src');
-  const hooksDir = path.join(srcDir, 'hooks');
-
-  /** @type {Map<string, string>} hookName → category */
-  const hookCategories = new Map();
-
-  // 1. Scan src/hooks/ for *.doc.mjs files
-  if (pathExists(hooksDir)) {
-    const entries = listDirEntries(hooksDir);
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (!entry.name.endsWith('.doc.mjs')) continue;
-      const hookName = hookNameFromFile(entry.name);
-      if (!keep(hookName)) continue;
-      const docPath = path.join(hooksDir, entry.name);
-      const {category} = readHookMeta(docPath);
-      hookCategories.set(hookName, category || 'Other');
-    }
-  }
-
-  // 2. Scan ALL component directories for hook docs: use*.doc.mjs, and
-  // create*.doc.mjs for a factory documented as a hook (createReorderable)
-  if (pathExists(srcDir)) {
-    const topEntries = listDirEntries(srcDir);
-    for (const entry of topEntries) {
-      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
-      if (tops && !tops.has(entry.name)) continue;
-      const dirPath = path.join(srcDir, entry.name);
-      scanDirForHookDocs(dirPath, hookCategories, keep);
-    }
-  }
-
-  // 3. Group by category, sorted alphabetically
+  // Group by category, sorted alphabetically
   /** @type {Map<string, string[]>} */
   const groups = new Map();
-  for (const [hookName, category] of hookCategories) {
+  for (const [hookName, docPath] of hookDocs(coreDir, keep, tops)) {
+    const category = readHookMeta(docPath).category || 'Other';
     if (!groups.has(category)) groups.set(category, []);
     groups.get(category)?.push(hookName);
   }
@@ -144,29 +119,92 @@ export function discoverHooks(coreDir, keep = () => true, tops) {
 }
 
 /**
+ * Each hook's doc, by hook name: the `*.doc.mjs` files in src/hooks/, then
+ * the hook docs in the other folders of src/.
+ * @param {string | null} coreDir null in a run that reads no Core
+ * @param {(name: string) => boolean} keep the hooks to list
+ * @param {Set<string>} [tops] as for {@link discoverHooks}
+ * @returns {Map<string, string>} hook name → doc path
+ */
+function hookDocs(coreDir, keep, tops) {
+  if (coreDir == null) return new Map();
+  const srcDir = path.join(coreDir, 'src');
+  const hooksDir = path.join(srcDir, 'hooks');
+  /** @type {Map<string, string>} */
+  const docs = new Map();
+
+  if (pathExists(hooksDir)) {
+    for (const entry of listDirEntries(hooksDir)) {
+      if (!entry.isFile() || !entry.name.endsWith('.doc.mjs')) continue;
+      const hookName = hookNameFromFile(entry.name);
+      if (keep(hookName)) docs.set(hookName, path.join(hooksDir, entry.name));
+    }
+  }
+
+  // Every component folder: use*.doc.mjs, and create*.doc.mjs for a factory
+  // documented as a hook (createReorderable).
+  if (pathExists(srcDir)) {
+    for (const entry of listDirEntries(srcDir)) {
+      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (tops && !tops.has(entry.name)) continue;
+      scanDirForHookDocs(path.join(srcDir, entry.name), docs, keep);
+    }
+  }
+  return docs;
+}
+
+/**
  * Recursively scan a directory for use*.doc.mjs files.
  * @param {string} dirPath
- * @param {Map<string, string>} hookCategories
+ * @param {Map<string, string>} docs hook name → doc path
  * @param {(name: string) => boolean} keep
  */
-function scanDirForHookDocs(dirPath, hookCategories, keep) {
+function scanDirForHookDocs(dirPath, docs, keep) {
   if (!pathExists(dirPath)) return;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
     if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
-      scanDirForHookDocs(path.join(dirPath, entry.name), hookCategories, keep);
+      scanDirForHookDocs(path.join(dirPath, entry.name), docs, keep);
     } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
       const docPath = path.join(dirPath, entry.name);
       if (
         keep(hookName) &&
-        !hookCategories.has(hookName) &&
+        !docs.has(hookName) &&
         !isBesideOwnHook(docPath, hookName)
       ) {
-        const {category} = readHookMeta(docPath);
-        hookCategories.set(hookName, category || 'Other');
+        docs.set(hookName, docPath);
       }
     }
+  }
+}
+
+/**
+ * Each hook with the keywords its doc declares, in name order. The docs are
+ * read as text, not imported.
+ * @param {string} coreDir
+ * @returns {Array<{name: string, keywords: string[]}>}
+ */
+export function discoverHookKeywords(coreDir) {
+  return [...hookDocs(coreDir, () => true)]
+    .sort(([a], [b]) => compareText(a, b))
+    .map(([name, docPath]) => ({name, keywords: readHookKeywords(docPath)}));
+}
+
+/**
+ * The `keywords` a hook's doc declares, or none when the doc does not read.
+ * @param {string} docPath
+ * @returns {string[]}
+ */
+function readHookKeywords(docPath) {
+  try {
+    const list = KEYWORDS_RE.exec(fs.readFileSync(docPath, 'utf-8'));
+    if (!list) return [];
+    return [...list[1].matchAll(QUOTED_RE)].map(
+      match => match[1] ?? match[2],
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -175,11 +213,12 @@ function scanDirForHookDocs(dirPath, hookCategories, keep) {
  * Searches hooks/ directory and component directories.
  * Matches both exact name and with 'use' prefix stripped.
  *
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name - Hook name (e.g. 'useMediaQuery', 'MediaQuery', 'mediaquery')
  * @returns {string|null} Path to the .doc.mjs file, or null
  */
 export function findHookDoc(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
 
@@ -269,7 +308,7 @@ function searchDirForHookDoc(dirPath, candidates) {
 
 /**
  * Get all discovered hook names as a flat array (for fuzzy matching).
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] as for {@link discoverHooks}
  * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {string[]}

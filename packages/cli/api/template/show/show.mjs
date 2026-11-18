@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 import {
   componentsInSource,
   pkgOf,
@@ -54,13 +55,14 @@ export function templateShow(match, {iconSets = NO_ICON_SETS} = {}) {
     package: pkgOf(match),
     data: {
       template: match.dirName,
-      description: match.description,
+      description: renderTokens(match.description),
       type: match.type,
       components: componentsInSource(source),
       source,
       demoMediaReplaced,
       demoContentReplaced,
       ...(icons ? {icons} : {}),
+      isReady: match.isReady !== false,
     },
   };
 }

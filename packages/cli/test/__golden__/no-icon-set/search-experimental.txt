@@ -1,9 +1,15 @@
-Results for "experimental" (7)
+Results for "experimental" (13)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs author-a-theme --index
 parent:      pnpm exec astryx docs guides
+name:        author-a-theme
+section:     creating-a-custom-theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs author-a-theme creating-a-custom-theme
+parent:      pnpm exec astryx docs author-a-theme --index
 name:        authoring/field-reference
 section:     config
 domain:      doc
@@ -38,3 +44,33 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme --index
 parent:      pnpm exec astryx docs guides
+name:        theme
+section:     make-or-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme make-or-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     look-after-each-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme look-after-each-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     denser-or-roomier
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme denser-or-roomier
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     one-kind-of-part
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme one-kind-of-part
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     no-app-yet
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme no-app-yet
+parent:      pnpm exec astryx docs theme --index

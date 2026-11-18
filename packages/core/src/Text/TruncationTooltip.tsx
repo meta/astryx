@@ -26,8 +26,12 @@ import {
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import type {
+  Tooltip as TooltipType,
+  UndescribedTooltip as UndescribedTooltipType,
+} from '../Tooltip/Tooltip';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,
@@ -192,4 +196,167 @@ export function TruncationTooltip({
       <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
     </TooltipPresentInterestContext>
   );
+}
+
+/** Whether a box clips its content. */
+function overflows(element: Element): boolean {
+  const box =
+    element.clientWidth ||
+    (element instanceof HTMLElement ? element.offsetWidth : 0);
+  return box > 0 && element.scrollWidth > box;
+}
+
+/** Whether an element is visually hidden: a screen-reader-only label. */
+function isVisuallyHidden(element: Element): boolean {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  return (
+    style != null &&
+    style.position === 'absolute' &&
+    ((style.clip !== '' && style.clip !== 'auto') ||
+      (style.clipPath !== '' && style.clipPath !== 'none'))
+  );
+}
+
+// A field and its value: an input, or a widget that shows a chosen value (a
+// Selector's combobox). Its value is not the component's text.
+const FIELD_SELECTOR =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="searchbox"], [role="spinbutton"], [role="slider"], [role="textbox"]';
+
+/**
+ * Whether an element is left out of the measured text: hidden, a hidden copy
+ * (ToggleButton's bold-width reservation), visually hidden, or a field, whose
+ * value clips inside its own box and is not the cut text.
+ */
+function isLeftOut(element: Element): boolean {
+  return (
+    element.closest(`[hidden], [aria-hidden="true"], ${FIELD_SELECTOR}`) !=
+      null || isVisuallyHidden(element)
+  );
+}
+
+/** Whether text is cut: its box, or a box inside it that a reader sees, clips it. */
+function isTextCut(element: HTMLElement): boolean {
+  return (
+    overflows(element) ||
+    [...element.querySelectorAll('*')].some(
+      child => !isLeftOut(child) && overflows(child),
+    )
+  );
+}
+
+/**
+ * The text a sighted reader sees, without hidden, visually hidden and field
+ * text: the label or heading itself.
+ */
+function visibleText(root: HTMLElement): string {
+  let text = '';
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? '';
+    } else if (node instanceof Element && !isLeftOut(node)) {
+      node.childNodes.forEach(walk);
+    }
+  };
+  walk(root);
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+type UndescribedTooltipComponent = typeof UndescribedTooltipType;
+
+export interface CutTextOnKeyboardFocus {
+  /** The full text while keyboard focus is inside and the text is cut. */
+  readonly cutText: string | null;
+  /**
+   * The tooltip that shows `cutText` with no description, once its module
+   * has loaded (after the first render, as tooltip code loads).
+   */
+  readonly Tooltip: UndescribedTooltipComponent | null;
+  /** Closes the tooltip; pass it as the tooltip's `onHide` (Escape). */
+  readonly hide: () => void;
+  readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
+  readonly onBlur: (event: FocusEvent<HTMLElement>) => void;
+  /** A press closes it, as a press closes a tooltip. */
+  readonly onPointerDown: () => void;
+}
+
+/**
+ * Shows a component's cut text in an undescribed tooltip on keyboard focus:
+ * a Button's cut label, a table header cell's cut heading. When keyboard focus
+ * reaches the anchor (or an element inside it), it measures `measureRef`'s
+ * text; if the text is cut, `cutText` holds it until focus leaves the anchor,
+ * Escape, or a press. A hover, a pointer-focused field and a touch tap show
+ * nothing, and nothing is measured at rest. Internal: the package does not
+ * export it.
+ */
+export function useCutTextOnKeyboardFocus({
+  anchorRef,
+  measureRef,
+  isEnabled,
+  isSuppressed,
+}: {
+  /** The element focus reaches and the tooltip attaches to. */
+  anchorRef: RefObject<HTMLElement | null>;
+  /** The element whose text is cut; the anchor itself when omitted. */
+  measureRef?: RefObject<HTMLElement | null>;
+  isEnabled: boolean;
+  /** Returns true when another tooltip already describes the anchor. */
+  isSuppressed?: (anchor: HTMLElement) => boolean;
+}): CutTextOnKeyboardFocus {
+  const [cutText, setCutText] = useState<string | null>(null);
+  const [Tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
+    () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
+  );
+  const readModality = useInteractionModalityTrackingFor(anchorRef, isEnabled);
+  // Syncs with the module loader: the tooltip loads after the first render,
+  // so keyboard focus shows it at once.
+  useEffect(() => {
+    if (!isEnabled || Tooltip != null) {
+      return;
+    }
+    let isCurrent = true;
+    tooltipModule.load().then(
+      loaded => {
+        if (isCurrent) {
+          setTooltip(() => loaded.UndescribedTooltip);
+        }
+      },
+      () => {},
+    );
+    return () => {
+      isCurrent = false;
+    };
+  }, [isEnabled, Tooltip]);
+  const hide = useCallback(() => setCutText(null), []);
+  const onFocus = (event: FocusEvent<HTMLElement>) => {
+    const anchor = anchorRef.current;
+    const measured = measureRef?.current ?? anchor;
+    const target = event.target;
+    // `:focus-visible` also matches a text field a pointer focused, so the
+    // modality reader decides: only keyboard focus counts.
+    if (
+      !isEnabled ||
+      anchor == null ||
+      measured == null ||
+      !isElement(target) ||
+      // React delivers focus from a portal (a header's filter popover) to the
+      // anchor's handlers; only focus inside the anchor counts.
+      !anchor.contains(target) ||
+      !target.matches(':focus-visible') ||
+      readModality() !== 'keyboard'
+    ) {
+      return;
+    }
+    const text = visibleText(measured);
+    const isCut =
+      text !== '' && !(isSuppressed?.(anchor) ?? false) && isTextCut(measured);
+    setCutText(isCut ? text : null);
+  };
+  const onBlur = (event: FocusEvent<HTMLElement>) => {
+    const next = event.relatedTarget;
+    if (isElement(next) && anchorRef.current?.contains(next)) {
+      return;
+    }
+    setCutText(null);
+  };
+  return {cutText, Tooltip, hide, onFocus, onBlur, onPointerDown: hide};
 }

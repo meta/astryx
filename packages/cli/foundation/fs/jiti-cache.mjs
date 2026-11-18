@@ -139,14 +139,16 @@ function lastCheck(checked) {
 }
 
 /**
- * Record the folder's time. The record is made once, empty, which moves the
+ * Record the folder's time, and the time before which no copy can be
+ * removed. The record is made once, empty, which moves the
  * folder's time; after that it is written in place, which does not, so the
  * time it holds is the time a later run reads. Making it never replaces
  * anything at its name, and writing it never follows a link.
  * @param {string} dir
  * @param {string} checked
+ * @param {number} removable
  */
-function recordCheck(dir, checked) {
+function recordCheck(dir, checked, removable) {
   let stat = null;
   try {
     stat = fs.lstatSync(checked);
@@ -159,7 +161,7 @@ function recordCheck(dir, checked) {
     fs.constants.O_WRONLY | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW,
   );
   try {
-    fs.writeSync(fd, String(fs.statSync(dir).mtimeMs));
+    fs.writeSync(fd, `${fs.statSync(dir).mtimeMs} ${removable}`);
   } finally {
     fs.closeSync(fd);
   }
@@ -177,13 +179,19 @@ function recordCheck(dir, checked) {
 export function keepWithinLimit(dir, limit = CACHE_LIMIT_BYTES) {
   const checked = path.join(dir, CHECKED);
   try {
-    if (lastCheck(checked) === String(fs.statSync(dir).mtimeMs)) return;
-    evictOldest(dir, isTranspiledCopy, {
+    const [time, removable] = (lastCheck(checked) ?? '').split(' ');
+    if (time === String(fs.statSync(dir).mtimeMs)) return;
+    // Nothing can go before the least recently used copy the last check
+    // kept is RECENT_USE_MS old: every copy made since is newer. Until
+    // then, a grown folder is not read again.
+    if (Date.now() < Number(removable)) return;
+    const oldest = evictOldest(dir, isTranspiledCopy, {
       limit,
       keepUsedSince: Date.now() - RECENT_USE_MS,
       lastUse,
     });
-    recordCheck(dir, checked);
+    // A copy made after this check is used after it.
+    recordCheck(dir, checked, Math.min(oldest, Date.now()) + RECENT_USE_MS);
   } catch {
     // A folder that cannot be checked is checked again by a later run.
   }

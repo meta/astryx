@@ -2217,6 +2217,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             themeProps('multi-selector-option', {
               size,
               'select-all': isSelectAll ? 'select-all' : null,
+              highlighted: isHighlighted ? 'highlighted' : null,
               selected: isSelected ? 'selected' : null,
               disabled: item.disabled ? 'disabled' : null,
             }),

@@ -33,6 +33,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   // Outer shell: owns border/divider and sizing. No padding — that lives on inner.
@@ -199,6 +200,7 @@ export function LayoutHeader({
           paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
           paddingBlockEnd != null &&
             containerPaddingBlockEndVarStyles[paddingBlockEnd],
+          containerBlockBleedStyles.publish,
         )}>
         {children}
       </div>

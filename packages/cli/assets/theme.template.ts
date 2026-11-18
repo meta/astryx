@@ -154,8 +154,9 @@ export const myTheme = defineTheme({
    *   scale.base   body size in px; scale.ratio  step between sizes
    *                (1.125 tight/dense · 1.2 default · 1.333 dramatic)
    *   body / heading / code: {family, fallbacks, weight, weights}
-   *   heading inherits family and fallbacks from body when omitted; `weights`
-   *   sets per-level weight for headings 1–6.
+   *   heading without a family of its own uses body's full list; given a
+   *   family, it keeps just its own fallbacks (fallbacks alone do nothing).
+   *   `weights` sets per-level weight for headings 1–6.
    *
    * See §2 above — naming a family here does not load it.
    *

@@ -392,7 +392,7 @@ describe('the allowlist', () => {
     expect(rows).toEqual([
       {
         from: 'Text/TruncationTooltip',
-        to: 'Layer/useTouchTrigger',
+        to: 'Layer/gestureCounter',
         entries: ['Text', 'Heading', 'Button', 'IconButton', 'Link', 'Table'],
       },
       {

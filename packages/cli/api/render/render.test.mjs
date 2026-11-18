@@ -14,7 +14,9 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
+import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
+import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -103,11 +105,14 @@ describe('render(): page to one HTML file', () => {
     expect(result.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
   });
 
-  it('is one static file: no external references, no running script', () => {
+  it("is one file: no external references, and no script but the embedded source and the page's own", () => {
     expect(html).not.toMatch(/<link\b/i);
     expect(html).not.toMatch(/\ssrc="(?!data:)/);
-    const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map(m => m[1]);
-    expect(scripts).toEqual([' type="application/x-astryx-source"']);
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
+    expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
+    expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
+    // The page's script follows the note after the embedded source.
+    expect(html).toMatch(/ -->\n<script>[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -1756,7 +1761,7 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.type).toBe('render.page');
     put('fwd/.gitignore', 'page.html\n');
     expect(await codeOf(() => render('page.tsx', {cwd}))).toBe('ERR_FILE_EXISTS');
-  }, 60_000);
+  }, 120_000);
 
   it('refuses a received file that lists one path twice', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
@@ -1772,6 +1777,50 @@ describe('render(): every write stays inside the current folder', () => {
     fs.mkdirSync(path.join(dir, 'a-folder.html'), {recursive: true});
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'a-folder.html'}))).toBe('ERR_WRITE_FAILED');
   }, 60_000);
+
+  it('writes to an absolute --out in another folder, and never replaces a file there that a render did not write', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'share', 'page.html');
+      const result = /** @type {any} */ (await render('page.tsx', {cwd: dir, out}));
+      expect(result.data.output).toBe(out);
+      expect(fs.readFileSync(out, 'utf8')).toContain('<meta name="generator" content="Astryx');
+      // A render again replaces the file a render wrote.
+      await render('page.tsx', {cwd: dir, out});
+      const other = path.join(elsewhere, 'notes.html');
+      fs.writeFileSync(other, '<p>mine</p>');
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: other}))).toBe('ERR_FILE_EXISTS');
+      expect(fs.readFileSync(other, 'utf8')).toBe('<p>mine</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a symbolic link at an absolute --out, and leaves the file it points to', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const target = path.join(elsewhere, 'precious.html');
+      fs.writeFileSync(target, '<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+      const link = path.join(elsewhere, 'page.html');
+      fs.symlinkSync(target, link);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: link}))).toBe('ERR_PATH_TRAVERSAL');
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe('<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a relative --out outside the current folder, saying an absolute path works', async () => {
+    let error;
+    try {
+      await render('page.tsx', {cwd: dir, out: '../escaped.html'});
+    } catch (e) {
+      error = /** @type {any} */ (e);
+    }
+    expect(error?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(error?.message).toContain('or name an absolute path');
+  });
 
   it('refuses --out outside the current folder, and a write through a symlink that leaves it', async () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: '../escaped.html'}))).toBe('ERR_PATH_TRAVERSAL');
@@ -2000,6 +2049,34 @@ describe('astryx experimental render (CLI)', () => {
     expect(fs.readFileSync(path.join(dir, 'cli.html'), 'utf8')).toContain('<title>From the CLI</title>');
   }, 60_000);
 
+  it('prints a command to give back a file rendered to another folder that runs from here', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'shared report.html');
+      // Twice: the second round trip names the next free folder.
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        const rendered = await runCli(['experimental', 'render', 'page.tsx', '--out', out], dir);
+        expect(rendered.status, rendered.stderr).toBe(0);
+        const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
+        expect(line).toBeDefined();
+        // The printed command, run as printed after the CLI's own name.
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental render ')[1];
+        const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
+        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'render', ...args], dir);
+        expect(back.status, back.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
+          fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
+        );
+      }
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        fs.rmSync(path.join(dir, folder), {recursive: true, force: true});
+      }
+    }
+  }, 120_000);
+
   it('fails with exit 1 and a JSON error envelope', async () => {
     const r = await runCli(['--json', 'experimental', 'render', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
@@ -2025,6 +2102,87 @@ describe('render(): refusals', () => {
   ])('%s', async (_, name, source, code) => {
     put(name, source);
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
+  }, 30_000);
+
+  it('names the file and the line a compile error points at', async () => {
+    put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
+    put('broken/page.tsx', "import {Card} from './Card';\nexport default function Page() { return <Card />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('broken/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(/^The page does not compile \((?:broken\/)?Card\.tsx, line 1\): Unterminated JSX contents/);
+    // No machine path: the file is named from the project.
+    expect(error.message).not.toContain(dir);
+  }, 30_000);
+
+  it('names the value and the import when StyleX cannot read an imported value at build time', async () => {
+    put('sx/tokens.ts', 'export const gap = 8;\n');
+    put(
+      'sx/Row.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {\n  gap,\n} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap}});\nexport function Row() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+    );
+    put('sx/page.tsx', "import {Row} from './Row';\nexport default function Page() { return <Row />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?Row\.tsx, line 3\): StyleX could not read `gap` from \.\/tokens at build time\. A value a style uses must be written in the style, or come from a \.stylex\.ts or \.stylex\.js file that defines it with stylex\.defineVars or stylex\.defineConsts\.$/,
+    );
+  }, 30_000);
+
+  it('reads the error the same with colour forced on, and names an aliased import by its local name', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      put(
+        'sx/AliasRow.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {gap as space} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap: space}});\nexport function AliasRow() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+      );
+      put('sx/alias.tsx', "import {AliasRow} from './AliasRow';\nexport default function Page() { return <AliasRow />; }\n");
+      /** @type {any} */
+      let error;
+      try {
+        await render('sx/alias.tsx', {cwd: dir});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_COMPILE');
+      expect(error.message).toMatch(
+        /^The page does not compile \((?:sx\/)?AliasRow\.tsx, line 2\): StyleX could not read `space` from \.\/tokens at build time\./,
+      );
+      expect(error.message).not.toContain('\u001b[');
+    } finally {
+      if (previous === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previous;
+    }
+  }, 30_000);
+
+  it('says which .stylex file StyleX could not find', async () => {
+    put(
+      'sx/missing.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {tones} from './gone.stylex';\nconst styles = stylex.create({text: {color: tones.ink}});\nexport default function Page() {\n  return <p {...stylex.props(styles.text)}>Hi</p>;\n}\n",
+    );
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/missing.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?missing\.tsx, line 2\): StyleX could not find \.\/gone\.stylex, which `tones` comes from, at build time\. Check that the file exists, or that its package is installed where the page is\.$/,
+    );
   }, 30_000);
 
   it('refuses wrong inputs and flags', async () => {
@@ -2309,8 +2467,8 @@ describe('render(): a page outside a project', () => {
 const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
 const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
 const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
-const inside = textOf(await renderPage(entry, {served: null}));
-const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+const inside = textOf(await renderPage(entry, {served: null, markupOnly: true}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}, markupOnly: true}));
 console.log(JSON.stringify({inside, outside}));
 `;
     const {NODE_PATH: _, ...env} = process.env;
@@ -2354,6 +2512,65 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
+  it('names every package the page and its own modules need in one refusal, with one install line', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed');
+    expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
+  }, 60_000);
+
+  it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
+    fs.writeFileSync(
+      path.join(away, 'used-deps.tsx'),
+      "import {Metadata} from 'not-real-next-xyz';\nimport {unused} from 'not-real-unused-xyz';\nimport {size} from './used-deps-shapes';\nimport logo from 'not-real-brand-xyz/logo.png';\nimport mark from 'not-real-mark-xyz/mark.svg';\nexport const metadata: Metadata = {title: 'x'};\nexport default () => <img src={logo} data-mark={mark} width={size} alt=\"\" />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'used-deps-shapes.ts'),
+      "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
+    fs.writeFileSync(
+      path.join(away, 'js-deps.jsx'),
+      "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts a re-export of a package whose type the module also imports without `import type`', () => {
+    fs.writeFileSync(
+      path.join(away, 're-export-deps.tsx'),
+      "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed');
+  }, 60_000);
+
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed');
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {
@@ -2364,10 +2581,112 @@ console.log(JSON.stringify({inside, outside}));
   }, 60_000);
 });
 
+describe('render(): media queries asked in JavaScript', () => {
+  it("names each media query the page asks with Core's hook or matchMedia, and says to fold the layout with CSS", async () => {
+    put(
+      'screen-query.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
+function useDark() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(window.matchMedia(\`(prefers-color-scheme: dark)\`).matches), []);
+  return dark;
+}
+export default function Page() {
+  const narrow = useMediaQuery('(max-width: 768px)');
+  const alsoNarrow = useMediaQuery('(max-width: 768px)');
+  const dark = useDark();
+  return <main>{narrow && alsoNarrow ? 'One column' : 'Two columns'}{dark ? ' dark' : ''}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query.tsx', {cwd: dir}));
+    const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toBe(
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 60_000);
+
+  it("names the hook imported from Core's root entry, and an optional matchMedia call", async () => {
+    put(
+      'screen-query-root.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core';
+export default function Page() {
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const [motion, setMotion] = useState(true);
+  useEffect(() => setMotion(!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches), []);
+  return <main>{wide ? 'Wide' : 'Narrow'}{motion ? '' : ' still'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-root.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks useMediaQuery('(min-width: 1024px)'), matchMedia('(prefers-reduced-motion: reduce)') in JavaScript");
+  }, 60_000);
+
+  it("names the hook called through a namespace import of Core, and a call with no query, without failing the render", async () => {
+    put(
+      'screen-query-namespace.tsx',
+      `import * as core from '@astryxdesign/core';
+function never() {
+  return [window.matchMedia?.(), matchMedia(), core.useMediaQuery()];
+}
+export default function Page() {
+  const narrow = core.useMediaQuery('(max-width: 600px)');
+  return <main>{narrow ? 'Narrow' : 'Wide'}{typeof never}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-namespace.tsx', {cwd: dir}));
+    expect(result.type).toBe('render.page');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks matchMedia(), useMediaQuery(), useMediaQuery('(max-width: 600px)') in JavaScript");
+  }, 60_000);
+
+  it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
+    put(
+      'no-screen-query.tsx',
+      `function useMediaQuery(query: string) {
+  return query.length > 100;
+}
+export default function Page() {
+  return <main>{useMediaQuery('(max-width: 768px)') ? 'narrow' : 'wide'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('no-screen-query.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('screen-query');
+  }, 60_000);
+});
+
 describe('render(): charts', () => {
   const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
+  /**
+   * Each drawing in a page, in order: its picture's size and its markup.
+   * @param {string} html
+   */
+  const drawingsIn = html =>
+    html
+      .split(/(?=<div\b[^>]*class="recharts-wrapper")/)
+      .slice(1)
+      .map(part => {
+        const surface = /<svg\b(?![^>]*legend icon)[^>]*class="recharts-surface"[^>]*>/.exec(part)?.[0] ?? '';
+        const [, width, height] = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(surface) ?? [];
+        return {width: Number(width), height: Number(height), html: part};
+      });
+  /**
+   * Each container chart's drawings, by the container's place in the page.
+   * @param {string} html
+   */
+  const containersIn = html =>
+    html
+      .split(/(?=<div\b[^>]*class="recharts-responsive-container")/)
+      .slice(1)
+      .map(part => drawingsIn(part).slice(0, CHART_WIDTHS.length));
 
-  it('draws a chart sized by its container and a chart of fixed size, and lets the first fit the width', async () => {
+  it('draws a chart sized by its container at each width, and a chart of fixed size once', async () => {
     put(
       'charts.tsx',
       `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
@@ -2387,16 +2706,73 @@ export default function Page() {
     const result = /** @type {any} */ (await render('charts.tsx', {cwd: dir}));
     expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
     const html = fs.readFileSync(path.join(dir, 'charts.html'), 'utf8');
-    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(2);
     expect(html).toContain('recharts-line-curve');
     expect(html).toContain('recharts-bar-rectangle');
-    // A container 200 pixels high starts two and a half times as wide.
-    expect(html).toContain('viewBox="0 0 500 200"');
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important');
+    // The container is drawn at each width, all 200 pixels high, in a box
+    // with the size the container gives itself in a browser.
+    const [container] = containersIn(html);
+    expect(container.map(d => [d.width, d.height])).toEqual(CHART_WIDTHS.map(w => [w, 200]));
+    expect(html).toContain('<div data-astryx-chart-widths="" style="width:100%;height:200px" class="recharts-responsive-container">');
+    // The chart of fixed size is drawn once, as its props give it.
+    expect(drawingsIn(html).map(d => [d.width, d.height]).slice(-1)).toEqual([[300, 120]]);
+    expect(html).toContain('@container (width <= 71px)');
     expect(html).not.toContain('<astryx-chart');
   }, 60_000);
 
-  it('keeps room for a fixed chart\'s legend where its props place it, and gives a container chart\'s legend its own row', async () => {
+  it('draws a chart that fills its box at the height the box states', async () => {
+    put(
+      'charts-box.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <div style={{height: 280}}>
+        <ResponsiveContainer width="100%" height="100%"><LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart></ResponsiveContainer>
+      </div>
+      <section>
+        <ResponsiveContainer width="100%" height="50%"><LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart></ResponsiveContainer>
+      </section>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-box.tsx', {cwd: dir});
+    const [fills, unstated] = containersIn(fs.readFileSync(path.join(dir, 'charts-box.html'), 'utf8'));
+    expect(new Set(fills.map(d => d.height))).toEqual(new Set([280]));
+    // A box that states no height gives none to share: the chart is drawn
+    // 300 high and fits the box a browser gives it.
+    expect(new Set(unstated.map(d => d.height))).toEqual(new Set([300]));
+  }, 60_000);
+
+  it('gives each drawing of a container chart its own ids, so a gradient the page defines in it fills every drawing', async () => {
+    put(
+      'charts-gradient.tsx',
+      `import {ResponsiveContainer, AreaChart, Area, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data}>
+        <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
+        <XAxis dataKey="d" /><Area dataKey="v" fill="url(#fade)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+`,
+    );
+    await render('charts-gradient.tsx', {cwd: dir});
+    const [container] = containersIn(renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8')) ?? '');
+    for (const {width, html: part} of container) {
+      expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-chart0-at-${width}"`));
+      expect(part).toContain(`fill="url(#fade-chart0-at-${width})"`);
+      expect(part).not.toMatch(/id="fade"|url\(#fade\)/);
+    }
+  }, 60_000);
+
+  it("keeps room for a chart's legend where its props place it, and puts a container chart's legend inside its picture", async () => {
     put(
       'charts-legend.tsx',
       `import {ResponsiveContainer, LineChart, Line, XAxis, Legend} from 'recharts';
@@ -2416,7 +2792,7 @@ export default function Page() {
         <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Wins" /><Legend layout="vertical" align="left" verticalAlign="bottom" /></LineChart>
       </ResponsiveContainer>
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Ties" /><Legend layout="vertical" align="center" verticalAlign="bottom" /></LineChart>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Bold" /><Legend wrapperStyle={{fontSize: 12, fontWeight: 700}} /></LineChart>
       </ResponsiveContainer>
     </div>
   );
@@ -2426,38 +2802,46 @@ export default function Page() {
     const result = /** @type {any} */ (await render('charts-legend.tsx', {cwd: dir}));
     expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
     const html = fs.readFileSync(path.join(dir, 'charts-legend.html'), 'utf8');
-    const axes = [...html.matchAll(/<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/g)].map(m => ({
-      y: Number(/\by1="([\d.]+)"/.exec(m[0])?.[1]),
-      x2: Number(/\bx2="([\d.]+)"/.exec(m[0])?.[1]),
-    }));
-    // A container chart keeps no room in its picture: its legend takes its
-    // own row under it, so the x-axis sits at 200 - 5 - 30 = 165.
-    expect(axes[0].y).toBe(165);
-    // A fixed chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
-    expect(axes[1].y).toBe(141);
-    // A legend at the side keeps room on the right: the plot ends before it.
-    expect(axes[2].x2).toBeLessThan(550 - 40);
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important');
-    expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
-    // A vertical legend in a container chart sits beside the picture, centered.
-    const sided = [...html.matchAll(/<div\b[^>]*class="recharts-wrapper"[^>]*>/g)].map(m => m[0]).filter(tag => tag.includes('data-legend-side'));
-    // Right and middle, then left and bottom; a vertical legend centered
-    // across takes its own row, unmarked.
-    expect(sided).toHaveLength(2);
-    expect(sided[0]).toContain('data-legend-side="right"');
-    expect(sided[0]).toContain('data-legend-middle=""');
-    expect(sided[1]).toContain('data-legend-side="left"');
-    expect(sided[1]).not.toContain('data-legend-middle');
-    expect(sided[1]).toContain('data-legend-bottom=""');
-    // A bottom legend goes under the picture only when it is not beside it.
-    expect(html).toContain('.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}');
-    expect(html).toContain('[data-legend-side]{flex-direction:row');
-    // A side is physical: a right-to-left page reverses the row.
-    expect(html).toContain('[data-legend-side]:dir(rtl){flex-direction:row-reverse}');
-    expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
-    // Only the chart's own picture scales; a legend's icons keep their size.
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
-    expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
+    /** @param {string} part */
+    const axis = part => {
+      const line = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(part)?.[0] ?? '';
+      return {y: Number(/\by1="([\d.]+)"/.exec(line)?.[1]), x2: Number(/\bx2="([\d.]+)"/.exec(line)?.[1])};
+    };
+    /** @param {string} part */
+    const legendBox = part => {
+      const tag = /<foreignObject\b[^>]*>/.exec(part)?.[0] ?? '';
+      /** @param {string} name */
+      const n = name => Number(new RegExp(`\\b${name}="([\\d.]+)"`).exec(tag)?.[1]);
+      return {x: n('x'), y: n('y'), width: n('width'), height: n('height')};
+    };
+    const fixed = drawingsIn(html);
+    const [bottom, right, left, styled] = containersIn(html);
+    const wide = bottom.find(d => d.width === 960);
+    // Each chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
+    expect(axis(/** @type {any} */ (wide).html).y).toBe(141);
+    expect(axis(fixed.find(d => d.width === 400)?.html ?? '').y).toBe(141);
+    // A container chart's legend sits in that row, inside the picture, so it
+    // scales with the drawing and never covers it.
+    expect(legendBox(/** @type {any} */ (wide).html)).toEqual({x: 5, y: 200 - 5 - 24, width: 950, height: 24});
+    expect(/** @type {any} */ (wide).html).toMatch(/<foreignObject\b[^>]*><div style="width:100%" class="recharts-legend-wrapper">/);
+    // A legend at the side keeps room there: the plot ends before it, and
+    // the legend sits at that edge, at the height recharts gives it.
+    const sided = /** @type {any} */ (right.find(d => d.width === 960));
+    expect(axis(sided.html).x2).toBeLessThan(960 - 40);
+    const box = legendBox(sided.html);
+    expect(box.x + box.width).toBe(960 - 5);
+    const low = legendBox(/** @type {any} */ (left.find(d => d.width === 960)).html);
+    expect(low.x).toBe(5);
+    expect(low.y + low.height).toBe(220 - 5);
+    // Inside the picture a legend keeps the rest of its own style.
+    const styledLegend = /<div style="([^"]*)" class="recharts-legend-wrapper">/.exec(/** @type {any} */ (styled.find(d => d.width === 960)).html)?.[1];
+    expect(styledLegend).toContain('font-size:12px');
+    expect(styledLegend).toContain('font-weight:700');
+    expect(styledLegend).toContain('width:100%');
+    expect(styledLegend).not.toMatch(/position|left|bottom/);
+    // A chart of fixed size keeps its legend in the layer recharts puts it in.
+    expect(fixed.find(d => d.width === 550)?.html).not.toContain('<foreignObject');
+    expect(html).not.toContain('data-legend-side');
   }, 60_000);
 
   it("draws a chart's parts in the React context the page gives them", async () => {
@@ -2640,7 +3024,7 @@ export default function Page() {
 `,
     );
     await render('charts-effect-provider.tsx', {cwd: dir});
-    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    const html = renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8')) ?? '';
     expect(html).toContain('Unit: items');
     expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
     expect(html).toMatch(/a (items|km)/);
@@ -2689,16 +3073,16 @@ export default function Page() {
     // Five names of about 120 px each wrap into two rows in 470 px, so the
     // axis sits two legend rows up: 240 - 5 - 48 - 30 = 157.
     expect(Number(/\by1="([\d.]+)"/.exec(axis)?.[1])).toBe(157);
-    // In a container chart the same legend takes its own row under the
-    // picture, which keeps no room for it, so it cannot cover the axis.
+    // A container chart drawn 480 wide keeps the same room.
     put('charts-wrap-rc.tsx', fs.readFileSync(path.join(dir, 'charts-wrap.tsx'), 'utf8')
       .replace("import {LineChart,", "import {ResponsiveContainer, LineChart,")
       .replace('<LineChart width={480} height={240} data={data}>', '<ResponsiveContainer width="100%" height={240}><LineChart data={data}>')
       .replace('</LineChart>', '</LineChart></ResponsiveContainer>'));
     await render('charts-wrap-rc.tsx', {cwd: dir});
     const rc = fs.readFileSync(path.join(dir, 'charts-wrap-rc.html'), 'utf8');
-    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(rc)?.[0] ?? '';
-    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(240 - 5 - 30);
+    const at480 = drawingsIn(rc).find(d => d.width === 480)?.html ?? '';
+    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(at480)?.[0] ?? '';
+    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(157);
     expect(rc).toContain('recharts-legend-wrapper');
   }, 60_000);
 
@@ -2724,17 +3108,29 @@ export default function Page() {
     );
     await render('charts-axis.tsx', {cwd: dir});
     const html = fs.readFileSync(path.join(dir, 'charts-axis.html'), 'utf8');
-    const ticks = [...html.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
-      x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
-      anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
-      text: m[2],
-    }));
-    const timeTicks = ticks.filter(t => t.text.startsWith('Apr'));
-    const last = timeTicks[timeTicks.length - 1];
-    // The drawing is 750 wide; an 11-character label at 14 px is about 92 wide.
-    expect(last.anchor).toBe('middle');
-    expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(750);
-    expect(timeTicks.length).toBeLessThan(25);
+    /** @param {string} part */
+    const ticksIn = part =>
+      [...part.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
+        x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
+        anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
+        text: m[2],
+      }));
+    const drawings = drawingsIn(html);
+    // In each drawing of the container chart, the last label stays inside:
+    // an 11-character label at 14 px is about 92 wide. A drawing too narrow
+    // for one label shows none, as a browser that narrow does.
+    for (const {width, html: part} of drawings.filter(d => d.width !== 400)) {
+      const timeTicks = ticksIn(part).filter(t => t.text.startsWith('Apr'));
+      const last = timeTicks[timeTicks.length - 1];
+      if (width < 240 && !last) continue;
+      expect(last.anchor).toBe('middle');
+      expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(width);
+      expect(timeTicks.length).toBeLessThan(25);
+    }
+    // A narrower drawing shows fewer labels, as a narrower browser does.
+    const count = (/** @type {number} */ w) => ticksIn(drawings.find(d => d.width === w)?.html ?? '').length;
+    expect(count(339)).toBeLessThan(count(1358));
+    const ticks = ticksIn(drawings.find(d => d.width === 400)?.html ?? '');
     const catTicks = ticks.filter(t => t.text.startsWith('Category'));
     expect(catTicks.length).toBeGreaterThan(1);
     expect(catTicks.length).toBeLessThan(24);
