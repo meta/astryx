@@ -93,8 +93,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   toolbar before leaving it.
 - **A start lane holding an OverflowList folds rather than wraps.** FR2 gap:
   below its folded content width (about 135 px in the overflow-actions story),
-  such a lane overlaps the end lane, because the lane drops its automatic
-  minimum so the list, whose own width is its unfolded width, can shrink. A 320 px no-overlap test guards the supported range.
+  such a lane overlaps the end lane. The lane drops its automatic minimum so
+  the list, whose own width is its unfolded width, can shrink. A 320 px
+  no-overlap test guards the supported range.
 - **Some fields keep their own tab stops.** A `textarea` or `select` in the
   row is outside the roving stop: it keeps its own tab stop and the arrow keys
   skip it. The APG toolbar pattern makes the toolbar a single tab stop.

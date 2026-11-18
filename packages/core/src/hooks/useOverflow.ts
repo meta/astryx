@@ -126,9 +126,24 @@ function isFlexRow(parent: Element | null): boolean {
   );
 }
 
-/** An element's sub-pixel border-box width; its rounded width without layout. */
-function exactWidth(element: HTMLElement): number {
-  return element.getBoundingClientRect().width || element.offsetWidth;
+/**
+ * An element's sub-pixel border-box width in layout pixels; its rounded width
+ * without layout.
+ */
+function exactWidth(element: HTMLElement, scale: number): number {
+  const width = element.getBoundingClientRect().width;
+  return width > 0 ? width / scale : element.offsetWidth;
+}
+
+/**
+ * How many screen pixels one layout pixel takes, from the measure copy (a
+ * scaled ancestor makes it differ from 1). The copy is the widest box the
+ * list owns, so its rounded layout width gives the smallest error.
+ */
+function layoutScale(measure: HTMLElement): number {
+  const screen = measure.getBoundingClientRect().width;
+  const layout = measure.offsetWidth;
+  return screen > 0 && layout > 0 ? screen / layout : 1;
 }
 
 /** The bounds of a single-row set, from sub-pixel widths. */
@@ -138,6 +153,7 @@ function inlineBoundsOf(
   gap: number,
   minVisibleItems: number,
   collapseFrom: 'start' | 'end',
+  maxVisibleItems: number | undefined,
   chrome: number,
   inFlexRow: boolean,
 ): OverflowInlineBounds {
@@ -153,11 +169,25 @@ function inlineBoundsOf(
   const collapsed = folds
     ? span(keptWidths) + (keptWidths.length > 0 ? gap : 0) + indicatorWidth
     : span(widths);
+  // The most the list shows: the items the cap allows (the floor wins over a
+  // smaller cap), and the indicator when the cap leaves items out.
+  const allowed = Math.max(
+    kept,
+    Math.min(maxVisibleItems ?? widths.length, widths.length),
+  );
+  const allowedWidths =
+    collapseFrom === 'end'
+      ? widths.slice(0, allowed)
+      : widths.slice(widths.length - allowed);
+  const capped = allowed < widths.length && indicatorWidth > 0;
+  const rendered =
+    span(allowedWidths) +
+    (capped ? (allowedWidths.length > 0 ? gap : 0) + indicatorWidth : 0);
   // Round the folded width up so the trigger never clips. Keep the unfolded
   // width exact: the list's width at it must not widen a list with room.
   return {
     collapsed: Math.ceil(collapsed),
-    rendered: span(widths),
+    rendered,
     chrome,
     inFlexRow,
   };
@@ -575,25 +605,28 @@ export function useOverflowInternal(
           px(style.borderLeftWidth) +
           px(style.borderRightWidth);
       }
+      const scale = tracksInlineBounds ? layoutScale(measure) : 1;
+      const exact = (element: HTMLElement) => exactWidth(element, scale);
       if (tracksInlineBounds && !observeParent) {
         // The list publishes its unfolded width as its own width. It fits
         // sub-pixel items in its sub-pixel content box, so a box at that
         // width holds every item.
-        widths = children.map(exactWidth);
+        widths = children.map(exact);
         fitIndicatorWidth = hasIndicator
-          ? exactWidth(allChildren[allChildren.length - 1])
+          ? exact(allChildren[allChildren.length - 1])
           : 0;
         // Layout snaps a published width to a fraction of a pixel; the
         // allowance keeps a box at that width holding every item.
-        availableWidth = exactWidth(container) - chrome + 0.05;
+        availableWidth = exact(container) - chrome + 0.05;
       }
       if (tracksInlineBounds) {
         const bounds = inlineBoundsOf(
-          children.map(exactWidth),
-          hasIndicator ? exactWidth(allChildren[allChildren.length - 1]) : 0,
+          children.map(exact),
+          hasIndicator ? exact(allChildren[allChildren.length - 1]) : 0,
           gap,
           minVisibleItems,
           collapseFrom,
+          maxVisibleItems,
           chrome,
           !observeParent && isFlexRow(container.parentElement),
         );

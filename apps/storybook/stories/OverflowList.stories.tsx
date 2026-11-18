@@ -500,7 +500,7 @@ export const ContentSizedParent: Story = {
   ),
 };
 
-/** In a wide flex row, a list whose width the caller sets or caps (in pixels, with `calc()`, or with a flex basis) folds within that width and keeps its trigger; one set narrower than its folded width holds its folded width. */
+/** In a wide flex row, a list whose width the caller sets or caps (in pixels, with `calc()`, or with a flex basis) folds within that width and keeps its trigger; one set narrower than its folded width holds its folded width. A list capped at three items is as wide as those items and its trigger. */
 export const CallerLimitedWidth: Story = {
   render: () => {
     const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
@@ -536,6 +536,22 @@ export const CallerLimitedWidth: Story = {
         </div>
         <div data-testid="width-narrow" style={{display: 'flex', marginTop: 8}}>
           {list({width: 30})}
+        </div>
+        <div data-testid="count-capped" style={{display: 'flex', marginTop: 8}}>
+          <OverflowList
+            gap={2}
+            maxVisibleItems={3}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
         </div>
       </div>
     );
@@ -624,6 +640,42 @@ export const FollowedBySibling: Story = {
             <Button label="Save" size="sm" />
             <Button label="Edit" size="sm" />
           </OverflowList>
+        </div>
+      </div>
+    );
+  },
+};
+
+/** Lists in flex rows under an ancestor scaled to one half: one with room shows every item, one in a 30 px parent keeps its trigger whole. */
+export const ScaledRow: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    const list = () => (
+      <OverflowList
+        gap={2}
+        overflowRenderer={overflowItems => (
+          <Button
+            label={`+${overflowItems.length}`}
+            variant="ghost"
+            size="sm"
+          />
+        )}>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div
+        data-testid="scaled-frame"
+        style={{width: 700, transform: 'scale(0.5)', transformOrigin: '0 0'}}>
+        <div data-testid="scaled-wide" style={{display: 'flex'}}>
+          {list()}
+        </div>
+        <div
+          data-testid="scaled-narrow"
+          style={{display: 'flex', width: 30, marginTop: 8}}>
+          {list()}
         </div>
       </div>
     );

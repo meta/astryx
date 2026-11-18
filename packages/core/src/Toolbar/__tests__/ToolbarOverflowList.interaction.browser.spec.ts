@@ -801,6 +801,82 @@ test.describe('a single row’s minimum width', () => {
     expect(flexAgain.labels).toHaveLength(6);
   });
 
+  test('a list capped at three items is as wide as those items and its trigger', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--caller-limited-width&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="count-capped"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(300);
+    const read = await page.evaluate(() => {
+      const list = document.querySelector<HTMLElement>(
+        '[data-testid="count-capped"] .astryx-overflow-list',
+      );
+      const last = list?.lastElementChild;
+      if (list == null || last == null) {
+        throw new Error('missing story parts');
+      }
+      return {
+        labels: [...list.children].map(child =>
+          (child as HTMLElement).innerText.trim(),
+        ),
+        blank:
+          list.getBoundingClientRect().right -
+          last.getBoundingClientRect().right,
+      };
+    });
+    test.info().annotations.push({
+      type: 'count-capped',
+      description: JSON.stringify(read),
+    });
+    expect(read.labels).toEqual(['Save', 'Edit', 'Duplicate', '+3']);
+    expect(read.blank).toBeLessThanOrEqual(1);
+  });
+
+  test('under an ancestor scaled to one half, a list with room shows every item and one in a 30 px parent keeps its trigger whole', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(300);
+    const read = await page.evaluate(() =>
+      ['scaled-wide', 'scaled-narrow'].map(id => {
+        const list = document.querySelector<HTMLElement>(
+          `[data-testid="${id}"] .astryx-overflow-list`,
+        );
+        if (list == null) {
+          throw new Error(`No list in ${id}`);
+        }
+        const last = list.lastElementChild?.getBoundingClientRect();
+        return {
+          labels: [...list.children].map(child =>
+            (child as HTMLElement).innerText.trim(),
+          ),
+          clipped:
+            last != null &&
+            last.right > list.getBoundingClientRect().right + 0.5,
+        };
+      }),
+    );
+    test.info().annotations.push({
+      type: 'scaled',
+      description: JSON.stringify(read),
+    });
+    const [wide, narrow] = read;
+    expect(wide.labels).toHaveLength(6);
+    expect(narrow.labels).toEqual(['+6']);
+    expect(narrow.clipped).toBe(false);
+  });
+
   test('a list capped with calc() holds one fold across frames', async ({
     page,
   }) => {
