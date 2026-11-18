@@ -68,11 +68,15 @@ export async function searchIconSection(query, {cwd, declaredNames, limit}) {
           ? iconSetDirectoryNames(integration.iconSets)
           : [],
       ),
-      sets: async () => {
+      read: async () => {
         try {
-          return (await loaded.iconSets()).sets;
+          return await loaded.iconSets();
         } catch {
-          return [];
+          return {
+            sets: [],
+            withdrawn: [],
+            choice: /** @type {const} */ ({status: 'none', reason: ''}),
+          };
         }
       },
     },
@@ -175,9 +179,7 @@ async function gatherDomains(options) {
     return result;
   }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
-    wants('component')
-      ? gatherComponents(coreDir, cwd)
-      : [],
+    wants('component') ? gatherComponents(coreDir, cwd) : [],
     wants('hook') ? gatherHooks(coreDir) : [],
     wants('doc') ? gatherDocs(cwd) : [],
     wants('template') ? gatherTemplates(cwd) : [],

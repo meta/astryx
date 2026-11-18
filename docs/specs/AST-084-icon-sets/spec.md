@@ -20,6 +20,7 @@ verified_by:
     packages/cli/api/icon/look-theme-maps.test.mjs,
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
+    packages/cli/api/search/search.icons.test.mjs,
   ]
 ---
 

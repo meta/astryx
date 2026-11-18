@@ -23,6 +23,8 @@ import {asksForIcon} from '../../foundation/discovery/icon-ranking.mjs';
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./search.mjs')} */
 const {search} = require('./search.mjs');
+/** @type {typeof import('../icon/icon.mjs')} */
+const {icon} = require('../icon/icon.mjs');
 
 const SLOW = 120_000;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -97,8 +99,9 @@ function writeTilesIntegration(dir) {
  * installed and, when `pack`, the fixture icon set.
  * @param {string} dir
  * @param {boolean} pack
+ * @param {Record<string, unknown>} [config] astryx.config.mjs contents
  */
-function writeProject(dir, pack) {
+function writeProject(dir, pack, config) {
   fs.rmSync(dir, {recursive: true, force: true});
   const scope = path.join(dir, 'node_modules', '@astryxdesign');
   fs.mkdirSync(scope, {recursive: true});
@@ -116,6 +119,12 @@ function writeProject(dir, pack) {
     path.join(dir, 'package.json'),
     JSON.stringify({name: 'app', private: true, dependencies}),
   );
+  if (config) {
+    fs.writeFileSync(
+      path.join(dir, 'astryx.config.mjs'),
+      `export default ${JSON.stringify(config)};\n`,
+    );
+  }
 }
 
 /** @param {string} cwd @param {string} query */
@@ -247,6 +256,25 @@ describe('search icon section', () => {
           query,
         ).toEqual(['image']);
       }
+    },
+    SLOW,
+  );
+
+  it(
+    "draws each icon in the project's look, as the icon finder does",
+    async () => {
+      const looked = path.join(root, 'looked');
+      writeProject(looked, true, {
+        experimental: {iconSet: 'glyphs', iconVariant: 'solid'},
+      });
+      const {data} = await search('trash icon', {cwd: looked});
+      const finder = await icon('trash', {cwd: looked});
+      if (finder.type !== 'icon.search') throw new Error(finder.type);
+      expect(data.icons?.results[0]).toMatchObject({
+        id: 'trash',
+        import: "import {TrashSolidIcon} from '@acme/glyphs';",
+      });
+      expect(data.icons?.results[0].import).toBe(finder.data.matches[0].import);
     },
     SLOW,
   );
