@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx experimental theme editor how`: a top bar's fill reaches the top nav along with its text, so the text always reads on the bar's own fill; a top nav takes a fill of its own. A word that begins only one component's name before a part noun names that component ("segmented buttons" are the segmented control, never every button). After a ";" that goes on with a part's colon list, the items its bar holds are that bar's ("navigation bar: …; the selected item gets a pill" styles the top nav's selected item), and a top nav's items in the bar are written on the top nav item.
+[experimental] `astryx experimental theme editor how`: a top bar's fill reaches the top nav along with its text, so the text always reads on the bar's own fill; a top nav takes a fill of its own. A word that begins only one component's name before a part noun names that component ("segmented buttons" are the segmented control, never every button). After a ";" that goes on with a part's colon list, the items its bar holds are that bar's ("navigation bar: …; the selected item gets a pill" styles the top nav's selected item), and a top nav's items in the bar are written on the top nav item.
 
 - `astryx experimental theme editor`: the danger color now reaches the error toast's fill and the gray dial the slider track (each at the shade nearest Core's own), a pale accent that does not read on a track gets a line on its own fill rather than one darkening the track, and a selected look's missed line says what the accent tint draws in dark, with a softer one first where it is a strong block of the accent.
 
