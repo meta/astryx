@@ -587,10 +587,28 @@ function validateMergeBackAtRef(
     plan.cutSha,
     releaseRef,
   ]);
+  const releaseEntries = releaseDiff.split('\n').filter(Boolean);
+  const releasePromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base: plan.cutSha,
+    head: releaseRef,
+    entries: releaseEntries,
+    version: marker.version,
+  });
+  const projectedPromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base,
+    head,
+    entries,
+    version: marker.version,
+    workingTree,
+  });
+  errors.push(...releasePromotion.errors, ...projectedPromotion.errors);
+  const validatedCodemodPromotionPaths = new Set(
+    [...releasePromotion.validatedPaths].filter(file =>
+      projectedPromotion.validatedPaths.has(file),
+    ),
+  );
   const releaseRenames = new Set(
-    releaseDiff
-      .split('\n')
-      .filter(Boolean)
+    releaseEntries
       .map(entry => entry.split('\t'))
       .filter(
         ([status, ...files]) => status?.startsWith('R') && files.length === 2,
@@ -644,6 +662,7 @@ function validateMergeBackAtRef(
       releaseOutputs,
       headOutputs,
       releaseRenames,
+      validatedCodemodPromotionPaths,
       releaseVersion: marker.version,
       fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
       cutManifests,
@@ -1305,7 +1324,7 @@ function validateCodemodPromotionApplicabilityMove({
 
 function validateCodemodPromotionApplicabilityAtRef(
   root,
-  {base, head, entries, version},
+  {base, head, entries, version, workingTree = false},
 ) {
   const matchingEntries = entries.filter(entry =>
     (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
@@ -1323,10 +1342,14 @@ function validateCodemodPromotionApplicabilityAtRef(
   const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
     CODEMOD_PROMOTION_SPEC_PATH,
   );
-  const after = filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
-    CODEMOD_PROMOTION_SPEC_PATH,
-  );
-  if (before === undefined || after === undefined)
+  const after = workingTree
+    ? fs.existsSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      ? fs.readFileSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      : null
+    : filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+        CODEMOD_PROMOTION_SPEC_PATH,
+      );
+  if (before === null || after === null)
     return {
       errors: [
         `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
@@ -1516,6 +1539,7 @@ function validateReleaseMergeBack({
   releaseOutputs,
   headOutputs,
   releaseRenames = new Set(),
+  validatedCodemodPromotionPaths = new Set(),
   releaseVersion,
   fixedNames = new Set(),
   cutManifests = new Map(),
@@ -1561,6 +1585,14 @@ function validateReleaseMergeBack({
         if (!releaseManifestPaths.has(file))
           errors.push(
             `release merge-back changed a manifest not changed on the published branch: ${file}`,
+          );
+      } else if (isCodemodPromotionApplicabilityPath(file)) {
+        if (
+          status !== 'M' ||
+          !validatedCodemodPromotionPaths.has(file)
+        )
+          errors.push(
+            `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
           );
       } else if (isReleaseOutputPath(file)) {
         if (!releaseOutputPaths.has(file) && !releaseRenamePaths.has(file))
@@ -2111,6 +2143,7 @@ export {
   latestStableVersion,
   listActiveBranches,
   mergeBackEntries,
+  validateCodemodPromotionApplicabilityAtRef,
   validateCodemodPromotionApplicabilityMove,
   validateIdentity,
   validateRefMarker,

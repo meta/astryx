@@ -30,6 +30,7 @@ import {
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  validateCodemodPromotionApplicabilityAtRef,
   validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
   validateReleaseTestRepair,
@@ -512,6 +513,39 @@ describe('active release branch authority', () => {
     expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
       'invalid',
     );
+  });
+
+  it('reports a missing AST-057 record instead of reading null bytes', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-codemod-applicability-'),
+    );
+    roots.push(root);
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const {base, deleted} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'base',
+        snapshot: true,
+        files: {[spec]: 'record\n'},
+      },
+      {
+        ref: 'refs/heads/candidate',
+        name: 'deleted',
+        parent: 'base',
+        files: {[spec]: null},
+      },
+    ]);
+
+    const result = validateCodemodPromotionApplicabilityAtRef(root, {
+      base,
+      head: deleted,
+      entries: [`D\t${spec}`],
+      version: '0.7.17',
+    });
+    expect(result.errors).toContain(
+      `${spec} must exist before and after the codemod promotion`,
+    );
+    expect(result.validatedPaths).toEqual(new Set());
   });
 
   it('admits one post-bump test repair whose patch already merged on main', () => {
@@ -1337,6 +1371,39 @@ describe('published release merge-back (FR50)', () => {
       }),
     ).toContain(
       `release merge-back rename does not match published branch: ${from} -> ${to}`,
+    );
+  });
+
+  it('admits only a byte-validated codemod applicability move', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const entries = [
+      'D\t.changeset/frozen.md',
+      'M\tpackages/core/CHANGELOG.md',
+      `M\t${spec}`,
+    ];
+    const common = {
+      entries,
+      base: mainAt('0.7.0'),
+      head: mainAt('0.7.0'),
+    };
+
+    expect(
+      mergeBack({
+        ...common,
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(mergeBack(common)).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+    expect(
+      mergeBack({
+        ...common,
+        entries: [...entries.slice(0, -1), `D\t${spec}`],
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
     );
   });
 

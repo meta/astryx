@@ -1,19 +1,38 @@
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index b4801ce1a88..4146a73d733 100644
+index b4801ce1a88..9414fa0a926 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
-@@ -25,6 +25,7 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
- import {
-   classifyReleaseDiff,
-   diffEntryFiles,
+@@ -27,0 +28 @@ import {
 +  isCodemodPromotionApplicabilityPath,
-   isReleaseOutputPath,
-   isReleaseTestRepairPath,
- } from './release-paths.mjs';
-@@ -1259,7 +1260,104 @@ function validateReleasePolicyCarryAtRef(
-   };
- }
- 
+@@ -588,0 +590,20 @@ function validateMergeBackAtRef(
++  const releaseEntries = releaseDiff.split('\n').filter(Boolean);
++  const releasePromotion = validateCodemodPromotionApplicabilityAtRef(root, {
++    base: plan.cutSha,
++    head: releaseRef,
++    entries: releaseEntries,
++    version: marker.version,
++  });
++  const projectedPromotion = validateCodemodPromotionApplicabilityAtRef(root, {
++    base,
++    head,
++    entries,
++    version: marker.version,
++    workingTree,
++  });
++  errors.push(...releasePromotion.errors, ...projectedPromotion.errors);
++  const validatedCodemodPromotionPaths = new Set(
++    [...releasePromotion.validatedPaths].filter(file =>
++      projectedPromotion.validatedPaths.has(file),
++    ),
++  );
+@@ -590,3 +611 @@ function validateMergeBackAtRef(
+-    releaseDiff
+-      .split('\n')
+-      .filter(Boolean)
++    releaseEntries
+@@ -645,0 +665 @@ function validateMergeBackAtRef(
++      validatedCodemodPromotionPaths,
+@@ -1262 +1282,102 @@ function validateReleasePolicyCarryAtRef(
 -function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
 +const CODEMOD_PROMOTION_SPEC_PATH =
 +  'docs/specs/AST-057-row-actions/spec.md';
@@ -60,7 +79,7 @@ index b4801ce1a88..4146a73d733 100644
 +
 +function validateCodemodPromotionApplicabilityAtRef(
 +  root,
-+  {base, head, entries, version},
++  {base, head, entries, version, workingTree = false},
 +) {
 +  const matchingEntries = entries.filter(entry =>
 +    (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
@@ -78,10 +97,14 @@ index b4801ce1a88..4146a73d733 100644
 +  const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
 +    CODEMOD_PROMOTION_SPEC_PATH,
 +  );
-+  const after = filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
-+    CODEMOD_PROMOTION_SPEC_PATH,
-+  );
-+  if (before === undefined || after === undefined)
++  const after = workingTree
++    ? fs.existsSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
++      ? fs.readFileSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
++      : null
++    : filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
++        CODEMOD_PROMOTION_SPEC_PATH,
++      );
++  if (before === null || after === null)
 +    return {
 +      errors: [
 +        `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
@@ -113,13 +136,7 @@ index b4801ce1a88..4146a73d733 100644
 +    validatedCodemodPromotionPaths = new Set(),
 +  } = {},
 +) {
-   const errors = [];
-   const planned = plan
-     ? new Map(plan.changesets.map(entry => [entry.path, entry.sha256]))
-@@ -1273,8 +1371,16 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
-       continue;
-     }
-     for (const file of files) {
+@@ -1276,2 +1397,10 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
 -      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file))
 -        errors.push(`release bump contains a non-generated path: ${file}`);
 +      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file)) {
@@ -132,13 +149,18 @@ index b4801ce1a88..4146a73d733 100644
 +          errors.push(`release bump contains a non-generated path: ${file}`);
 +        }
 +      }
-       if (file.startsWith('.changeset/')) {
-         if (status !== 'D')
-           errors.push(
-@@ -1853,7 +1959,20 @@ async function main() {
-       patchId = repair.patchId;
-       diffErrors = repair.errors;
-     } else if (kind === 'version-bump') {
+@@ -1412,0 +1542 @@ function validateReleaseMergeBack({
++  validatedCodemodPromotionPaths = new Set(),
+@@ -1458,0 +1589,8 @@ function validateReleaseMergeBack({
++      } else if (isCodemodPromotionApplicabilityPath(file)) {
++        if (
++          status !== 'M' ||
++          !validatedCodemodPromotionPaths.has(file)
++        )
++          errors.push(
++            `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
++          );
+@@ -1856 +1994,14 @@ async function main() {
 -      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
 +      const promotion = validateCodemodPromotionApplicabilityAtRef(root, {
 +        base,
@@ -154,41 +176,19 @@ index b4801ce1a88..4146a73d733 100644
 +        }),
 +        ...promotion.errors,
 +      ];
-     } else {
-       diffErrors = [
-         'release candidate contains paths outside the generated version bump or test-repair classes',
-@@ -1992,6 +2111,7 @@ export {
-   latestStableVersion,
-   listActiveBranches,
-   mergeBackEntries,
+@@ -1994,0 +2146,2 @@ export {
++  validateCodemodPromotionApplicabilityAtRef,
 +  validateCodemodPromotionApplicabilityMove,
-   validateIdentity,
-   validateRefMarker,
-   validateReleaseDiff,
 diff --git a/scripts/release/active-release.test.mjs b/scripts/release/active-release.test.mjs
-index a7cc3b8a5e0..58bed589f09 100644
+index a7cc3b8a5e0..d039c699690 100644
 --- a/scripts/release/active-release.test.mjs
 +++ b/scripts/release/active-release.test.mjs
-@@ -30,6 +30,7 @@ import {
-   latestStableVersion,
-   mergeBackEntries,
-   nextPlannedVersion,
+@@ -32,0 +33,2 @@ import {
++  validateCodemodPromotionApplicabilityAtRef,
 +  validateCodemodPromotionApplicabilityMove,
-   validateReleaseDiff,
-   validateReleaseTestRepair,
-   validateHistoricalReleaseMergeBack,
-@@ -37,6 +38,7 @@ import {
-   validateReleaseState,
-   writeAuthority,
- } from './active-release.mjs';
+@@ -39,0 +42 @@ import {
 +import {classifyReleaseDiff} from './release-paths.mjs';
- 
- const CUT = '1'.repeat(40);
- const HEAD = '2'.repeat(40);
-@@ -456,6 +458,62 @@ describe('active release branch authority', () => {
-     ).toEqual([]);
-   });
- 
+@@ -458,0 +462,89 @@ describe('active release branch authority', () => {
 +  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
 +    const spec = 'docs/specs/AST-057-row-actions/spec.md';
 +    const sources = [
@@ -245,17 +245,78 @@ index a7cc3b8a5e0..58bed589f09 100644
 +    );
 +  });
 +
-   it('admits one post-bump test repair whose patch already merged on main', () => {
-     const patchId = 'a'.repeat(40);
-     const changeDigest = 'c'.repeat(64);
++  it('reports a missing AST-057 record instead of reading null bytes', () => {
++    const root = fs.mkdtempSync(
++      path.join(os.tmpdir(), 'astryx-codemod-applicability-'),
++    );
++    roots.push(root);
++    const spec = 'docs/specs/AST-057-row-actions/spec.md';
++    const {base, deleted} = createRepository(root, [
++      {
++        ref: 'refs/heads/main',
++        name: 'base',
++        snapshot: true,
++        files: {[spec]: 'record\n'},
++      },
++      {
++        ref: 'refs/heads/candidate',
++        name: 'deleted',
++        parent: 'base',
++        files: {[spec]: null},
++      },
++    ]);
++
++    const result = validateCodemodPromotionApplicabilityAtRef(root, {
++      base,
++      head: deleted,
++      entries: [`D\t${spec}`],
++      version: '0.7.17',
++    });
++    expect(result.errors).toContain(
++      `${spec} must exist before and after the codemod promotion`,
++    );
++    expect(result.validatedPaths).toEqual(new Set());
++  });
++
+@@ -1284,0 +1377,33 @@ describe('published release merge-back (FR50)', () => {
++  it('admits only a byte-validated codemod applicability move', () => {
++    const spec = 'docs/specs/AST-057-row-actions/spec.md';
++    const entries = [
++      'D\t.changeset/frozen.md',
++      'M\tpackages/core/CHANGELOG.md',
++      `M\t${spec}`,
++    ];
++    const common = {
++      entries,
++      base: mainAt('0.7.0'),
++      head: mainAt('0.7.0'),
++    };
++
++    expect(
++      mergeBack({
++        ...common,
++        validatedCodemodPromotionPaths: new Set([spec]),
++      }),
++    ).toEqual([]);
++    expect(mergeBack(common)).toContain(
++      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
++    );
++    expect(
++      mergeBack({
++        ...common,
++        entries: [...entries.slice(0, -1), `D\t${spec}`],
++        validatedCodemodPromotionPaths: new Set([spec]),
++      }),
++    ).toContain(
++      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
++    );
++  });
++
 diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
 index 8ede431dd48..4895a3fdb82 100644
 --- a/scripts/release/release-paths.mjs
 +++ b/scripts/release/release-paths.mjs
-@@ -19,6 +19,13 @@ const RELEASE_OUTPUT_PATTERNS = [
-   /^pnpm-lock\.yaml$/,
- ];
- 
+@@ -21,0 +22,7 @@ const RELEASE_OUTPUT_PATTERNS = [
 +const CODEMOD_PROMOTION_APPLICABILITY_PATH =
 +  'docs/specs/AST-057-row-actions/spec.md';
 +
@@ -263,26 +324,11 @@ index 8ede431dd48..4895a3fdb82 100644
 +  return file === CODEMOD_PROMOTION_APPLICABILITY_PATH;
 +}
 +
- const RELEASE_TEST_REPAIR_PATTERNS = [
-   /(?:^|\/)__tests__\//,
-   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
-@@ -56,7 +63,10 @@ function classifyReleaseDiff(entries) {
-   if (paths.every(isReleaseTestRepairPath)) return 'test-repair';
-   if (
-     paths.every(
+@@ -59 +66,4 @@ function classifyReleaseDiff(entries) {
 -      file => file.startsWith('.changeset/') || isReleaseOutputPath(file),
 +      file =>
 +        file.startsWith('.changeset/') ||
 +        isReleaseOutputPath(file) ||
 +        isCodemodPromotionApplicabilityPath(file),
-     )
-   ) {
-     return 'version-bump';
-@@ -75,6 +85,7 @@ if (process.argv.includes('--classify')) {
- export {
-   classifyReleaseDiff,
-   diffEntryFiles,
+@@ -77,0 +88 @@ export {
 +  isCodemodPromotionApplicabilityPath,
-   isReleaseOutputPath,
-   isReleaseTestRepairPath,
- };
