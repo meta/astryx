@@ -799,13 +799,6 @@ function tintedColors(c) {
 }
 
 /**
- * A clause that forbids a change ("don't make buttons rounder", "inputs
- * shouldn't be round"): it changes nothing and says what stays.
- */
-const PROHIBITION =
-  /^\s*(?:(?:but|and)\s+)?(?:please\s+)?(?:don'?t|do not|never)\s+make\b|\b(?:should|must|shall)(?:n'?t| not)\s+(?:be|get|look|become)\b/;
-
-/**
  * The opposite of a look a word names, for the word said with "un-" or
  * "non-" ("un-rounded" buttons are square; "non-bold" headings regular).
  * @type {Record<string, string>}
@@ -2688,6 +2681,16 @@ const REMOVAL_VERBS =
   // said last, is a noun.)
   '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip(?!\\s*(?:$|[,.;:!?]))|nix|scrap|take away|take off)(?: all the| the| all| any)?';
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
+/**
+ * A clause that forbids a change ("don't make buttons rounder", "never hide
+ * the tab underline", "inputs shouldn't be round"): nothing changes.
+ */
+const PROHIBITION = new RegExp(
+  `^\\s*(?:(?:but|and)\\s+)?(?:please\\s+)?(?:don'?t|do not|never)\\s+(?:make|hide|${REMOVAL_VERBS})\\b|\\b(?:should|must|shall)(?:n'?t| not)\\s+(?:be|get|look|become)\\b`,
+);
+/** Words that ask for a setting's earlier value: a reset, never a look. */
+const GOING_BACK =
+  /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
 /** The things a removal can take away. */
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
@@ -19304,9 +19307,7 @@ export function draftAnswer(ctx, env, question) {
       ? c.text.replace(/\bdefault\b/g, ' ')
       : c.text;
     if (
-      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/.test(
-        resetText,
-      ) ||
+      !GOING_BACK.test(resetText) ||
       /\bby default\b|\bthe last change\b|\beverything\b/.test(c.text) ||
       (c.colors.length > 0 &&
         !/\b(by mistake|by accident|accidentally)\b/.test(c.text)) ||
@@ -27110,7 +27111,14 @@ export function draftAnswer(ctx, env, question) {
             : 'a theme that is always dark: mode dark-only',
         options: [[set('mode', 'dark-only')]],
       };
-    if (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length)
+    // ("use the default theme": a theme named is the app's choice, a switch.)
+    if (GOING_BACK.test(t) && /\btheme\b/.test(t) && !c.colors.length)
+      return {
+        text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
+        options: [],
+        lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
+      };
+    if ((/\b(undo|go back)\b/.test(t) || GOING_BACK.test(t)) && !c.colors.length)
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
@@ -31676,6 +31684,8 @@ export function draftAnswer(ctx, env, question) {
     // look", names something how cannot see: its colors are asked for,
     // never guessed.)
     const lookWrites = result.some(r => r.options.some(o => o.length));
+    // ("look like before" is the earlier look, a reset, never a name.)
+    notTaken.splice(0, notTaken.length, ...notTaken.filter(w => !GOING_BACK.test(`like ${w}`)));
     // (By position, never a list of brands: a word said as a look's name,
     // "<word> theme", "<word>-like", "like <word>", that the editor's own
     // words do not hold (a dial's help, a feel, a describing word) names
