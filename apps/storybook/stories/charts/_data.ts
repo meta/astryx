@@ -165,6 +165,19 @@ export const dailyVisitorsData = [
   {day: 'Jun 15', visitors: 8330},
 ];
 
+const TRACKING_OUTAGE_DAYS = new Set(['Jun 10', 'Jun 11']);
+
+/**
+ * The same daily visitors, with no data for two days of a tracking outage.
+ * Missing days are null, not zero.
+ */
+export const dailyVisitorsWithGapData = dailyVisitorsData.map(
+  ({day, visitors}) => ({
+    day,
+    visitors: TRACKING_OUTAGE_DAYS.has(day) ? null : visitors,
+  }),
+);
+
 /** Page load time percentiles in milliseconds, by hour of day. */
 export const pageLoadTimeData = [
   {hour: '00:00', median: 820, p75: 1180, p95: 2100},
