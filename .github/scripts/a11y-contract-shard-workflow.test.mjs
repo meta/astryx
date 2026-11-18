@@ -126,7 +126,27 @@ describe('the single contract-leg dispatch', () => {
     const release =
       'pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium';
     expect(releaseStep.run).toContain(release);
-    expect(run.run).toContain(`${release} --repeat-each "$REPEAT"`);
+    // One pass after another, each with its own output: a component audit
+    // writes one evidence folder that passes running together would share.
+    expect(run.run).not.toContain('--repeat-each');
+    expect(run.run).toContain('for pass in $(seq 1 "$REPEAT"); do');
+    expect(run.run).toContain(
+      `${release} --output "test-results/pass-$pass" || status=1`,
+    );
+    expect(run.run).toContain('mv "$folder" "audit-evidence/pass-$pass/"');
+    expect(run.run).toMatch(/exit "\$status"\s*$/);
+    // The audits refuse a build without the source stamp ci.yml writes.
+    const stamp = step('Stamp Storybook source revision');
+    expect(stamp.run).toBe(
+      'git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt',
+    );
+    expect(job.steps.indexOf(stamp)).toBe(
+      job.steps.indexOf(step('Build packages and Storybook')) + 1,
+    );
+    const ciStamp = ci.jobs['build-storybook'].steps.find(
+      item => item.name === 'Stamp Storybook source revision',
+    );
+    expect(ciStamp.run).toBe(stamp.run);
     expect(run.env.A11Y_CONTRACT_WORKERS).toBe(
       releaseStep.env.A11Y_CONTRACT_WORKERS,
     );
@@ -149,10 +169,10 @@ describe('the single contract-leg dispatch', () => {
         'fromJSON',
         `return ${limit.replace(/^\$\{\{\s*|\s*\}\}$/g, '')};`,
       )({repeat: String(repeat)}, JSON.parse);
-    // About 20 minutes of install and build, then about 12 a pass.
+    // About 20 minutes of install and build, then about 13 a pass.
     for (let repeat = 1; repeat <= 10; repeat += 1)
       expect(minutes(repeat), `repeat ${repeat}`).toBeGreaterThanOrEqual(
-        20 + 12.5 * repeat,
+        20 + 13 * repeat,
       );
     expect(minutes(10)).toBeLessThanOrEqual(360);
   });
@@ -163,7 +183,7 @@ describe('the single contract-leg dispatch', () => {
     expect(keep.uses).toMatch(/^actions\/upload-artifact@/);
     expect(keep.with).toEqual({
       name: 'a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}',
-      path: 'test-results/\n*-audit-evidence/\n',
+      path: 'test-results/\naudit-evidence/\n',
       'retention-days': 14,
       'if-no-files-found': 'ignore',
     });
