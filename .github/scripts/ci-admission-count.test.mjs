@@ -19,7 +19,9 @@ import {afterAll, describe, expect, it} from 'vitest';
 
 import {
   CI_CEILING,
+  OPEN_CEILING,
   SMALL_MOST,
+  ceilingFor,
   pullRequestPeak,
 } from '../actions/ci-admission/count.mjs';
 
@@ -114,7 +116,16 @@ describe('the count command', () => {
         ...Array.from({length: 20}, () => ({status: 'in_progress', steps: []})),
       ],
     },
-    'repos/o/r/pulls/7': {labels: [{name: 'CLA Signed'}]},
+    // A pull request from a branch in another repository.
+    'repos/o/r/pulls/7': {
+      labels: [{name: 'CLA Signed'}],
+      head: {repo: {full_name: 'someone/r'}},
+    },
+    // A pull request from a branch in this repository.
+    'repos/o/r/pulls/8': {
+      labels: [{name: 'CLA Signed'}],
+      head: {repo: {full_name: 'o/r'}},
+    },
   };
   const run = (args, data = fixture) =>
     spawnSync(process.execPath, [COUNT, ...args], {
@@ -147,6 +158,80 @@ describe('the count command', () => {
     expect(JSON.parse(run(['--repo', 'o/r', '--peak', '30']).stdout).peak).toBe(
       30,
     );
+  });
+
+  it('holds CI to the open ceiling while no outside run waits, and to the lower ceiling while one does', () => {
+    expect(OPEN_CEILING).toBeGreaterThan(CI_CEILING);
+    expect(ceilingFor({outsideWaiting: false})).toBe(OPEN_CEILING);
+    expect(ceilingFor({outsideWaiting: true})).toBe(CI_CEILING);
+    // The looking run's own pull request counts as waiting.
+    expect(ceilingFor({outsideWaiting: false}, true)).toBe(CI_CEILING);
+    // No outside run waits: a pull request from this repository, or no pull
+    // request at all, gets the open ceiling.
+    for (const args of [
+      ['--repo', 'o/r', '--pr', '8'],
+      ['--repo', 'o/r', '--peak', '30'],
+    ]) {
+      const look = JSON.parse(run(args).stdout);
+      expect(look.ceiling, args.join(' ')).toBe(OPEN_CEILING);
+      expect(look.fits).toBe(look.others + look.peak <= OPEN_CEILING);
+    }
+    // An outside contributor's pull request looking for room gets the lower
+    // ceiling.
+    expect(JSON.parse(run(['--repo', 'o/r', '--pr', '7']).stdout).ceiling).toBe(
+      CI_CEILING,
+    );
+    // An outside contributor's run waiting for room, or not yet at its wait,
+    // holds every run to the lower ceiling.
+    const outsideRun = waitStatus => ({
+      ...fixture,
+      'repos/o/r/actions/runs?status=queued': {
+        workflow_runs: [
+          {
+            id: 13,
+            event: 'pull_request',
+            path: '.github/workflows/ci.yml',
+            updated_at: now,
+            head_repository: {full_name: 'someone/r'},
+            repository: {full_name: 'o/r'},
+          },
+        ],
+      },
+      'repos/o/r/actions/runs/13/jobs': {
+        jobs:
+          waitStatus == null
+            ? []
+            : [
+                {
+                  name: 'room',
+                  status:
+                    waitStatus === 'completed' ? 'completed' : 'in_progress',
+                  steps: [
+                    {
+                      name: 'Wait for room under the CI ceiling',
+                      status: waitStatus,
+                      started_at: longAgo,
+                      completed_at: waitStatus === 'completed' ? now : null,
+                    },
+                  ],
+                },
+                ...(waitStatus === 'completed'
+                  ? [{status: 'in_progress', steps: []}]
+                  : []),
+              ],
+      },
+    });
+    for (const status of ['in_progress', null]) {
+      const look = JSON.parse(
+        run(['--repo', 'o/r', '--peak', '30'], outsideRun(status)).stdout,
+      );
+      expect(look.ceiling, String(status)).toBe(CI_CEILING);
+    }
+    // Once that run has started, the ceiling goes back up.
+    const started = JSON.parse(
+      run(['--repo', 'o/r', '--peak', '30'], outsideRun('completed')).stdout,
+    );
+    expect(started.ceiling).toBe(OPEN_CEILING);
   });
 
   it("leaves out the pull request's own run with --run, and runs through a symlinked path", () => {

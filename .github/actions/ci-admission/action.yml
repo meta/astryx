@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Admits a whole CI run under CI's ceiling of about ninety concurrent jobs
+# Admits a whole CI run under CI's ceiling of concurrent jobs
 # (spec:AST-030 FR16, DEC-16). GitHub has no repository-wide job limit to set
 # (a `concurrency` group serializes runs, it does not count jobs), so each run
 # waits for room before its jobs start:
@@ -177,7 +177,7 @@ runs:
           // The count itself is shared with the tools that grant CI capacity,
           // so both read CI the same way (count.mjs).
           const {pathToFileURL} = await import('node:url');
-          const {CI_CEILING, STEP, AT_LIMIT_SPACING_MS, waitSpan, countLook} = await import(
+          const {ceilingFor, STEP, AT_LIMIT_SPACING_MS, waitSpan, countLook} = await import(
             pathToFileURL(process.env.COUNT_MODULE).href
           );
           const JITTER_MS = 20_000;
@@ -206,7 +206,7 @@ runs:
           // wait in the last ten minutes, about the time one run takes, and
           // no run that has waited longer still waits; otherwise CI is full
           // for it. So runs that waited out the same burst start one at a
-          // time, and CI passes ninety by about one run's jobs at most
+          // time, and CI passes its ceiling by about one run's jobs at most
           // (spec:AST-030 DEC-16).
           const PHASE = process.env.PHASE || 'whole';
           let peak = Number(process.env.PEAK);
@@ -224,10 +224,14 @@ runs:
           // the load (spec:AST-030 DEC-30). The look only picks its legs' width.
           const RELEASE_CRITICAL = 'release-critical';
           let releaseCritical = false;
+          // A pull request from a branch in another repository: an outside
+          // contributor's, which holds CI to the lower ceiling while it waits.
+          let selfOutside = false;
           const pr = context.payload.pull_request;
           if (pr != null) {
             const labels = (pr.labels ?? []).map(label => label.name);
             const fork = pr.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`;
+            selfOutside = fork;
             if (pr.draft || (fork && !labels.includes('ci:run'))) {
               core.info('This pull request runs no CI yet; nothing to admit.');
               return;
@@ -327,35 +331,36 @@ runs:
                 return;
               }
               const {others, small, smallBy, stale, counted, mainWaiting, pullWaiters, startedAtLimit} = lookAt;
+              const ceiling = ceilingFor(lookAt, selfOutside);
               // Small workflows count at least their usual most (count.mjs).
               const smallCounted = others - lookAt.large;
               const smallList = Object.entries(smallBy).map(([name, count]) => `${name} ${count}`).join(', ');
               core.info(`Look ${look}: ${counted.join('; ') || 'no CI or Main runs'}. Small workflows ${small}${smallList ? ` (${smallList})` : ''}, counted as ${smallCounted}.${stale ? ` Ignored ${stale} stale run${stale === 1 ? '' : 's'}.` : ''}`);
-              const fits = releaseCritical || (others + peak <= CI_CEILING && !mainWaiting);
+              const fits = releaseCritical || (others + peak <= ceiling && !mainWaiting);
               core.setOutput('fits', String(fits));
               if (fits) {
                 // A run with no widening matrix has no full width to take.
-                const wide = widen > 0 && others + peak + widen <= CI_CEILING;
+                const wide = widen > 0 && others + peak + widen <= ceiling;
                 core.setOutput('wide', String(wide));
                 if (releaseCritical) {
                   core.notice(`${RELEASE_CRITICAL}: this run starts at once, without waiting for room under the CI ceiling (about ${others} other jobs + ${peak}; legs at ${wide ? 'full' : 'tight'} width).`);
                   return;
                 }
-                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.${widen === 0 ? '' : wide ? ` Legs run at full width: + ${widen} <= ${CI_CEILING}.` : ` Legs run at tight width: + ${widen} > ${CI_CEILING}.`}`);
+                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${ceiling}.${widen === 0 ? '' : wide ? ` Legs run at full width: + ${widen} <= ${ceiling}.` : ` Legs run at tight width: + ${widen} > ${ceiling}.`}`);
                 return;
               }
               if (PHASE === 'room') {
-                if (others + 1 <= CI_CEILING && !mainWaiting) {
+                if (others + 1 <= ceiling && !mainWaiting) {
                   // The rest of the run carries on this wait from this look.
-                  const next = plan(others + peak - CI_CEILING, false);
+                  const next = plan(others + peak - ceiling, false);
                   core.setOutput('looks', String(spent + (next.spends ? 1 : 0)));
                   core.setOutput('next', String(Date.now() + next.interval));
-                  core.info(`Room for the Storybook build: about ${others} other jobs + 1 <= ${CI_CEILING}; the rest of the run waits.`);
+                  core.info(`Room for the Storybook build: about ${others} other jobs + 1 <= ${ceiling}; the rest of the run waits.`);
                   return;
                 }
               }
               // Room for what this look admits, if no `main` check waited.
-              const next = plan(others + (PHASE === 'room' ? 1 : peak) - CI_CEILING, mainWaiting);
+              const next = plan(others + (PHASE === 'room' ? 1 : peak) - ceiling, mainWaiting);
               if (next.spends) spent += 1;
               core.setOutput('looks', String(spent));
               // The time left decides, not the look's own API time: a slow

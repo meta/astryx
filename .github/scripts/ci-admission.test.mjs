@@ -832,12 +832,21 @@ describe('ci admission', () => {
   /** A CI or Main run still waiting in its admission step. */
   const waitingRun = (
     id,
-    {event = 'pull_request', path = '.github/workflows/ci.yml'} = {},
+    {
+      event = 'pull_request',
+      path = '.github/workflows/ci.yml',
+      outside = false,
+    } = {},
   ) => ({
     id,
     status: 'in_progress',
     event,
     path,
+    // An outside contributor's run comes from a branch in another repository.
+    ...(outside && {
+      head_repository: {full_name: 'fork/r'},
+      repository: {full_name: 'o/r'},
+    }),
     jobs: [
       {status: 'in_progress', steps: [{name: STEP, status: 'in_progress'}]},
     ],
@@ -859,6 +868,10 @@ describe('ci admission', () => {
     merge = false,
     labels = [],
     pull = {},
+    // The looking pull request comes from another repository (with `ci:run`),
+    // so it holds CI to the lower ceiling these cases count against; `false`
+    // looks from this repository, at the open ceiling.
+    outside = true,
     error,
     maxWait = 15,
     maxLooks = 8,
@@ -882,7 +895,23 @@ describe('ci admission', () => {
     let calls = 0;
     const logs = {info: [], warning: [], notice: []};
     const outputs = {};
-    const runs = () => (typeof active === 'function' ? active(looks) : active);
+    // A dispatch has no pull request of its own; with `outside`, an outside
+    // contributor's run that has not reached its wait holds it to the lower
+    // ceiling too. It runs no jobs yet, so it adds none to the count.
+    const outsideQueued = {
+      id: 990,
+      status: 'queued',
+      event: 'pull_request',
+      path: '.github/workflows/ci.yml',
+      updated_at: new Date(NOW).toISOString(),
+      head_repository: {full_name: 'fork/r'},
+      repository: {full_name: 'o/r'},
+      jobs: [],
+    };
+    const runs = () => {
+      const list = typeof active === 'function' ? active(looks) : active;
+      return outside && (isMain || merge) ? [...list, outsideQueued] : list;
+    };
     const github = {
       // Who applied each label, newest last, as the pull request's timeline
       // reads it.
@@ -954,8 +983,11 @@ describe('ci admission', () => {
           : {
               pull_request: {
                 draft: false,
-                head: {repo: {full_name: 'o/r'}},
-                labels: labels.map(name => ({name})),
+                head: {repo: {full_name: outside ? 'fork/r' : 'o/r'}},
+                labels: [
+                  ...labels,
+                  ...(outside && pull.head == null ? ['ci:run'] : []),
+                ].map(name => ({name})),
                 ...pull,
               },
             },
@@ -1000,7 +1032,13 @@ describe('ci admission', () => {
   it('agrees with a capacity tool on a full queue: the same count, and no room for either', async () => {
     // Six pull-request runs at 12 live jobs, one waiting, and small
     // workflows: 72 + 1 + 18 = 91 other jobs, no room for a run of 16.
-    const active = [...prs(6, 12), waitingRun(40), ...slims(3)];
+    // The waiting run is an outside contributor's, so both read the lower
+    // ceiling.
+    const active = [
+      ...prs(6, 12),
+      waitingRun(40, {outside: true}),
+      ...slims(3),
+    ];
     // The tool's reading: the shared count as a command, through a stub `gh`
     // that answers from the same runs.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-agree-'));

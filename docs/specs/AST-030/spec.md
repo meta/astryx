@@ -414,7 +414,7 @@ they are separately named.
   sweep starts with the run (below). The Storybook build starts as soon as there
   is room for it while every job that uses it waits for room for the run: it
   starts once the other active runs' estimated jobs plus its own most fit under
-  about ninety, and every other pull-request run also waits, for that wait's first
+  the CI ceiling (DEC-16), and every other pull-request run also waits, for that wait's first
   fifteen minutes, while a `main` full check, release re-check or baseline
   capture is waiting, looking twice on a pull
   request, at once and after twelve minutes, and about every four minutes for
@@ -1116,7 +1116,7 @@ Rejected: larger runners for these lanes (measured no faster than the standard
 four-core runners); keeping four unit legs, whose slowest leg took about eight
 minutes.
 
-### DEC-16 — CI holds itself to about ninety jobs, and main fits first
+### DEC-16 — CI holds itself under a job ceiling, and main fits first
 
 **Reference:** `spec:AST-030/DEC-16`
 **Decider:** `cixzhang`, `2026-10-31`
@@ -1124,7 +1124,11 @@ minutes.
 GitHub offers no repository-wide limit on concurrent jobs: a `concurrency` group
 serializes runs and does not count jobs. So every run of the CI and Main
 workflows waits at its start until the other active runs' estimated jobs plus
-its own fit under ninety; only the CI workflow's Storybook build, a
+its own fit under the ceiling: one hundred twenty jobs, or ninety while an
+outside contributor's pull-request run (from a branch in another repository,
+FR17) has not started yet, the looking run included. A look that finds such a
+run waiting holds every run to ninety; once it has started, the next look reads
+one hundred twenty again. Only the CI workflow's Storybook build, a
 pull-request run's `superseded-runs` sweep, and a `release-critical` pull
 request's run (DEC-30) start before that (FR16). Small
 workflows that are not admitted (linting, review
@@ -1172,7 +1176,7 @@ admission job succeeded, and any run that waited out about its whole longest
 wait counts, room on its last look or not; until then it ranks as a waiter. Runs that wait out the same burst then start
 one at a time instead of together. A `main` run is never stopped.
 
-CI can still pass ninety in six bounded ways, the first three rare:
+CI can still pass its ceiling in six bounded ways, the first three rare:
 
 - A run that has waited its longest (two hours for `main`, twelve minutes for
   a pull request) starts whatever the load, even while a `main` check waits, at
@@ -1201,7 +1205,7 @@ CI can still pass ninety in six bounded ways, the first three rare:
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would
-pass ninety); a check in every job (it spent the shared API budget); admitting
+pass the ceiling); a check in every job (it spent the shared API budget); admitting
 the small workflows too (one or two slim jobs a run do not repay two API calls
 each).
 

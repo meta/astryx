@@ -18,7 +18,10 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
+// CI holds itself to about this many jobs while an outside contributor's run
+// waits for room, and to OPEN_CEILING while none does (spec:AST-030 DEC-16).
 export const CI_CEILING = 90;
+export const OPEN_CEILING = 120;
 // Below this many API calls left this hour, a run starts rather than spend
 // the budget every job shares.
 export const BUDGET_FLOOR = 1500;
@@ -146,6 +149,20 @@ export const short = run =>
   (run.path ?? '').replace(/^.*\//, '').replace(/\.ya?ml$/, '');
 export const isPullRun = run =>
   run.event === 'pull_request' && run.path === '.github/workflows/ci.yml';
+// A pull-request run from a branch in another repository: an outside
+// contributor's, as FR17 tells them apart.
+export const isOutsidePullRun = run =>
+  isPullRun(run) &&
+  run.head_repository?.full_name != null &&
+  run.head_repository.full_name !== run.repository?.full_name;
+/**
+ * The ceiling one look holds CI to: CI_CEILING while an outside contributor's
+ * run waits for room, the looking run included, and OPEN_CEILING otherwise.
+ * @param {{outsideWaiting?: boolean}} look
+ * @param {boolean} [selfOutside] whether the looking run is an outside one
+ */
+export const ceilingFor = (look, selfOutside = false) =>
+  selfOutside || look.outsideWaiting ? CI_CEILING : OPEN_CEILING;
 export const isMain = run =>
   ['push', 'schedule', 'workflow_dispatch'].includes(run.event) &&
   ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'].includes(
@@ -177,7 +194,7 @@ export const waitSpan = waits => {
  * @param {number} options.maxWaitMs a pull-request run's longest wait
  * @param {() => Promise<number>} [options.ownWaitStart] when the looking `main`
  *   run began waiting, on GitHub's clock
- * @returns {Promise<{lowBudget?: number, others: number, large: number, small: number, smallBy: Record<string, number>, mainWaiting: boolean, pullWaiters: {id: number, began: number}[], startedAtLimit: {id: number, ago: number}[], counted: string[], stale: number, calls: number}>}
+ * @returns {Promise<{lowBudget?: number, others: number, large: number, small: number, smallBy: Record<string, number>, mainWaiting: boolean, outsideWaiting: boolean, pullWaiters: {id: number, began: number}[], startedAtLimit: {id: number, ago: number}[], counted: string[], stale: number, calls: number}>}
  */
 export async function countLook({
   listRuns,
@@ -191,6 +208,8 @@ export async function countLook({
   let large = 0;
   let small = 0;
   let mainWaiting = false;
+  // An outside contributor's pull-request run that has not started yet.
+  let outsideWaiting = false;
   let calls = 0;
   // Pull-request runs that started at their longest wait lately, and those
   // still waiting, by when their wait began.
@@ -225,6 +244,12 @@ export async function countLook({
         .flatMap(job => job.steps ?? [])
         .filter(step => step.name === STEP);
       const span = waitSpan(waits);
+      // Not started yet: it waits for room, or has not reached its wait.
+      if (
+        isOutsidePullRun(run) &&
+        (waits.length === 0 || waits.some(step => step.status !== 'completed'))
+      )
+        outsideWaiting = true;
       if (waits.some(step => step.status === 'in_progress')) {
         if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});
         // Still waiting for room. A `main` run holds its whole peak, ahead of
@@ -284,6 +309,7 @@ export async function countLook({
     small,
     smallBy,
     mainWaiting,
+    outsideWaiting,
     pullWaiters,
     startedAtLimit,
     counted,
@@ -356,16 +382,22 @@ async function main() {
     let peak = Number(value('--peak'));
     // Every API call this command makes, the labels read included.
     let labelCalls = 0;
-    if (value('--peak') == null && pr != null) {
+    // Whether the pull request comes from a branch in another repository.
+    let outside = false;
+    if (pr != null) {
       labelCalls = 1;
-      const workflow = fs.readFileSync(
-        fileURLToPath(new URL('../../workflows/ci.yml', import.meta.url)),
-        'utf8',
-      );
-      const labels = ghJson(`repos/${repo}/pulls/${pr}`).labels.map(
-        label => label.name,
-      );
-      peak = pullRequestPeak(workflow, labels);
+      const pull = ghJson(`repos/${repo}/pulls/${pr}`);
+      outside = pull.head?.repo?.full_name !== repo;
+      if (value('--peak') == null) {
+        const workflow = fs.readFileSync(
+          fileURLToPath(new URL('../../workflows/ci.yml', import.meta.url)),
+          'utf8',
+        );
+        peak = pullRequestPeak(
+          workflow,
+          pull.labels.map(label => label.name),
+        );
+      }
     }
     if (!Number.isInteger(peak) || peak < 1) usage();
     const look = await countLook({
@@ -382,13 +414,14 @@ async function main() {
       maxWaitMs: (isMainCheck ? 120 : 12) * 60_000,
     });
     const others = look.others + reserved;
+    const ceiling = ceilingFor(look, outside);
     console.log(
       JSON.stringify({
         others,
         reserved,
         peak,
-        ceiling: CI_CEILING,
-        fits: others + peak <= CI_CEILING && (isMainCheck || !look.mainWaiting),
+        ceiling,
+        fits: others + peak <= ceiling && (isMainCheck || !look.mainWaiting),
         mainWaiting: look.mainWaiting,
         calls: look.calls + labelCalls,
         counted: look.counted,

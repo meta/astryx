@@ -124,7 +124,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
-  # Admit the whole run under CI's ceiling of about ninety concurrent jobs
+  # Admit the whole run under CI's ceiling of concurrent jobs
   # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
   # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
