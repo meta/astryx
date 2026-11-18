@@ -73,6 +73,7 @@ describe('a family said by name', () => {
     // (A catalog font is written as its preset.)
     ['Inter headings', 'set q0 font inter --on heading'],
     ['Georgia body text', 'set q0 font georgia --on body'],
+    ['Segoe UI headings', 'set q0 font segoe --on heading'],
     [
       'use JetBrains Mono for headings',
       'set q0 font jetbrains-mono --on heading',
