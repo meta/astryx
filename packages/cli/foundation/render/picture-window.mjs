@@ -203,7 +203,8 @@ const not = a => (a == null ? null : !a);
 /**
  * Thrown for a query the browser reads as invalid, which never matches: a
  * media type followed by a condition with `or` at its top level (after a
- * feature, a group, or `not` and a group), whatever the type and its `not`.
+ * feature, a group, or `not` and a group), whatever the type and its `not`;
+ * or `not`, `and` or `or` written straight against `(`.
  */
 const INVALID_QUERY = new SyntaxError('invalid media query');
 
@@ -230,8 +231,11 @@ function conditionAnswer(text, sure, withoutOr = false) {
   const take = word => {
     skip();
     const found = new RegExp(`^${word}(?![\\w-])`, 'i').exec(text.slice(at));
-    if (found) at += found[0].length;
-    return found != null;
+    if (!found) return false;
+    // CSS reads `not(` as a function, never as the keyword.
+    if (text[at + found[0].length] === '(') throw INVALID_QUERY;
+    at += found[0].length;
+    return true;
   };
   /** @returns {Answer} */
   const inParens = () => {
@@ -345,10 +349,9 @@ function queryList(query) {
  * match, by its media type and its condition, read as Media Queries level 4
  * reads it (queryAnswer). A feature the window does not judge holds, as in
  * the chart document (no motion); with `sure`, a query whose answer depends
- * on one never matches, so only what the window answers counts. A media
- * type followed by a condition with `or` at its top level is invalid and
- * never matches (INVALID_QUERY); a query the reader cannot parse falls back
- * to featuresMatch.
+ * on one never matches, so only what the window answers counts. A query
+ * the browser reads as invalid in the ways INVALID_QUERY names never
+ * matches; a query the reader cannot parse falls back to featuresMatch.
  * @param {string} query
  * @param {{sure?: boolean}} [options]
  * @returns {boolean}

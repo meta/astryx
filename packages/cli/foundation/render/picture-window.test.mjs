@@ -155,6 +155,21 @@ describe('desktopMatches', () => {
     expect(desktopMatches('not print and (max-width: 640px)')).toBe(true);
   });
 
+  it('never matches `not`, `and` or `or` written straight against `(`', () => {
+    expect(desktopMatches('not(min-width: 2000px)')).toBe(false);
+    expect(desktopMatches('(not(min-width: 2000px))')).toBe(false);
+    expect(desktopMatches('screen and not(min-width: 2000px)')).toBe(false);
+    expect(desktopMatches('(max-width: 640px) or(min-width: 1024px)')).toBe(
+      false,
+    );
+    expect(desktopMatches('(min-width: 640px) and(min-width: 800px)')).toBe(
+      false,
+    );
+    expect(
+      desktopMatches('(max-width: 640px) or(min-width: 1024px), screen'),
+    ).toBe(true);
+  });
+
   it('reads text it cannot parse as before', () => {
     expect(desktopMatches('(min-width: 1024px) and')).toBe(true);
     expect(desktopMatches('((min-width: 1024px)')).toBe(true);
