@@ -139,6 +139,17 @@ describe('a family said by name', () => {
     expect(offer?.commands?.[0]).toMatch(
       / set q0 font Assistant --on heading$/,
     );
+    // (A casing said in words is the text's case, never a family.)
+    for (const ask of [
+      'titles in All Caps, rounder cards',
+      'body text in Sentence Case',
+    ])
+      expect(
+        writes(await how('q0', ask)).some(line =>
+          /^set q0 (?:font|font-family) /.test(line),
+        ),
+        ask,
+      ).toBe(false);
     // (With a cue it is the family.)
     expect(writes(await how('q0', 'headings in Assistant'))[0]).toBe(
       'set q0 font Assistant --on heading',

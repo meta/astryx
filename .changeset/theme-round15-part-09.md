@@ -10,9 +10,9 @@
 
 - `astryx experimental theme editor` is faster: a picture's faint-text measurement reads the page's images once and each text once, and a change makes its color mapping and reads the theme's own token values once.
 
-- `astryx experimental theme editor how`: a font family named before or after the text it's for, without the word "font", now sets that font. Examples: "Fraunces headings", "use Playfair Display for headings", "headings in Lora". This works for any family `set` accepts, not only the built-in presets.
+- `astryx experimental theme editor how`: a font family named before or after the text it's for, without the word "font", now sets that font. Examples: "Fraunces headings", "use Playfair Display for headings", "headings in Lora". Before the text, the family must be one the editor knows (a built-in preset or a Fontsource family); after "in" or "use", any family `set` accepts works. A casing said in words ("titles in All Caps") is the text's case, never a family.
 
-- In `astryx experimental theme editor how`, a list piece that is only a color, with no look or part word of its own ("big buttons, a sky blue, high contrast"), is the theme's. It no longer fills the button named in a piece before it. "buttons rounder and red" still reds the buttons, and a part's colon list ("badges: green, amber, red") still colors that part.
+- In `astryx experimental theme editor how`, a list piece that is only a color, with no look or part word of its own ("big buttons, a sky blue, high contrast"), is the theme's accent. It no longer fills the button named in a piece before it, and it is no longer dropped. "buttons rounder and red" still reds the buttons, and a part's colon list ("badges: green, amber, red") still colors that part.
 
 - In `astryx experimental theme editor how`, an offer, meaning more than the ask (such as "to change the blue, green … card variants too"), is marked `offer: true` in the JSON result. It follows every other result and is never the first, so running the first result's commands never runs one. When what the ask writes is in place already, the first result now says so ("already #ffffff on the card …, nothing to change") with no command. Before, the offer could be the only result with commands. The response type and docs describe the new field.
 
