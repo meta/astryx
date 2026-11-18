@@ -282,8 +282,7 @@ This record does not choose the migration design or timeline.
   inheritance; theme application owns active-theme selection.
 - **INV10 — Existing keys coexist.** Shipped slots and extension keys remain
   supported until a separate compatibility decision changes them. New Core slots
-  use `ComponentIconSlotMap` and `componentIcons`. A complete `IconRegistry`
-  may omit `drag`; an omitted `drag` resolves the default artwork.
+  use `ComponentIconSlotMap` and `componentIcons`.
 - **INV11 — A selected function answers the request.** Once a function entry or slot
   function is selected, its result is final for that resolution. Public theme
   reads never call or return a slot function.
