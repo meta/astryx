@@ -6015,8 +6015,8 @@ async function themeBuildInternal(
           cssFileName: path.basename(outPath),
         },
       ) +
-      // The one color mode, beside the theme export (a two-mode theme
-      // exports none, so its module is unchanged).
+      // The one color mode, beside the theme export. A two-mode theme's
+      // ['light', 'dark'] is not written, so its module is unchanged.
       (colorModes
         ? `export const colorModes = [${JSON.stringify(colorModes[0])}];\n`
         : '');

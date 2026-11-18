@@ -13,6 +13,8 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {resolveColor, themeTokens} from './lib/theme-contrast.mjs';
+import {parseColor} from '../packages/core/src/utils/color.ts';
 import * as butter from '../packages/themes/butter/src/source.ts';
 import * as chocolate from '../packages/themes/chocolate/src/source.ts';
 import * as gothic from '../packages/themes/gothic/src/source.ts';
@@ -23,38 +25,22 @@ import * as y2k from '../packages/themes/y2k/src/source.ts';
 
 const PACKAGES = {butter, chocolate, gothic, matcha, neutral, stone, y2k};
 
-/** A token value's light and dark halves. */
-function halves(value) {
-  if (Array.isArray(value)) return [String(value[0]), String(value[1])];
-  const pair = /^light-dark\((.*)\)$/s.exec(String(value).trim());
-  if (!pair) return [String(value), String(value)];
-  let depth = 0;
-  for (const [i, ch] of [...pair[1]].entries()) {
-    if (ch === '(') depth++;
-    if (ch === ')') depth--;
-    if (ch === ',' && depth === 0)
-      return [pair[1].slice(0, i).trim(), pair[1].slice(i + 1).trim()];
-  }
-  return [String(value), String(value)];
-}
-
-/** The modes a theme draws, from its colour tokens. */
+/** The modes a theme draws, from its colour tokens as each mode resolves them. */
 function drawnModes(theme) {
-  const tokens = Object.entries(theme.tokens ?? {}).filter(([token]) =>
-    token.startsWith('--color-'),
+  const tokens = themeTokens(theme);
+  const [light, dark] = [0, 1].map(mode =>
+    Object.fromEntries(
+      Object.keys(tokens)
+        .filter(token => token.startsWith('--color-'))
+        .map(token => [token, resolveColor(tokens[token], tokens, mode)]),
+    ),
   );
-  if (tokens.some(([, value]) => new Set(halves(value)).size > 1))
+  if (Object.keys(light).some(token => light[token] !== dark[token]))
     return ['light', 'dark'];
   // One mode: the one its page color reads as.
-  const body = halves(theme.tokens?.['--color-background-body'] ?? '')[0];
-  const hex = /^#([0-9a-f]{6})/i.exec(body)?.[1];
-  const sum = hex
-    ? [0, 2, 4].reduce(
-        (total, i) => total + parseInt(hex.slice(i, i + 2), 16),
-        0,
-      )
-    : 765;
-  return sum < 383 ? ['dark'] : ['light'];
+  const body = parseColor(light['--color-background-body'] ?? '');
+  const lightness = body ? body.r + body.g + body.b : 765;
+  return lightness < 383 ? ['dark'] : ['light'];
 }
 
 describe('official theme color modes', () => {
