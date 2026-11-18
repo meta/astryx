@@ -163,8 +163,11 @@ jobs:
             echo "::group::Pass $pass of $REPEAT"
             PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json" \
               pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --output "test-results/pass-$pass" --reporter=list,github,json || status=1
-            # Audits write their evidence at the root or under test-results/.
-            for folder in *-audit-evidence test-results/*-audit-evidence; do
+            # Audits write their evidence at the root (*-audit-evidence) or in a
+            # folder of their own under test-results/; every folder there but
+            # the passes' own outputs moves, so the next pass cannot reset it.
+            for folder in *-audit-evidence test-results/*; do
+              case "$folder" in test-results/pass-*) continue ;; esac
               if [ -d "$folder" ]; then
                 mkdir -p "audit-evidence/pass-$pass"
                 mv "$folder" "audit-evidence/pass-$pass/"

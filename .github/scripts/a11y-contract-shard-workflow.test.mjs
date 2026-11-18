@@ -148,9 +148,14 @@ describe('the single contract-leg dispatch', () => {
       'PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json"',
     );
     expect(run.run).toContain('mv "$folder" "audit-evidence/pass-$pass/"');
-    // Audits write evidence at the root or under test-results/; both move.
+    // Audits write evidence at the root or in their own folder under
+    // test-results/ (pressed-state-evidence, markdown-table-narrow, …); every
+    // folder but the passes' outputs moves.
     expect(run.run).toContain(
-      'for folder in *-audit-evidence test-results/*-audit-evidence; do',
+      'for folder in *-audit-evidence test-results/*; do',
+    );
+    expect(run.run).toContain(
+      'case "$folder" in test-results/pass-*) continue ;; esac',
     );
     expect(run.run).toMatch(/exit "\$status"\s*$/);
     // The audits refuse a build without the source stamp ci.yml writes.
@@ -175,6 +180,45 @@ describe('the single contract-leg dispatch', () => {
     expect(step('Build packages and Storybook').run).toBe(
       'node .github/scripts/build-packages-and-storybook.mjs',
     );
+  });
+
+  it("moves every evidence folder of a pass, at the root or under test-results/, but not the passes' outputs", () => {
+    const run = step('Run accessibility spec-test contracts').run;
+    const loop = run.slice(
+      run.indexOf('for folder in'),
+      run.indexOf('done', run.indexOf('for folder in')) + 'done'.length,
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-move-'));
+    try {
+      for (const folder of [
+        'more-menu-audit-evidence',
+        'test-results/pressed-state-evidence',
+        'test-results/markdown-table-narrow',
+        'test-results/drawer-audit-evidence',
+        'test-results/pass-1',
+      ])
+        fs.mkdirSync(path.join(dir, folder), {recursive: true});
+      fs.writeFileSync(path.join(dir, 'test-results/.last-run.json'), '{}');
+      const result = spawnSync('bash', ['-c', `pass=1\n${loop}`], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(
+        fs.readdirSync(path.join(dir, 'audit-evidence/pass-1')).sort(),
+      ).toEqual([
+        'drawer-audit-evidence',
+        'markdown-table-narrow',
+        'more-menu-audit-evidence',
+        'pressed-state-evidence',
+      ]);
+      expect(fs.readdirSync(path.join(dir, 'test-results')).sort()).toEqual([
+        '.last-run.json',
+        'pass-1',
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('gives the leg time for its repeats, with no arithmetic, which expressions lack', () => {
