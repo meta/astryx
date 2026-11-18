@@ -42,13 +42,24 @@ module (`AstryxPdfModule`), and the image markup module (`AstryxImageMarkup`).
 
 ## Why this exists
 
-| Piece                      | What the ecosystem already does well                                                                                                                                                                                                                                                | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxPhotoLibrary`       | `@react-native-camera-roll/camera-roll` pages through photos and videos, saves to the library, and handles iOS limited access. `expo-media-library` adds albums, asset details, and change listeners. Both ship native code.                                                        | An app that shows the library inside its own screens needs a native module; the alternatives are libraries with native code of their own. The gaps are specific: closed access states with `limited`, `restricted`, and `canAsk`; the limited-selection picker; export to files where one asset's failure never fails the rest, with progress, cancel, and iCloud download; results with closed reasons, never a throw; a previewed project never reaches the person's library; no Expo runtime library (`spec:AST-112/FR11`); Astryx Stage parity. Choosing a few photos needs none of this: the core file picker presents the system's photo picker with no permission (`spec:AST-130/FR13`). |
-| `AstryxPhotoThumbnailView` | On Android, React Native's `Image` draws a MediaStore content URI with no extra native code. On iOS a PhotoKit asset has no URL `Image` can load; the camera-roll library's `ph://` loader or `expo-image` adds one, with native code.                                              | iOS has no path without native code, so the view stays. It decodes each asset natively at the cell's size, off the main thread, through one shared cache (and PhotoKit's caching image manager on iOS), cancels when a cell leaves the screen, and sends no picture through JavaScript. It takes the library module's ids on both platforms, shows iCloud photos once they arrive, and never prompts.                                                                                                                                                                                                                                                                                           |
-| `AstryxPdfView`            | `react-native-pdf` shows local and remote PDFs with paging, zoom, and passwords, over `react-native-blob-util`; both ship native code. On iOS a web view shows a local PDF with no extra native code; Android's web view does not render PDF.                                       | The system's renderers (PDFKit, `PdfRenderer`) with no third-party renderer or download layer; find with every match counted and a closed result; the theme's light or dark background behind the pages; one bounded render pool and page cache on Android however many views are open; a previewed project reads only its own files; Astryx Stage parity.                                                                                                                                                                                                                                                                                                                                      |
-| `AstryxPdfModule`          | `react-native-pdf-thumbnail` and similar libraries render a page to an image file, with native code. pdf.js inside a web view renders pages with no native code of its own.                                                                                                         | The system's renderer off the main thread; one file name per document, page, and size, so a list asks again for free; cancel; the picture lands in the runtime's file cache, so a sign-out clears it; the page count on every answer. The pdf.js path needs no native code where the app already has a web view, so its place is a scope question (OQ2).                                                                                                                                                                                                                                                                                                                                        |
-| `AstryxImageMarkup`        | Drawing libraries such as `@shopify/react-native-skia` canvases or `react-native-sketch-canvas` draw strokes over an image, and `react-native-view-shot` flattens a view to a file; each ships native code. `expo-image-manipulator` crops, rotates, and resizes but does not draw. | PencilKit gives finger and Apple Pencil drawing, the system's tool picker, undo and redo, and the ruler. The module wraps it in one call that settles once, flattens the strokes at the image's own pixel size into a new file with no metadata, asks before it discards strokes, and leaves the source untouched. Whether it is core or an opt-in capability is OQ1.                                                                                                                                                                                                                                                                                                                           |
+Each piece stays in the platform package because the alternative an app would
+otherwise add is an open-source library that ships native code, which a
+JavaScript-only app and a previewed project cannot add (DEC-1).
+
+- `AstryxPhotoLibrary`: an app that shows the library inside its own screens
+  needs a native module. Choosing a few photos does not: the core file picker
+  presents the system's photo picker with no permission
+  (`spec:AST-130/FR13`).
+- `AstryxPhotoThumbnailView`: iOS has no way to draw a library asset without
+  native code. On Android, React Native's `Image` draws an asset's content URI
+  with none, so one view serves both platforms with the library module's ids.
+- `AstryxPdfView`: Android's web view does not render PDF, so a document view
+  on both platforms needs native code.
+- `AstryxPdfModule`: a page picture from the system's renderer needs native
+  code. A JavaScript PDF renderer in the platform's web view needs none of its
+  own, so the module's place is a scope question (OQ2).
+- `AstryxImageMarkup`: drawing over an image and flattening the result to a
+  file needs native code. Whether it is core or an opt-in capability is OQ1.
 
 ## Who uses it
 
@@ -105,7 +116,7 @@ Scope notes: these pieces are specified elsewhere.
     `isPhotoThumbnailAvailable()`.
   - `pdf` links PDFKit on iOS and uses `PdfRenderer` on Android. It declares
     no permission. Its iOS privacy manifest declares the file-timestamp
-    required-reason API that names its page pictures (FR8). The `./pdf` entry
+    required-reason API that names its page pictures (FR9). The `./pdf` entry
     exports `PdfView`, `isPdfViewAvailable()`, and `AstryxPdfModule`.
   - `AstryxImageMarkup` is part of the core on iOS and declares nothing. The
     core never links PencilKit: the module loads it at the first markup, so
@@ -115,16 +126,16 @@ Scope notes: these pieces are specified elsewhere.
     `AstryxPlatform.capability('photos' | 'pdf')` (`spec:AST-112/FR2`).
 - **FR2 — The native contract.**
 
-  | Contract             | Kind                                | Methods                                                                                                                          | Events                                | Platforms    |
-  | -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------ |
-  | `AstryxPhotoLibrary` | native module (Turbo Native Module) | `getConstants()` (`version`), `getAccess`, `requestAccess`, `presentLimitedPicker`, `listAssets`, `exportAssets`, `cancelExport` | `onLibraryChange`, `onExportProgress` | iOS, Android |
-  | `AstryxPdfModule`    | native module (Turbo Native Module) | `getConstants()` (`version`), `renderPage`, `cancel`                                                                             | none                                  | iOS, Android |
-  | `AstryxImageMarkup`  | native module (Turbo Native Module) | `getConstants()` (`version`, `isSupported`), `markup`                                                                            | none                                  | iOS          |
+  | Contract             | Kind                                | Methods                                                                                            | Events                                | Platforms    |
+  | -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------ |
+  | `AstryxPhotoLibrary` | native module (Turbo Native Module) | `getAccess`, `requestAccess`, `presentLimitedPicker`, `listAssets`, `exportAssets`, `cancelExport` | `onLibraryChange`, `onExportProgress` | iOS, Android |
+  | `AstryxPdfModule`    | native module (Turbo Native Module) | `renderPage`, `cancel`                                                                             | none                                  | iOS, Android |
+  | `AstryxImageMarkup`  | native module (Turbo Native Module) | `getConstants()` (`isSupported`), `markup`                                                         | none                                  | iOS          |
 
-  | Contract                   | Kind                                       | Props                                                                                                          | Commands                                                                         | Events                                                                              | Platforms    |
-  | -------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------ |
-  | `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `assetId`, `contentMode`                                                                                       | none                                                                             | `onThumbnailLoad`, `onThumbnailError`                                               | iOS, Android |
-  | `AstryxPdfView`            | native component (Fabric Native Component) | `source`, `initialPage`, `fit`, `displayMode`, `maxZoom`, `pageGap`, `colorScheme`, `isFindInteractionEnabled` | `goToPage`, `resetZoom`, `find`, `findStep`, `clearFind`, `presentFindNavigator` | `onPdfLoad`, `onPdfPageChange`, `onPdfScaleChange`, `onPdfError`, `onPdfFindResult` | iOS, Android |
+  | Contract                   | Kind                                       | Props                                                                                                               | Commands                                                                         | Events                                                                              | Platforms    |
+  | -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------ |
+  | `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `assetId`, `contentMode`                                                                                            | none                                                                             | `onThumbnailLoad`, `onThumbnailError`                                               | iOS, Android |
+  | `AstryxPdfView`            | native component (Fabric Native Component) | `source`, `initialPageIndex`, `fit`, `displayMode`, `maxZoom`, `pageGap`, `colorScheme`, `isFindInteractionEnabled` | `goToPage`, `resetZoom`, `find`, `findStep`, `clearFind`, `presentFindNavigator` | `onPdfLoad`, `onPdfPageChange`, `onPdfScaleChange`, `onPdfError`, `onPdfFindResult` | iOS, Android |
   - Every module method is optional and takes at most one request object. A
     method resolves a result object and never rejects.
   - An export and a page render name a `requestId` the JavaScript picks;
@@ -174,7 +185,7 @@ nextCursor}`: the photos and videos the app can see (only the selection
     about once a second. It starts after the runtime's first `getAccess`,
     `requestAccess`, or `listAssets`. It returns `{remove()}`.
 - **FR5 — Assets are exported to files.**
-  - `exportAssets(ids, {format, maxPixels, quality, allowNetwork, signal,
+  - `exportAssets(ids, {format, maxPixels, quality, allowsNetwork, signal,
 onProgress})` writes each asset, in the order given, to a file in the
     calling runtime's file cache and answers `{files, failures}`. Each file
     has `id`, a `file://` URI, its cache `name`, `mimeType`, `mediaType`,
@@ -185,10 +196,10 @@ onProgress})` writes each asset, in the order given, to a file in the
     where the platform converts it: iOS re-encodes a QuickTime movie, and
     Android writes the stored file and reports its own type.
     `format: 'original'` writes the stored bytes; a HEIC image stays HEIC.
-  - With `allowNetwork` (default true), iOS downloads an iCloud-only original
+  - With `allowsNetwork` (default true), iOS downloads an iCloud-only original
     first, and the progress counts the download. A download that makes no
     progress for ten minutes fails that asset `download-failed`. With
-    `allowNetwork: false`, an iCloud-only asset fails `download-failed` at
+    `allowsNetwork: false`, an iCloud-only asset fails `download-failed` at
     once.
   - One asset's failure never fails the rest: `failures` lists each id not
     written with its reason, `missing` (no such asset, or not visible to the
@@ -206,10 +217,9 @@ onProgress})` writes each asset, in the order given, to a file in the
     decoded picture's pixels, `onError(failure)`, `fallback`, `style`,
     `testID`, and `accessibilityLabel`.
   - The native view decodes the asset at its own laid-out size times the
-    screen scale, off the main thread, through one process-wide memory cache
-    keyed by asset and size (and PhotoKit's caching image manager on iOS). A
-    grid scrolled back and forth decodes each cell once. No picture crosses
-    to JavaScript.
+    screen scale, off the main thread. A cell scrolled away and back shows
+    its picture again without a second decode while the picture stays in
+    memory. No picture crosses to JavaScript.
   - A view that leaves the screen or takes another `assetId` cancels its
     request. On iOS the request may use the network, so an iCloud-only photo
     shows once its thumbnail arrives.
@@ -235,12 +245,11 @@ onProgress})` writes each asset, in the order given, to a file in the
     project's file outside its own files).
   - `ref` is a handle with `goToPage({pageIndex, isAnimated})` and
     `resetZoom({isAnimated})` (`isAnimated` defaults to true).
-  - On Android every PDF view renders on one shared, bounded render pool and
-    keeps its pages in one process-wide cache bounded by the heap, dropped
-    when the view goes, so many PDF views cost no extra threads and bounded
-    memory. No document is refused for its page count or size.
+  - Rendering runs off the main thread. Many PDF views open at once hold
+    bounded memory together, and a view's pages are freed when it goes. No
+    document is refused for its page count or size.
 - **FR8 — Find in a document.**
-  - The handle's `find(query, {caseSensitive})` finds every match of `query`
+  - The handle's `find(query, {isCaseSensitive})` finds every match of `query`
     in the document's text (case-insensitive by default), highlights them
     all, and selects the first one on or after the page shown.
     `findNext()` and `findPrevious()` move through the matches and wrap.
@@ -268,10 +277,9 @@ name, width, height, pageCount}`.
     with its aspect, the page's rotation, and white behind transparent
     content. `maxPixels` bounds the picture's decode and memory, never the
     document.
-  - The file name is derived from the document's resolved path, size, and
-    modification time, the page, and `maxPixels`: the same request lands on
-    the same file. A picture is written to a hidden temporary file and then
-    moved into place, so a reader never sees half a file.
+  - The same request for an unchanged document answers the same file, and a
+    changed document answers a new one. A reader never sees a partly written
+    picture.
   - Renders run one at a time per runtime. Aborting `signal` stops one: a
     queued render never starts, and one in flight leaves no file. It answers
     `cancelled`, as does a render whose runtime's cache was cleared while it
@@ -283,7 +291,8 @@ name, width, height, pageCount}`.
     reasons. `not-a-pdf` and `page-out-of-range` are definitive for that
     document; the others may succeed later.
 - **FR10 — `AstryxImageMarkup` marks up an image and saves a copy.**
-  - `supports('markup')` is synchronous and true only on iOS with the module.
+  - `AstryxImageMarkup.supports('markup')` is synchronous and true only on
+    iOS with the module.
     `markupImage({uri, rootTag?})` presents the markup screen full screen over
     the calling surface (`rootTag`, `spec:AST-112/FR7`) and settles once.
   - `uri` is a `file://` URL of a PNG or JPEG, recognised by its bytes. The
@@ -351,40 +360,44 @@ name, width, height, pageCount}`.
     and saving announces itself. The confirmation is the system's alert.
   - The limited-selection picker, the access prompt, and the iOS find bar are
     the system's own.
-- **FR14 — Public platform API only.** Every piece uses the platform's public
-  frameworks: PhotoKit and `PHCachingImageManager`, PDFKit and
-  `UIFindInteraction`, and PencilKit on iOS; `MediaStore`,
-  `ContentResolver.loadThumbnail`, and `PdfRenderer` on Android. One
-  exception is named: the image markup module loads PencilKit at first use
-  and reaches its public classes by name, so the core never links the
-  framework at launch (FR1).
-- **FR15 — Contract baseline.** Every contract in the group is at revision 1,
-  find included. A behaviour added after revision 1 is a named feature
+- **FR14 — Public platform API only.** Every piece uses only the platform's
+  public SDK. One exception is named: the image markup module loads PencilKit
+  at first use and reaches its public classes by name, so the core never
+  links the framework at launch (FR1).
+- **FR15 — Contract baseline.** Every contract in the group is at revision 1
+  on iOS and Android, find included, and carries no revision counter
+  (`spec:AST-112/FR8`). A behaviour added after revision 1 is a named feature
   (`AstryxPhotoLibrary.<feature>`, `AstryxPhotoThumbnailView.<feature>`,
   `AstryxPdfView.<feature>`, `AstryxPdfModule.<feature>`,
-  `AstryxImageMarkup.<feature>`) that the binary lists in
-  `AstryxPlatformInfo`'s contract features, and the JavaScript checks it with
-  `hasContractFeature` before it uses it. Without the feature the JavaScript
-  keeps the revision-1 behaviour or answers `unsupported`, never a silent
-  weaker path. Compatibility with Astryx Stage goes through the library's
-  Stage version floor: the package names the oldest Stage that implements its
-  contract set, and an older Stage refuses the project with the gaps listed.
+  `AstryxImageMarkup.<feature>`) that the binary reports through the platform
+  info module, and the JavaScript checks it before it uses it. Without the
+  feature the JavaScript keeps the revision-1 behaviour, draws its fallback,
+  or answers `unsupported`, never a silent weaker path. Astryx Stage pairs with
+  a project through the project's Astryx Stage version floor: an Astryx Stage
+  that lacks a contract or named feature the project needs refuses it and
+  lists what is missing (`spec:AST-112/DEC-14`).
 
 ### Platform support
 
 | Contract                   | iOS                                                                                                                                                                                                                                   | Android                                                                                                                                                                                          | Astryx Stage                                                                                                                                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxPhotoLibrary`       | PhotoKit fetches sorted by creation date; `PHPhotoLibrary` authorization for read and write access, limited from iOS 14; `presentLimitedLibraryPicker` from iOS 15; a change observer; asset resources and image requests for export. | `MediaStore` queries with a keyset cursor; the media read permissions, with `READ_MEDIA_VISUAL_USER_SELECTED` as limited access from Android 14; a content observer; the stored file for export. | A built-in library of placeholder photos and one video with fixed ids; the run sets the starting access and the prompt's answer; listing, cursors, export, and change events follow the platform Stage runs as. |
-| `AstryxPhotoThumbnailView` | `PHCachingImageManager` with the process-wide cache, network allowed.                                                                                                                                                                 | `ContentResolver.loadThumbnail` with the process-wide cache.                                                                                                                                     | The asset's placeholder tile, `cover` or `contain`, with the load size that platform reports.                                                                                                                   |
-| `AstryxPdfView`            | PDFKit's `PDFView`; find on a copy of the document off the main thread; `UIFindInteraction` from iOS 16.                                                                                                                              | Pages drawn by `PdfRenderer` in a scrolling, zooming view; `Page.searchText` from API level 35.                                                                                                  | The document's own pages on macOS; numbered placeholder pages on other hosts; `fit`, `displayMode`, `pageGap`, `colorScheme`, `goToPage`, and the events as on a device.                                        |
-| `AstryxPdfModule`          | PDFKit's page drawing into a bitmap.                                                                                                                                                                                                  | `PdfRenderer` on the PDF views' shared render pool.                                                                                                                                              | Absent (FR9 gap).                                                                                                                                                                                               |
-| `AstryxImageMarkup`        | PencilKit's canvas and tool picker in a full-screen screen.                                                                                                                                                                           | Absent: `supports('markup')` is false (OQ3).                                                                                                                                                     | No canvas: the screen closes `cancelled`, unless a script plays a save, which writes the source's pixels as the new file; the reasons and their order are the device's.                                         |
+| `AstryxPhotoThumbnailView` | `PHCachingImageManager`, network allowed.                                                                                                                                                                                             | `ContentResolver.loadThumbnail`.                                                                                                                                                                 | The asset's placeholder tile, `cover` or `contain`, with the load size that platform reports.                                                                                                                   |
+| `AstryxPdfView`            | PDFKit's `PDFView`; find on a copy of the document off the main thread; `UIFindInteraction` from iOS 16.                                                                                                                              | Pages drawn by `PdfRenderer` in a scrolling, zooming view; `Page.searchText` from API level 35.                                                                                                  | The document's own pages on macOS (FR7 gap elsewhere); `fit`, `displayMode`, `pageGap`, `colorScheme`, `goToPage`, and the events as on a device.                                                               |
+| `AstryxPdfModule`          | PDFKit's page drawing into a bitmap.                                                                                                                                                                                                  | `PdfRenderer`.                                                                                                                                                                                   | Absent (FR9 gap).                                                                                                                                                                                               |
+| `AstryxImageMarkup`        | PencilKit's canvas and tool picker in a full-screen screen.                                                                                                                                                                           | Absent: `supports('markup')` is false (OQ3).                                                                                                                                                     | The refusals and their order are the device's; no drawing (FR10 gap).                                                                                                                                           |
 
+- FR5 gap: Astryx Stage writes an `original` photo as a JPEG, not in its
+  stored format, and a video as a file that does not play.
 - FR7 gap: Astryx Stage does not scroll or zoom inside the PDF view with a
-  finger or trackpad, and `resetZoom` does nothing there.
+  finger or trackpad, and `resetZoom` does nothing there. On Linux and
+  Windows it shows numbered placeholder pages instead of the document's.
 - FR8 gap: Astryx Stage has no page text, so a find answers `unsupported`.
 - FR9 gap: Astryx Stage has no `AstryxPdfModule`, so `canRenderPage()` is
   false and `renderPage` answers `no-module` there.
+- FR10 gap: Astryx Stage shows no markup screen: a markup answers
+  `cancelled`, unless a script plays a save, which saves the source's pixels
+  as the new file.
 - FR13 gap: `PhotoThumbnail` sets no image role, and an unlabelled thumbnail
   is not hidden from assistive technology.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
@@ -400,38 +413,37 @@ name, width, height, pageCount}`.
 
 ## Current-state impact
 
-- This record details `spec:AST-112`: its FR1 (the `pdf` capability and the
-  core), FR3 (`photos` and `pdf` stay opt-in), FR4 (the host declarations the
-  plugin writes for `photos`), FR6 (the group's closed reasons), FR7 (the
-  probes, `supports`, and views that never prompt), FR8 (the group's
-  revision-1 baseline and named features), and FR12 (photos and documents in
-  Astryx Stage).
-- It changes `spec:AST-112/FR1` in two places: `photos` (photo library
-  access and thumbnails) joins the optional capabilities, and image markup
-  joins the core on iOS.
+- This record details `spec:AST-112`: its FR1 (`photos` and `pdf` among the
+  opt-in capabilities, and photos, PDF, and image markup in the package with
+  no library component using them), FR3 (`photos` and `pdf` stay opt-in),
+  FR4 (the host declarations written for `photos`), FR5 (the `./photos` and
+  `./pdf` entries), FR6 (the group's closed reasons), FR7 (the probes,
+  `supports`, and views that never prompt), FR8 (the revision-1 baseline and
+  named features), and FR12 (photos and documents in Astryx Stage).
+- It places image markup in the core on iOS (OQ1).
 - It refines `spec:AST-112/FR7`'s explicit permissions for photo access:
   photo access is read and asked for through `AstryxPhotoLibrary`, whose
   states include `limited` (OQ4).
 
 ## Verification
 
-| Contract | Verification                                                                                                            | Representative states                                                                             | Mutation or failure expectation                                                                                                                          |
-| -------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader; an iOS launch check          | `photos` and `pdf` opted out; opted in; an app that never marks up                                | An opted-out app links PhotoKit or PDFKit or declares a media permission, the library imports a capability outside its loader, or launch loads PencilKit |
-| FR2      | The platform's spec rules check; the contracts list against the codegen specs                                           | each module method; each view prop, command, and event                                            | A listed member is missing, a shipped member changes, or a method rejects                                                                                |
-| FR3      | The photos contract suite over the `./testing` double (`mockPhotosCapability`); Simulator, emulator, and device checks  | each access state; `canAsk` true and false; limited picker on and off the supported versions      | A read prompts, `requestAccess` prompts without `canAsk` or opens Settings, or the picker runs without `limited`                                         |
-| FR4      | Unit tests of paging; JVM tests of the cursor and selection rules; hosted iOS tests over a seeded library; Astryx Stage | first, middle, and last page; limited selection; a change between pages on each platform          | An asset repeats or is skipped, an iOS cursor survives a change, an Android cursor goes stale, or a page size is refused                                 |
-| FR5      | Unit tests of export through the double; hosted iOS tests; emulator and device checks; Astryx Stage                     | `jpeg` and `original`; `maxPixels`; an iCloud-only asset; one missing id; a cancel mid-export     | One failure fails the batch, a cancelled asset leaves a file, progress arrives faster than its bound, or a JPEG keeps the stored orientation             |
-| FR6      | Library tests of `PhotoThumbnail`; hosted iOS tests; emulator checks; Astryx Stage renders                              | `cover` and `contain`; a scrolled grid; a removed asset; no access                                | A picture crosses to JavaScript, a cell decodes twice at one size, a hidden cell keeps decoding, or the view prompts                                     |
-| FR7      | Library tests through the doubles; Simulator, emulator, and device checks; JVM tests of the render pool and page cache  | each `fit` and `displayMode`; zoom to `maxZoom`; `goToPage`; a locked or missing file; many views | A page event is 1-based, a locked file loads, a second view adds threads, or the cache outlives its view                                                 |
-| FR8      | Hosted iOS find tests on a fixture document; emulator checks on API level 35 and below; unit tests of the find state    | a match on several pages; no match; a superseded find; `clearFind`; a new document                | A match is missed or capped, a superseded find resolves its state, or a new document keeps the old highlights                                            |
-| FR9      | Module tests of renders and cancels; JVM tests of the job queue; Simulator and emulator checks                          | the same request twice; a cancel queued and in flight; a cache clear mid-render; each reason      | A second identical request renders a new file, a cancelled render leaves a file, or `page-out-of-range` lacks `pageCount`                                |
-| FR10     | Hosted iOS tests of the markup screen; unit tests of the wrapper; Astryx Stage scripted saves                           | PNG and JPEG; Close with and without strokes; Save; a second call while open; an unwritable save  | The source file changes, the new file carries metadata or a different pixel size, a second call queues, or a failed save closes the screen               |
-| FR11     | Unit tests through the doubles in their absent, not-linked, older, and current shapes; previewed-project checks         | each capability not opted in; each view absent; a project's own and foreign files                 | A call throws, a reason falls outside the set, `no-native-view` repeats, or a project reads the photo library or a foreign file                          |
-| FR12     | Unit tests of the feature rows; emulator checks below and at API level 35; iOS checks below and at 16                   | each row true and false                                                                           | A call runs where its row is false, or a row answers true on a device that lacks the feature                                                             |
-| FR13     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                    | a labelled and an unlabelled thumbnail; a page change; the markup screen                          | A thumbnail has no image role, an unlabelled one is read, the page is not announced, or a markup control has no name                                     |
-| FR14     | Review of each platform source against the platform SDKs                                                                | each piece                                                                                        | A piece calls an API outside the platform's public SDK, other than the named exception                                                                   |
-| FR15     | Contract baseline check; Astryx Stage contract suites; Stage version floor check                                        | a binary without a named feature; an older Stage                                                  | The JavaScript uses a feature the binary does not list, or an older Stage runs the project                                                               |
+| Contract | Verification                                                                                                                       | Representative states                                                                             | Mutation or failure expectation                                                                                                                          |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader; an iOS launch check                     | `photos` and `pdf` opted out; opted in; an app that never marks up                                | An opted-out app links PhotoKit or PDFKit or declares a media permission, the library imports a capability outside its loader, or launch loads PencilKit |
+| FR2      | The platform's spec rules check; the contracts list against the codegen specs                                                      | each module method; each view prop, command, and event                                            | A listed member is missing, a shipped member changes, or a method rejects                                                                                |
+| FR3      | The photos contract suite over the `./testing` double (`mockPhotosCapability`); Simulator, emulator, and device checks             | each access state; `canAsk` true and false; limited picker on and off the supported versions      | A read prompts, `requestAccess` prompts without `canAsk` or opens Settings, or the picker runs without `limited`                                         |
+| FR4      | Unit tests of paging; JVM tests of the cursor and selection rules; hosted iOS tests over a seeded library; Astryx Stage            | first, middle, and last page; limited selection; a change between pages on each platform          | An asset repeats or is skipped, an iOS cursor survives a change, an Android cursor goes stale, or a page size is refused                                 |
+| FR5      | Unit tests of export through the double; hosted iOS tests; emulator and device checks; Astryx Stage                                | `jpeg` and `original`; `maxPixels`; an iCloud-only asset; one missing id; a cancel mid-export     | One failure fails the batch, a cancelled asset leaves a file, progress arrives faster than its bound, or a JPEG keeps the stored orientation             |
+| FR6      | Library tests of `PhotoThumbnail`; hosted iOS tests; emulator checks; Astryx Stage renders                                         | `cover` and `contain`; a scrolled grid; a removed asset; no access                                | A picture crosses to JavaScript, a cell decodes twice at one size, a hidden cell keeps decoding, or the view prompts                                     |
+| FR7      | Library tests through the doubles; Simulator, emulator, and device checks; JVM tests of Android's page rendering and memory bounds | each `fit` and `displayMode`; zoom to `maxZoom`; `goToPage`; a locked or missing file; many views | A page event is 1-based, a locked file loads, or a closed view's pages stay in memory                                                                    |
+| FR8      | Hosted iOS find tests on a fixture document; emulator checks on API level 35 and below; unit tests of the find state               | a match on several pages; no match; a superseded find; `clearFind`; a new document                | A match is missed or capped, a superseded find resolves its state, or a new document keeps the old highlights                                            |
+| FR9      | Module tests of renders and cancels; JVM tests of the job queue; Simulator and emulator checks                                     | the same request twice; a cancel queued and in flight; a cache clear mid-render; each reason      | A second identical request renders a new file, a cancelled render leaves a file, or `page-out-of-range` lacks `pageCount`                                |
+| FR10     | Hosted iOS tests of the markup screen; unit tests of the wrapper; Astryx Stage scripted saves                                      | PNG and JPEG; Close with and without strokes; Save; a second call while open; an unwritable save  | The source file changes, the new file carries metadata or a different pixel size, a second call queues, or a failed save closes the screen               |
+| FR11     | Unit tests through the doubles in their absent, not-linked, older, and current shapes; previewed-project checks                    | each capability not opted in; each view absent; a project's own and foreign files                 | A call throws, a reason falls outside the set, `no-native-view` repeats, or a project reads the photo library or a foreign file                          |
+| FR12     | Unit tests of the feature rows; emulator checks below and at API level 35; iOS checks below and at 16                              | each row true and false                                                                           | A call runs where its row is false, or a row answers true on a device that lacks the feature                                                             |
+| FR13     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                               | a labelled and an unlabelled thumbnail; a page change; the markup screen                          | A thumbnail has no image role, an unlabelled one is read, the page is not announced, or a markup control has no name                                     |
+| FR14     | Review of each platform source against the platform SDKs                                                                           | each piece                                                                                        | A piece calls an API outside the platform's public SDK, other than the named exception                                                                   |
+| FR15     | Contract baseline check; Astryx Stage contract suites; Stage version floor check                                                   | a binary without a named feature; an older Stage                                                  | The JavaScript uses a feature the binary does not list, or an older Stage runs the project                                                               |
 
 ## Decision log
 
