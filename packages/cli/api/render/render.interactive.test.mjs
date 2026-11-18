@@ -712,6 +712,36 @@ export default function Page() {
     expect(fs.readFileSync(path.join(dir, 'drawn-later-back/src/near.png'))).toEqual(png);
   }, 120_000);
 
+  it('shows an image named with percent-escapes that the page draws only after a click', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    put('escaped-later/c d.png', png);
+    put(
+      'escaped-later/page.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <img src="./c%20d.png" alt="Later" />}</main>;
+}
+`,
+    );
+    await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
+    const dom = new JSDOM(read('escaped-later.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await settle();
+    const doc = dom.window.document;
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await settle();
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(
+      `data:image/png;base64,${png.toString('base64')}`,
+    );
+    dom.window.close();
+    const back = /** @type {any} */ (await render('escaped-later.html', {cwd: dir, reverse: true, out: 'escaped-later-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 120_000);
+
   it('shows the file a relative string names from the page, also when modules in two folders each name one', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',

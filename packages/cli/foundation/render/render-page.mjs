@@ -908,14 +908,7 @@ export function assetRef(ref, at) {
   if (!clean) return null;
   if (NOT_A_LOAD.test(clean)) return null;
   if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean, url: decodeAttr(ref).trim()};
-  /** @type {string} */
-  let named;
-  try {
-    named = decodeURIComponent(clean);
-  } catch {
-    // A % that starts no escape is the character itself.
-    named = clean;
-  }
+  const named = fileNamed(clean);
   if (!isAssetPath(named)) return null;
   const publicDir = path.join(at.root, 'public');
   const found = named.startsWith('/')

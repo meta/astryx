@@ -303,7 +303,9 @@ export function resolutionCandidates(spec) {
 
 /**
  * The file name a reference written as URL text names: its percent-escapes
- * decoded. A `%` that starts no escape is the character itself.
+ * decoded. A reference with any `%` that starts no escape is read whole, as
+ * written (`./a%20b%.png` stays `./a%20b%.png`). The first paint, the export's
+ * scan of carried modules and `--reverse` all read a reference this way.
  * @param {string} ref
  */
 export function fileNamed(ref) {
