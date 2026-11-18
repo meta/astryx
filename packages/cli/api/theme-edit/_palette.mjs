@@ -71,6 +71,7 @@ import {P, wordTable} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {projectAddCommand} from '../../foundation/release/notices.mjs';
 
 export {readRegularFile};
 
@@ -1159,6 +1160,9 @@ function darkExact(t, id, seed) {
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
+  // (Before anything reads it, so the refusal names this project's way to
+  // a newer CLI.)
+  refuseUnknownRecipe(existing, file, cwd);
   const fams = dialFamilies(data);
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
@@ -1986,21 +1990,45 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 }
 
 /**
- * @param {any} config
- * @param {string} [file] the config's path, for the refusal
- * @returns {Candidate}
+ * The command that brings a newer CLI to the project at `cwd`, with its
+ * package manager (or the integration's own install guidance); outside a
+ * project, the newest CLI run once.
+ * @param {string} [cwd]
+ * @returns {{name: string, reason: string}}
  */
-function generate(config, file = 'palette.config.json') {
-  // A palette made with a recipe this CLI does not know (one a newer CLI
-  // brings): said as such, with the file left as it is, never as a fault
-  // to fix by hand.
+function newerCliCommand(cwd) {
+  const add = cwd ? projectAddCommand(cwd) : null;
+  return add
+    ? {name: add('@astryxdesign/cli@latest'), reason: 'install the newest CLI'}
+    : {name: 'npx @astryxdesign/cli@latest', reason: 'run the newest CLI'};
+}
+
+/**
+ * A palette made with a recipe this CLI does not know (one a newer CLI
+ * brings): said as such, with the file left as it is, never as a fault to
+ * fix by hand.
+ * @param {any} config
+ * @param {string} file the config's path, for the refusal
+ * @param {string} [cwd] the project, for the command that updates the CLI
+ */
+function refuseUnknownRecipe(config, file, cwd) {
   const recipe = config?.recipe;
   if (recipe != null && !PALETTE_RECIPES.includes(recipe))
     throw new AstryxError(
       `${file}: this theme's colors were made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know; update the CLI to open it. The file is left as it is. Nothing was changed.`,
-      [{name: 'astryx upgrade', reason: 'update the CLI'}],
+      [newerCliCommand(cwd)],
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
+}
+
+/**
+ * @param {any} config
+ * @param {string} [file] the config's path, for the refusal
+ * @param {string} [cwd] the project, for the command that updates the CLI
+ * @returns {Candidate}
+ */
+function generate(config, file = 'palette.config.json', cwd = undefined) {
+  refuseUnknownRecipe(config, file, cwd);
   try {
     return generateTonalPalette(config);
   } catch (e) {
@@ -2092,7 +2120,7 @@ export function familyRamp(cwd, slug, data, base, family) {
       planPalette(cwd, slug, data, base)
     );
     const ramp = /** @type {any} */ (
-      generate(plan.config, paletteFiles(slug).config).palette
+      generate(plan.config, paletteFiles(slug).config, cwd).palette
     )[family];
     if (ramp?.light && ramp?.dark) return ramp;
   }
@@ -2135,7 +2163,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
-  const candidate = generate(config, paletteFiles(slug).config);
+  const candidate = generate(config, paletteFiles(slug).config, cwd);
   const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
   const {
     stops,
