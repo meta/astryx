@@ -11,7 +11,7 @@
 - What a look turns into in a state ("1px bottom border that turns accent and 2px when focused") is that look in that state. The border before it stays at rest.
 - A typed text color beside "never use pure black for text" already keeps the rule, so nothing else is written.
 - Hues said of a part's statuses ("status badges: green, amber, red") go to its success, warning and error variants.
-- A typed color beside a theme color's word ("accent buttons #0F6CBD") is the color asked.
+- A typed hex color beside a theme color's word ("accent buttons #0F6CBD") is the color asked.
 - A part's underline, where the part draws one of its own ("selected tab … with a 2px underline"), is that indicator.
 - A size beside a text color ("12px white text") is that text's size.
 - A page's title is its top heading.
