@@ -1034,14 +1034,12 @@ function generatedMediaStatusRoleDefaults(
 }
 
 /**
- * The scope root in an adaptation's media blocks. The scope root always
- * carries the theme attribute, and the scope's lower limit stops at the next
- * themed element, so this matches the root alone, with `:scope`'s 0,1,0
- * specificity. Unlike a bare `:scope`, browsers file it under the attribute,
- * so other elements skip it on every style recalc, including when a theme
- * family shares one block under a list of theme names.
+ * The scope root in an adaptation's media blocks: `:scope`, with its 0,1,0
+ * specificity. Chromium files a bare `:scope` under a list of theme names
+ * with the rules every element tries; with the theme attribute in `:where()`,
+ * it files the rule under that attribute.
  */
-const ADAPTATION_SCOPE_ROOT = `:where(:scope)[data-${dataAttrNamespace}-theme]`;
+const ADAPTATION_SCOPE_ROOT = `:scope:where([data-${dataAttrNamespace}-theme])`;
 
 /** The `:scope` token block for portable and theme-local token values. */
 function tokenBlock(

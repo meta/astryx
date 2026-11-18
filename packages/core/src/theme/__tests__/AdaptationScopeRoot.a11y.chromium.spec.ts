@@ -19,7 +19,7 @@ const ONE = '[data-astryx-theme="coarse"]';
 const FAMILY =
   ':where([data-astryx-theme="coarse"], [data-astryx-theme="other"])';
 const BARE = ':scope';
-const ROOT = ':where(:scope)[data-astryx-theme]';
+const ROOT = ':scope:where([data-astryx-theme])';
 
 function block(scope: string, selector: string): string {
   return `@media (pointer: coarse) {\n  @scope (${scope}) to ([data-astryx-theme]) {\n    ${selector} {\n      --size-element-md: 40px;\n    }\n  }\n}`;
