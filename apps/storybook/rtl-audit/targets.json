@@ -170,8 +170,8 @@
     "storyId": "lab-chatadditions--reactions",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-chat-reaction-bar button:has-text(\"\ud83c\udf89\")",
-      "next": ".astryx-chat-reaction-bar button:has-text(\"\ud83d\udc40\")"
+      "prev": ".astryx-chat-reaction-bar button:has-text(\"🎉\")",
+      "next": ".astryx-chat-reaction-bar button:has-text(\"👀\")"
     }
   },
   {
@@ -545,7 +545,10 @@
     "storyId": "core-mobilenav--default",
     "dims": ["D4"],
     "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
-    "selectors": {"overlay": ".astryx-mobile-nav-drawer", "overlayRoot": "body"}
+    "selectors": {
+      "overlay": ".astryx-mobile-nav-drawer",
+      "overlayRoot": "body"
+    }
   },
   {
     "component": "MobileNavToggle",
