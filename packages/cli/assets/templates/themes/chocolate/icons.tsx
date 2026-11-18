@@ -43,7 +43,6 @@ import {
   Wrench,
   Square,
   Mic,
-  GripVertical,
 } from 'lucide-react';
 
 const iconProps = {
@@ -81,5 +80,4 @@ export const chocolateIconRegistry: IconRegistry = {
   wrench: <Wrench {...iconProps} />,
   stop: <Square {...iconProps} />,
   microphone: <Mic {...iconProps} />,
-  drag: <GripVertical {...iconProps} />,
 };
