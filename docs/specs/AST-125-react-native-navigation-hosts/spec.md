@@ -127,18 +127,16 @@ no navigation host.
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
     scroll-edge and bar behaviour, and the insets they report.
   - The header and tab bar components decide their own rendering, system or
-    drawn, in their own component records, through the components' one
-    rendering axis, `render: 'auto' | 'system' | 'drawn'` (`auto` is the
-    component's platform default, which a theme may set). The hosts host either
+    drawn, in their own component records, through the components' rendering
+    axis (`spec:AST-123/FR1`). The hosts host either
     rendering: the stack host carries a screen with the system bar or with a
     header the component draws, and a drawn tab bar renders without the tabs
     host (FR12).
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
-  - The hosts are reached only by the router (and an optional router adapter,
-    `spec:AST-112/FR2`) through the package's internal host entry; an app
-    imports the router, never a host.
+  - The hosts are reached only by the router, through the package's internal
+    host entry; an app imports the router, never a host.
   - Astryx provides this router so that Astryx's header, tab bar and sheets
     work with the native hosts and the gesture layer. An app may navigate with
     another router instead, such as Expo Router. Astryx components work inside
@@ -206,7 +204,8 @@ no navigation host.
     the system in the same frame.
   - Navigation options that derive from the theme (the chrome appearance, tint,
     bar and tab colours) resolve in the theme scope of the screen that uses
-    them. The router never derives them by comparing colour values.
+    them. A screen's own chrome appearance reaches the native bar through the
+    stack screen's `appearance` (FR7).
   - `estimatedWidth` and `estimatedHeight` size a new screen's first layout
     until its container reports the real size.
 - **FR4 — Back gestures belong to the stack host and are gated before they
@@ -382,9 +381,9 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     focus to the incoming screen as the platform does; the hosts add no focus
     rule of their own.
 - **FR14 — Named features.**
-  - The group's native contracts follow `spec:AST-140/FR5`: each is at
-    revision 1, and behaviour added later is a named feature the JavaScript
-    checks before use. The group's named features are
+  - The group's native contracts follow `spec:AST-140/FR5`: each contract's
+    baseline is its first release's shape, and behaviour added later is a
+    named feature the JavaScript checks before use. The group's named features are
     `AstryxStackHost.pop-start` (`onPopStart`, FR3) and
     `AstryxStackScreen.appearance` (the screen's chrome, FR7); any further
     stack screen behaviour beyond the baseline is a named feature of
@@ -444,7 +443,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   subtitles and the bottom accessory iOS 26, vertical bars iOS 27.1.
 - Unsupported behavior: a prop a platform does not honor is a documented no-op
   listed in this table; a missing host fails loudly (FR12); a missing named
-  feature keeps the revision-1 behaviour with one warning (FR14).
+  feature keeps the baseline behaviour with one warning (FR14).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator and devices (`spec:AST-112/FR15`).
 
@@ -452,8 +451,8 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces,
   the navigation hosts included, link by default.
-- Relies on `spec:AST-140/FR5`: native contracts start at revision 1 and grow
-  by named features.
+- Relies on `spec:AST-140/FR5`: a native contract's baseline is its first
+  release's shape, and it grows by named features.
 - Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
   only, and a record names its exceptions (FR15 here).
 - Details `spec:AST-112/FR2` (router and hosts), `spec:AST-112/FR5` (the
@@ -463,23 +462,23 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                                             | Representative states                                                              | Mutation or failure expectation                                                                                  |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                 | a push during a transition; a reset; a native pop of two routes                    | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
-| FR2      | Unit tests of the snapshot, its shape fingerprint, and each declared consumer's reads                                                                                                                    | no root; nested roots; a URL the config fails on; an unchanged commit              | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
-| FR3      | Simulator and emulator checks of each event                                                                                                                                                              | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop  | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
-| FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                         | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back    | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
-| FR5      | Simulator and emulator captures per option                                                                                                                                                               | each bar item kind; menus; header slots; large title collapse; scroll edge effects | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
-| FR6      | Unit tests of the option mapping; Simulator checks of the system field; emulator checks of the drawn row                                                                                                 | each placement; scopes; controlled text; Android                                   | The two renderings disagree on an option's meaning, or the drawn row's motion runs JavaScript per frame          |
-| FR7      | Unit tests of the scoped options; Simulator and emulator frame captures of push, pop and a cancelled back                                                                                                | a dark screen over a light stack; a tab bar under it; a presented sheet            | The chrome changes outside the transition, or a cancelled back changes it                                        |
-| FR8      | Simulator and emulator selection and re-select checks                                                                                                                                                    | a refused tab; re-select with a guard; six tabs on Android; a lazy stack tab       | The router pops on a system re-select, a refused tab is selected, or a selected tab goes blank                   |
-| FR9      | Simulator checks of placement events; emulator docked accessory                                                                                                                                          | iOS 26 minimize; below iOS 26; `isChromeHidden`                                    | No placement event at first layout, or hiding the chrome remounts the content                                    |
-| FR10     | Unit tests of the inset hooks; Simulator and emulator first-frame captures                                                                                                                               | a push's first frame; `safeAreaEdges`; a vertical bar pose                         | A pushed screen's first frame is laid out at a wrong size, or an edge is padded twice                            |
-| FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                          | Any JavaScript work per frame during these motions                                                               |
-| FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; drawn tabs                                                           | A blank screen, a silent fallback, or an error that does not name the capability                                 |
-| FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                       | The escape pops while `canPop` is false, or a badge is not read                                                  |
-| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `revision` changes with its shape                              | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`     | A contract above revision 1, or a feature used without the check                                                 |
-| FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                         | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
+| Contract | Verification                                                                                                                                                                                             | Representative states                                                                                  | Mutation or failure expectation                                                                                  |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                 | a push during a transition; a reset; a native pop of two routes                                        | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
+| FR2      | Unit tests of the snapshot, its shape fingerprint, and each declared consumer's reads                                                                                                                    | no root; nested roots; a URL the config fails on; an unchanged commit                                  | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
+| FR3      | Simulator and emulator checks of each event                                                                                                                                                              | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop                      | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
+| FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                         | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back                        | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
+| FR5      | Simulator and emulator captures per option                                                                                                                                                               | each bar item kind; menus; header slots; large title collapse; scroll edge effects                     | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
+| FR6      | Unit tests of the option mapping; Simulator checks of the system field; emulator checks of the drawn row                                                                                                 | each placement; scopes; controlled text; Android                                                       | The two renderings disagree on an option's meaning, or the drawn row's motion runs JavaScript per frame          |
+| FR7      | Unit tests of the scoped options; Simulator and emulator frame captures of push, pop and a cancelled back                                                                                                | a dark screen over a light stack; a screen under a nested theme; a tab bar under it; a presented sheet | The chrome changes outside the transition, or a cancelled back changes it                                        |
+| FR8      | Simulator and emulator selection and re-select checks                                                                                                                                                    | a refused tab; re-select with a guard; six tabs on Android; a lazy stack tab                           | The router pops on a system re-select, a refused tab is selected, or a selected tab goes blank                   |
+| FR9      | Simulator checks of placement events; emulator docked accessory                                                                                                                                          | iOS 26 minimize; below iOS 26; `isChromeHidden`                                                        | No placement event at first layout, or hiding the chrome remounts the content                                    |
+| FR10     | Unit tests of the inset hooks; Simulator and emulator first-frame captures                                                                                                                               | a push's first frame; `safeAreaEdges`; a vertical bar pose                                             | A pushed screen's first frame is laid out at a wrong size, or an edge is padded twice                            |
+| FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                                              | Any JavaScript work per frame during these motions                                                               |
+| FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; drawn tabs                                                                               | A blank screen, a silent fallback, or an error that does not name the capability                                 |
+| FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                                           | The escape pops while `canPop` is false, or a badge is not read                                                  |
+| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `revision` changes with its shape                              | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A contract whose baseline changes, or a feature used without the check                                           |
+| FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                                             | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
 
 ## Decision log
 
