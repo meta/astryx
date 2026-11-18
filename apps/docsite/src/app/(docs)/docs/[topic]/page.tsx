@@ -20,6 +20,7 @@ import {
 import {components} from '../../../../generated/componentRegistry';
 import {ReferenceDocView} from '../../../../components/docs/ReferenceDocView';
 import {TokensDocView} from '../../../../components/docs/TokensDocView';
+import {ColorSetsDocView} from '../../../../components/docs/ColorSetsDocView';
 import {PackageStubPage} from '../../../../components/docs/PackageStubPage';
 import {type InstallStep} from '../../../../components/docs/PackageActions';
 import {linkifyDocSections} from '../../../../components/docs/docsLinkify';
@@ -130,7 +131,13 @@ export default async function DocPage({
       topic.category === 'foundations' && TOKEN_TOPICS.has(topic.topic);
     const sections = linkifyDocSections(topic.sections, componentNames);
 
-    return isTokenTopic ? (
+    return topic.topic === 'visualization-color-sets' ? (
+      <ColorSetsDocView
+        title={topic.title}
+        description={topic.description}
+        sections={sections}
+      />
+    ) : isTokenTopic ? (
       <TokensDocView
         title={topic.title}
         description={topic.description}

@@ -26,5 +26,6 @@ export const docs = {
   ],
   slots: {
     guides: {title: 'Guides', accepts: {kinds: ['generic']}},
+    references: {title: 'Reference', accepts: {kinds: ['namespace']}},
   },
 };
