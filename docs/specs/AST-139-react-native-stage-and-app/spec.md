@@ -219,8 +219,11 @@ define, so Astryx React Native itself stays the same with or without it.
     its fallback or its refusal, so the project's JavaScript detects what is
     missing. The report lists it (FR5).
 - **FR8 — `astryx experimental rn stage` runs Stage from the Astryx CLI.**
-  `@astryxdesign/react-native` contributes the group to the Astryx CLI, and
-  the group follows `architecture:cli-surface`: it asks no question (INV1),
+  `@astryxdesign/react-native-stage`, a separate experimental package,
+  contributes the group's command functions to the Astryx CLI
+  (`spec:AST-042` FR1); `@astryxdesign/react-native` and `@astryxdesign/cli`
+  carry no Stage command code. The package carries only the commands; Stage's
+  binaries are not in it. The group follows `architecture:cli-surface`: it asks no question (INV1),
   prints one envelope under `--json` (INV2), prints plain text otherwise
   (INV4), exits 0 or 1 the same in text and JSON (INV8), and its outcomes
   differ by `code` (INV3). `astryx experimental rn stage` without a
@@ -233,18 +236,18 @@ define, so Astryx React Native itself stays the same with or without it.
   | `astryx experimental rn stage shot`          | Takes one capture of the app and writes it with the run's report.                                                                                   |
   | `astryx experimental rn stage play <script>` | Runs a scripted check and reports each step.                                                                                                        |
   | `astryx experimental rn stage a11y`          | Reads the app's accessibility tree.                                                                                                                 |
-  | `astryx experimental rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
+  | `astryx experimental rn stage install`       | Gets the Stage release that `@astryxdesign/react-native-stage` pins, and verifies each binary's checksum and signature.                             |
   | `astryx experimental rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
   | `astryx experimental rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
   - The group is experimental and lives in the CLI's experimental namespace
     (`spec:AST-017` FR21 and FR27; this record's DEC-6): its help and its docs
     say so, the docs carry `stability: 'experimental'`, and
     its commands, flags, and results may change or be removed in any release.
-    While the group is experimental and its package is on the canary
+    While the group is experimental and `@astryxdesign/react-native-stage` is on the canary
     channel, its outcome codes have no frozen shape either; from the first
     stable release that ships a code, the code is append-only and keeps its
     meaning (`architecture:cli-surface` INV3).
-  - Where `@astryxdesign/react-native` is not installed, the group is hidden
+  - Where `@astryxdesign/react-native-stage` is not installed, the group is hidden
     from help and still recognized: a run writes nothing and exits 1 with
     `ERR_BASE_COMMAND`. The `astryx experimental` group admits it
     (`spec:AST-017` FR27, `spec:AST-084` FR0).
@@ -275,8 +278,8 @@ define, so Astryx React Native itself stays the same with or without it.
     option fails with `ERR_INVALID_OPTION`. A script's steps change a running
     window's settings. A window answers only its own user on its own
     computer.
-  - The package pins the Stage release its commands use, in a file the
-    package ships, never in `astryx.config`. The pin names the release that
+  - `@astryxdesign/react-native-stage` pins the Stage release its commands
+    use, in a file it ships, never in `astryx.config`. The pin names the release that
     `stage install` gets, not a minimum: FR7 decides whether a Stage runs the
     project. A binary that fails its checksum
     or signature never runs. `--engine <path>` runs a binary that no checksum
@@ -297,7 +300,7 @@ define, so Astryx React Native itself stays the same with or without it.
     puts the app on a simulator, an emulator, or a device and returns no
     picture, accessibility tree, or step report, so an option on it cannot
     answer either (`spec:AST-042` FR4). Its function is
-    `stage` in the package's `./commands` entry, and its result is captures,
+    `stage` in `@astryxdesign/react-native-stage`, and its result is captures,
     step reports, and the accessibility tree.
   - Its outcomes beyond a wrong or missing argument or option:
 
@@ -343,11 +346,16 @@ define, so Astryx React Native itself stays the same with or without it.
   `astryx experimental rn stage …` commands follow the CLI's experimental rule
   (`spec:AST-017` FR21 and FR27, `spec:AST-084` FR0) and
   `architecture:cli-surface`, which FR8 cites.
+- `spec:AST-042` FR1 and FR2 extend to the command functions of
+  `@astryxdesign/react-native-stage`, the experimental package that
+  contributes the `astryx experimental rn stage` group (FR8); neither
+  `@astryxdesign/cli` nor `@astryxdesign/react-native` changes.
 - `architecture:cli-surface` INV10 and `spec:AST-081` FR7 gain the Stage
   cache as a per-user write root, and INV10 admits a file that `--out` names
   by an absolute path, as DEC-16 does for `experimental render --out`.
 - `architecture:cli-surface` INV3 gains an exception: while the
-  `astryx experimental rn stage` group is experimental and its package is on
+  `astryx experimental rn stage` group is experimental and
+  `@astryxdesign/react-native-stage` is on
   the canary channel, its outcome codes may change or be removed (FR8).
 - `spec:AST-114` FR6 to FR8 cover `astryx experimental rn stage` on a base
   that does not provide it (FR8).
