@@ -49,15 +49,19 @@ An app could reach each piece through an open-source library instead. Every
 such library ships native code, so a JavaScript-only app, or a project opened
 in the Astryx app's Preview, cannot add it. The platform package already links
 the system web engine for the web view (`spec:AST-131`), so these modules add
-no new framework to an app that opts `web` in.
+no new framework to an app that opts `web` in. Each piece adds:
 
-| Piece                 | Why the platform owns it                                                                                                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAuthSession`   | react-native-app-auth, and expo-auth-session with expo-web-browser, are complete OAuth clients but ship native code. The module adds a redirect URI per runtime and a state bound natively, so a Preview project never receives another runtime's callback (DEC-3). |
-| `AstryxWebSessions`   | react-native-webview's per-app cookie modes with a cookie library ship native code and cannot give one view a store of its own with cookies that never cross as props. The handle carries them into the view (`spec:AST-131/FR8`).                                  |
-| `AstryxWebData`       | Clearing web data through a cookie library ships native code and signs the app's own `fetch` session out. The module clears the page store alone, and can clear it when the last view closes (DEC-1).                                                               |
-| `AstryxWebBundles`    | Serving a bundled folder through react-native-webview's file access and a file library ships native code and gives the page file access. The module serves a private origin with no network and a byte route the app answers in JavaScript (DEC-2).                 |
-| `AstryxPageSnapshots` | Capturing an offscreen react-native-webview with react-native-view-shot ships native code and runs the document's script. The module draws the document inert (DEC-4). No Astryx component uses it, so its place in the package is a scope question (OQ2).          |
+- `AstryxAuthSession`: sign-in in the system's authentication browser with a
+  redirect URI per runtime and a state bound natively (FR8, DEC-3, DEC-5).
+- `AstryxWebSessions`: a store of one view's own, with cookies that never
+  cross as props (FR4, `spec:AST-131/FR8`).
+- `AstryxWebData`: one clear of the page store that keeps the app signed in,
+  and a clear when the last view closes (FR5, DEC-1).
+- `AstryxWebBundles`: a bundled web app from a private origin with no network,
+  reading the app's data over a byte route (FR6, DEC-2).
+- `AstryxPageSnapshots`: a picture of a document drawn inert (FR7, DEC-4). No
+  Astryx component uses it, so its place in the package is a scope question
+  (OQ2).
 
 ## Who uses it
 
@@ -297,8 +301,9 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     projects in its native configuration.
   - On iOS the session is `ASWebAuthenticationSession`. On Android it is the
     browser's Auth Tab where the browser has one, else a Custom Tab, and the
-    redirect activity the configuration plugin declares for the app's
-    callback schemes receives the callback.
+    redirect activity that the `web` capability's host declarations
+    (`spec:AST-112/FR4`) add for the app's callback schemes receives the
+    callback.
 
 - **FR9 — Security and privacy.**
   - Cookie values, callback URLs, codes, states, and verifiers never appear
@@ -309,9 +314,9 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     no script and loads nothing but its own images; neither reaches the app's
     client identity.
   - Sign-in never runs in an embedded web view (DEC-5).
-  - The package declares no permission (`spec:AST-112/FR3`); the
-    configuration plugin writes the callback schemes and the redirect
-    activity.
+  - The package declares no permission (`spec:AST-112/FR3`); the `web`
+    capability's host declarations (`spec:AST-112/FR4`) carry the callback
+    schemes and the redirect activity.
 
 - **FR10 — Results never throw, and reasons are a closed set.** Every call
   resolves `AstryxResult` and never rejects; a reason the JavaScript does not
@@ -402,6 +407,13 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     answers false there.
   - FR15 gap: Astryx Stage keeps no warm pages and does not list
     `AstryxWebBundles.warmPages`.
+  - FR15 gap: on Linux and Windows Astryx Stage shows no web view
+    (`spec:AST-131` Platform support). There `AstryxWebData` answers
+    `unavailable`, as on a device with no web engine, and sessions and
+    bundles register but no view shows them.
+  - FR15 gap: on Windows a sign-in whose callback is a custom scheme does not
+    come back; only a loopback redirect does, and the person ends any other
+    sign-in with Cancel.
 
 - **FR16 — Accessibility.** The sign-in sheet is the system's, read by
   VoiceOver and TalkBack and sized by the system text size. Warm pages are
