@@ -310,10 +310,10 @@ run.
     `not-declared`, because Astryx Stage never crashes a project on purpose.
   - `AstryxDailyMetrics`: present, as on the iOS Simulator: `latest()`
     answers `metrics: null`, and the feature row of FR6 reads false.
-  - `AstryxFrameRecorder`: present for the iOS look in the app's own runtime,
-    sampled once per frame from Astryx Stage's own frame model, so a check
-    sees what Astryx Stage draws at each frame. It is absent for the Android
-    look and in a Preview project, as on those platforms.
+  - `AstryxFrameRecorder`: present for the iOS look in the app's own runtime.
+    It samples what Astryx Stage draws at each displayed frame, with the same
+    sample shape as on iOS. It is absent for the Android look and in a Preview
+    project, as on those platforms.
   - FR11 gap: Astryx Stage has no `AstryxCrashReports` and no
     `AstryxDailyMetrics` module; their wrappers answer `no-module` there.
 
@@ -331,11 +331,11 @@ run.
 
 ### Platform support
 
-| Contract              | iOS                                                                                                                                                            | Android                                                              | Astryx Stage                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `AstryxCrashReports`  | MetricKit crash diagnostics; a chained uncaught-exception handler; `sigaction` on an alternate stack; reports in the app's container, out of the device backup | No module: `isEnabled()` is false and calls answer `no-module` (OQ3) | Present, no reports, follows the opt-in (FR11)                   |
-| `AstryxDailyMetrics`  | One `MXMetricManager` subscriber per process; one kept record in the app's container, out of the device backup                                                 | No module: `latest()` answers `os`; the feature row reads false      | Present, `metrics: null`, as on the Simulator (FR11)             |
-| `AstryxFrameRecorder` | `CADisplayLink` on the main thread; presentation-layer frames in window points; Debug builds only                                                              | No module: `recordFrames` throws `unsupported-step` (OQ4)            | Frames from Astryx Stage's own frame model, iOS look only (FR11) |
+| Contract              | iOS                                                                                                                                                            | Android                                                              | Astryx Stage                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `AstryxCrashReports`  | MetricKit crash diagnostics; a chained uncaught-exception handler; `sigaction` on an alternate stack; reports in the app's container, out of the device backup | No module: `isEnabled()` is false and calls answer `no-module` (OQ3) | Present, no reports, follows the opt-in (FR11)              |
+| `AstryxDailyMetrics`  | One `MXMetricManager` subscriber per process; one kept record in the app's container, out of the device backup                                                 | No module: `latest()` answers `os`; the feature row reads false      | Present, `metrics: null`, as on the Simulator (FR11)        |
+| `AstryxFrameRecorder` | `CADisplayLink` on the main thread; presentation-layer frames in window points; Debug builds only                                                              | No module: `recordFrames` throws `unsupported-step` (OQ4)            | What Astryx Stage draws at each frame, iOS look only (FR11) |
 
 - Supported feature/engine floor: the platform floor of `spec:AST-112` (iOS at
   React Native's minimum, Android API level 24, the New Architecture only).
