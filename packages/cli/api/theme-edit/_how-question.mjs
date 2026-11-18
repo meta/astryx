@@ -16529,7 +16529,17 @@ export function draftAnswer(ctx, env, question) {
     // surfaces glass": a rung a dial names (its own values, as set reads
     // them), next to the dial's noun, is that rung, never a step.
     {
-      const r = dialRung(c.text);
+      // (A corner rung said of some corners of a part, "square corners on
+      // inputs except the top", is the corner reader's: those corners only.)
+      const rung = dialRung(c.text);
+      const someCorners =
+        rung?.dial === 'corners' && c.parts[0]
+          ? cornersNamed(c.text, c.parts[0].on)
+          : null;
+      const r =
+        someCorners && (someCorners.except || someCorners.corners.length < 4)
+          ? null
+          : rung;
       const scoped = r && (r.dial === 'corners' || r.dial === 'spacing');
       // "corners square but at least 8px": a corner rung is a length (the
       // corners table); one outside the bound is not written.
@@ -27635,7 +27645,7 @@ export function draftAnswer(ctx, env, question) {
       ROLE_WORDS.test(w) ||
       /^(?:scrollbars?|scroll|carets?|cursors?|selections?)$/.test(w) ||
       parseColor(w) ||
-      /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|solid|plain|highlight|highlights|tint|tints|stripe|stripes|glow|glows|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
+      /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|solid|plain|highlight|highlights|tint|tints|stripe|stripes|glow|glows|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything|except)$/.test(
         w,
       ) ||
       // (A property's own name, "cards transform", and a word that is no

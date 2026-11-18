@@ -278,7 +278,7 @@ describe('the corners an ask names', () => {
     );
   }, 240_000);
 
-  it('reads a negative, a bare 0, and two sides with "and"', async ctx => {
+  it('reads a negative, a bare 0, two sides with "and", and an except after the part', async ctx => {
     if (needBases(ctx)) return;
     expect(await writes('cards not rounded at the bottom')).toEqual([
       'border-end-start-radius 0 --on card',
@@ -294,6 +294,17 @@ describe('the corners an ask names', () => {
     ).toEqual(['start-start', 'start-end', 'end-start', 'end-end']);
     expect(await writes('tabs rounded on top and bottom')).toEqual([]);
     expect(await writes('tabs rounded on the left and right')).toEqual([]);
+    // (An except after "on <part>" is the corners' except, never a part.)
+    expect(await writes('4px corners on tabs except the bottom')).toEqual([
+      "border-radius '4px 4px 0 0' --on tab",
+    ]);
+    expect(await writes('rounded corners on cards except the bottom')).toEqual([
+      "border-radius 'var(--radius-container) var(--radius-container) 0 0' --on card",
+    ]);
+    expect(await writes('square corners on inputs except the top')).toEqual([
+      'border-end-start-radius 0 --on inputs',
+      'border-end-end-radius 0 --on inputs',
+    ]);
   }, 240_000);
 
   it('keeps a radius the theme sets as a token, and rounds the square corners of a radius of several', async ctx => {
