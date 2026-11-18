@@ -592,8 +592,8 @@ Known verification gaps:
   and has no `create…` factory yet; no full inventory exists yet. Each conforms
   by adding its factory; a shipped hook's signature changes only when a real
   need arises (INV21a).
-- INV29 gap: no lint rule checks the `Ref` suffix or the ref type yet.
-  Public-API review is the only check. Three shipped inputs break the rule:
+- INV29 gap: no lint rule checks the `Ref` suffix or the ref type;
+  public-API review is the only check. Three shipped inputs break the rule:
   `useMenuPress`'s `getScroller` and `useLayerDismissal`'s `getContainer` take
   a getter, and Lab ChatVirtualizer's `scrollElement` takes an element.
   INV21a keeps the two shipped hook options until a real need arises.
