@@ -36,9 +36,7 @@ app.
 This record details the gesture and drag pieces of the platform layer that
 `spec:AST-112` defines: it applies the result vocabulary (`spec:AST-112/FR6`),
 the capability shape (`spec:AST-112/FR7`), and additive evolution of native
-interfaces (`spec:AST-112/FR8`) to eight native components, and covers them in
-Astryx Stage, which conforms to these contracts and never defines them
-(`spec:AST-112/FR12`).
+interfaces (`spec:AST-112/FR8`) to eight native components.
 
 ## Why this exists
 
@@ -47,8 +45,7 @@ Astryx Stage, which conforms to these contracts and never defines them
   Astryx's native hosts, from the component's live state, and a system menu's
   dismiss tap must not press the content under it (DEC-4).
 - Drag and snap, and the swipe row: the motion matches UIKit and Android
-  physics, Astryx Stage shows the same behaviour, and no app carries a second
-  JavaScript runtime for it (DEC-3). The swipe row draws its actions itself
+  physics, and no app carries a second JavaScript runtime for it (DEC-3). The swipe row draws its actions itself
   because the system's swipe actions exist only in UIKit table and collection
   views and Android's `RecyclerView`, which React Native lists are not.
 - Zoomable pager: the native paging and zoom behind `Lightbox` (FR8).
@@ -81,6 +78,8 @@ Astryx Stage, which conforms to these contracts and never defines them
   `DropZone`, `ReorderableList`, `Lightbox`, and the others under "Who uses
   it"), including their gesture numbers (detents, thresholds, springs,
   durations); each component's own record owns them.
+- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
+  they conform to this record's contracts.
 - `AstryxTouchShieldView`: Preview and inspector tooling, part of the Astryx
   app's Preview host (`spec:AST-139`), outside this record.
 - The native stack's back gesture itself, the menu hosts, and the presentation
@@ -344,16 +343,16 @@ Astryx Stage, which conforms to these contracts and never defines them
 
 ### Platform support
 
-| Contract                 | iOS                                                                                                                 | Android                                                                                                                                                         | Astryx Stage                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `AstryxGestureOwnerView` | A blocking pan recognizer; the stack's back swipes, scroll views, and UIKit's sheet drag wait through its delegate. | Owner lookup by the gesture views, `requestDisallowInterceptTouchEvent`, `View.setSystemGestureExclusionRects` for `ownsEdge`. `backGesture` is not read (OQ2). | Both looks.                                                         |
-| `AstryxGestureRootView`  | A recognizer that never begins and cancels React Native's touch for a menu's dismiss tap.                           | None: the contract is iOS only, and the wrapper renders its children.                                                                                           | iOS look.                                                           |
-| `AstryxDragItem`         | `UIDragInteraction` (enabled on iPhone), lift preview, `accessibilityDragSourceDescriptors`.                        | `View.startDragAndDrop` with a `ClipData`, a `DragShadowBuilder`, `DRAG_FLAG_GLOBAL` for `crossApp`.                                                            | Both looks: a held press lifts, the item follows finger or pointer. |
-| `AstryxDropZone`         | `UIDropInteraction` with a `UIDropProposal`, `accessibilityDropPointDescriptors`, auto-scroll.                      | `View.OnDragListener`, auto-scroll on the nearest scrollable ancestors.                                                                                         | Both looks.                                                         |
-| `AstryxDragSnap`         | A UIKit pan (its threshold is the claim), UIScrollView's rubber band, spring settle.                                | Touch-slop claim (`claim`), the same release rules and spring.                                                                                                  | Both looks, the same rules.                                         |
-| `AstryxSwipeRow`         | A pan with an axis gate, velocity-aware release, spring and slide-out.                                              | The same rules.                                                                                                                                                 | Both looks.                                                         |
-| `AstryxPanZoomView`      | `UIScrollView` deceleration and rubber band; double tap and two-finger tap recognizers.                             | `OverScroller` fling, `ScaleGestureDetector`, `GestureDetector` taps, `ValueAnimator`. No two-finger tap (FR7 gap).                                             | Both looks.                                                         |
-| `AstryxZoomPager`        | Paging, pinch, glide (UIScrollView's deceleration rates), iOS 26 back-swipe arbitration.                            | The same rules; the trailing-side drag closes.                                                                                                                  | Both looks.                                                         |
+| Contract                 | iOS                                                                                                                 | Android                                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxGestureOwnerView` | A blocking pan recognizer; the stack's back swipes, scroll views, and UIKit's sheet drag wait through its delegate. | Owner lookup by the gesture views, `requestDisallowInterceptTouchEvent`, `View.setSystemGestureExclusionRects` for `ownsEdge`. `backGesture` is not read (OQ2). |
+| `AstryxGestureRootView`  | A recognizer that never begins and cancels React Native's touch for a menu's dismiss tap.                           | None: the contract is iOS only, and the wrapper renders its children.                                                                                           |
+| `AstryxDragItem`         | `UIDragInteraction` (enabled on iPhone), lift preview, `accessibilityDragSourceDescriptors`.                        | `View.startDragAndDrop` with a `ClipData`, a `DragShadowBuilder`, `DRAG_FLAG_GLOBAL` for `crossApp`.                                                            |
+| `AstryxDropZone`         | `UIDropInteraction` with a `UIDropProposal`, `accessibilityDropPointDescriptors`, auto-scroll.                      | `View.OnDragListener`, auto-scroll on the nearest scrollable ancestors.                                                                                         |
+| `AstryxDragSnap`         | A UIKit pan (its threshold is the claim), UIScrollView's rubber band, spring settle.                                | Touch-slop claim (`claim`), the same release rules and spring.                                                                                                  |
+| `AstryxSwipeRow`         | A pan with an axis gate, velocity-aware release, spring and slide-out.                                              | The same rules.                                                                                                                                                 |
+| `AstryxPanZoomView`      | `UIScrollView` deceleration and rubber band; double tap and two-finger tap recognizers.                             | `OverScroller` fling, `ScaleGestureDetector`, `GestureDetector` taps, `ValueAnimator`. No two-finger tap (FR7 gap).                                             |
+| `AstryxZoomPager`        | Paging, pinch, glide (UIScrollView's deceleration rates), iOS 26 back-swipe arbitration.                            | The same rules; the trailing-side drag closes.                                                                                                                  |
 
 - Supported feature/engine floor: the floor of `spec:AST-112` (React Native's
   New Architecture; iOS at React Native's minimum; Android API level 24). The
@@ -362,19 +361,16 @@ Astryx Stage, which conforms to these contracts and never defines them
   its children without a gesture (FR11); a behaviour a binary lacks follows
   `spec:AST-112/FR8`.
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
-  emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
+  emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
 - Details `spec:AST-112` FR1 (the gesture owner and gesture root in the
-  core), FR6, FR7, FR8, and FR12 for this group.
+  core), FR6, FR7, and FR8 for this group.
 - Relies on `spec:AST-112` FR3 (amended): the native half of the library's
   components, these views included, links in every app by default.
 - Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and
   grow by named features that JavaScript checks before it uses them.
-- Relies on `spec:AST-112` FR12 (amended): each release names its Astryx Stage
-  version floor, and an older Astryx Stage refuses the project and lists the
-  contracts it lacks.
 - Changes `spec:AST-112` FR1: the touch shield, which FR1 lists in the core,
   is Preview and inspector tooling in the Astryx app's Preview host
   (`spec:AST-139`).
@@ -383,20 +379,20 @@ Astryx Stage, which conforms to these contracts and never defines them
 
 ## Verification
 
-| Contract | Verification                                                                                                                         | Representative states                                                                                                                                                 | Mutation or failure expectation                                                                                               |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | UI-thread frame checks on the Simulator, the emulator, and Astryx Stage: JavaScript wakes counted during a drag and its settle       | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                                                                      | Any JavaScript wake per frame during a gesture or its settle, other than `onDropZoneMove` and an asked-for `onCameraChange`   |
-| FR2      | Unit tests of each wrapper through the `./testing` doubles; frame checks on device builds                                            | values given and not; values changed; a consumer remounted; frames turned on                                                                                          | An `Animated.event` prop, a frame listener added in JavaScript, a value that stops following after a remount, a frame at rest |
-| FR3      | Astryx Stage contract checks and Simulator and emulator checks of back swipes against owner frames                                   | a slider at the screen edge; a carousel at its leading edge; a toast dragged toward its edge; `backGesture` values                                                    | A back swipe takes an owned drag, an edge swipe ignores `ownsEdge`, or an owned frame blocks an unowned drag                  |
-| FR4      | Simulator and Astryx Stage checks with a system menu open                                                                            | the dismiss tap over a pressable row; the root absent                                                                                                                 | The row's press fires on the dismiss tap                                                                                      |
-| FR5–FR8  | Unit tests of the shared rules and wrappers through `./testing` doubles; Astryx Stage contract checks; Simulator and emulator checks | stops by value; fling, slow drag, interrupt, dismiss, threshold; reveal and commit; pan, pinch, tap, glide; paging, zoom, dismiss, two fingers                        | A release settles on another stop than the rules choose, an event fires per frame, or a command sends a milestone it must not |
-| FR9      | Astryx Stage contract checks and Simulator and emulator checks with two apps                                                         | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag                                           | No `onDragItemEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                              |
-| FR10     | The platform's spec rules check over the codegen specs and the contract list                                                         | each contract's props, commands, events, platforms                                                                                                                    | A contract differs from the table                                                                                             |
-| FR11     | Unit tests with each view absent through the `./testing` doubles                                                                     | each absent view; a command sent to an absent view                                                                                                                    | Children dropped, a probe that answers true, a throw, or a command handle on an absent view                                   |
-| FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of forwarded accessibility props               | actions passed to each view; the pager and the pan-zoom surface as adjustable elements; drag item and drop zone; the large content viewer inside a drag-and-snap view | An accessibility prop not forwarded, or an adjustable that does something other than its gesture                              |
-| FR13     | Unit tests and Astryx Stage contract checks with Reduce Motion and right-to-left                                                     | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                                                          | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                  |
-| FR14     | The platform's spec rules check over the contract list                                                                               | each contract in the group                                                                                                                                            | A contract above revision 1, or a named feature the record does not list                                                      |
-| FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                                          | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
+| Contract | Verification                                                                                                           | Representative states                                                                                                                                                 | Mutation or failure expectation                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | UI-thread frame checks on the Simulator and the emulator: JavaScript wakes counted during a drag and its settle        | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                                                                      | Any JavaScript wake per frame during a gesture or its settle, other than `onDropZoneMove` and an asked-for `onCameraChange`   |
+| FR2      | Unit tests of each wrapper through the `./testing` doubles; frame checks on device builds                              | values given and not; values changed; a consumer remounted; frames turned on                                                                                          | An `Animated.event` prop, a frame listener added in JavaScript, a value that stops following after a remount, a frame at rest |
+| FR3      | Simulator and emulator checks of back swipes against owner frames                                                      | a slider at the screen edge; a carousel at its leading edge; a toast dragged toward its edge; `backGesture` values                                                    | A back swipe takes an owned drag, an edge swipe ignores `ownsEdge`, or an owned frame blocks an unowned drag                  |
+| FR4      | Simulator checks with a system menu open                                                                               | the dismiss tap over a pressable row; the root absent                                                                                                                 | The row's press fires on the dismiss tap                                                                                      |
+| FR5–FR8  | Unit tests of the shared rules and wrappers through `./testing` doubles; Simulator and emulator checks                 | stops by value; fling, slow drag, interrupt, dismiss, threshold; reveal and commit; pan, pinch, tap, glide; paging, zoom, dismiss, two fingers                        | A release settles on another stop than the rules choose, an event fires per frame, or a command sends a milestone it must not |
+| FR9      | Simulator and emulator checks with two apps                                                                            | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag                                           | No `onDragItemEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                              |
+| FR10     | The platform's spec rules check over the codegen specs and the contract list                                           | each contract's props, commands, events, platforms                                                                                                                    | A contract differs from the table                                                                                             |
+| FR11     | Unit tests with each view absent through the `./testing` doubles                                                       | each absent view; a command sent to an absent view                                                                                                                    | Children dropped, a probe that answers true, a throw, or a command handle on an absent view                                   |
+| FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of forwarded accessibility props | actions passed to each view; the pager and the pan-zoom surface as adjustable elements; drag item and drop zone; the large content viewer inside a drag-and-snap view | An accessibility prop not forwarded, or an adjustable that does something other than its gesture                              |
+| FR13     | Unit tests and Simulator and emulator checks with Reduce Motion and right-to-left                                      | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                                                          | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                  |
+| FR14     | The platform's spec rules check over the contract list                                                                 | each contract in the group                                                                                                                                            | A contract above revision 1, or a named feature the record does not list                                                      |
+| FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                            | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
 
 ## Decision log
 
@@ -428,12 +424,13 @@ JavaScript listener that wakes JavaScript every frame.
 **Decider:** imdreamrunner, 2026-11-17
 
 Each gesture is a native view with declared props, commands, and events, so
-iOS, Android, and Astryx Stage show the same behaviour and the package keeps
-React and React Native as its only peers.
+iOS and Android show the same behaviour and the package keeps React and React
+Native as its only peers. Astryx takes no third-party native dependency for
+these gestures; an app may use react-native-gesture-handler or
+react-native-reanimated beside these components without conflict.
 
 Rejected: building on react-native-reanimated and react-native-gesture-handler,
-because Astryx Stage cannot simulate arbitrary worklets, and they add a second
-JavaScript runtime to every app.
+because they add a second JavaScript runtime to every app.
 
 ### DEC-4 — Components declare ownership; the platform arbitrates
 
