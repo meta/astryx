@@ -187,3 +187,136 @@ describe('a stress theme of gradients', () => {
     T,
   );
 });
+
+describe('beside a variant gradient', () => {
+  it(
+    'keeps a background longhand set before it in the same scope, and a plain color as the color under it',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('k', {cwd, like: 'neutral'});
+      const scope = {cwd, on: 'button', when: 'variant:primary'};
+      await themeEditSet('k', 'background-size', '100% 200%', scope);
+      await themeEditSet('k', 'background-position', '0 0', scope);
+      await themeEditSet(
+        'k',
+        'background-image',
+        'linear-gradient(#049cdb, #0064cd)',
+        scope,
+      );
+      const rule = rulesOn(css('k'), 'button').find(
+        r => r.selector === '.astryx-button[data-variant="primary"]',
+      );
+      expect(rule).toBeTruthy();
+      const body = /** @type {{body: string}} */ (rule).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        'linear-gradient(#049cdb, #0064cd)',
+      );
+      expect(valueIn(body, 'background-size')).toBe('100% 200%');
+      expect(valueIn(body, 'background-position')).toBe('0 0');
+      expect(shorthandsAfterOwnLonghands(css('k'))).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'leaves one mode of a text color written on that variant, which the image does not cover',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('t', {cwd, like: 'neutral'});
+      await themeEditSet(
+        't',
+        'background',
+        'linear-gradient(#049cdb, #0064cd)',
+        {
+          cwd,
+          on: 'button',
+          when: 'variant:primary',
+        },
+      );
+      const r = await themeEditSet('t', 'color', '#123456', {
+        cwd,
+        on: 'button',
+        mode: 'light',
+      });
+      expect((r.data.notes ?? []).join('\n')).not.toMatch(
+        /variant:primary keeps its own background image/,
+      );
+      // The light color reaches the primary variant's rule, in its light
+      // block, as it does every other variant's.
+      const built = css('t');
+      const withColor = [...built.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m =>
+        /#123456/.test(m[2]),
+      );
+      expect(
+        withColor.some(m =>
+          m[1].includes('.astryx-button[data-variant="primary"]'),
+        ),
+      ).toBe(true);
+      // A one-mode background color under the same gradient is still left
+      // out, and said.
+      const b = await themeEditSet('t', 'background-color', '#eeeeee', {
+        cwd,
+        on: 'button',
+        mode: 'light',
+      });
+      expect(b.data.notes.join('\n')).toMatch(
+        /variant:primary keeps its own background image/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'stays in the variant, state or mode it is set for',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('l', {cwd, like: 'neutral'});
+      await themeEditSet(
+        'l',
+        'background',
+        'linear-gradient(#aa0000, #550000)',
+        {cwd, on: 'button', when: 'variant:primary'},
+      );
+      await themeEditSet(
+        'l',
+        'background',
+        'linear-gradient(#00aa00, #005500)',
+        {cwd, on: 'button', state: 'hover'},
+      );
+      await themeEditSet(
+        'l',
+        'background',
+        'linear-gradient(#0000aa, #000055)',
+        {cwd, on: 'card', mode: 'dark'},
+      );
+      const rules = [...css('l').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({
+        selector: m[1].trim(),
+        body: m[2],
+      }));
+      /** @param {string} color */
+      const rulesWith = color => rules.filter(r => r.body.includes(color));
+      // The variant's gradient is on that variant's rules only.
+      const variant = rulesWith('#aa0000');
+      expect(variant.length).toBeGreaterThan(0);
+      for (const r of variant)
+        expect(r.selector).toContain('[data-variant="primary"]');
+      // The hover gradient is on hover rules only: never on the part at rest.
+      const hover = rulesWith('#00aa00');
+      expect(hover.length).toBeGreaterThan(0);
+      for (const r of hover) expect(r.selector).toContain(':hover');
+      // The dark gradient is in dark blocks only: never in light ones.
+      const dark = rulesWith('#0000aa');
+      expect(dark.length).toBeGreaterThan(0);
+      for (const r of dark) {
+        expect(r.selector).toMatch(/dark/);
+        expect(r.selector).not.toMatch(/^\.astryx-card\s*$/);
+      }
+      expect(
+        rules.some(
+          r => r.selector === '.astryx-card' && /gradient\(/.test(r.body),
+        ),
+      ).toBe(false);
+    },
+    T,
+  );
+});
