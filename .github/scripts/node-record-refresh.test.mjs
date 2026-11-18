@@ -6,7 +6,7 @@
  * Also proves that no pull-request check fails on an unrecorded test file.
  */
 
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +26,10 @@ import {
 } from './node-record-refresh.mjs';
 import {MARGIN_S, RATIO, main as driftMain} from './node-time-drift.mjs';
 import {nodeLegFiles} from '../../scripts/vitest-node-legs.mjs';
-import {partitionByDuration} from '../../scripts/vitest-shard-sequencer.mjs';
+import {
+  partitionByDuration,
+  recordDurations,
+} from '../../scripts/vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const workflowFile = path.join(
@@ -93,8 +96,64 @@ describe('the Node record refresh workflow', () => {
     expect(commands.some(line => line.includes('gh run view'))).toBe(false);
     expect(read.run).toContain('actions/runs/$run/jobs?filter=latest');
     expect(read.run).toContain(
-      'gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"',
+      'gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"',
     );
+  });
+
+  it('runs the read step against a leg log with colour codes, as gh api serves it', () => {
+    const read = step("Read the Node leg logs of main's full unit run");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-'));
+    try {
+      const files = nodeFiles.slice(0, 3);
+      const legLog = [
+        ...files.map(file => rawLine(file, 2)),
+        `2026-01-01T00:00:00.0000000Z  \x1b[2m Test Files \x1b[22m \x1b[1m\x1b[32m${files.length} passed\x1b[39m\x1b[22m\x1b[90m (${files.length})\x1b[39m`,
+      ].join('\n');
+      fs.writeFileSync(path.join(dir, 'leg-fixture.log'), `${legLog}\n`);
+      // A stand-in for gh that keeps its rule: `gh api` writes a response
+      // with terminal escape sequences only with --allow-escape-sequences.
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'gh'),
+        [
+          '#!/usr/bin/env bash',
+          'case "$*" in',
+          '  *"/actions/runs/"*"/jobs"*) printf \'101\\ttest-node (1)\\n\' ;;',
+          '  *"/actions/jobs/101/logs"*)',
+          '    case " $* " in',
+          '      *" --allow-escape-sequences "*) cat "$FIXTURE" ;;',
+          '      *) echo "the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway" >&2; exit 1 ;;',
+          '    esac ;;',
+          '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
+          'esac',
+        ].join('\n'),
+        {mode: 0o755},
+      );
+      const result = spawnSync('bash', ['-e', '-c', read.run], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          FIXTURE: path.join(dir, 'leg-fixture.log'),
+          GITHUB_REPOSITORY: 'meta/astryx',
+          GITHUB_SERVER_URL: 'https://github.com',
+          GITHUB_OUTPUT: path.join(dir, 'output'),
+          RUNNER_TEMP: dir,
+          COMPLETED_RUN: '7',
+        },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const log = fs.readFileSync(path.join(dir, 'main-run.log'), 'utf8');
+      expect(log).toContain('\x1b[');
+      expect(incompleteLegs(log)).toEqual([]);
+      expect(Object.keys(recordDurations(log)).sort()).toEqual(
+        [...files].sort(),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it("gives every line of a leg's own log its leg's name, long lines included", () => {
@@ -530,6 +589,29 @@ describe("a leg's log that misses test files", () => {
       }
       expect(status).toBe(1);
       expect(stderr).toContain('test-node (4): 3 files read, 5 counted');
+      // A log with no Node leg lines at all fails too.
+      fs.writeFileSync(logFile, '');
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'check',
+            '--log',
+            logFile,
+            '--reasons',
+            reasonsFile,
+          ],
+          {cwd: ROOT, stdio: 'pipe', encoding: 'utf8'},
+        );
+        status = 0;
+      } catch (error) {
+        status = error.status;
+        stderr = String(error.stderr);
+      }
+      expect(status).toBe(1);
+      expect(stderr).toContain('no Node leg lines');
+      expect(fs.existsSync(reasonsFile)).toBe(false);
       // A leg that crashed before its summary fails too, by name.
       fs.writeFileSync(logFile, leg('test-node (6)', 4, null));
       try {

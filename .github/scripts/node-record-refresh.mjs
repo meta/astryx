@@ -234,6 +234,12 @@ function main(args) {
       /** @type {string} */ (option('--log')),
       'utf8',
     );
+    if (nodeLegLogs(log).size === 0) {
+      console.error(
+        '::error title=No Node leg logs::The run log has no Node leg lines, so no record is written.',
+      );
+      return 1;
+    }
     const short = incompleteLegs(log);
     if (short.length > 0) {
       console.error(

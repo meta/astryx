@@ -77,7 +77,9 @@ jobs:
           # Each leg's complete job log. `gh run view --log` stops reading a
           # job's log at its first line over 64 KiB, and a test can print one,
           # so the results after it never reach the record. Each line gets the
-          # leg's name and a step column, the shape the readers expect.
+          # leg's name and a step column, the shape the readers expect. The
+          # logs carry colour codes, which `gh api` writes out only with
+          # --allow-escape-sequences.
           : > "$RUNNER_TEMP/main-run.log"
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
             --jq '.jobs[] | select(.name | test("^test-node \\([0-9]+\\)$")) | "\(.id)\t\(.name)"' > "$RUNNER_TEMP/node-legs.tsv"
@@ -86,7 +88,7 @@ jobs:
             exit 1
           fi
           while IFS=$'\t' read -r job name; do
-            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
+            gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
             sed "s/^/${name}\tlog\t/" "$RUNNER_TEMP/leg.log" >> "$RUNNER_TEMP/main-run.log"
           done < "$RUNNER_TEMP/node-legs.tsv"
           echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
