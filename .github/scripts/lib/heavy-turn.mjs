@@ -14,7 +14,12 @@
  * is such a later attempt too.
  */
 
+import {createRequire} from 'node:module';
 import {workflowRunPullCandidates} from './workflow-run-pulls.mjs';
+
+const reviewDecision = createRequire(import.meta.url)(
+  '../review-signal-decision.cjs',
+);
 
 /** The commit status the review gate writes (both halves: DEC-14). */
 export const REVIEW_STATUS = 'review-required';
@@ -70,6 +75,74 @@ export async function pullsForRun({github, owner, repo, run}) {
 }
 
 /**
+ * The handles in an owner variable such as `vars.ENGOWNERS`, lower-cased.
+ * @param {string | undefined} text
+ * @returns {string[]}
+ */
+export function ownerHandles(text) {
+  return (String(text ?? '').match(/@?[A-Za-z0-9-]+/g) ?? []).map(handle =>
+    handle.replace(/^@/, '').toLowerCase(),
+  );
+}
+
+/**
+ * Whether a pull request's review passes at its head, as
+ * architecture:knowledge-contracts DEC-11 reads the gate: `review-required`
+ * succeeds there (its spec half included), and a review of that exact head
+ * cleared its code half: the review app's latest verdict for a write-access
+ * author, or an engineering owner's approval. An author's own push never
+ * clears it.
+ * @param {{
+ *   github: any,
+ *   owner: string,
+ *   repo: string,
+ *   pull: {number: number, head: {sha: string}, user?: {login?: string}},
+ *   engOwners: string[],
+ *   reviewApp?: string,
+ * }} input
+ */
+export async function reviewPasses({
+  github,
+  owner,
+  repo,
+  pull,
+  engOwners,
+  reviewApp = '',
+}) {
+  const sha = pull.head.sha;
+  const status = await reviewStatus({github, owner, repo, sha});
+  if (status?.state !== 'success') return false;
+  const reviews = await github.paginate(github.rest.pulls.listReviews, {
+    owner,
+    repo,
+    pull_number: pull.number,
+    per_page: 100,
+  });
+  const app = reviewDecision.normalizeReviewApp(reviewApp);
+  let authorHasWrite = false;
+  if (app && pull.user?.login) {
+    try {
+      const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+        owner,
+        repo,
+        username: pull.user.login,
+      });
+      authorHasWrite = reviewDecision.hasWritePermission(data);
+    } catch {
+      // An unreadable permission leaves the app's verdict without effect.
+    }
+  }
+  return reviewDecision.resolveReviewApprovals({
+    reviews,
+    headSha: sha,
+    engOwners,
+    designOwners: [],
+    reviewApp: app,
+    authorHasWrite,
+  }).codeApproved;
+}
+
+/**
  * Starts the heavy suites for a pull request whose review passes at its head:
  * re-runs its newest CI run there in full while that run's latest attempt
  * still defers them (a failed-jobs re-run keeps the deferral). Returns what
@@ -78,14 +151,23 @@ export async function pullsForRun({github, owner, repo, run}) {
  *   github: any,
  *   owner: string,
  *   repo: string,
- *   pull: {number: number, base?: {ref?: string}, head: {sha: string}},
+ *   pull: {number: number, base?: {ref?: string}, head: {sha: string}, user?: {login?: string}},
+ *   engOwners: string[],
+ *   reviewApp?: string,
  * }} input
  */
-export async function startHeavy({github, owner, repo, pull}) {
+export async function startHeavy({
+  github,
+  owner,
+  repo,
+  pull,
+  engOwners,
+  reviewApp = '',
+}) {
   const sha = pull.head.sha;
   const at = `#${pull.number} at ${sha.slice(0, 8)}`;
-  const status = await reviewStatus({github, owner, repo, sha});
-  if (status?.state !== 'success') return `${at}: review has not passed`;
+  if (!(await reviewPasses({github, owner, repo, pull, engOwners, reviewApp})))
+    return `${at}: review has not passed`;
   const {data} = await github.rest.actions.listWorkflowRuns({
     owner,
     repo,

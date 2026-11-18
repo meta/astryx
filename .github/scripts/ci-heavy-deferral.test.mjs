@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 import {
@@ -204,6 +204,74 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     expect(heavyCi(github).result).toBe('skipped');
   });
 
+  it('runs every suite in the same run when the review gate already passes at the head, never a deferred attempt and then a second run (DEC-32)', async () => {
+    vi.useFakeTimers();
+    const job = ci.jobs['heavy-ci'];
+    expect(job.permissions.statuses).toBe('read');
+    const gate = job.steps.find(item => item.id === 'gate');
+    expect(gate.env.HEAD_SHA).toBe('${{ github.event.pull_request.head.sha }}');
+    expect(job.steps.find(item => item.id === 'decide').env.REVIEW_PASSES).toBe(
+      '${{ steps.gate.outputs.passes }}',
+    );
+    process.env.HEAVY_MODULE = '/heavy-turn.mjs';
+    process.env.HEAD_SHA = 'h1';
+    process.env.ENG_OWNERS = '@owner1';
+    process.env.REVIEW_APP = 'astracat-bot[bot]';
+    /**
+     * Runs the step with the gate's states, one per look, and whether a
+     * review of the head cleared it; returns its answer and looks.
+     */
+    const passes = async (states, reviewed = true) => {
+      const outputs = {};
+      let looks = 0;
+      const done = new AsyncFunction(
+        'github',
+        'context',
+        'core',
+        'importModule',
+        gate.with.script.replaceAll('await import(', 'await importModule('),
+      )(
+        {},
+        {
+          repo: {owner: 'o', repo: 'r'},
+          payload: {pull_request: {number: 7, head: {sha: 'h1'}}},
+        },
+        {warning: () => {}, setOutput: (key, value) => (outputs[key] = value)},
+        async specifier =>
+          specifier === 'node:url'
+            ? import('node:url')
+            : {
+                reviewStatus: async ({sha}) => {
+                  expect(sha).toBe('h1');
+                  const state = states[Math.min(looks, states.length - 1)];
+                  looks += 1;
+                  return state == null ? null : {state};
+                },
+                ownerHandles: text => [String(text)],
+                reviewPasses: async ({pull, engOwners, reviewApp}) => {
+                  expect(pull).toEqual({number: 7, head: {sha: 'h1'}});
+                  expect(engOwners).toEqual(['@owner1']);
+                  expect(reviewApp).toBe('astracat-bot[bot]');
+                  return reviewed;
+                },
+              },
+      );
+      await vi.advanceTimersByTimeAsync(4 * 60_000);
+      await done;
+      return [outputs.passes, looks];
+    };
+    // Review signal writes the gate a moment after the push; a review of the
+    // head cleared it (a re-run, or a head reviewed before its run).
+    expect(await passes([null, 'pending', 'success'])).toEqual(['true', 3]);
+    // The gate passed at the author's own push, with no review: defer.
+    expect(await passes(['success'], false)).toEqual(['false', 1]);
+    // A failing gate defers at once; a gate still pending after three
+    // minutes defers.
+    expect(await passes(['failure'])).toEqual(['false', 1]);
+    expect(await passes(['pending'])).toEqual(['false', 12]);
+    vi.useRealTimers();
+  });
+
   it('reads a release-critical label only when someone with write access applied it last (DEC-30)', async () => {
     const job = ci.jobs['heavy-ci'];
     const read = job.steps.find(item => item.id === 'release');
@@ -384,15 +452,16 @@ describe('a deferred push', () => {
   // A Lab-only change runs only fast work, so it defers nothing either
   // (spec:AST-030 FR26).
   it.each([
-    ['true', 'false', '', 'false', ''],
-    ['false', 'true', '', 'false', ''],
-    ['false', 'false', 'true', 'false', ''],
-    ['false', 'false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
-    ['false', 'false', '', 'true', HEAVY_DEFERRED_MESSAGE],
-    ['', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['true', 'false', '', '', 'false', ''],
+    ['false', 'true', '', '', 'false', ''],
+    ['false', 'false', 'true', '', 'false', ''],
+    ['false', 'false', 'false', 'true', 'false', ''],
+    ['false', 'false', 'false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['false', 'false', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['', '', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
   ])(
-    'defers unless the change is spec-only or Lab-only, or release-critical counts (spec_only=%s, lab_only=%s, release_critical=%s → deferred=%s)',
-    (specOnly, labOnly, releaseCritical, deferred, summary) => {
+    'defers unless the change is spec-only or Lab-only, release-critical counts, or the review gate already passes (spec_only=%s, lab_only=%s, release_critical=%s, review_passes=%s → deferred=%s)',
+    (specOnly, labOnly, releaseCritical, reviewPasses, deferred, summary) => {
       const step = ci.jobs['heavy-ci'].steps.find(item => item.id === 'decide');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heavy-ci-'));
       try {
@@ -409,6 +478,7 @@ describe('a deferred push', () => {
               SPEC_ONLY: specOnly,
               LAB_ONLY: labOnly,
               RELEASE_CRITICAL: releaseCritical,
+              REVIEW_PASSES: reviewPasses,
               GITHUB_OUTPUT: output,
               GITHUB_STEP_SUMMARY: stepSummary,
               GITHUB_RUN_ID: '7',

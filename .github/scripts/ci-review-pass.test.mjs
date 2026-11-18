@@ -48,11 +48,36 @@ const ranJobs = [
 ];
 
 /** A stub GitHub with pull requests, CI runs, their jobs and statuses. */
-function stubGithub({pulls = [], runs = [], jobs = {}, statuses = {}}) {
+const APP = 'astracat-bot[bot]';
+const REVIEW = {engOwners: ['owner1'], reviewApp: APP};
+/** The review app's approval of a head. */
+const appApproval = sha => ({
+  user: {login: APP, type: 'Bot'},
+  commit_id: sha,
+  state: 'APPROVED',
+});
+
+function stubGithub({
+  pulls = [],
+  runs = [],
+  jobs = {},
+  statuses = {},
+  reviews = null,
+  permission = 'write',
+}) {
   const calls = {reRunWorkflow: [], listWorkflowRuns: []};
   const github = {
+    paginate: async (method, options) => (await method(options)).data,
     rest: {
       pulls: {
+        // By default the review app approved each pull request's head.
+        listReviews: async ({pull_number}) => ({
+          data:
+            reviews?.[pull_number] ??
+            [pulls.find(pull => pull.number === pull_number)]
+              .filter(Boolean)
+              .map(pull => appApproval(pull.head.sha)),
+        }),
         get: async ({pull_number}) => ({
           data: pulls.find(pull => pull.number === pull_number),
         }),
@@ -67,6 +92,7 @@ function stubGithub({pulls = [], runs = [], jobs = {}, statuses = {}}) {
         },
       },
       repos: {
+        getCollaboratorPermissionLevel: async () => ({data: {permission}}),
         listCommitStatusesForRef: async ({ref}) => ({
           data:
             typeof statuses[ref] === 'function'
@@ -112,6 +138,7 @@ const pull = (number, sha, extra = {}) => ({
   state: 'open',
   base: {ref: 'main'},
   head: {sha},
+  user: {login: 'author'},
   ...extra,
 });
 const ciRun = (id, sha, extra = {}) => ({
@@ -136,11 +163,13 @@ describe('a deferred run', () => {
 describe('starting the heavy suites', () => {
   it('re-runs the deferred run in full once review passes at the head', async () => {
     const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
       runs: [ciRun(11, 'h1')],
       jobs: {11: deferredJobs},
       statuses: {h1: passed},
     });
     const said = await turn.startHeavy({
+      ...REVIEW,
       ...stub,
       owner: 'o',
       repo: 'r',
@@ -183,6 +212,7 @@ describe('starting the heavy suites', () => {
   ])('starts nothing when %s', async (_, data) => {
     const stub = stubGithub(data);
     await turn.startHeavy({
+      ...REVIEW,
       ...stub,
       owner: 'o',
       repo: 'r',
@@ -191,15 +221,84 @@ describe('starting the heavy suites', () => {
     expect(stub.calls.reRunWorkflow).toEqual([]);
   });
 
+  it.each([
+    [
+      'the review app approved the exact head of a write-access author',
+      {},
+      [11],
+    ],
+    [
+      'an engineering owner approved the exact head',
+      {
+        reviews: {
+          1: [{user: {login: 'Owner1'}, commit_id: 'h1', state: 'APPROVED'}],
+        },
+        permission: 'read',
+      },
+      [11],
+    ],
+    [
+      "the gate passed at the author's own push, with no review of the head",
+      {reviews: {1: []}},
+      [],
+    ],
+    [
+      'the review app approved an earlier head only',
+      {reviews: {1: [appApproval('h0')]}},
+      [],
+    ],
+    [
+      'the review app approved, but the author has no write access',
+      {permission: 'read'},
+      [],
+    ],
+    [
+      'a lookalike of the review app approved',
+      {
+        reviews: {
+          1: [
+            {
+              user: {login: APP, type: 'User'},
+              commit_id: 'h1',
+              state: 'APPROVED',
+            },
+          ],
+        },
+      },
+      [],
+    ],
+  ])(
+    'reads the review as DEC-11 does: starts when %s',
+    async (_, data, expected) => {
+      const stub = stubGithub({
+        pulls: [pull(1, 'h1')],
+        runs: [ciRun(11, 'h1')],
+        jobs: {11: deferredJobs},
+        statuses: {h1: passed},
+        ...data,
+      });
+      await turn.startHeavy({
+        ...REVIEW,
+        ...stub,
+        owner: 'o',
+        repo: 'r',
+        pull: pull(1, 'h1'),
+      });
+      expect(stub.calls.reRunWorkflow).toEqual(expected);
+    },
+  );
+
   it('re-runs a run that "Re-run failed jobs" left deferred', async () => {
     // A failed-jobs re-run keeps heavy-ci's deferred output, so its required
     // checks still fail at the deferral step on the later attempt.
     const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
       runs: [ciRun(11, 'h1', {run_attempt: 2})],
       jobs: {11: deferredJobs},
       statuses: {h1: passed},
     });
     await turn.startHeavy({
+      ...REVIEW,
       ...stub,
       owner: 'o',
       repo: 'r',
@@ -210,6 +309,7 @@ describe('starting the heavy suites', () => {
 
   it("reads the newest run at the head, not an older head's", async () => {
     const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
       runs: [
         ciRun(10, 'old'),
         ciRun(11, 'h1', {created_at: '2026-11-17T11:00:00Z'}),
@@ -219,6 +319,7 @@ describe('starting the heavy suites', () => {
       statuses: {h1: passed},
     });
     await turn.startHeavy({
+      ...REVIEW,
       ...stub,
       owner: 'o',
       repo: 'r',
@@ -271,6 +372,8 @@ describe('the workflow', () => {
       s.uses?.startsWith('actions/github-script'),
     );
     process.env.HEAVY_MODULE = HEAVY_MODULE;
+    process.env.ENG_OWNERS = '@owner1 @owner2';
+    process.env.REVIEW_APP = APP;
     const done = new AsyncFunction(
       'github',
       'context',

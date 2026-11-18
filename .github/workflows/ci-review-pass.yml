@@ -66,6 +66,8 @@ jobs:
         uses: actions/github-script@v9
         env:
           HEAVY_MODULE: ${{ github.workspace }}/.heavy-turn/.github/scripts/lib/heavy-turn.mjs
+          ENG_OWNERS: ${{ vars.ENGOWNERS }}
+          REVIEW_APP: ${{ vars.REVIEW_APP }}
         with:
           retries: 3
           script: |
@@ -74,7 +76,15 @@ jobs:
             const intoMain = pull => pull.base?.ref === 'main';
             const start = async pull => {
               try {
-                core.info(await turn.startHeavy({github, ...context.repo, pull}));
+                core.info(
+                  await turn.startHeavy({
+                    github,
+                    ...context.repo,
+                    pull,
+                    engOwners: turn.ownerHandles(process.env.ENG_OWNERS),
+                    reviewApp: process.env.REVIEW_APP,
+                  }),
+                );
               } catch (error) {
                 core.warning(`#${pull.number}: could not start its heavy suites (${error.message}).`);
               }

@@ -752,10 +752,11 @@ jobs:
     needs: [room]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.run_attempt == '1' && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v')) && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true') }}
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    timeout-minutes: 6
     permissions:
       contents: read
       pull-requests: read
+      statuses: read
     outputs:
       deferred: ${{ steps.decide.outputs.deferred }}
     steps:
@@ -796,16 +797,59 @@ jobs:
             }
             core.setOutput('counts', String(counts === true));
 
+      # A head whose review already passes (a re-run, or a head reviewed before
+      # its run) would get its review-pass run at once, so it runs every suite
+      # in this run instead. Review signal writes the gate a moment after the
+      # push: look for up to three minutes.
+      - name: Read whether the review gate already passes at this head
+        id: gate
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true' && steps.release.outputs.counts != 'true'
+        uses: actions/github-script@v9
+        env:
+          HEAVY_MODULE: ${{ github.workspace }}/.test-scope/.github/scripts/lib/heavy-turn.mjs
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ENG_OWNERS: ${{ vars.ENGOWNERS }}
+          REVIEW_APP: ${{ vars.REVIEW_APP }}
+        with:
+          script: |
+            const {pathToFileURL} = await import('node:url');
+            let passes = false;
+            try {
+              const turn = await import(pathToFileURL(process.env.HEAVY_MODULE).href);
+              let status = null;
+              for (let look = 0; look < 12; look += 1) {
+                status = await turn.reviewStatus({github, ...context.repo, sha: process.env.HEAD_SHA});
+                if (status != null && status.state !== 'pending') break;
+                await new Promise(resolve => setTimeout(resolve, 15_000));
+              }
+              // The gate passes only as DEC-11 reads it: a review of this
+              // exact head, never the author's own push.
+              passes =
+                status?.state === 'success' &&
+                (await turn.reviewPasses({
+                  github,
+                  ...context.repo,
+                  pull: context.payload.pull_request,
+                  engOwners: turn.ownerHandles(process.env.ENG_OWNERS),
+                  reviewApp: process.env.REVIEW_APP,
+                }));
+            } catch (error) {
+              core.warning(`Could not read the review gate: ${error.message}`);
+            }
+            core.setOutput('passes', String(passes));
+
       - name: Defer the heavy suites unless the change is spec-only or Lab-only
         id: decide
         env:
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
           RELEASE_CRITICAL: ${{ steps.release.outputs.counts }}
+          REVIEW_PASSES: ${{ steps.gate.outputs.passes }}
         run: |
           # A Lab-only change runs only fast work, so nothing is deferred (FR26).
-          # Nor is a pull request whose release-critical label counts (DEC-30).
-          if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ] || [ "$RELEASE_CRITICAL" = true ]; then
+          # Nor is a pull request whose release-critical label counts (DEC-30),
+          # or a head whose review gate already passes (DEC-32).
+          if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ] || [ "$RELEASE_CRITICAL" = true ] || [ "$REVIEW_PASSES" = true ]; then
             echo 'deferred=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
