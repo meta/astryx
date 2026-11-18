@@ -75,11 +75,11 @@ these components without conflict (`spec:AST-140/FR9`).
 
 | Native piece       | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                     | What a person sees                                                                                 |
 | ------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), in both system and drawn chrome; the drawn chrome draws `Header` inside its screens                                                                                                                                                     | Native push and pop transitions, the back swipe, Android predictive back                           |
+| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), with `render: 'system'` or `'drawn'`; with `'drawn'`, `Header` draws inside its screens                                                                                                                                                 | Native push and pop transitions, the back swipe, Android predictive back                           |
 | AstryxStackScreen  | native component (Fabric Native Component) | The router's stack navigator; `Header` (its composed parts declare the screen's stack options) and `ScreenView`; `ScreenScroll` (the screen's scroll target); the header search row, drawn with `SearchField`                                                                                                     | The navigation bar: titles, large title, back button, bar buttons and menus, toolbar, search field |
 | AstryxHeaderSlot   | native component (Fabric Native Component) | The router's stack navigator, for a screen's `headerTitle`, `headerLeft` and `headerRight` given as React                                                                                                                                                                                                         | A custom title view or bar button in the system bar                                                |
-| AstryxTabsHost     | native component (Fabric Native Component) | The router's tab navigator (`createTabs`) with system chrome                                                                                                                                                                                                                                                      | The system tab bar (iOS) or a Material navigation bar or rail (Android)                            |
-| AstryxTabScreen    | native component (Fabric Native Component) | The router's tab navigator with system chrome                                                                                                                                                                                                                                                                     | Each tab's icon, label and badge, and the tab's content                                            |
+| AstryxTabsHost     | native component (Fabric Native Component) | The router's tab navigator (`createTabs`) with `render: 'system'`                                                                                                                                                                                                                                                 | The system tab bar (iOS) or a Material navigation bar or rail (Android)                            |
+| AstryxTabScreen    | native component (Fabric Native Component) | The router's tab navigator with `render: 'system'`                                                                                                                                                                                                                                                                | Each tab's icon, label and badge, and the tab's content                                            |
 | AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its bottom accessory (`BottomAccessory`, one component for both placements)                                                                                                                                                                                                       | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
 | AstryxRouter       | protocol (JavaScript)                      | The router provides it: `NavigationRoot` (its handle) and `createNavigationRef()` carry the four methods, and `useNavigationInspector` reads it. No other Astryx component reads it; apps (`useRouterState`), Astryx Stage's address bar (`spec:AST-139`) and the Astryx app's preview chrome (`spec:AST-141`) do | An address bar or route list that shows and opens the app's routes                                 |
 
@@ -126,12 +126,16 @@ no navigation host.
     containers, transitions, back gestures, bars, large titles, search fields,
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
     scroll-edge and bar behaviour, and the insets they report.
-  - The header and tab bar components decide their own rendering, system or
-    drawn, in their own component records, through the components' rendering
-    axis (`spec:AST-123/FR1`). The hosts host either
-    rendering: the stack host carries a screen with the system bar or with a
-    header the component draws, and a drawn tab bar renders without the tabs
-    host (FR12).
+  - The header and tab bar components decide their own rendering in their own
+    component records, through the components' rendering axis
+    (`spec:AST-123/FR1`), where `render` names who draws the pixels. The stack
+    host's system bar and the tabs host's tab bar are `render: 'system'`: the
+    platform draws them. A header or tab bar that Astryx draws in React is
+    `render: 'drawn'`. The hosts host either: the stack host carries a screen
+    with the system bar or with a header the component draws, and a drawn tab
+    bar renders without the tabs host (FR12).
+  - FR1 gap: the code spells the axis two ways, `render: 'system' | 'drawn'`
+    on the navigators and `presentation: 'native' | …` on components.
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
@@ -359,11 +363,11 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     (`spec:AST-112/FR3`).
   - The router checks that the hosts are present before it renders through
     them (`spec:AST-140/FR2`). When they are absent (an app that opted out of the default set, or a
-    binary without them), a navigator with system chrome fails at its first
+    binary without them), a navigator with `render: 'system'` fails at its first
     render with an error that names the missing capability. It never renders
     a blank screen.
   - Drawn tabs render without a host. The stack needs its host for transitions
-    in both chrome modes (OQ1).
+    with either `render` value (OQ1).
 - **FR13 — Accessibility.**
   - The system bars, back buttons, tab items and menus keep the platform's own
     VoiceOver and TalkBack behaviour, including UIKit's Large Content Viewer
