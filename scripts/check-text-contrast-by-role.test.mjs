@@ -14,7 +14,7 @@
  *   nested default card, a transparent card, a text field, inline code, an
  *   open menu, a selected segment, an input group addon, a step number, a
  *   banner and a striped table row (whose cell color the table root fixes);
- * - a nav item's text at rest, hovered, pressed and selected over the page;
+ * - a nav item's text at rest, hovered, pressed and selected on the top bar;
  * - a ghost or secondary button's label at rest, hovered and pressed, on the
  *   page and on a surface;
  * - secondary text on a selected row, a dropzone and a numbered citation on
@@ -365,43 +365,43 @@ function rows() {
         for (const role of TEXT_ROLES)
           push({...base, where, role, text: at(tokens, role), layers});
       }
-      // A nav item's own text at rest, hovered, pressed and selected, over
-      // the page.
+      // A nav item's text at rest, hovered, pressed and selected, in the
+      // colour it draws: its rule's own, else Core's (secondary text at
+      // rest, primary text on the selected neutral fill).
       {
         const navRule = rule(theme, 'top-nav-item');
         const nav = themeTokens(theme, navRule);
-        const navText = role =>
-          navRule.color != null && role === '--color-text-primary'
-            ? resolveColor(navRule.color, nav, modeIndex)
-            : at(nav, role);
+        const drawn = (own, tokens, role) =>
+          own != null ? resolveColor(own, tokens, modeIndex) : at(tokens, role);
         const selectedRule = {
           ...navRule,
           ...rule(theme, 'top-nav-item', 'selected'),
         };
         const selected = themeTokens(theme, selectedRule);
-        const selectedFill =
-          selectedRule.backgroundColor != null &&
-          selectedRule.backgroundColor !== 'transparent'
-            ? resolveColor(selectedRule.backgroundColor, selected, modeIndex)
-            : null;
+        const selectedFill = resolveColor(
+          selectedRule.backgroundColor ?? 'var(--color-neutral)',
+          selected,
+          modeIndex,
+        );
+        // A nav item sits on the top bar, which paints the surface.
+        const bar = [at(page, '--color-background-surface'), body];
+        const text = drawn(navRule.color, nav, '--color-text-secondary');
         for (const [state, layers] of [
-          ['nav item', [body]],
-          ['hovered nav item', [at(page, '--color-overlay-hover'), body]],
-          ['pressed nav item', [at(page, '--color-overlay-pressed'), body]],
+          ['nav item', bar],
+          ['hovered nav item', [at(page, '--color-overlay-hover'), ...bar]],
+          ['pressed nav item', [at(page, '--color-overlay-pressed'), ...bar]],
         ])
-          for (const role of TEXT_ROLES)
-            push({...base, where: state, role, text: navText(role), layers});
-        for (const role of ['--color-text-primary', '--color-text-secondary'])
-          push({
-            ...base,
-            where: 'selected nav item',
-            role,
-            text:
-              selectedRule.color != null && role === '--color-text-primary'
-                ? resolveColor(selectedRule.color, selected, modeIndex)
-                : at(selected, role),
-            layers: selectedFill ? [selectedFill, body] : [body],
-          });
+          push({...base, where: state, role: 'nav item text', text, layers});
+        push({
+          ...base,
+          where: 'selected nav item',
+          role: 'nav item text',
+          text: drawn(selectedRule.color, selected, '--color-text-primary'),
+          layers:
+            selectedFill && selectedRule.backgroundColor !== 'transparent'
+              ? [selectedFill, ...bar]
+              : bar,
+        });
       }
       // A ghost or secondary button's label on its fill at rest, hovered and
       // pressed, on the page and on a surface.
