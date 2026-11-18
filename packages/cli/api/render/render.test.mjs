@@ -2464,6 +2464,32 @@ describe('render(): a page outside a project', () => {
     fs.rmSync(away, {recursive: true, force: true});
   });
 
+  it('loads the page\'s own modules imported TypeScript-style by .js names, and gives them back exactly', () => {
+    const tree = path.join(away, 'own-ts-js');
+    fs.mkdirSync(path.join(tree, 'parts'), {recursive: true});
+    const files = {
+      'parts/fmt.ts': "export const fmt = (value: string): string => `#${value}`;\n",
+      'parts/later.tsx': 'export const Later = () => <p>Later</p>;\n',
+      'parts/Kpi.tsx':
+        "import {fmt} from './fmt.js';\nexport const loadLater = () => import('./later.js');\nexport function Kpi({label, value}: {label: string; value: string}) {\n  return <p>{label}: {fmt(value)}</p>;\n}\n",
+      'page.tsx':
+        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\n",
+    };
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tree, name), text);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    expect([...run.json.data.files].sort()).toEqual(['page.tsx', 'parts/Kpi.tsx', 'parts/fmt.ts', 'parts/later.tsx']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(fs.readFileSync(path.join(tree, 'page.html'), 'utf8')).toContain('Signups: #128');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data.exact).toBe(true);
+    expect(back.json.data).not.toHaveProperty('missing');
+    for (const [name, text] of Object.entries(files)) {
+      expect(fs.readFileSync(path.join(tree, 'page-restored', name), 'utf8'), name).toBe(text);
+    }
+  }, 60_000);
+
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
     fs.writeFileSync(path.join(away, 'dot.png'), PNG);

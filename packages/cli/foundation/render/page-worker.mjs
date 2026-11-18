@@ -43,7 +43,7 @@ import {pathToFileURL} from 'node:url';
 import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, TS_SOURCES, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
@@ -642,27 +642,55 @@ async function drawOpenLayers(elements, React) {
  */
 function aliasPlugin() {
   return () => {
-    /** @param {any} node a string literal to point at the file an alias places */
-    const point = node => {
+    /**
+     * Point a string literal at the file an alias places, or at the
+     * TypeScript source a relative `.js`-family name stands for when no file
+     * has that name (`./fmt.js` for fmt.ts), as TypeScript and bundlers read
+     * it.
+     * @param {any} node
+     * @param {string} from the importing file
+     */
+    const point = (node, from) => {
       if (node?.type !== 'StringLiteral') return;
       const file = resolvePath(PATHS, node.value);
-      if (file) node.value = file;
+      if (file) {
+        node.value = file;
+        return;
+      }
+      const source = from ? typeScriptSourceOf(node.value, from) : null;
+      if (source) node.value = source;
     };
     return {
       visitor: {
-        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-          point(p.node.source);
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
-        CallExpression(/** @type {any} */ p) {
+        CallExpression(/** @type {any} */ p, /** @type {any} */ state) {
           const callee = p.node.callee;
-          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require'))
+            point(p.node.arguments?.[0], state.filename);
         },
-        ImportExpression(/** @type {any} */ p) {
-          point(p.node.source);
+        ImportExpression(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
       },
     };
   };
+}
+
+/**
+ * The TypeScript source a relative `.js`, `.jsx`, `.mjs` or `.cjs` import
+ * names when no file has the name as written, or null.
+ * @param {string} spec
+ * @param {string} from the importing file
+ */
+function typeScriptSourceOf(spec, from) {
+  if (!spec.startsWith('.') || spec.includes('?')) return null;
+  const written = path.resolve(path.dirname(from), spec);
+  const ext = path.extname(written);
+  if (!TS_SOURCES[ext] || fs.existsSync(written)) return null;
+  const stem = written.slice(0, written.length - ext.length);
+  return TS_SOURCES[ext].map(x => stem + x).find(f => fs.existsSync(f)) ?? null;
 }
 
 /**
