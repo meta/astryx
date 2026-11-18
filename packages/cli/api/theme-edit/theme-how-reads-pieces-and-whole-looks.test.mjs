@@ -135,7 +135,6 @@ describe('one variant made to look like another', () => {
       for (const q of [
         'make it look like before',
         'clear everything',
-        'make it look standard',
       ])
         expect(JSON.stringify((await answer(q)).results), q).toMatch(
           /undo t steps back one change|has no change to undo/,
@@ -144,6 +143,17 @@ describe('one variant made to look like another', () => {
       expect(use).toMatch(/astryx theme use /);
       expect(use).toMatch(/back to the base theme/);
       expect(use).not.toMatch(/steps back one change/);
+      // (A going-back word said as a look describes: no undo, no theme
+      // switch.)
+      for (const q of [
+        'make it more original',
+        'make it clear',
+        'use a clear theme',
+      ]) {
+        const text = JSON.stringify((await answer(q)).results);
+        expect(text, q).not.toMatch(/steps back one change|has no change to undo/);
+        expect(text, q).not.toMatch(/astryx theme use /);
+      }
     },
     T,
   );

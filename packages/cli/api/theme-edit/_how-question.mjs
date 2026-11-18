@@ -27299,13 +27299,20 @@ export function draftAnswer(ctx, env, question) {
     // theme; "make it look like before" asks undo. Beside other asks, or
     // "by default", it is theirs.)
     const back = clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
-    if (back && GOING_BACK.test(/\b(\w+) theme\b/.exec(t)?.[1] ?? ''))
+    // (A going-back word said as a look, after "a", "more", "it" or "look":
+    // "make it clear", "more original", "a clear theme", describes; it
+    // never goes back.)
+    const said = t
+      .split(/\s+/)
+      .filter((w, k, all) => !(k && /^(?:a|an|more|less|very|so|too|it|look|looks|is|be)$/.test(all[k - 1]) && GOING_BACK.test(w)))
+      .join(' ');
+    if (back && GOING_BACK.test(/\b(\w+) theme\b/.exec(said)?.[1] ?? ''))
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
         options: [],
         lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
       };
-    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && GOING_BACK.test(t)))
+    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && GOING_BACK.test(said)))
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
