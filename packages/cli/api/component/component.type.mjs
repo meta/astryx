@@ -40,7 +40,30 @@
  *   - 'full'    -> ComponentDoc[]        (full authored doc per entry, plus its owner package)
  * @typedef {object} ComponentListResponse
  * @property {'component.list'} type
+ * @property {ComponentListData & ComponentThemeField} data
+ */
+
+/**
+ * What the list leaf (`componentList`) returns: the catalog before the
+ * `component()` dispatcher adds `data.theme`.
+ * @typedef {object} ComponentListLeafResponse
+ * @property {'component.list'} type
  * @property {ComponentListData} data
+ */
+
+/**
+ * The configured theme's custom values, which the text view marks with `*`.
+ * `problem` is the reason a configured theme did not resolve; then `name` is
+ * null and `values` is empty, and the text view prints it as a warning.
+ * @typedef {object} ComponentTheme
+ * @property {string | null} name The theme's name.
+ * @property {Record<string, Record<string, string[]>>} values The values the built theme exports as `themeVariants`: for each component key, each extensible prop and its custom values.
+ * @property {string | null} problem Why the configured theme did not resolve, or null.
+ */
+
+/**
+ * @typedef {object} ComponentThemeField
+ * @property {ComponentTheme | null} theme The configured theme's custom values; null when no theme is configured.
  */
 
 /**
@@ -120,7 +143,7 @@
  * @typedef {object} ComponentDetailResponse
  * @property {'component.detail'} type
  * @property {string} package The npm package that owns the component.
- * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope} data
+ * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope & ComponentThemeField} data
  */
 
 /**

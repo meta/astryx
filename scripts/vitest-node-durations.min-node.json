@@ -985,7 +985,7 @@
     "packages/cli/clients/cli/lib/mcp-server.test.mjs": 4.6,
     "packages/cli/clients/cli/lib/mcp-tools.test.mjs": 2.5,
     "packages/cli/clients/cli/lib/parse-error-format.test.mjs": 2.1,
-    "packages/cli/clients/cli/lib/resolve-theme.test.mjs": 17.9,
+    "packages/cli/api/component/_theme.test.mjs": 17.9,
     "packages/cli/clients/cli/lib/stray-option.test.mjs": 0.8,
     "packages/cli/clients/cli/lib/unknown-command.test.mjs": 1.5,
     "packages/cli/clients/cli/refusals-name-a-run.test.mjs": 3.7,

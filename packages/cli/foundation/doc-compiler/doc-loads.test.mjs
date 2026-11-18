@@ -40,6 +40,10 @@ const SELF_DOCS = 'its self-docs, statically: raw exports build its help text';
  * @type {Record<string, {runs: string, sites: string[]}>}
  */
 const RUNNERS = {
+  'api/component/_theme.mjs': {
+    runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
+    sites: ['require(<computed>)'],
+  },
   'api/doctor/doctor.mjs': {
     runs: "the project's astryx.config, for the config check",
     sites: ['import(<computed>)'],
@@ -368,10 +372,6 @@ const RUNNERS = {
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',
     sites: ['import ../commands/manifest.doc.mjs'],
-  },
-  'clients/cli/lib/resolve-theme.mjs': {
-    runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
-    sites: ['require(<computed>)'],
   },
   'foundation/bases/requirements.mjs': {
     runs: "a base's adapter module, only in a run whose command needs one of its steps",

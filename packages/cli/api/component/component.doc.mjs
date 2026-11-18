@@ -117,7 +117,7 @@ export const doc = {
     {
       type: 'component.list',
       description:
-        "The catalog grouped by component group. data.detail is the level ('names' | 'compact' | 'full') and data.components is the grouped map: names entries with name, package, and an optional canonical import for integration and legacy package components; brief entries; or full ComponentDoc entries.",
+        "The catalog grouped by component group. data.detail is the level ('names' | 'compact' | 'full') and data.components is the grouped map: names entries with name, package, and an optional canonical import for integration and legacy package components; brief entries; or full ComponentDoc entries. data.theme is the configured theme's custom values that the text marks with *: {name, values, problem}, where values maps each component key to each extensible prop and its values, and problem says why a configured theme did not resolve; null without a theme.",
     },
     {
       type: 'component.batch',
@@ -127,7 +127,7 @@ export const doc = {
     {
       type: 'component.detail',
       description:
-        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent.",
+        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent. data.theme is the configured theme's custom values that the text marks with *: {name, values, problem}, where values maps each component key to each extensible prop and its values, and problem says why a configured theme did not resolve; null without a theme.",
     },
     {
       type: 'component.detail.props',

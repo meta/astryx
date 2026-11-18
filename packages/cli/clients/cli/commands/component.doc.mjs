@@ -26,9 +26,11 @@ export const doc = {
     'source, showcase, or example blocks. An integration component that replaces a Core ' +
     'component (its doc sets replaces, and its package declares the CLI range that turns ' +
     'replacement on) answers to the Core name in detail, batch, and list views; use ' +
-    '--package @astryxdesign/core for the original. With --json, a detail, list, or batch ' +
-    "result carries data.theme: the configured theme's name and the custom values it adds " +
-    'by component and prop (null without a theme), the same values the text marks with *.',
+    '--package @astryxdesign/core for the original. With --json, a detail or list result, ' +
+    "and each found detail row of a batch, carries data.theme: the configured theme's name, " +
+    'the custom values it carries by component and prop, the same values the text marks with *, ' +
+    'and problem, why a configured theme did not resolve, which the text prints as a warning ' +
+    '(null without a theme).',
   fn: 'component',
   args: [
     {

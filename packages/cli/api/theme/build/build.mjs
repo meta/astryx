@@ -2699,9 +2699,9 @@ function generateVariantDeclarations(entries, iconVariantNames) {
  * `{ [componentKey]: { [prop]: value[] } }`. The prop axis is kept so a
  * component with two extensible props (Banner `container` and `status`) says
  * which prop accepts which value. `resolveTheme()`
- * (clients/cli/lib/resolve-theme.mjs) reads this as the module's
- * `themeVariants` export and component-format.mjs renders each value as a
- * starred `prop:value`. A theme that adds no custom variants gets an empty
+ * (api/component/_theme.mjs) reads this as the module's `themeVariants`
+ * export, a component read returns it as `data.theme.values`, and
+ * component-format.mjs renders each value as a starred `prop:value`. A theme that adds no custom variants gets an empty
  * object, so every single-theme built module carries the export.
  *
  * @param {Awaited<ReturnType<typeof collectCustomVariants>>} entries

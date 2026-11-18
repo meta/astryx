@@ -54,6 +54,7 @@ import {
   synonymMatches,
 } from '../../foundation/text/suggest-order.mjs';
 import {AstryxError, coreDirOrThrow} from '../error.mjs';
+import {resolveTheme} from './_theme.mjs';
 import {
   discoverAll,
   findRelatedBlocks,
@@ -1098,4 +1099,47 @@ async function listingParent(block, coreDir, cwd) {
     }
   }
   return null;
+}
+
+/**
+ * The configured theme's custom values for a component read
+ * (`data.theme`): `null` when no theme is configured; otherwise its name, the
+ * values its built module exports as `themeVariants` by component key and
+ * prop, and `problem`, the reason a configured theme did not resolve (then
+ * `name` is null and `values` is empty). An error the theme module throws for
+ * another reason is not a theme problem: the read fails with
+ * `ERR_THEME_LOAD`, in text and JSON alike.
+ *
+ * @param {string} cwd
+ * @returns {Promise<import('./component.type.mjs').ComponentTheme | null>}
+ */
+export async function componentTheme(cwd) {
+  /** @type {string | null} */
+  let problem = null;
+  let resolved;
+  try {
+    resolved = await resolveTheme(cwd, {
+      onProblem: message => {
+        problem ??= message;
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message.split('\n', 1)[0]?.trim() || error.name
+        : String(error);
+    throw new AstryxError(
+      `Could not load the recorded theme: ${message}`,
+      undefined,
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
+  }
+  if (resolved) {
+    return {
+      name: resolved.name ?? null,
+      values: resolved.variants ?? {},
+      problem: null,
+    };
+  }
+  return problem === null ? null : {name: null, values: {}, problem};
 }

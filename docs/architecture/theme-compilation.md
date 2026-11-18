@@ -295,10 +295,11 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   size through a font-size on the app's own container inside the Theme, or
   through the theme's `--text-body-size`, which also sizes Core's own body
   text.
-- **INV21 — A built theme exports the custom variants it adds.** Every
+- **INV21 — A built theme exports the custom variants it carries.** Every
   single-theme built module exports `themeVariants` (an empty object when the
-  theme adds no custom component values): for each component key, each
-  extensible prop and the values the theme adds
+  theme carries no custom component values): for each component key, each
+  extensible prop and the custom values the theme carries, its own and those
+  it inherits
   (`Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>`). These
   are the values its `.variants.d.ts` augments: enrolled values across root,
   onDark, and onLight, for props whose core interface can be augmented.
@@ -423,6 +424,7 @@ tiers.
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
 | INV16            | Root, adaptation, media, nested-theme, and CLI-built status-alias fixtures                                                                                                                                                                                                                                                                                                                                                                             | A generated role escapes its source scope, overrides an authored role, changes cascade meaning, cycles, or differs by output path                                                                                                                                                                 |
 | INV17            | A minimal custom theme that sets only its four status fills, compiled at runtime and through the CLI build, plus themes that set a light fill, a grey fill, an unresolved fill, an unresolved card surface, only a surface, only a hue text token, a fill only inside an adaptation rule, and one that `extends` a theme setting a status role, each also read through non-CSS resolution                                                              | A content or text role is missing, misses an INV11 floor in light or dark mode, is grey, ignores a value the theme set, or differs between runtime, build, and non-CSS resolution; an icon or border role does not follow the text role; a fill is derived; or an inherited role is derived again |
+| INV21            | `build-theme.variants.test.mjs` (the export and `.variants.d.ts` from the same values across root, onDark and onLight, an empty export for a theme without custom values, a named static import, inherited values), `build.family.test.mjs` (a family module exports none)                                                                                                                                                                             | A built module without `themeVariants`, a value in it that the `.variants.d.ts` does not augment or the reverse, or a `--family` module that exports or declares it                                                                                                                               |
 
 ## Known conformance and verification gaps
 

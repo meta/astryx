@@ -16,7 +16,6 @@ import {
   formatProps,
   formatBriefAll,
 } from '../lib/component-format.mjs';
-import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -62,39 +61,41 @@ const MARKDOWN = {lang: 'markdown'};
  */
 
 /**
- * The theme values the text output marks with `*`, for the JSON result: the
- * configured theme's name and the custom values it adds, by component key and
- * prop. `null` when no theme is configured. Text is a projection of the JSON,
- * so the JSON carries what the text prints.
+ * The theme data the formatters read, from a result's `data.theme`: its name
+ * and the custom values the text marks with `*`. Null without a resolved
+ * theme.
  *
- * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
- * @returns {{name: string | null; values: Record<string, Record<string, string[]>>} | null}
+ * @param {import('../../../api/component/component.type.mjs').ComponentTheme | null | undefined} theme
+ * @returns {{name: string | null; variants: Record<string, Record<string, string[]>>} | null}
  */
-function themeJson(themeData) {
-  if (!themeData) return null;
-  return {name: themeData.name ?? null, values: themeData.variants ?? {}};
+function formatterTheme(theme) {
+  if (!theme || theme.problem !== null) return null;
+  return {name: theme.name, variants: theme.values};
 }
 
 /**
- * The result with `data.theme` on every response whose text view can print
- * theme values: a component detail, a list, and a batch.
+ * Each problem a result's `data.theme` reports, once: a list or detail
+ * carries one, and a batch carries one on each found detail row.
  *
  * @param {ComponentResult} result
- * @param {ReturnType<typeof themeJson>} theme
- * @returns {ComponentResult}
+ * @returns {string[]}
  */
-function withTheme(result, theme) {
-  if (
-    result.type === 'component.detail' ||
-    result.type === 'component.list' ||
-    result.type === 'component.batch'
-  ) {
-    return /** @type {ComponentResult} */ ({
-      ...result,
-      data: {...result.data, theme},
-    });
+function themeProblems(result) {
+  /** @type {Set<string>} */
+  const problems = new Set();
+  /** @param {any} theme */
+  const add = theme => {
+    if (theme?.problem) problems.add(theme.problem);
+  };
+  if (result.type === 'component.detail' || result.type === 'component.list')
+    add(result.data.theme);
+  if (result.type === 'component.batch') {
+    for (const row of result.data.results) {
+      if (row.status === 'found' && row.result.type === 'component.detail')
+        add(row.result.data.theme);
+    }
   }
-  return result;
+  return [...problems];
 }
 
 /**
@@ -143,7 +144,7 @@ function summarize(result) {
  * @param {import('../../../api/component/component.type.mjs').ComponentSingleResponse} result
  * @param {string} requestedName
  * @param {'full'|'compact'|'brief'} detail
- * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @param {ReturnType<typeof formatterTheme>} themeData
  * @param {string} [scopePackage] - the `--package` the read was scoped to
  * @returns {import('../formatters/index.mjs').Block[]}
  */
@@ -356,20 +357,8 @@ export function registerComponent(program) {
         result.type === 'component.batch'
           ? result.data.results.find(row => row.status !== 'found')
           : undefined;
-      let themeData;
-      try {
-        themeData = await resolveTheme(process.cwd());
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message.split('\n', 1)[0]?.trim() || error.name
-            : String(error);
-        return cliError(`Could not load the recorded theme: ${message}`, {
-          code: ERROR_CODES.ERR_THEME_LOAD,
-        });
-      }
       if (json) {
-        jsonOut(withTheme(result, themeJson(themeData)));
+        jsonOut(result);
         if (unresolved) failAfterOutput(unresolved.code);
         return answered;
       }
@@ -378,6 +367,16 @@ export function registerComponent(program) {
       // The api layer already resolved against core (result exists), so core is
       // present on this path; narrow away the null branch findCoreDir allows.
       const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
+      // A configured theme that did not resolve is a warning on stderr in
+      // text; JSON carries it as data.theme.problem and prints nothing.
+      for (const problem of themeProblems(result)) {
+        console.error(`⚠ theme: ${problem}`);
+      }
+      const themeData = formatterTheme(
+        result.type === 'component.detail' || result.type === 'component.list'
+          ? result.data.theme
+          : null,
+      );
 
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
@@ -540,7 +539,11 @@ export function registerComponent(program) {
                   row.result,
                   row.selector,
                   detail,
-                  themeData,
+                  formatterTheme(
+                    row.result.type === 'component.detail'
+                      ? row.result.data.theme
+                      : null,
+                  ),
                   options.package,
                 ),
               );

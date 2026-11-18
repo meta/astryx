@@ -40,6 +40,7 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {component} from '../../../api/component/component.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -633,7 +634,10 @@ describe('theme build custom-variant augmentations', () => {
       ['Badge', 'variant:gray'],
       ['Heading', 'type:hero'],
     ]) {
-      const full = await runCli(['component', component], tmpDir);
+      const full = await runCli(
+        ['component', component, '--detail', 'full'],
+        tmpDir,
+      );
       expect(full.code).toBe(0);
       expect(full.stdout).toContain(`${value}*`);
       expect(full.stdout).toContain(
@@ -704,7 +708,10 @@ describe('theme build custom-variant augmentations', () => {
     fs.mkdirSync(path.dirname(coreDir), {recursive: true});
     fs.symlinkSync(path.resolve(CLI_ROOT, '../core'), coreDir);
 
-    const full = await runCli(['component', 'Banner'], tmpDir);
+    const full = await runCli(
+      ['component', 'Banner', '--detail', 'full'],
+      tmpDir,
+    );
     expect(full.code).toBe(0);
     const bannerRow = full.stdout
       .split('\n')
@@ -723,10 +730,29 @@ describe('theme build custom-variant augmentations', () => {
     // The JSON result carries the values the text marks with `*`.
     const json = await runCli(['--json', 'component', 'Banner'], tmpDir);
     expect(json.code).toBe(0);
-    expect(JSON.parse(json.stdout).data.theme).toEqual({
+    const theme = {
       name: 'variants-theme',
       values: {banner: {container: ['glass'], status: ['critical']}},
-    });
+      problem: null,
+    };
+    expect(JSON.parse(json.stdout).data.theme).toEqual(theme);
+    expect(json.stderr).toBe('');
+
+    // component() returns the same theme values as the JSON (spec:AST-042
+    // FR1), and a batch carries them on each found detail row.
+    expect(
+      /** @type {any} */ (await component('Banner', {cwd: tmpDir})).data.theme,
+    ).toEqual(theme);
+    const batch = /** @type {any} */ (
+      await component(['Banner', 'Badge'], {cwd: tmpDir})
+    );
+    expect(
+      batch.data.results.map((/** @type {any} */ row) => row.result.data.theme),
+    ).toEqual([theme, theme]);
+    const props = /** @type {any} */ (
+      await component('Banner', {cwd: tmpDir, props: true})
+    );
+    expect(props.data).not.toHaveProperty('theme');
   });
 
   it('keeps runtime variants aligned with the .d.ts: non-augmentable props are excluded', async () => {

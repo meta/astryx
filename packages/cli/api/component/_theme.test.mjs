@@ -10,15 +10,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {resolveTheme} from './resolve-theme.mjs';
-import {themeAdd} from '../../../api/theme/add/add.mjs';
-import {themeBuild} from '../../../api/theme/build/build.mjs';
-import {themeEject} from '../../../api/theme/eject/eject.mjs';
-import {themeUse} from '../../../api/theme/use/use.mjs';
-import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
-import {checkAppThemes} from '../../../api/doctor/theme-checks.mjs';
+import {resolveTheme} from './_theme.mjs';
+import {themeAdd} from '../theme/add/add.mjs';
+import {themeBuild} from '../theme/build/build.mjs';
+import {themeEject} from '../theme/eject/eject.mjs';
+import {themeUse} from '../theme/use/use.mjs';
+import {renderThemeModule} from '../../foundation/config/theme-state.mjs';
+import {checkAppThemes} from '../doctor/theme-checks.mjs';
 
-const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
 
 /** @type {string[]} */
 const dirs = [];
@@ -283,22 +283,20 @@ describe('resolveTheme package field', () => {
   });
 });
 
-describe('resolveTheme warnings', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
+describe('resolveTheme problems', () => {
   it.each([
     ['a file path', './\u001b[2Jmissing.cjs'],
     ['a scoped package', '@evil/\u001b]0;owned\u0007\npkg'],
     ['a bare name', 'theme\u202e\r\nnext'],
   ])(
-    'prints %s from astryx.theme as one line without control or format characters',
+    'reports %s from astryx.theme as one line without control or format characters',
     async (_kind, specifier) => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warn = vi.fn();
 
       expect(
-        await resolveTheme(fixture({name: 'app', astryx: {theme: specifier}})),
+        await resolveTheme(fixture({name: 'app', astryx: {theme: specifier}}), {
+          onProblem: warn,
+        }),
       ).toBeNull();
 
       expect(warn).toHaveBeenCalledTimes(1);
@@ -350,13 +348,12 @@ describe('resolveTheme source precedence', () => {
       {'./built': './dist/built.js', './theme.css': './dist/theme.css'},
       {'dist/built.js': builtTheme('reef'), 'dist/theme.css': '.reef {}\n'},
     );
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.fn();
 
-    await expect(resolveTheme(dir)).resolves.toBeNull();
+    await expect(resolveTheme(dir, {onProblem: warn})).resolves.toBeNull();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('multi-theme package @acme/themes'),
     );
-    warn.mockRestore();
   });
 
   it('warns and returns no theme when a single-theme package has no built export', async () => {
@@ -371,13 +368,12 @@ describe('resolveTheme source precedence', () => {
       {'./theme.css': './dist/theme.css'},
       {'dist/theme.css': '.ocean {}\n'},
     );
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.fn();
 
-    await expect(resolveTheme(dir)).resolves.toBeNull();
+    await expect(resolveTheme(dir, {onProblem: warn})).resolves.toBeNull();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('could not resolve the generated default theme'),
     );
-    warn.mockRestore();
   });
 
   it('warns and returns no theme for a malformed recorded module', async () => {
@@ -392,13 +388,12 @@ describe('resolveTheme source precedence', () => {
       {'./themes/ocean': './dist/ocean.js'},
       {'dist/ocean.js': 'export const oceanTheme = ;\n'},
     );
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.fn();
 
-    await expect(resolveTheme(dir)).resolves.toBeNull();
+    await expect(resolveTheme(dir, {onProblem: warn})).resolves.toBeNull();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('could not load the recorded theme artifact'),
     );
-    warn.mockRestore();
   });
 
   it('does not swallow an unrelated recorded-module runtime error', async () => {
@@ -443,14 +438,12 @@ describe('resolveTheme source precedence', () => {
     // links stone's dependencies, not those of the folder the run starts in.
     const stoneModules = path.resolve(
       import.meta.dirname,
-      '../../../../themes/stone/node_modules',
+      '../../../themes/stone/node_modules',
     );
     // Stone's dev install links the workspace Core, which this case builds with.
     expect(
       fs.realpathSync(path.join(stoneModules, '@astryxdesign', 'core')),
-    ).toBe(
-      fs.realpathSync(path.resolve(import.meta.dirname, '../../../../core')),
-    );
+    ).toBe(fs.realpathSync(path.resolve(import.meta.dirname, '../../../core')));
     fs.symlinkSync(stoneModules, path.join(dir, 'node_modules'), 'dir');
     fs.mkdirSync(path.join(dir, 'src'));
     fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
@@ -503,8 +496,14 @@ describe('component output with a broken recorded theme', () => {
 
       const json = runComponent(dir, ['--json', 'component', 'Button']);
       expect(json.status, json.stderr).toBe(0);
-      expect(() => JSON.parse(json.stdout)).not.toThrow();
-      expect(JSON.parse(json.stdout).type).toBe('component.detail');
+      const envelope = JSON.parse(json.stdout);
+      expect(envelope.type).toBe('component.detail');
+      // JSON carries the warning the text prints, and prints nothing itself.
+      expect(envelope.data.theme).toEqual({
+        name: null,
+        values: {},
+        problem: expect.stringContaining(warning),
+      });
       expect(json.stderr).toBe('');
 
       const checks = await checkAppThemes(dir);
@@ -515,21 +514,13 @@ describe('component output with a broken recorded theme', () => {
     30_000,
   );
 
-  it.each([
-    ['list', ['component', '--list'], 'component.list'],
-    ['props', ['component', 'Button', '--props'], 'component.detail.props'],
-    ['source', ['component', 'Button', '--source'], 'component.detail.source'],
-    [
-      'showcase',
-      ['component', 'Button', '--showcase'],
-      'component.detail.showcase',
-    ],
-    ['blocks', ['component', 'Button', '--blocks'], 'component.detail.blocks'],
-  ])(
-    'keeps the ambiguous-theme %s projection alive in text and JSON',
-    (projection, args, type) => {
-      const dir = brokenThemeProject('ambiguous');
+  it('warns once for the ambiguous theme of a list and a batch', () => {
+    const dir = brokenThemeProject('ambiguous');
 
+    for (const [args, type] of /** @type {const} */ ([
+      [['component', '--list'], 'component.list'],
+      [['component', 'Button', 'Badge'], 'component.batch'],
+    ])) {
       const text = runComponent(dir, args);
       expect(text.status, text.stderr).toBe(0);
       expect(text.stdout).not.toBe('');
@@ -540,6 +531,34 @@ describe('component output with a broken recorded theme', () => {
       const json = runComponent(dir, ['--json', ...args]);
       expect(json.status, json.stderr).toBe(0);
       expect(JSON.parse(json.stdout).type).toBe(type);
+      expect(json.stderr).toBe('');
+    }
+  }, 60_000);
+
+  it.each([
+    ['props', ['component', 'Button', '--props'], 'component.detail.props'],
+    ['source', ['component', 'Button', '--source'], 'component.detail.source'],
+    [
+      'showcase',
+      ['component', 'Button', '--showcase'],
+      'component.detail.showcase',
+    ],
+    ['blocks', ['component', 'Button', '--blocks'], 'component.detail.blocks'],
+  ])(
+    'does not load the theme for the %s projection, which prints no theme values',
+    (projection, args, type) => {
+      const dir = brokenThemeProject('runtime');
+
+      const text = runComponent(dir, args);
+      expect(text.status, text.stderr).toBe(0);
+      expect(text.stdout).not.toBe('');
+      expect(text.stderr).not.toContain('theme');
+
+      const json = runComponent(dir, ['--json', ...args]);
+      expect(json.status, json.stderr).toBe(0);
+      const envelope = JSON.parse(json.stdout);
+      expect(envelope.type).toBe(type);
+      expect(envelope.data).not.toHaveProperty('theme');
       expect(json.stderr).toBe('');
     },
     30_000,
@@ -572,10 +591,12 @@ describe('component output with a broken recorded theme', () => {
     );
     expect(text.stderr).not.toMatch(/\n\s+at /u);
 
+    // The same condition exits the same way in JSON (cli-surface INV8).
     const json = runComponent(dir, ['--json', 'component', 'Button']);
-    expect(json.status, json.stderr).toBe(0);
-    expect(JSON.parse(json.stdout).type).toBe('component.detail');
-    expect(json.stderr).toBe('');
+    expect(json.status).toBe(1);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      code: 'ERR_THEME_LOAD',
+    });
   });
 });
 

@@ -40,6 +40,7 @@ import {
   resolveComponentReplacement,
   unscopedComponentOwners,
   linkComponentResponse,
+  componentTheme,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -275,17 +276,47 @@ export async function component(name, options = {}) {
       docPackageManager(cwd),
       async () =>
         /** @type {any} */ (
-          await linkComponentResponse(await componentRead(name, options), cwd)
+          await withTheme(
+            await linkComponentResponse(
+              await componentRead(name, options),
+              cwd,
+            ),
+            cwd,
+          )
         ),
     ),
   );
 }
 
 /**
- * {@link component}, with each `{@link}` in its doc text as written.
+ * A detail or list response with `data.theme`, the configured theme's custom
+ * values that the text view marks with `*`. A batch carries it on each found
+ * detail row. Props, source, showcase, and blocks print no theme values, so
+ * they do not load the theme.
+ *
+ * @template {{type: string, data?: any}} T
+ * @param {T} response
+ * @param {string} cwd
+ * @returns {Promise<T>}
+ */
+async function withTheme(response, cwd) {
+  if (
+    response.type !== 'component.detail' &&
+    response.type !== 'component.list'
+  )
+    return response;
+  return {
+    ...response,
+    data: {...response.data, theme: await componentTheme(cwd)},
+  };
+}
+
+/**
+ * {@link component}, with each `{@link}` in its doc text as written and no
+ * `data.theme` yet.
  * @param {string|string[]} [name]
  * @param {Parameters<typeof component>[1]} [options]
- * @returns {ReturnType<typeof component>}
+ * @returns {Promise<Awaited<ReturnType<typeof component>> | import('./component.type.mjs').ComponentListLeafResponse>}
  */
 async function componentRead(name, options = {}) {
   const {

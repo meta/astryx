@@ -36,7 +36,7 @@ import {
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
- * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
+ * @typedef {import('../component.type.mjs').ComponentListLeafResponse} ComponentListResponse
  * @typedef {import('../component.type.mjs').ComponentListEntry} ComponentListEntry
  * @typedef {import('../component.type.mjs').ComponentBriefEntry} ComponentBriefEntry
  */
