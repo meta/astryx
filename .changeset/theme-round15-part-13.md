@@ -17,7 +17,7 @@
 - "fab: #eaddff background": a label that names no part is named, never painted on the page.
 - White links on a bar this ask fills dark are measured on that bar and written for both modes.
 - A box word in a part's list ("menus: plain white boxes") is that part's box, never every container.
-- A corner or edge look said of a side ("cards square on top, 6px rounded at the bottom") stays on the part before, never the whole theme.
+- A corner look said of one side of a part ("cards square on top") is written on that part, for every corner, never on the whole theme.
 
 - `astryx experimental theme editor how` reads four more kinds of clause:
 
