@@ -779,6 +779,83 @@ describe('DropdownMenu', () => {
     expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
   });
 
+  it('shows an open sub-menu of the sheet with the current items after a re-render', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(await screen.findByRole('button', {name: 'Bump (0)'}));
+
+    expect(
+      await screen.findByRole('button', {name: 'Bump (1)'}),
+    ).toBeInTheDocument();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its row leaves the items', async () => {
+    const user = userEvent.setup();
+    function Removable() {
+      const [hasMore, setHasMore] = useState(true);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore
+              ? [
+                  {
+                    label: 'More',
+                    items: [
+                      {
+                        label: 'Remove this menu',
+                        hasCloseOnSelect: false,
+                        onClick: () => setHasMore(false),
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+        />
+      );
+    }
+    render(<Removable />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Remove this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
