@@ -798,6 +798,27 @@ const JOINING_WORD =
   /^(?:keep|keeps|leave|leaves|stay|stays|remain|remains|and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/;
 
 /**
+ * Whether words are only chat said to the editor ("thanks a lot", "no
+ * rush", "please", "love it"), never an ask.
+ * @param {string} text
+ */
+function chatOnly(text) {
+  // (A typed value, a hex or a number, is never chat.)
+  if (/[\d#]/.test(String(text))) return false;
+  const words =
+    String(text)
+      .toLowerCase()
+      .replace(
+        /\b(?:(?:thank(?:s| you| u)|thx)(?: so much| a lot| very much)?|many thanks|ty|tysm|cheers|hmm+|idk|cool|nice|great|(?:i\s+)?love it|asap|no rush|appreciate it|much appreciated)\b/g,
+        ' ',
+      )
+      .match(/[a-z']+/g) ?? [];
+  return words.every(
+    w => PRONOUN_WORD.test(w) || JOINING_WORD.test(w) || /^(?:i|u)$/.test(w),
+  );
+}
+
+/**
  * The colors a tint word modifies in a clause: the color right after
  * "tinted", "tint" or "washed" ("cards tinted blue"), or right before
  * "tint" ("a green tint"), as RGB.
@@ -7200,6 +7221,13 @@ export function draftAnswer(ctx, env, question) {
     HYPOTHETICAL.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
+  /**
+   * Held-back clauses that name no part and no thing ("spooky vibes"). The
+   * not-used line names them; chat words ("please", "thanks!") and a
+   * question back to the editor ("what do you think?") are not asks.
+   * @type {string[]}
+   */
+  const heldAside = [];
   if (gated.length && !gateAll) {
     // A held-back clause gives the next clause what it names: its part, and
     // the thing a "them" or "it" there stands for.
@@ -7252,6 +7280,22 @@ export function draftAnswer(ctx, env, question) {
           /\b(borders?|shadows?|radius|corners|padding|spacing|gap|font|underlines?|background)\b/i.exec(
             x,
           )?.[0];
+        const aside = x
+          .trim()
+          .replace(/^(?:and|or|but|also|plus)\s+/i, '')
+          .replace(/[\s,]+(?:please|pls|plz|thanks|thx)[.!]*$/i, '')
+          .trim();
+        if (
+          !part &&
+          !thing &&
+          /[a-z]{3}/i.test(aside) &&
+          !chatOnly(x) &&
+          !chatOnly(aside) &&
+          !/^(?:what|how|do|does|did|can|could|would|should|is|are|was|why|which|any|will|shall)\b[^?]*\?\s*$/i.test(
+            x.trim(),
+          )
+        )
+          heldAside.push(aside);
         carry = [part, thing].filter(Boolean).join(' ');
         carryPart = part ?? '';
         continue;
@@ -32817,8 +32861,19 @@ export function draftAnswer(ctx, env, question) {
       ...new Set(silent.flatMap(asTyped).filter(w => !named.includes(w))),
     ];
     const lines = [
-      ...named.map(w => `"${w}"`),
-      ...(clauses.length > 1 ? silentTyped.map(w => `"${w}"`) : []),
+      ...named.filter(w => !chatOnly(w)).map(w => `"${w}"`),
+      ...(clauses.length > 1
+        ? silentTyped.filter(w => !chatOnly(w)).map(w => `"${w}"`)
+        : []),
+      // (A held-back clause with nothing of its own, "spooky vibes", once.)
+      ...heldAside
+        .filter(
+          x =>
+            !texts.includes(x.toLowerCase()) &&
+            !named.some(w => w.includes(x)) &&
+            !silentTyped.some(w => w.toLowerCase() === x.toLowerCase()),
+        )
+        .map(x => `"${x}"`),
       // (An ask of one clause no answer took at all, "pagination pages in
       // one bordered strip", is named in its own words.)
       ...(clauses.length === 1 &&
