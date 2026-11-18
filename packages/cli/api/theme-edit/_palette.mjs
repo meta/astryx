@@ -2519,7 +2519,7 @@ export function familyRamp(cwd, slug, data, base, family) {
  * in memory, so it matches the palette file `syncPalette` writes.
  * @param {string} cwd
  * @param {string} slug
- * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{mode?: string, settings: Setting[]}} data - The theme's settings (a whole ThemeData, or the settings with one left out).
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @param {Record<string, unknown>} tokenDefaults
  * @returns {PaletteMapping | null}
