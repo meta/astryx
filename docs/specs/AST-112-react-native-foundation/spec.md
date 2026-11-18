@@ -446,13 +446,14 @@ shared icon names under FR17.
     job is the React Native app's lifecycle; and its results are data. Each
     subcommand stays inside that job:
 
-    | Subcommand | The question it answers                                                             | Why an option on another subcommand cannot answer it                                                                                                                                                      | Function                        | Its result as data                                    |
-    | ---------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------- |
-    | `create`   | How do I start a React Native app on Astryx?                                        | Every other subcommand needs an app that exists.                                                                                                                                                          | `create`                        | The app's folder, its files, and the next commands    |
-    | `shell`    | Are this app's generated native projects what its configuration generates?          | `apply` changes files the app owns, in place; `shell` replaces generated projects whole.                                                                                                                  | `shell`                         | The written or differing paths                        |
-    | `apply`    | Do the native projects this app keeps carry the declarations its capabilities need? | `shell` owns generated projects only.                                                                                                                                                                     | `apply`                         | The changed or differing files                        |
-    | `run`      | How do I see this app on a simulator, an emulator, or a device?                     | No other subcommand builds or launches.                                                                                                                                                                   | `run`                           | The plan, each step's result, and the launched target |
-    | `doctor`   | Is this machine and this app ready to build and run a React Native app?             | It is an alias, not a new job: it runs `astryx doctor` with the package as its base, so `astryx doctor --base @astryxdesign/react-native` answers the same and the group keeps the question in one place. | `doctor` (the shared command's) | `doctor`'s issue report                               |
+    | Subcommand        | The question it answers                                                             | Why an option on another subcommand cannot answer it                                                                                                                                                      | Function                        | Its result as data                                    |
+    | ----------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------- |
+    | `create`          | How do I start a React Native app on Astryx?                                        | Every other subcommand needs an app that exists.                                                                                                                                                          | `create`                        | The app's folder, its files, and the next commands    |
+    | `shell`           | Are this app's generated native projects what its configuration generates?          | `apply` changes files the app owns, in place; `shell` replaces generated projects whole.                                                                                                                  | `shell`                         | The written or differing paths                        |
+    | `shell save-lock` | Should the next generation keep this app's current iOS pod lock?                    | `shell` writes projects and `save-lock` writes nothing else, so an option on `shell` would make one run do two jobs.                                                                                      | `shellSaveLock`                 | The saved lock path                                   |
+    | `apply`           | Do the native projects this app keeps carry the declarations its capabilities need? | `shell` owns generated projects only.                                                                                                                                                                     | `apply`                         | The changed or differing files                        |
+    | `run`             | How do I see this app on a simulator, an emulator, or a device?                     | No other subcommand builds or launches.                                                                                                                                                                   | `run`                           | The plan, each step's result, and the launched target |
+    | `doctor`          | Is this machine and this app ready to build and run a React Native app?             | It is an alias, not a new job: it runs `astryx doctor` with the package as its base, so `astryx doctor --base @astryxdesign/react-native` answers the same and the group keeps the question in one place. | `doctor` (the shared command's) | `doctor`'s issue report                               |
 
   - Flags keep the Astryx CLI's names and meanings (`spec:AST-042` FR5).
     `--json` and `--base` are the CLI's global flags. `astryx rn shell`,
@@ -671,9 +672,11 @@ shared icon names under FR17.
   New Architecture is today's floor (Platform support), because its native
   component and module interfaces are the ones the platform implements.
 - **FR23 — New pieces start in a lab entry.** A new or experimental React
-  Native piece starts in a lab entry of the package, under the web's
-  Lab-to-Core lifecycle (`spec:AST-017`) and its Lab-only CI route
-  (`spec:AST-030` FR26), and leaves the lab under the same rules.
+  Native piece starts in the package's lab folder,
+  `packages/react-native/lab/`, exported only under `./unstable/*` (FR5). It
+  follows the web's Lab-to-Core lifecycle (`spec:AST-017` FR27) and its
+  Lab-only CI route (`spec:AST-030` FR26), as amended in Current-state impact,
+  and leaves the lab under the same rules.
 
 ### Platform support
 
@@ -711,12 +714,17 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-114` reads the package as a base. Its FR4 list gains the
   `setup.checks` step, and its FR5 table gains `doctor`'s `--platform` and
   `--dev-server-port`, each requiring that step (FR13).
+- `spec:AST-017` FR27 keeps a new or experimental React Native piece in the
+  lab folder of `@astryxdesign/react-native` instead of the Lab package, and
+  `spec:AST-030` FR26's Lab-only route also covers a pull request whose every
+  changed path is in `packages/react-native/lab/` (FR23).
 - `spec:AST-114` FR2's resolution order gains one rule for the reserved `rn`
   group: `astryx rn` reads `@astryxdesign/react-native` as its base as if
-  `--base` named it, wherever FR2 finds the package installed (the project,
-  the package set that serves the run, or the computer), a project that also
-  installs Core included. Where the package is installed nowhere, `astryx rn`
-  refuses with `ERR_BASE_COMMAND`. Its DEC-5, which reaches a base other than
+  `--base` named it where FR2 may read it: inside a project, only the
+  project's own install, a project that also installs Core included, as
+  `spec:AST-081` FR12 allows; outside a project, the package set that serves
+  the run or the computer's install. Where neither has the package,
+  `astryx rn` refuses with `ERR_BASE_COMMAND`. Its DEC-5, which reaches a base other than
   Core only through `--base`, gains that exception (FR13).
 - `spec:AST-114` FR6's check, FR7's help and manifest, and FR8's refusal also
   cover the reserved `rn` group: `ERR_BASE_COMMAND`, checked after
