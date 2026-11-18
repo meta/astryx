@@ -299,21 +299,22 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   size through a font-size on the app's own container inside the Theme, or
   through the theme's `--text-body-size`, which also sizes Core's own body
   text.
-- **INV21 — A surface whose fill flips with the page is right at the first
-  paint.** An inverted surface whose fill the theme sets (a toast's card, on
-  `--color-background-inverted` or `--color-background-error-inverted`) can
-  take one media side on a light page and the other on a dark one. On a
-  system-mode page the server does not know the reader's scheme, so the
-  surface renders its light-page side and names its dark-page side in a
-  private attribute (`architecture:public-component-api` INV23; owner
-  `privateAttributes/mediaDarkPage.ts`) until a script measures it. The web
-  compiler writes that side's surface rules again for that attribute, after
-  both sides' own, under the conditions that make the page dark: a dark root,
-  a system root while the page root names dark, and the reader's preference
-  while it names none. The compiler picks each side by the rule the painted
-  surface is measured with, from the theme's tokens for each mode, and writes
-  these rules only for a theme whose inverted surfaces take different sides
-  in the two page modes.
+- **INV21 — A surface whose side depends on the page's mode is right at the
+  first paint.** A component whose media surface takes one side on a light
+  page and the other on a dark one, by a fill the theme sets, cannot know
+  the side before a script runs on a system-mode page, because the scheme is
+  the reader's. It renders its light-page side and names its dark-page side
+  in a private attribute it owns (`architecture:public-component-api` INV23)
+  until it knows the scheme. The web compiler writes the dark-page side's
+  surface rules again for that attribute, after both sides' own, under the
+  conditions that make the page dark: a dark root, a system root while the
+  page root names dark, and the reader's preference while it names none. It
+  picks each side by the rule the painted surface is measured with, from the
+  theme's tokens for each mode, and writes these rules only for a theme whose
+  surfaces take different sides in the two page modes. Toast is the first
+  user: its card's fill is `--color-background-inverted` or
+  `--color-background-error-inverted`, and its attribute's owner is
+  `privateAttributes/mediaDarkPage.ts`, written through `theme/MediaDarkPage`.
 
 This record does not own:
 
