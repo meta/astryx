@@ -4365,6 +4365,22 @@ function oneModeLine(C, TARGET, part, width, color, mode, state) {
 }
 
 /**
+ * What the clause holding a place in a text says before that place ("buttons
+ * with " in "buttons with #fff 14px text"): from the clause's start (the
+ * text's, or after a comma, a semicolon or an "and"), with its trailing
+ * space; empty when nothing comes before it.
+ * @param {string} text
+ * @param {number} at
+ * @returns {string}
+ */
+function clauseBefore(text, at) {
+  const before = String(text).slice(0, at);
+  const m = /(?:^|[,;]|\band\b)\s*([^,;]*)$/i.exec(before);
+  const lead = (m?.[1] ?? '').replace(/^\s*and\s+/i, '');
+  return lead.trim() ? `${lead.trim()} ` : '';
+}
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -5055,19 +5071,21 @@ export function draftAnswer(ctx, env, question) {
       },
     )
     // ("#f5eff7 12px text"): a color and a size said for one text are two
-    // asks of that text, each read on its own.
+    // asks of that text, each read on its own. Whatever the clause says
+    // before them ("buttons with") goes with both, so the size keeps its
+    // part.
     .replace(
       /(#[0-9a-f]{3,8}|\b[a-z]+)\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+(text|type|labels?|copy)\b(?!\s+(?:on|for|in|of)\b)/gi,
-      (m, color, len, noun) =>
+      (m, color, len, noun, at, whole) =>
         colorsIn(String(color).toLowerCase()).length
-          ? `${color} ${noun}, ${len} ${noun}`
+          ? `${color} ${noun}, ${clauseBefore(whole, at)}${len} ${noun}`
           : m,
     )
     .replace(
       /\b(\d+(?:\.\d+)?(?:px|rem|em))\s+(#[0-9a-f]{3,8}|[a-z]+)\s+(text|type|labels?|copy)\b(?!\s+(?:on|for|in|of)\b)/gi,
-      (m, len, color, noun) =>
+      (m, len, color, noun, at, whole) =>
         colorsIn(String(color).toLowerCase()).length
-          ? `${len} ${noun}, ${color} ${noun}`
+          ? `${len} ${noun}, ${clauseBefore(whole, at)}${color} ${noun}`
           : m,
     )
     // ("sky blue", "near-black"): names in two words.
@@ -29769,6 +29787,20 @@ export function draftAnswer(ctx, env, question) {
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
         )
+      )
+        return false;
+      // (A length written in another unit, "14px" as 0.875rem, is used.)
+      if (
+        c.lengths.some(v => {
+          const want = lengthPx(String(v));
+          return (
+            want != null &&
+            vals.some(x => {
+              const got = lengthPx(x);
+              return got != null && Math.abs(got - want) < 0.01;
+            })
+          );
+        })
       )
         return false;
       // (Named already in the words as typed.)

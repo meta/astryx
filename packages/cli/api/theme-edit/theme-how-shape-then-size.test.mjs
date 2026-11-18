@@ -166,8 +166,23 @@ describe('one text, two asks', () => {
   }, 240_000);
 
   it('menus 14px text moves the type size tokens only', async () => {
-    const lines = writes(await how('q0', 'menus 14px text'));
+    const rs = await how('q0', 'menus 14px text');
+    const lines = writes(rs);
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.join(' ')).not.toMatch(/--spacing-/);
+    // (The answer names the size as typed, and 14px written as 0.875rem is
+    // used: no "not used" line.)
+    expect(rs[0].text).toMatch(/14px/);
+    expect(rs.map(r => r.text).join(' ')).not.toMatch(/not used/);
+  }, 240_000);
+
+  it('a color and a size of one part\u2019s text both stay on the part', async () => {
+    const lines = writes(await how('q0', 'buttons with #ffffff 14px text'));
+    expect(lines).toContain('set q0 font-size 14px --on button');
+    // (Never the whole theme's text size beside the button's color.)
+    expect(lines.join(' ')).not.toMatch(/text-size 14|--text-[a-z-]+-size/);
+    expect(lines.some(l => /^set q0 color '#ffffff' --on button/.test(l))).toBe(
+      true,
+    );
   }, 240_000);
 });
