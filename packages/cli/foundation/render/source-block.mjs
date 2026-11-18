@@ -20,7 +20,7 @@ import {createHash} from 'node:crypto';
 import * as path from 'node:path';
 import {isValidSemver} from '../env/semver.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
-import {TS_SOURCES} from './ts-paths.mjs';
+import {typeScriptSourcesOf} from './ts-paths.mjs';
 import {decode, readTag, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
@@ -35,10 +35,11 @@ export const RENDER_FORMAT = 3;
  * whose name holds `config`, ends in `rc` or `lock`, or names a manifest;
  * and a module named `config.*` or with a stem that ends in `rc`. A file
  * that carries one says format 2, so a CLI that reads render formats names
- * the CLI that reads it instead of calling the file damaged; every other
- * file says format 1, which every CLI that reads render files opens. The
- * rules stay as format 1 readers have them: a kind a later CLI adds needs a
- * format of its own.
+ * the CLI that reads it instead of calling the file damaged. A file whose
+ * modules import a TypeScript file by its JavaScript name, which format 1
+ * and 2 readers cannot follow, says format 3. Every other file says format
+ * 1, which every CLI that reads render files opens. The rules stay as format
+ * 1 readers have them: a kind a later CLI adds needs a format of its own.
  */
 const FORMAT_1_REFUSED_MODULE = /\.(?:mts|cts|cjs)$/i;
 const FORMAT_1_CONFIG_JSON =
@@ -74,12 +75,9 @@ function importsTypeScriptByJsName(files) {
     for (const spec of importSpecifiers(f.bytes.toString('utf8'), f.path)) {
       const raw = spec.split('?')[0];
       if (!raw.startsWith('.')) continue;
-      const ext = path.posix.extname(raw);
-      if (!TS_SOURCES[ext]) continue;
       const named = path.posix.normalize(path.posix.join(dir, raw));
       if (paths.has(named)) continue;
-      const stem = named.slice(0, named.length - ext.length);
-      if (TS_SOURCES[ext].some(x => paths.has(stem + x))) return true;
+      if (typeScriptSourcesOf(named).some(source => paths.has(source))) return true;
     }
   }
   return false;

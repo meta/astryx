@@ -43,7 +43,7 @@ import {pathToFileURL} from 'node:url';
 import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {LOAD_EXTENSIONS, TS_SOURCES, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
@@ -679,18 +679,17 @@ function aliasPlugin() {
 }
 
 /**
- * The TypeScript source a relative `.js`, `.jsx`, `.mjs` or `.cjs` import
- * names when no file has the name as written, or null.
+ * The TypeScript source a relative `.js`-family import names when no file has
+ * the name as written, as the import walk and the browser bundle resolve it,
+ * or null.
  * @param {string} spec
  * @param {string} from the importing file
  */
 function typeScriptSourceOf(spec, from) {
   if (!spec.startsWith('.') || spec.includes('?')) return null;
   const written = path.resolve(path.dirname(from), spec);
-  const ext = path.extname(written);
-  if (!TS_SOURCES[ext] || fs.existsSync(written)) return null;
-  const stem = written.slice(0, written.length - ext.length);
-  return TS_SOURCES[ext].map(x => stem + x).find(f => fs.existsSync(f)) ?? null;
+  const file = existingFile(written, []);
+  return file && file !== written ? file : null;
 }
 
 /**

@@ -2464,6 +2464,23 @@ describe('render(): a page outside a project', () => {
     fs.rmSync(away, {recursive: true, force: true});
   });
 
+  it('uses a .js file that exists under the name as written, not the TypeScript file beside it', () => {
+    const tree = path.join(away, 'own-js-exists');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'fmt.js'), "export const fmt = value => `js:${value}`;\n");
+    fs.writeFileSync(path.join(tree, 'fmt.ts'), "export const fmt = (value: string): string => `ts:${value}`;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'fmt.js']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('js:128');
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 1}});
+  }, 60_000);
+
   it('loads the page\'s own modules imported TypeScript-style by .js names, and gives them back exactly', () => {
     const tree = path.join(away, 'own-ts-js');
     fs.mkdirSync(path.join(tree, 'parts'), {recursive: true});

@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {babelParse as parse, postcss} from '../runtime/lazy-dependencies.mjs';
 import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import {builtinModules} from 'node:module';
-import {TS_SOURCES, matchPath, pathsFor} from './ts-paths.mjs';
+import {matchPath, pathsFor, typeScriptSourcesOf} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
@@ -289,11 +289,9 @@ export function receivingAliases(file) {
  * @returns {string[]}
  */
 export function resolutionCandidates(spec) {
-  const ext = path.posix.extname(spec);
-  const stem = spec.slice(0, spec.length - ext.length);
   return [
     spec,
-    ...(TS_SOURCES[ext] ?? []).map(x => stem + x),
+    ...typeScriptSourcesOf(spec),
     ...RESOLVE_EXTENSIONS.map(x => spec + x),
     ...RESOLVE_EXTENSIONS.map(x => `${spec}/index${x}`),
   ];
