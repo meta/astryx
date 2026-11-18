@@ -118,6 +118,9 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     margin: 0,
     padding: 0,
+    // Like the side-by-side label: a label word longer than its column
+    // breaks instead of running into the next column.
+    wordBreak: 'break-word',
   },
   stackedValue: {
     color: colorVars['--color-text-primary'],

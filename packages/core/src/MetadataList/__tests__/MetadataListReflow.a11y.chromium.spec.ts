@@ -90,3 +90,29 @@ for (const story of [
     expect(await pageOverflow(page)).toBe(0);
   });
 }
+
+/** The right edge of the element's text (not its box), in CSS px. */
+async function textRight(target: Locator): Promise<number> {
+  return target.evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return range.getBoundingClientRect().right;
+  });
+}
+
+test('a label word longer than its column breaks inside its column', async ({
+  page,
+}) => {
+  await open(page, 'long-label-two-columns');
+  const label = page.locator('dt', {hasText: 'Internationalization'});
+  expect(await lineCount(label)).toBeGreaterThan(1);
+  const neighborBox = await page
+    .locator('dt', {hasText: 'Status'})
+    .boundingBox();
+  if (neighborBox == null) {
+    throw new Error('the neighbor label has no box');
+  }
+  // The label's text ends before the neighbor column starts (left to right).
+  expect(await textRight(label)).toBeLessThanOrEqual(neighborBox.x);
+  expect(await pageOverflow(page)).toBe(0);
+});

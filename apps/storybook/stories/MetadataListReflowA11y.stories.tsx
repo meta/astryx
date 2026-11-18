@@ -112,3 +112,17 @@ export const TokenTwoColumns: Story = {
     </div>
   ),
 };
+
+/** A label word longer than its column, in a two-column list. */
+export const LongLabelTwoColumns: Story = {
+  render: () => (
+    <div style={{padding: 8}} data-testid="frame">
+      <MetadataList columns={2}>
+        <MetadataListItem label="Internationalizationconfigurationidentifier">
+          Enabled
+        </MetadataListItem>
+        <MetadataListItem label="Status">Shipped</MetadataListItem>
+      </MetadataList>
+    </div>
+  ),
+};
