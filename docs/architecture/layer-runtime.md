@@ -710,14 +710,15 @@ layers use Layer rendering without joining Escape/platform dismissal.
   scaled subtree and anchors to the trigger's untransformed box
   (`spec:AST-059` DEC-10).
 
-- **INV24 — A closed layer costs nothing until first shown.** Every Core
-  surface built on `useLayer` in context mode (Tooltip, HoverCard, Popover,
-  DropdownMenu, ContextMenu, Selector's and MultiSelector's lists, and the
-  date pickers) mounts its layer on its first show, not with its trigger, and
-  keeps it mounted after that first show. The exception is Selector's list:
-  every close removes it, so a closed Selector holds no option list
-  (`component:Selector` PR3). A closed trigger renders only the trigger. This uses `useLayer`'s existing `lazyMount` internally and adds no
-  public prop (DEC-2).
+- **INV24 — A closed layer costs nothing until first shown.** ContextMenu
+  mounts its layer on its first show, not with its trigger, and keeps it
+  mounted after that first show. This list of surfaces is exhaustive. A
+  closed trigger renders only the trigger and its layer's inert marker. This
+  uses `useLayer`'s internal `lazyMount` and `keepsMountAfterShow` and adds no
+  public prop (DEC-2). A closed Selector holds no option list
+  (`component:Selector` PR3). INV24 gap: Tooltip AR1, Popover, HoverCard FR8
+  and ComplexSelector FR2 still state their own mount rules; each moves under
+  INV24 in its own change.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -941,12 +942,14 @@ this current architecture record.
 
 A person opening a table where each row has a few tooltips waits seconds,
 because every tooltip mounts its layer with its trigger. `useLayer` already
-supports mounting on first show. Core surfaces now use it, so a page pays for a
-layer only when a person opens it.
+supports mounting on first show and keeping the layer after it. A surface
+under INV24 uses it, so a page pays for that layer only when a person opens
+it.
 
 Rejected: a public `lazyMount` prop on each surface, which makes every caller
 opt in to the fast path. Rejected: unmounting after every close, which repeats
-the mount cost and loses state on each open.
+the mount cost and loses state on each open; Selector's list is the one
+surface whose own record removes it on close (`component:Selector` PR3).
 
 ## Verification
 
@@ -972,7 +975,7 @@ the mount cost and loses state on each open.
 | INV20        | `layerEntranceSide.test.ts` and `popoverSurfaceMotion.test.ts`, which read one fixture table, for the side and the meeting point; `layerEntranceSide.test.ts` also for a step that stops at the room to a sized trigger, with no step for a layer flush against or over it; `LayerEntranceSide.interaction.browser.spec.ts` in Chromium and WebKit for the first frame of each anchored layer that flips, and `PopoverTouchMotion.interaction.browser.spec.ts` in Chromium and WebKit; `useLayer.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                |
 | INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle, excluding the keyboard lift; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A script write of a layer's position during a scroll, or a handler outside DEC-9's four uses that moves a layer toward its anchor                                                                                                                                                                                                                                                                                            |
 | INV22        | `LayerPressTransform.interaction.browser.spec.ts`: a browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, MultiSelector, ComplexSelector, ContextMenu), by mouse and by finger: during and after a press, the layer's rectangle, layout box and computed transform match an unpressed open, a layer that opens on the press is placed from the untransformed box in its first frame, and a press on a trigger whose own layer is open leaves the trigger unscaled.                                                                                                                                                                                                                                                                                                                                                                                | A layer whose rectangle, size or computed transform changes while its trigger is pressed                                                                                                                                                                                                                                                                                                                                     |
-| INV24        | Mount-count tests per surface plus a real-browser trace: a table of 100 rows with five tooltips each, before and after first hover                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | A closed trigger that mounts its layer, or a layer that unmounts after its first close                                                                                                                                                                                                                                                                                                                                       |
+| INV24        | Mount-count tests per surface plus a real-browser trace: a table of 100 rows with five tooltips each, before and after first hover                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | A closed trigger on a listed surface that mounts its layer, or a listed surface's layer that unmounts after its first close                                                                                                                                                                                                                                                                                                  |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
