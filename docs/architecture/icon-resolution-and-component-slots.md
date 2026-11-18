@@ -282,7 +282,8 @@ This record does not choose the migration design or timeline.
   inheritance; theme application owns active-theme selection.
 - **INV10 — Existing keys coexist.** Shipped slots and extension keys remain
   supported until a separate compatibility decision changes them. New Core slots
-  use `ComponentIconSlotMap` and `componentIcons`.
+  use `ComponentIconSlotMap` and `componentIcons`. A complete `IconRegistry`
+  may omit `drag` until 0.8.0 (`spec:AST-032` DEP-0018, `CLN-0030`).
 - **INV11 — A selected function answers the request.** Once a function entry or slot
   function is selected, its result is final for that resolution. Public theme
   reads never call or return a slot function.
@@ -389,3 +390,15 @@ calls.
 | INV11            | Resolver tests for function entries, slot functions, and reads  | A nullish function result falls through to another source, or a read returns a function |
 | INV12            | Slot and indicator inventory check                              | One visual is reachable as both an indicator and a `componentIcons` slot                |
 | Documentation    | Component metadata and generated CLI/docsite fixtures           | A themeable slot cannot be discovered with its owner, fallback, and purpose             |
+
+## Deprecation and cleanup records
+
+### CLN-0030 — `IconRegistry` requires `drag`
+
+| Field     | Value                                                                                 |
+| --------- | ------------------------------------------------------------------------------------- |
+| id        | `CLN-0030`                                                                            |
+| lifecycle | `spec:AST-032` DEP-0018                                                               |
+| delta     | `IconRegistry` requires `drag`: a complete registry that omits it fails to type-check |
+| rollback  | Restore the transitional optional `drag` from the final-patch baseline                |
+| state     | `pending` — lands in 0.8.0, the next minor, with its `[breaking]` Changeset           |
