@@ -2391,14 +2391,25 @@ export function entryDamage(s) {
 }
 
 /**
- * Whether `only` fits a setting: it names one member of a group styled
- * alike (a text input of inputs), as `set --only` takes it.
+ * Whether `only` fits a setting, as `set --only` takes it and the settings
+ * reader keeps it: it names one member of a group styled alike (a text
+ * input of inputs), or a bar's height or vertical padding.
  * @param {any} s
+ * @param {Record<string, any> | null} [map] the part map, when there is one
  */
-function onlyFits(s) {
+export function onlyFits(s, map = null) {
   const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  return Boolean(
-    fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)),
+  if (fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+    return true;
+  // A height or vertical padding on a bar: --only keeps it off the row the
+  // bar holds (barReach). Read without the part map (a saved entry), any
+  // part may be such a bar; with it, only a part holding one row is.
+  return (
+    s.source === 'property' &&
+    typeof s.thing === 'string' &&
+    BAR_REACH_THINGS.test(s.thing) &&
+    typeof s.on === 'string' &&
+    (map == null || barRows(map, s.on).length === 1)
   );
 }
 
@@ -8066,7 +8077,14 @@ function barReach(ctx, theme, data) {
     if (!b || typeof b !== 'object') continue;
     const height = b.height ?? b.blockSize ?? b.minHeight;
     const pads = BLOCK_PADDING_KEYS.filter(k => b[k] != null);
-    if (height == null && !pads.length) continue;
+    /** @param {string} prop */
+    const ownSide = prop =>
+      b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ?? null;
+    // (A padding with no vertical side, such as '0 24px', is no bar's.)
+    const vertical = blockSides(ownSide, 'padding').some(
+      v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()),
+    );
+    if (height == null && !vertical) continue;
     const exact = data.settings.some(
       x =>
         x.only &&
@@ -11879,7 +11897,21 @@ function barFitProblems(ctx, data, res) {
     );
     // The row's vertical padding is the bar's (barReach), unless the theme
     // gives the row one of its own.
-    const rowPad = ownsPadding(row) ? padSum(prop => own(row, prop)) : 0;
+    // (A height set with --only stays on the bar: the row keeps its own.)
+    const exact = data.settings.some(
+      x =>
+        x.only &&
+        x.source === 'property' &&
+        !x.when &&
+        !x.state &&
+        BAR_REACH_THINGS.test(x.thing) &&
+        partsOf(ctx, x).includes(holder),
+    );
+    const rowPad = ownsPadding(row)
+      ? padSum(prop => own(row, prop))
+      : exact
+        ? padSum(prop => drawnValue(map[row], prop))
+        : 0;
     const room = barPx - holderPad - rowPad;
     for (const child of map[row]?.contains ?? []) {
       // The tokens set on the part itself feed its own values.
