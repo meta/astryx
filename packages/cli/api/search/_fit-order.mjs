@@ -15,7 +15,7 @@
  */
 
 import {
-  docSideOf,
+  docSideOfFields,
   matchOf,
   requestSideOf,
   stemOf,
@@ -51,17 +51,18 @@ const keyed = new WeakMap();
 const sides = new WeakMap();
 
 /**
- * An entry's docs text: its name words, display name or first title,
- * description, and keywords.
+ * An entry's docs fields: its name words, display name or first title,
+ * description, and each keyword. Each is read on its own, so no word pair
+ * spans two of them.
  * @param {any} c
+ * @returns {string[]}
  */
-const docText = c =>
-  [
-    wordsOf(c.name).join(' '),
-    c._displayName ?? (Array.isArray(c.titles) ? c.titles[0] : '') ?? '',
-    c.description ?? '',
-    (Array.isArray(c.keywords) ? c.keywords : []).join(' '),
-  ].join(' ');
+const docFields = c => [
+  wordsOf(c.name).join(' '),
+  c._displayName ?? (Array.isArray(c.titles) ? c.titles[0] : '') ?? '',
+  c.description ?? '',
+  ...(Array.isArray(c.keywords) ? c.keywords.map(String) : []),
+];
 
 /**
  * @param {any[]} candidates
@@ -97,7 +98,7 @@ function candidateSide(c, weights) {
   }
   let side = byCandidate.get(c);
   if (!side) {
-    side = docSideOf(docText(c), weights);
+    side = docSideOfFields(docFields(c), weights);
     byCandidate.set(c, side);
   }
   return side;
@@ -120,8 +121,8 @@ function resultSideOf(r, candidates, weights) {
   const c = byKey.get(`${r.domain}:${r.name}`);
   return c
     ? candidateSide(c, weights)
-    : docSideOf(
-        `${wordsOf(r.name).join(' ')} ${r.displayName ?? ''} ${r.description ?? ''}`,
+    : docSideOfFields(
+        [wordsOf(r.name).join(' '), r.displayName ?? '', r.description ?? ''],
         weights,
       );
 }

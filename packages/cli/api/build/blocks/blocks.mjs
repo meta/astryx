@@ -176,6 +176,17 @@ export function termsOf(text) {
 }
 
 /**
+ * The terms of several fields, each field read on its own: a word pair never
+ * spans the end of one field and the start of the next, so text added at a
+ * field's end changes no pair with the field after it.
+ * @param {string[]} fields
+ * @returns {string[]}
+ */
+export function termsOfFields(fields) {
+  return fields.flatMap(f => (f ? termsOf(f) : []));
+}
+
+/**
  * A text's sparse unit vector over the vocabulary: (1 + ln count) x idf.
  * @param {string[]} terms
  * @param {{index: Map<string, number>, idf: Float64Array}} d
@@ -294,7 +305,19 @@ function rowOf(weights, matrix, i) {
  * @returns {{vector: Map<number, number>, projected: Float64Array}}
  */
 function sideOf(text, weights, matrix, scale) {
-  const vector = vectorOf(termsOf(text), vocabularyOf(weights));
+  return sideOfTerms(termsOf(text), weights, matrix, scale);
+}
+
+/**
+ * The same side from terms already read.
+ * @param {string[]} terms
+ * @param {BlockPickerWeights} weights
+ * @param {'request' | 'doc'} matrix
+ * @param {number} scale
+ * @returns {{vector: Map<number, number>, projected: Float64Array}}
+ */
+function sideOfTerms(terms, weights, matrix, scale) {
+  const vector = vectorOf(terms, vocabularyOf(weights));
   const {dims} = weights;
   const projected = new Float64Array(dims);
   for (const [i, x] of vector) {
@@ -314,6 +337,16 @@ function sideOf(text, weights, matrix, scale) {
  */
 export function docSideOf(text, weights) {
   return sideOf(text, weights, 'doc', weights.docScale);
+}
+
+/**
+ * A docs side from several fields, each read on its own (`termsOfFields`).
+ * @param {string[]} fields
+ * @param {BlockPickerWeights} weights
+ * @returns {{vector: Map<number, number>, projected: Float64Array}}
+ */
+export function docSideOfFields(fields, weights) {
+  return sideOfTerms(termsOfFields(fields), weights, 'doc', weights.docScale);
 }
 
 /**
@@ -435,17 +468,17 @@ function computeCatalog(key, catalog, components, weights) {
   for (const b of catalog) {
     if (blocks.has(b.name)) continue;
     const component = componentOf(b, names);
-    const text = [
+    const fields = [
       wordsOf(b.name).join(' '),
       b.displayName ?? '',
       b.description ?? '',
       wordsOf(component).join(' '),
-      (keywords.get(component) ?? []).join(' '),
-    ].join(' ');
+      ...(keywords.get(component) ?? []),
+    ];
     blocks.set(b.name, {
       component,
-      ...docSideOf(text, weights),
-      words: wordVectorOf(termsOf(text), vocabulary),
+      ...docSideOfFields(fields, weights),
+      words: wordVectorOf(termsOfFields(fields), vocabulary),
     });
   }
   // A component is named by its own words, or by a keyword at most three
