@@ -2,9 +2,9 @@
 
 /**
  * @file `astryx theme build` keeps a theme's transpiled code in the per-user
- * jiti cache (foundation/fs/jiti-cache.mjs). A second build reads it back and
- * builds the same files; an edited theme is transpiled again and builds as it
- * would with no cache.
+ * transpile cache (foundation/fs/jiti-cache.mjs). A second build reads it
+ * back and builds the same files; an edited theme is transpiled again and
+ * builds as it would with no cache.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -52,15 +52,18 @@ function writeTheme(file, color) {
 }
 
 /**
- * The settings that make `user` the run's home folder, and the jiti folder
- * the CLI uses there on this platform (macOS keeps its cache under the home
- * folder whatever XDG_CACHE_HOME says).
+ * The settings that make `user` the run's home folder, and the transpile
+ * cache folder the CLI uses there on this platform (macOS keeps its cache
+ * under the home folder whatever XDG_CACHE_HOME says).
  * @param {string} user
  */
 function userDirs(user) {
   const home = path.join(user, 'home');
   const env = {HOME: home, XDG_CACHE_HOME: path.join(user, 'cache')};
-  return {env, jiti: path.join(userCacheDir({home, env}), 'jiti')};
+  return {
+    env,
+    transpiled: path.join(userCacheDir({home, env}), 'transpiled'),
+  };
 }
 
 /**
@@ -99,18 +102,18 @@ function build(project, user) {
 }
 
 /**
- * The transpiled copies of the theme in a user's jiti folder, by name, with
- * each one's inode and time.
+ * The transpiled copies in a user's transpile cache, by their path in it,
+ * with each one's inode and time. The build transpiles only the theme.
  * @param {string} user
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
 function themeCopies(user) {
-  const dir = userDirs(user).jiti;
+  const dir = userDirs(user).transpiled;
   /** @type {Map<string, {ino: number, mtimeMs: number}>} */
   const out = new Map();
   if (!fs.existsSync(dir)) return out;
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.includes('theme')) continue;
+  for (const name of fs.readdirSync(dir, {recursive: true}).map(String)) {
+    if (!name.endsWith('.js')) continue;
     const {ino, mtimeMs} = fs.statSync(path.join(dir, name));
     out.set(name, {ino, mtimeMs});
   }
@@ -144,8 +147,9 @@ describe.skipIf(process.platform === 'win32')(
       expect(edited.status, edited.stderr).toBe(0);
       expect(edited.css).toContain('#123456');
       expect(edited).toEqual(build(project, path.join(work, 'new-user')));
-      // The edit wrote over the theme's copy: the folder holds one.
-      expect(themeCopies(user).size).toBe(1);
+      // A copy is named for its text: the edit made a second copy, and the
+      // first stays until its subfolder is trimmed.
+      expect(themeCopies(user).size).toBe(2);
     }, 120_000);
 
     it('transpiles the theme again, with no error, when its kept copy is gone or cut short', () => {
@@ -154,7 +158,7 @@ describe.skipIf(process.platform === 'win32')(
       writeTheme(path.join(project, 'theme.ts'), '#ffffff');
       const first = build(project, user);
       expect(first.status, first.stderr).toBe(0);
-      const dir = userDirs(user).jiti;
+      const dir = userDirs(user).transpiled;
       const [name] = [...themeCopies(user).keys()];
       const copy = path.join(dir, name);
       const whole = fs.readFileSync(copy, 'utf8');

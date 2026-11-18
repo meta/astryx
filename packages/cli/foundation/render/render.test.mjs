@@ -2,7 +2,8 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, the time limit, and drawing the overlays a page opens.
+ * HTML reader, the time limit, drawing the overlays a page opens, and the
+ * names a render does not carry.
  */
 
 import * as fs from 'node:fs';
@@ -13,6 +14,7 @@ import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
 import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -268,3 +270,39 @@ describe('withUncarriedImages', () => {
   });
 });
 
+describe('a name that reads as configuration', () => {
+  it('is left out, and the name its warning offers is carried', () => {
+    for (const name of [
+      'chart.config.json',
+      'test.config.json',
+      'package.json',
+      'tsconfig.app.json',
+      'yarn-lock.json',
+      'vite.config.ts',
+      'test.config.ts',
+    ]) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig, name).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(`data/${name}`).name}`), name).toBeNull();
+    }
+  });
+
+  it('offers a rename for a *.config.json, and a file of its own for a tool\'s file', () => {
+    expect(carriedNameFor('chart.config.json')).toEqual({action: 'rename', name: 'chart-data.json'});
+    expect(carriedNameFor('data/a.b.config.json')).toEqual({action: 'rename', name: 'a-b-data.json'});
+    for (const name of ['package.json', 'tsconfig.json', 'package-lock.json', 'vite.config.ts']) {
+      expect(carriedNameFor(name).action, name).toBe('move');
+    }
+    expect(carriedNameFor('package.json').name).toBe('page-data.json');
+    expect(carriedNameFor('vite.config.ts').name).toBe('page-data.ts');
+  });
+
+  it('never offers a name a runner picks up: test.config.ts gets page-data.ts, not test-data.ts', () => {
+    expect(embeddedPathProblem('test-data.ts')).not.toBeNull();
+    expect(carriedNameFor('test.config.ts')).toEqual({action: 'move', name: 'page-data.ts'});
+  });
+
+  it('is not the reason a runner file or a dotfile is left out', () => {
+    expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
+    expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
+});

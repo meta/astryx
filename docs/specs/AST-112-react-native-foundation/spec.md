@@ -430,8 +430,10 @@ shared icon names under FR17.
     | `astryx rn run ios`, `astryx rn run android` | Puts the app on a simulator, an emulator, or a device. The steps of its plan are: generate or check the native project, check the machine, build, start the dev server for a debug build, install, and launch. `--target <name\|id>` names the simulator, emulator, or connected device, by name or identifier (default: the booted one, else the newest). `--release` builds the release configuration, `--with-dev-server` and `--skip-dev-server` change the dev-server default (together they fail with `ERR_INVALID_OPTION`), `--skip-launch` stops after the install, and `--dry-run` prints the plan. |
     | `astryx rn doctor`                           | An alias that runs the shared `astryx doctor` with the package as its base.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-    `astryx rn stage …` is specified in `spec:AST-139`, and
-    `astryx rn preview …` in `spec:AST-141`. No command passes arguments through to another tool.
+    The Astryx Stage and Preview commands follow the CLI's rule for
+    experimental commands: `astryx experimental rn stage …` is specified in
+    `spec:AST-139`, and `astryx experimental rn preview …` in
+    `spec:AST-141`. No command passes arguments through to another tool.
 
   - Two commands stay shared, outside the group:
     - `astryx doctor` keeps its job. In a run on the package, its report
