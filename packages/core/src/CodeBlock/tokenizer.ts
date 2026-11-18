@@ -273,7 +273,8 @@ function buildLanguagePatterns(lang: string): Grammar | null {
       return {
         defaultType: 'variable',
         patterns: [
-          {type: 'comment', regex: /#[^\n]*/},
+          // A # inside a word, as in a URL fragment, starts no comment.
+          {type: 'comment', regex: /(?<!\S)#[^\n]*/},
           {type: 'string', regex: /"(?:[^"\\]|\\.)*"/},
           {type: 'string', regex: /'[^']*'/},
           {type: 'variable', regex: /\$\{[^}]+\}/},
@@ -337,7 +338,8 @@ function buildLanguagePatterns(lang: string): Grammar | null {
       return {
         defaultType: 'variable',
         patterns: [
-          {type: 'comment', regex: /#[^\n]*/},
+          // A # inside a word, as in a URL fragment, starts no comment.
+          {type: 'comment', regex: /(?<!\S)#[^\n]*/},
           {type: 'string', regex: /"(?:[^"\\]|\\.)*"/},
           {type: 'string', regex: /'(?:[^'\\]|\\.)*'/},
           {type: 'constant', regex: /\b(true|false|yes|no|on|off|null|~)\b/i},
