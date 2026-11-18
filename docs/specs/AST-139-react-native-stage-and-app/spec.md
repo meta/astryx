@@ -101,7 +101,7 @@ code on a real phone with no build.
   Linux, and Windows. It is a development tool: no app depends on it at run
   time (`spec:AST-112/FR12`).
 
-  FR1 gap: Astryx Stage has no Windows build.
+  FR1 gap: Astryx Stage does not run on Windows.
 
 - **FR2 — Stage has a window and a headless mode.**
   - In the window, a person uses the app with a pointer and a keyboard, and
@@ -139,22 +139,21 @@ code on a real phone with no build.
     platform layer that the group records `spec:AST-123` to `spec:AST-137`
     define, with behavior that matches iOS and Android; a divergence is a
     defect that the contract's documentation names (`spec:AST-112/FR12`).
-  - Stage declares the contracts it implements: each contract by name and the
-    spec hash it implements, with Stage's own version.
-  - A project's package records each native contract's spec hash and the
-    oldest Stage version that implements that contract set (the version
-    floor). Stage pairs with a project by those hashes and that floor; it
-    reads no revision counter.
-  - Before any of the project's JavaScript runs, a Stage below the floor, or
-    one that lacks a contract the project's package declares, refuses the
-    project. The refusal lists each missing contract and names the Stage
-    version that has them. It never renders with a silent fallback. A newer
-    Stage renders a project on an older package.
+  - Stage declares the contracts it implements, by name, with its own
+    version. How it declares them is OQ3.
+  - Stage pairs with a project by the version floor that the project's
+    package names: the oldest Stage that implements the package's native
+    contracts (`spec:AST-112/FR12`).
+  - Before any of the project's JavaScript runs, a Stage below the floor
+    refuses the project. The refusal lists each contract it lacks and names
+    the Stage version that has them. It never renders with a silent fallback.
+    A Stage at or above the floor runs the project, and a newer Stage renders
+    a project on an older package.
 - **FR7 — The Astryx CLI runs Stage.** `astryx stage …` captures, runs
   scripted checks, reads the accessibility tree, opens the window, installs
   the pinned Stage, and says which Stage the commands use and where it comes
-  from (`spec:AST-112/FR13`). The project pins the Stage version its commands
-  use; the install verifies each binary, and a binary that fails the check
+  from (`spec:AST-112/FR13`). The Stage release the commands use is pinned as
+  `spec:AST-112/FR13` states; the install verifies each binary, and a binary that fails the check
   never runs. A developer may name another Stage binary, and
   the commands report that source.
 
@@ -244,33 +243,32 @@ code on a real phone with no build.
 - `spec:AST-112/FR1` and `spec:AST-112/DEC-12`: Preview is a feature of the
   Astryx app (FR15), and
   `@astryxdesign/react-native` keeps the project side.
-- `spec:AST-112/FR13`'s remote runs follow the answer to OQ8, and its
-  `astryx stage install` follows OQ6 for where binaries come from, with
-  `spec:AST-112/OQ4`.
+- `spec:AST-112/FR13`'s remote runs follow the answer to OQ8; where Stage's
+  binaries are published stays `spec:AST-112/OQ4`.
 - Each platform group record (`spec:AST-123` to `spec:AST-137`) states its
-  contracts' behavior in Stage and pairs through FR6's spec hashes and version
-  floor.
+  contracts' behavior in Stage, and pairs through the package's version floor
+  (FR6).
 
 ## Verification
 
-| Contract | Verification                                                                                                | Representative states                                                                 | Mutation or failure expectation                                                                                             |
-| -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | The same bundle rendered in Stage and on the Simulator and emulator; layout comparison                      | a sample app; each platform profile                                                   | A layout that differs from the device's with no entry in the report                                                         |
-| FR2      | Report contract tests of each headless verb; a scripted check that fails a step                             | capture; scripted check; accessibility tree; a JavaScript exception; an unknown route | A failed run that reports success, or a picture of nothing reported as ready                                                |
-| FR3      | Captures per option compared with the Simulator and emulator                                                | each profile; dark; RTL; largest text size; Reduce Motion                             | An option that changes nothing, or a theme default that Stage adds                                                          |
-| FR4      | Runs from a dev server with an edit, from a production bundle, and from a sample                            | hot reload with state; one-shot bundle                                                | An edit that loses the app's state on hot reload, or a bundle that runs differently from the dev server's                   |
-| FR5      | A project with an unknown native view and module; a run on a desktop without a system web view              | each kind of simulated entry                                                          | A missing native piece that the report does not name                                                                        |
-| FR6      | Stage's declared contract set compared with the package's; a Stage below the floor; a changed spec hash     | an older package; a newer package; one missing contract                               | A Stage that runs a project it lacks a contract for, a refusal without the list, or JavaScript that runs before the refusal |
-| FR7      | CLI contract tests of `astryx stage`; a tampered binary                                                     | the pinned version; a named binary                                                    | A tampered binary that runs, or a named binary that `astryx stage which` does not report                                    |
-| FR8      | A walk of every component page and example app on the Simulator and emulator                                | each component; each example app; each appearance                                     | A component without live examples, or an example that differs from the documentation's                                      |
-| FR9      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android            | QR code; photo; link; typed address; dev server; hosted bundle                        | A way in that does not open the project                                                                                     |
-| FR10     | Links and codes from outside the app; a link that claims a confirmation                                     | local network; internet; typed; opened before                                         | Any request or code that runs before the person confirms                                                                    |
-| FR11     | A project that reads the app's data, identity, and sign-in; a refused capability; the same project in Stage | each refused capability                                                               | A project that reads anything of the app's, a refusal that is a silent no-op, or a Stage run with other limits              |
-| FR12     | A project that requires a piece the host lacks; a bytecode bundle; `astryx preview check`                   | a missing native piece; an older host                                                 | A project's main module that runs on a failed check, or a bytecode bundle that runs                                         |
-| FR13     | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                  | a valid link; each failed check                                                       | A key that reaches the server, code that runs before every check passes, or decrypted bytes written to the device           |
-| FR14     | Reload and return while a project runs; a dev server that stops; removing a listed project                  | a running project; an unreachable address; an encrypted project                       | A project that cannot be left, an encrypted project in the list, or stored data left after removal                          |
-| FR15     | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                          | the Astryx app's build; a plain project                                               | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                |
-| FR16     | Review of each native change's evidence                                                                     | a native behavior change                                                              | A native claim backed only by Stage or Preview                                                                              |
+| Contract | Verification                                                                                                | Representative states                                                                 | Mutation or failure expectation                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| FR1      | The same bundle rendered in Stage and on the Simulator and emulator; layout comparison                      | a sample app; each platform profile                                                   | A layout that differs from the device's with no entry in the report                                                   |
+| FR2      | Report contract tests of each headless verb; a scripted check that fails a step                             | capture; scripted check; accessibility tree; a JavaScript exception; an unknown route | A failed run that reports success, or a picture of nothing reported as ready                                          |
+| FR3      | Captures per option compared with the Simulator and emulator                                                | each profile; dark; RTL; largest text size; Reduce Motion                             | An option that changes nothing, or a theme default that Stage adds                                                    |
+| FR4      | Runs from a dev server with an edit, from a production bundle, and from a sample                            | hot reload with state; one-shot bundle                                                | An edit that loses the app's state on hot reload, or a bundle that runs differently from the dev server's             |
+| FR5      | A project with an unknown native view and module; a run on a desktop without a system web view              | each kind of simulated entry                                                          | A missing native piece that the report does not name                                                                  |
+| FR6      | Stage's declared contracts compared with the package's; a Stage below the floor; a Stage at the floor       | an older package; a newer package; one missing contract                               | A Stage below the floor that runs the project, a refusal without the list, or JavaScript that runs before the refusal |
+| FR7      | CLI contract tests of `astryx stage`; a tampered binary                                                     | the pinned version; a named binary                                                    | A tampered binary that runs, or a named binary that `astryx stage which` does not report                              |
+| FR8      | A walk of every component page and example app on the Simulator and emulator                                | each component; each example app; each appearance                                     | A component without live examples, or an example that differs from the documentation's                                |
+| FR9      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android            | QR code; photo; link; typed address; dev server; hosted bundle                        | A way in that does not open the project                                                                               |
+| FR10     | Links and codes from outside the app; a link that claims a confirmation                                     | local network; internet; typed; opened before                                         | Any request or code that runs before the person confirms                                                              |
+| FR11     | A project that reads the app's data, identity, and sign-in; a refused capability; the same project in Stage | each refused capability                                                               | A project that reads anything of the app's, a refusal that is a silent no-op, or a Stage run with other limits        |
+| FR12     | A project that requires a piece the host lacks; a bytecode bundle; `astryx preview check`                   | a missing native piece; an older host                                                 | A project's main module that runs on a failed check, or a bytecode bundle that runs                                   |
+| FR13     | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                  | a valid link; each failed check                                                       | A key that reaches the server, code that runs before every check passes, or decrypted bytes written to the device     |
+| FR14     | Reload and return while a project runs; a dev server that stops; removing a listed project                  | a running project; an unreachable address; an encrypted project                       | A project that cannot be left, an encrypted project in the list, or stored data left after removal                    |
+| FR15     | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                          | the Astryx app's build; a plain project                                               | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run          |
+| FR16     | Review of each native change's evidence                                                                     | a native behavior change                                                              | A native claim backed only by Stage or Preview                                                                        |
 
 ## Decision log
 
@@ -293,8 +291,8 @@ components instead of the native contracts.
 **Decider:** imdreamrunner, 2026-11-17
 
 A picture that silently leaves out a native piece misleads the person or agent
-who trusts it. Stage pairs with a project by spec hash and a version floor and
-refuses, with the list, when it lacks what the project needs. Known
+who trusts it. Stage pairs with a project by the version floor its package
+names and refuses, with the list, when it lacks what the project needs. Known
 differences that remain are listed in every report.
 
 ### DEC-3 — Preview asks before any project code runs
@@ -370,15 +368,19 @@ manifest, and its types.
   person reading only the picture; a refusal stops an agent from trusting an
   incomplete screen.
 - **OQ3 — How does Stage track and declare the contracts it implements?**
-  (`human-design`) FR6 fixes the pairing by spec hash and version floor.
-  Options for the declaration and its exceptions:
-  - **A published manifest per Stage release** that lists each contract and
-    the spec hash it implements, read by `astryx doctor` and
-    `astryx stage which`. One table to compare; every spec change needs a
-    Stage release.
-  - **Named features on top of the hashes**, so a Stage can implement part of
-    a contract and declare which parts. Finer pairing; two vocabularies to
-    keep in step with the platform's named features.
+  (`human-design`) FR6 pairs by the package's version floor. Options for the
+  declaration and its exceptions:
+  - **A published manifest per Stage release** that lists each contract by
+    name, read by `astryx doctor` and `astryx stage which`. One table to
+    compare with the package's contracts.
+  - **The manifest plus each contract's spec hash**, so a contract whose spec
+    changed without a new floor is caught at start. Catches drift the floor
+    misses; the package then records a hash per contract, which
+    `spec:AST-112` does not.
+  - **Named features in the manifest**, so a Stage can implement part of a
+    contract and declare which parts, in the platform's named-feature
+    vocabulary (`spec:AST-112/DEC-14`). Finer pairing; each named feature
+    needs a Stage entry.
   - **Documented divergences in the manifest**: a contract Stage implements
     with a known difference carries the difference in the manifest, and the
     report repeats it. Honest and testable; the list must only shrink, or it
@@ -403,18 +405,15 @@ manifest, and its types.
   anyone who can get a person to scan and confirm can serve that person code.
   Whether plain hosted bundles may be kept for offline use belongs to the same
   question.
-- **OQ6 — How is Stage distributed and versioned?** (`human-design`;
-  `spec:AST-112/OQ4` owns where binaries are published) Options:
-  - **Development-dependency packages**: a small launcher package and a
-    package per operating system and architecture, so the project's lockfile
-    pins the version. Uses the package manager's cache and offline install;
-    large binaries in the registry.
-  - **Release archives** per operating system and architecture, with a
-    checksum manifest and a signature, which the CLI installs and the project
-    pins in a file. Smaller installs; a second download path to secure.
-  - Open in both: code signing and notarization on macOS, a signing scheme on
-    Linux, a built-in updater or none, and which architectures are supported
-    (macOS on Intel, Linux and Windows on ARM).
+- **OQ6 — How are Stage's binaries signed and updated, and for which
+  architectures?** (`human-design`; `spec:AST-112/OQ4` owns where binaries are
+  published and `spec:AST-112/FR13` the pin) Open: code signing and
+  notarization on macOS and a signing scheme on Linux and Windows; a built-in
+  updater, or only the pinned install; and which architectures are supported
+  beyond macOS on Apple silicon and Linux on x86-64 (macOS on Intel, Linux and
+  Windows on ARM). Platform signing removes the system's warnings and proves
+  the publisher, at the cost of a signing identity per platform; an updater
+  keeps developers current but competes with the pin.
 - **OQ7 — Does the Astryx app ship publicly, and where?** (`human-design`)
   Options: the App Store and Google Play; a public beta channel; or build from
   source only. Store review rules on running downloaded code (App Store Review
