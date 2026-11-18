@@ -74,8 +74,9 @@ app that prefers an ecosystem library can still use it beside these modules
 
 ## Non-goals
 
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app
+  (`spec:AST-141`) are separate products; they conform to this record's
+  contracts.
 - `AstryxStorage`, the string key-value store. `spec:AST-130` (FR14) owns it.
 - The cookie jar, domain information, redirect modes, and the request with no
   identity that `AstryxNetwork` carries. `spec:AST-130` owns them until OQ4 is
