@@ -154,8 +154,8 @@ function computerTextFailed(err, home, remove) {
     outcome: remove
       ? done.length > 0
         ? `Already removed: ${done.join(', ')}.`
-        : 'Nothing was removed.'
-      : 'Nothing was written.',
+        : 'The computer-level agent text was not removed.'
+      : 'The computer-level agent text was not written.',
     next,
   });
 }

@@ -317,6 +317,26 @@ describe('a computer-level folder the user cannot write', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'with another place first, the message is about the computer-level text only',
+    async () => {
+      const skills = path.join(home, '.agents', 'skills');
+      fs.mkdirSync(skills, {recursive: true});
+      fs.chmodSync(skills, 0o555);
+      const project = tmp('project');
+      fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}));
+      fs.mkdirSync(path.join(project, '.git'));
+      try {
+        const err = await init({to: 'agents-md,user'}, {cwd: project}).catch(e => e);
+        expect(err.code).toBe('ERR_WRITE_FAILED');
+        expect(err.message).toContain('The computer-level agent text was not written.');
+        expect(err.message).not.toContain('Nothing was written');
+      } finally {
+        fs.chmodSync(skills, 0o755);
+      }
+    },
+  );
+
   it('names a file standing where a folder belongs, with the step that fixes it', async () => {
     fs.writeFileSync(path.join(home, '.agents'), 'not a folder\n');
     await expect(init({user: true}, {cwd: tmp('cwd')})).rejects.toMatchObject({
@@ -337,7 +357,7 @@ describe('a computer-level folder the user cannot write', () => {
           init({user: true, removeAgents: true}, {cwd: tmp('cwd')}),
         ).rejects.toMatchObject({
           code: 'ERR_WRITE_FAILED',
-          message: expect.stringContaining('Nothing was removed.'),
+          message: expect.stringContaining('The computer-level agent text was not removed.'),
         });
         expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
       } finally {
