@@ -133,8 +133,8 @@ happens between pages.
   anchor, or on the page body. Focus that the person placed anywhere else stays
   there, and the new step is announced politely.
 - **FR16 — Focus returns when the tour ends.** When the tour ends with focus in
-  the callout, focus goes to the active step's anchor, else through the shared
-  return chain (`spec:AST-116` FR17–FR20). Focus elsewhere is not moved.
+  the callout, focus goes to the active step's anchor when it can take focus,
+  else through the shared return chain (`spec:AST-116` FR17–FR20). Focus elsewhere is not moved.
 - **FR17 — A callout is a labelled dialog.** The callout has role `dialog`
   without `aria-modal`. It is labelled by its title and described by its body.
   The step count is part of its accessible description.
@@ -150,15 +150,16 @@ happens between pages.
 
 ## Current-state impact
 
-- `component:Tour`: Public concepts gains Steps, Active step, Anchor and
-  Missing anchor rows; its Ownership boundary takes placement, step focus and
-  controls from FR6–FR17; AR1 points to FR14. Its Compatibility and Public
-  contract lines name `activeId`, `onActiveIdChange` and `onEnd` (FR4, FR5) in
+- `component:Tour` governs the core Tour, which replaces the lab Tour; its
+  path applicability moves to `packages/core/src/Tour/**` and its readiness
+  leaves Lab. Public concepts gains Steps, Active step, Anchor and Missing
+  anchor rows; its Ownership boundary takes placement, step focus and controls
+  from FR6–FR17; AR1 points to FR14. Its Compatibility "Controlled/uncontrolled
+  behavior" line names `activeId`, `onActiveIdChange` and `onEnd` (FR4, FR5) in
   place of `isActive` and `onDismiss`. DEC-1 and FR1 are unchanged.
-- `family:overlay-dismissal`: its Tour row says Escape ends the tour only
-  while focus is in the callout or on its anchor (FR14). Its
-  `component:TourStep` and Lab TourStep rows stay for the lab Tour; the core
-  Tour has no TourStep.
+- `family:overlay-dismissal` gains a Tour row: Escape ends the tour only while
+  focus is in the callout or on its anchor (FR14). Its Lab TourStep row and
+  member entry go with the lab Tour.
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
 - Lab `Tour` and `TourStep` take `<TourStep>` children. Core `Tour` takes a
@@ -175,7 +176,8 @@ FR7 gap: the lab does not scroll an anchor into view.
 FR8 gap: when a lab anchor is not in the document as its step starts, the
 callout shows unanchored, the ring never appears, and nothing reports it.
 FR9 gap: a lab step has no preparation before it shows.
-FR10 gap: a lab callout and ring stay on a removed anchor's last box.
+FR10 gap: a lab callout and ring stay on a removed anchor's last box, or jump
+to the viewport corner after a scroll or resize.
 FR11 gap: lab control labels are English only.
 FR12 gap: the lab has no Skip control.
 FR14 gap: lab Escape ends the tour wherever focus is.
@@ -186,15 +188,15 @@ description.
 
 ## Verification
 
-| Contract  | Verification                            | Representative states                                                                                        | Mutation or failure expectation                                                                  |
-| --------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| FR1–FR3   | `Tour.test.tsx` steps suite             | Three steps; the middle one left out; the active step removed; the last step removed                         | A count or Back/Next that includes a left-out step, or a removed active step left showing, fails |
-| FR4, FR5  | `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from an anchor's click                         | A step change not reported, a missing or wrong end reason, or an internal step override fails    |
-| FR6, FR7  | `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                  | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails         |
-| FR8, FR9  | `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default; a pending and a rejected preparation | A timer, a callout shown before preparation settles, or a missing anchor with no report fails    |
-| FR10      | Real-browser spec                       | The anchor scrolled out and removed while its step shows                                                     | A callout over unrelated content, or an end, fails                                               |
-| FR11–FR13 | `Tour.test.tsx` callout suite           | First, middle and last steps; Skip and count on and off; a locale; `labels`                                  | A built-in title or body text, Back on the first step, or an untranslated label fails            |
-| FR14–FR17 | `Tour.test.tsx` and a real-browser spec | Tab from the callout and the anchor; Escape in and out; each focus origin at a step change                   | Focus held in the callout, focus taken from the person, or `aria-modal` on a callout fails       |
+| Contract  | Verification                                 | Representative states                                                                                        | Mutation or failure expectation                                                                  |
+| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| FR1–FR3   | core `Tour.test.tsx` steps suite             | Three steps; the middle one left out; the active step removed; the last step removed                         | A count or Back/Next that includes a left-out step, or a removed active step left showing, fails |
+| FR4, FR5  | core `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from an anchor's click                         | A step change not reported, a missing or wrong end reason, or an internal step override fails    |
+| FR6, FR7  | core `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                  | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails         |
+| FR8, FR9  | core `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default; a pending and a rejected preparation | A timer, a callout shown before preparation settles, or a missing anchor with no report fails    |
+| FR10      | Real-browser spec                            | The anchor scrolled out and removed while its step shows                                                     | A callout over unrelated content, or an end, fails                                               |
+| FR11–FR13 | core `Tour.test.tsx` callout suite           | First, middle and last steps; Skip and count on and off; a locale; `labels`                                  | A built-in title or body text, Back on the first step, or an untranslated label fails            |
+| FR14–FR17 | core `Tour.test.tsx` and a real-browser spec | Tab from the callout and the anchor; Escape in and out; each focus origin at a step change                   | Focus held in the callout, focus taken from the person, or `aria-modal` on a callout fails       |
 
 ## Decision log
 
