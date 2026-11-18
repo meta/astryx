@@ -12,6 +12,11 @@
 # - An engineering owner (.github/ENGOWNERS, read from the base commit), a
 #   re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
 #   runs the suite.
+# - So is a pull request labelled `release-critical` (spec:AST-030 DEC-30),
+#   the label last applied by someone with write access, as the `ci:run-*`
+#   labels count (run-labels.cjs); a lookup that fails does not count it. A
+#   job that uses this action checks out `.github/scripts/lib`, which brings
+#   that script.
 #
 # Each limit is one entry in `limits`, checked in order.
 
@@ -22,6 +27,8 @@ runs:
   using: composite
   steps:
     - uses: actions/github-script@v9
+      env:
+        RUN_LABELS_MODULE: ${{ github.action_path }}/../../scripts/run-labels.cjs
       with:
         retries: 3
         script: |
@@ -30,6 +37,20 @@ runs:
           if (Number(process.env.GITHUB_RUN_ATTEMPT ?? '1') !== 1) return;
           const login = pr.user.login;
           if (login.endsWith('[bot]')) return;
+
+          // A release-critical pull request's heavy suites are never held.
+          const RELEASE_CRITICAL = 'release-critical';
+          if ((pr.labels ?? []).some(label => label.name === RELEASE_CRITICAL)) {
+            try {
+              const {pathToFileURL} = await import('node:url');
+              const {decideRunLabel} = await import(pathToFileURL(process.env.RUN_LABELS_MODULE).href);
+              // The shared check's own notices name a suite, so they stay quiet.
+              if (await decideRunLabel({github, context, core: {...core, notice: () => {}}, suite: RELEASE_CRITICAL, label: RELEASE_CRITICAL})) return;
+              core.info(`${RELEASE_CRITICAL} is on this pull request, but its newest application is not from someone with write access, or could not be read: the per-author limits apply.`);
+            } catch (error) {
+              core.warning(`Could not check who applied ${RELEASE_CRITICAL}: ${error.message}`);
+            }
+          }
 
           // Agent lanes share one login: each branch prefix counts as an author.
           // The same list as SHARED_AGENT_LOGINS (.github/scripts/ci-pr-gate.mjs).

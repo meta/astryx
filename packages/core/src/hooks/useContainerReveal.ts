@@ -40,9 +40,10 @@ export interface ContainerRevealOptions {
    * out). This is the lever for state a caller owns — a motion gate over a
    * list, a scroll in progress, a row whose menu is open and must stay lit.
    *
-   * `'inactive'` never overrides keyboard focus or a coarse pointer: the
-   * container still reveals on :focus-within and stays revealed on touch, so
-   * it cannot hide content from a keyboard or touch user.
+   * `'inactive'` never overrides keyboard focus or a coarse primary pointer:
+   * the container still reveals on :focus-within and stays revealed under a
+   * coarse primary pointer, so it cannot hide content from a keyboard or
+   * touch-first user.
    */
   forceState?: 'active' | 'inactive';
   /**
@@ -63,7 +64,8 @@ export interface ContentRevealOptions {
   /**
    * Conceal-on-hover instead of reveal-on-hover: content is visible at rest
    * and fades out while the container is hovered. Mouse-only and visual —
-   * stays in the a11y tree, ignores focus-within, stays visible on touch.
+   * stays in the a11y tree, ignores focus-within, stays visible under a
+   * coarse primary pointer.
    * @default false
    */
   isRevealInverted?: boolean;
@@ -107,7 +109,8 @@ const EMPTY = Object.freeze({});
  * Scoped, CSS-only hover/focus reveal for content inside a container.
  *
  * Revealed content stays in the accessibility tree and the tab order. It
- * shows on :focus-within without a delay, and it always shows on touch.
+ * shows on :focus-within without a delay, and it always shows under a coarse
+ * primary pointer.
  * Concealed content hides only for a mouse. Motion honors
  * prefers-reduced-motion.
  *

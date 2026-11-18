@@ -20,6 +20,7 @@
  * @property {string} [issuesUrl]
  * @property {string[]} [__declaredKeys]
  * @property {string[]} [__unknownKeys]
+ * @property {Array<{field: string, why: string}>} [__ignoredFields]
  * @property {string} __spec
  * @property {string} __packageDir
  * @property {string} __manifestFile
@@ -39,14 +40,17 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, shippedImports?: {status: 'checked', findings: [], unchecked: Array<{file: string, specifier: string, reason: string}>}, exampleCode?: {status: 'checked', findings: [], unchecked: Array<{file: string, example: string, reason: string}>}, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
  *   `iconSets` is experimental: it may change or be removed in a patch
  *   release.
  *   `notes`: information beside the issues. A note fails nothing by default;
  *   one with `next: true` counts as a warning under `integration check
  *   --next`, fails `integration check --strict --next`, and fails `--strict`
- *   from the next minor release. Notes include `invalid_cli_command`, a
- *   `cliCommand` that was ignored as malformed;
+ *   from the next minor release. Notes include `unknown_manifest_key`, a
+ *   manifest key the running CLI does not know (marked `next` only when it
+ *   is one letter from a known key); `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed; `invalid_install_guidance`,
+ *   an `installGuidance` that was ignored as malformed;
  *   `component_without_example`, `template_category`,
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names

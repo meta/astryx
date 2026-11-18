@@ -24,9 +24,11 @@ import {describe, it, expect} from 'vitest';
 import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   findClosestComponents,
+  firstSentence,
   searchComponents,
   levenshteinDistance,
 } from './string-utils.mjs';
+import {compareText} from './compare-text.mjs';
 
 const COMPONENTS = {group: ['Button', 'Card', 'Text', 'Badge', 'Avatar']};
 // A coreDir that does not exist -> Pass 2 (doc reads) is a no-op, so results
@@ -112,6 +114,54 @@ describe('searchComponents', () => {
     }
   });
 
+  it('scores components outside Core by the same signals', async () => {
+    const others = [
+      {name: 'ZorbletCard', view: {keywords: ['quandle']}},
+      {name: 'Button', view: {keywords: ['quandle']}},
+    ];
+    const typo = await searchComponents('ZorbletCrd', NO_CORE, COMPONENTS, [
+      ...others,
+    ]);
+    expect(typo[0]).toMatchObject({name: 'ZorbletCard', score: 80});
+    const keyword = await searchComponents('quandle', NO_CORE, COMPONENTS, [
+      ...others,
+    ]);
+    // A name Core already has keeps Core's doc, which has no such keyword.
+    expect(keyword.map(r => [r.name, r.score])).toEqual([['ZorbletCard', 90]]);
+  });
+
+  it('ranks a slip of a name typed as separate words above any keyword match', async () => {
+    const components = {group: ['ZorbletCard']};
+    const others = [
+      {name: 'QuillPanel', view: {keywords: ['zorblet card']}},
+      {name: 'QuillBadge', view: {keywords: ['zorblet']}},
+    ];
+    for (const typed of ['zorblet crad', 'zorblet-crd', 'Zorblet_Cardd']) {
+      const results = await searchComponents(typed, NO_CORE, components, [
+        ...others,
+      ]);
+      expect(results[0]).toMatchObject({
+        name: 'ZorbletCard',
+        score: 80,
+        reason: 'similar name (distance 1)',
+      });
+      expect(results.slice(1).every(r => r.score < 80)).toBe(true);
+    }
+  });
+
+  it('keeps an exact keyword above a slip of a name', async () => {
+    const results = await searchComponents(
+      'zorblet crad',
+      NO_CORE,
+      {group: ['ZorbletCard']},
+      [{name: 'QuillPanel', view: {keywords: ['zorblet crad']}}],
+    );
+    expect(results.map(r => [r.name, r.score])).toEqual([
+      ['QuillPanel', 90],
+      ['ZorbletCard', 80],
+    ]);
+  });
+
   it('scores an exact name match 100', async () => {
     const results = await searchComponents('Button', NO_CORE, COMPONENTS);
     expect(results[0]).toEqual({
@@ -124,6 +174,15 @@ describe('searchComponents', () => {
   it('scores a distance-1 name match 80', async () => {
     const results = await searchComponents('Buton', NO_CORE, COMPONENTS);
     expect(results[0]).toMatchObject({name: 'Button', score: 80});
+  });
+
+  it('counts two adjacent letters swapped as one edit', async () => {
+    const results = await searchComponents('Butotn', NO_CORE, COMPONENTS);
+    expect(results[0]).toMatchObject({
+      name: 'Button',
+      score: 80,
+      reason: 'similar name (distance 1)',
+    });
   });
 
   it('dedupes by name (an exact match yields a single entry)', async () => {
@@ -142,7 +201,7 @@ describe('searchComponents', () => {
       const cur = results[i];
       expect(prev.score).toBeGreaterThanOrEqual(cur.score);
       if (prev.score === cur.score) {
-        expect(prev.name.localeCompare(cur.name)).toBeLessThanOrEqual(0);
+        expect(compareText(prev.name, cur.name)).toBeLessThanOrEqual(0);
       }
     }
   });
@@ -202,5 +261,27 @@ describe('searchComponents', () => {
 
   it('returns an empty array for an empty registry without throwing', async () => {
     await expect(searchComponents('Button', NO_CORE, {})).resolves.toEqual([]);
+  });
+});
+
+describe('firstSentence', () => {
+  it('ends at the first sentence and collapses whitespace', () => {
+    expect(firstSentence('One thing.  Two\nthings.')).toBe('One thing.');
+    expect(firstSentence('No end mark')).toBe('No end mark');
+  });
+
+  it('keeps going past e.g and i.e', () => {
+    expect(firstSentence('Pick one, e.g. a Card. Then more.')).toBe(
+      'Pick one, e.g. a Card.',
+    );
+  });
+
+  it('does not end inside an open quote', () => {
+    const description =
+      'An invoice summary that formats its date and amount with Intl using the locale from useLocale, so switching the provider from English to German changes "Nov 2, 2026" and "$1,234.50" to "2. Nov. 2026" and "1.234,50 $" with no second locale source.';
+    expect(firstSentence(description)).toBe(description);
+    expect(
+      firstSentence('It reads \u201C2. Nov.\u201D in German. More.'),
+    ).toBe('It reads \u201C2. Nov.\u201D in German.');
   });
 });

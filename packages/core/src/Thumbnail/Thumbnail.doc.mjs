@@ -49,7 +49,7 @@ export const docs = {
       name: 'showRemoveOn',
       type: "'always' | 'hover'",
       description:
-        'When the remove button is visible. `hover` (the default) reveals it on hover and on keyboard focus, and keeps it visible on any touch-capable device; `always` shows it at rest. Only applies when `onRemove` is set.',
+        'When the remove button is visible. `hover` (the default) reveals it on hover and on keyboard focus, and keeps it visible under a coarse primary pointer (a phone or tablet); `always` shows it at rest. Only applies when `onRemove` is set.',
       default: "'hover'",
     },
     {
@@ -153,7 +153,7 @@ export const docsDense = {
     onClick: '(e) => void. Adds button semantics + hover overlay.',
     isLoading: 'Skeleton (no src) or upload overlay (with src). Default: false.',
     isDisabled: 'Disabled state. Default: false.',
-    showRemoveOn: "When remove button shows: hover (default: reveal on hover/focus, stays visible on touch) | always. Only when onRemove set.",
+    showRemoveOn: "When remove button shows: hover (default: reveal on hover/focus, stays visible under coarse primary pointer, e.g. phone/tablet) | always. Only when onRemove set.",
     xstyle: 'stylex.create() for layout.',
     className: 'CSS class. Prefer xstyle.',
     style: 'Inline styles. Prefer xstyle.',

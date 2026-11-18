@@ -40,14 +40,14 @@ export const docs = {
       name: 'hasLink',
       type: 'boolean',
       description:
-        'Whether to show the link button. It opens an Astryx Dialog that adds, updates or removes a link and keeps the editor selection. With a collapsed selection the URL is inserted as link text; otherwise the selected text is linked. Only http, https, mailto and tel URLs are written.',
+        'Whether to show the link button. It opens a link popover anchored to the button, with one URL field applied with Enter and Remove when the selection is in a link. The popover is not modal; Escape or Cancel returns focus and the selection to the editor. With a collapsed selection the URL is inserted as link text; otherwise the selected text is linked. Only http, https, mailto and tel URLs are written.',
       default: 'true',
     },
     {
       name: 'promptForUrl',
       type: '(selectedText: string) => string | null | undefined',
       description:
-        'A synchronous URL prompt that replaces the built-in Dialog when the link button is pressed on a selection that is not a link. It gets the selected text; return the URL, or null or an empty string to cancel.',
+        'A synchronous URL prompt that replaces the built-in link popover when the link button is pressed on a selection that is not a link. It gets the selected text; return the URL, or null or an empty string to cancel.',
     },
     {
       name: 'hasNewTabLinks',

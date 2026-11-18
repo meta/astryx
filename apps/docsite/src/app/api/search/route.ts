@@ -1,23 +1,25 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file GET /api/search?q=<query>: `astryx search <query>`, run by the site.
+ * @file GET /api/search?q=<query>: `astryx search <query>`, answered by the site.
  * @input The query, as `astryx search` takes it.
  * @output The CLI's search response, each result with the site destination and
  *   its destination page's title and registry category when available.
  * @position Called by the search panel (lib/cliSearchSource.ts).
  *
- * The site's search is the CLI's: this calls `search()` from
- * `@astryxdesign/cli/api`, the function behind `astryx search --json`, in this
- * site's project, so the panel gives the CLI's results in the CLI's order and
- * every change to the CLI's search reaches the site. Nothing here ranks.
+ * The site's search is the CLI's: `rankSearchIndex()` from
+ * `@astryxdesign/cli/api` ranks the candidates the build stored with
+ * `exportSearchIndex()` (generated/searchIndex.ts), so the panel gives the
+ * results of `astryx search --json` in this site's project, in the CLI's
+ * order, and every change to the CLI's search reaches the site. Nothing here
+ * ranks, and a starting server reads no docs or packages before it answers.
  *
  * GET /api/search?warm=1 answers 204 after loading the CLI's search in this
  * server, so a reader's first query does not wait for a cold start
  * (lib/searchWarmup.ts sends it before the first keystroke).
  */
 
-import {search} from '@astryxdesign/cli/api';
+import {rankSearchIndex} from '@astryxdesign/cli/api';
 import {
   searchResultCategory,
   searchResultHref,
@@ -25,6 +27,7 @@ import {
 } from '../../../lib/searchLinks.mjs';
 import type {SearchLinkTables} from '../../../lib/searchLinks.mjs';
 import links from '../../../generated/searchLinks.json';
+import {searchIndex} from '../../../generated/searchIndex';
 import admitted from '../../../generated/integrationPackages.json';
 import docsiteConfig from '../../../../astryx.config.mjs';
 
@@ -47,15 +50,15 @@ const LIMIT = 20;
 /** Longest query the API accepts. */
 const MAX_QUERY = 200;
 
-/** The query a warm-up runs: any query loads the CLI and gathers its catalog. */
+/** The query a warm-up runs: any query loads the CLI's search and its data. */
 const WARMUP_QUERY = 'button';
 
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   if (params.has('warm')) {
-    // Gather now, in this server, so the reader's first query only ranks.
+    // Load now, in this server, so the reader's first query only ranks.
     // Never cached: a cached answer would not reach, and so not warm, a server.
-    await search(WARMUP_QUERY, {cwd: process.cwd(), limit: 1});
+    await rankSearchIndex(WARMUP_QUERY, searchIndex, {limit: 1});
     return new Response(null, {
       status: 204,
       headers: {'Cache-Control': 'no-store'},
@@ -71,10 +74,11 @@ export async function GET(request: Request): Promise<Response> {
   // When this build leaves out an integration, ask for every match, drop
   // that integration's, then count and cut to the panel's 20; otherwise this
   // is exactly `astryx search <query>`.
-  const response = await search(query, {
-    cwd: process.cwd(),
-    ...(FILTERED ? {limit: Number.MAX_SAFE_INTEGER} : {}),
-  });
+  const response = await rankSearchIndex(
+    query,
+    searchIndex,
+    FILTERED ? {limit: Number.MAX_SAFE_INTEGER} : {},
+  );
   const kept = FILTERED
     ? response.data.results.filter(
         result => result.package == null || DOCUMENTED.has(result.package),

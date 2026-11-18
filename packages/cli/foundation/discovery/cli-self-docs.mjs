@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_SELF_DOC_DIRS, skipCliSelfDocFolder} from './name-roots.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {AUTHORING_SELF_DOCS, selfDocSection} from './authoring-self-docs.mjs';
@@ -26,15 +27,11 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {
+  publishedOptionDescription,
+  publishedSummary,
+} from './command-pointers.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-
-/** The directories, relative to the CLI root, that hold the CLI's own docs. */
-export const CLI_SELF_DOC_DIRS = [
-  'clients/cli/commands',
-  'api',
-  'authoring',
-  'foundation',
-];
 
 /** The doc kinds that declare a namespace. */
 const NAMESPACED_KINDS = new Set(['command', 'function', 'schema', 'enum']);
@@ -68,13 +65,7 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   const walk = dir => {
     if (!fs.existsSync(dir)) return;
     for (const entry of listDirEntries(dir)) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name.startsWith('__') ||
-        entry.name.startsWith('.')
-      ) {
-        continue;
-      }
+      if (skipCliSelfDocFolder(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith('.doc.mjs')) {
@@ -110,7 +101,14 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
-      loaded.push({source, doc});
+      // The docs and search read a command's summary with its pointers.
+      loaded.push({
+        source,
+        doc:
+          doc.type === 'command' && doc.pointers?.length
+            ? {...doc, summary: publishedSummary(doc)}
+            : doc,
+      });
     } catch (error) {
       failed.push({
         source,
@@ -182,6 +180,17 @@ function entryText(entry, fn) {
 }
 
 /**
+ * The text for a command option: its own or its API parameter's, then the
+ * text of every part it declares.
+ * @param {{description?: string, param?: string, pointers?: Array<string | {text: string}>}} option
+ * @param {any} fn the FunctionDoc the command calls, if any
+ * @returns {string}
+ */
+function optionText(option, fn) {
+  return publishedOptionDescription(option, entryText({param: option.param}, fn));
+}
+
+/**
  * `text`, ending in a full stop when more text follows it in the same cell.
  * @param {string} text
  * @param {boolean} more
@@ -246,7 +255,7 @@ function commandSection(cmd, index) {
         ].filter(Boolean);
         return [
           `\`${option.flag}\``,
-          [sentence(entryText(option, fn), extra.length > 0), ...extra]
+          [sentence(optionText(option, fn), extra.length > 0), ...extra]
             .filter(Boolean)
             .join(' '),
         ];

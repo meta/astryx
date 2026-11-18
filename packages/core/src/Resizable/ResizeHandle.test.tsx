@@ -15,7 +15,7 @@
  * which is bound to the region's `_size`.
  */
 
-import {useRef} from 'react';
+import {Suspense, startTransition, use, useRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import {hydrateRoot} from 'react-dom/client';
@@ -1330,5 +1330,61 @@ describe('ResizeHandle', () => {
       'aria-valuenow',
       String(200 + KEYBOARD_STEP),
     );
+  });
+});
+
+describe('ResizeHandle, when React discards a render', () => {
+  // A transition that suspends for good: React renders the new props, then
+  // keeps the committed tree and never commits that render.
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    isPending,
+    ...props
+  }: ResizeHandleProps & {isPending: boolean}) {
+    return (
+      <Suspense fallback={null}>
+        <ResizeHandle label="Resize" {...props} />
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  function pressArrowRight() {
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+  }
+
+  it('resizes the committed region', async () => {
+    const committed = makeResizable();
+    const discarded = makeResizable();
+    const {rerender} = render(
+      <Screen resizable={committed} isPending={false} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen resizable={discarded} isPending />);
+      });
+    });
+    pressArrowRight();
+    expect(discarded._onResizeMove).not.toHaveBeenCalled();
+    expect(committed._onResizeMove).toHaveBeenCalled();
+  });
+
+  it('resizes while the committed handle is enabled', async () => {
+    const resizable = makeResizable();
+    const {rerender} = render(
+      <Screen resizable={resizable} isPending={false} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen resizable={resizable} isDisabled isPending />);
+      });
+    });
+    pressArrowRight();
+    expect(resizable._onResizeMove).toHaveBeenCalled();
   });
 });

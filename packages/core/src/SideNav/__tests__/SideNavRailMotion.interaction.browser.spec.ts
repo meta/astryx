@@ -872,9 +872,36 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
           new Promise<void>(resolve => {
             requestAnimationFrame(() => resolve());
           });
+        const beforeCollapse = new Set(document.getAnimations());
         toggle().click();
         const collapsed = performance.now();
-        while (performance.now() - collapsed < 1150 - blockMs) {
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const collapse = document
+          .getAnimations()
+          .filter(animation => !beforeCollapse.has(animation));
+        if (collapse.length === 0) {
+          throw new Error('the collapse made no animation');
+        }
+        // The block comes after the page draws the collapse running: a frame
+        // later than the one it starts on. A starved page can draw only that
+        // first frame by then. The timeline the block holds would then read
+        // the collapse as not yet moved, though it carries on to its end.
+        // Chromium can read a start back a fraction of a millisecond below
+        // its frame time. A later frame comes 1 ms or more after it.
+        const isDrawnRunning = () =>
+          collapse.some(
+            animation =>
+              animation.startTime != null &&
+              Number(document.timeline.currentTime) -
+                Number(animation.startTime) >=
+                1,
+          );
+        while (
+          performance.now() - collapsed < 1150 - blockMs ||
+          !isDrawnRunning()
+        ) {
           await frame();
         }
         await new Promise<void>(resolve => {

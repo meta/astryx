@@ -6,9 +6,10 @@
  * @file useScheduleViewPopover.ts
  * @input The dialog name for the open trigger's key, or for no open trigger,
  *   and where focus goes when the open trigger stops being painted
- * @output One view-owned Popover with its open key, trigger props, the press
- *   model that lets one gesture switch triggers, a switch of the open content
- *   inside the popover, and a close when the open trigger is no longer painted
+ * @output One view-owned Popover with its open key, trigger props, a switch
+ *   of the open content inside the popover, the press that returns a trigger
+ *   to its own content, and a close when the open trigger is no longer
+ *   painted
  * @position Internal hook for Schedule views that own a popover (the month
  *   view's popover, component:Schedule FR17, FR20); not exported
  */
@@ -34,7 +35,6 @@ export interface ScheduleViewPopover {
   /** Spread on an element that contains every trigger. */
   readonly containerProps: {
     onPointerDownCapture: (event: ReactPointerEvent<HTMLElement>) => void;
-    onKeyDownCapture: () => void;
   };
   /**
    * Props of one trigger button. Calling it also marks the trigger as painted
@@ -89,40 +89,34 @@ export function useScheduleViewPopover(
     }, []),
   });
 
-  // A pointer press on a trigger while the popover is open would close it by
-  // the browser's light dismiss before the click arrives, and the layer then
-  // absorbs a show() from that same press. So the press itself decides: a
-  // press on another trigger closes the popover here, ahead of the browser,
-  // and the click that follows opens the pressed trigger; a press on the open
-  // trigger is remembered so its click ends closed, whichever of the two
-  // closed it. A key press starts a new gesture and forgets the press.
-  const openKeyAtPressRef = useRef<string | null>(null);
+  // A press on the open trigger while it shows content switched to from
+  // inside the popover (an event handed from a busy day's list) shows the
+  // trigger's own content again. The layer cannot tell that press from one
+  // that closes it, so the popover closes here, ahead of the browser's light
+  // dismiss, and the click that follows opens it.
   const onPointerDownCapture = (event: ReactPointerEvent<HTMLElement>) => {
-    const target = event.target as Element | null;
-    const pressedKey =
-      target
-        ?.closest(`[${TRIGGER_ATTRIBUTE}]`)
-        ?.getAttribute(TRIGGER_ATTRIBUTE) ?? null;
-    openKeyAtPressRef.current = pressedKey == null ? null : openKey;
+    const trigger = (event.target as Element | null)?.closest(
+      `[${TRIGGER_ATTRIBUTE}]`,
+    );
+    const pressedKey = trigger?.getAttribute(TRIGGER_ATTRIBUTE) ?? null;
     if (
       pressedKey != null &&
-      openKey != null &&
       pressedKey !== openKey &&
-      popover.isOpen
+      popover.isOpen &&
+      trigger?.getAttribute('aria-expanded') === 'true'
     ) {
       popover.hide();
     }
   };
-  const onKeyDownCapture = () => {
-    openKeyAtPressRef.current = null;
-  };
+
+  // A press on another trigger while the popover is open: the browser's
+  // light dismiss closes it as the press ends, and this show from the other
+  // trigger opens it there. A press on the open trigger ends closed: its
+  // light dismiss closes the popover, and the layer absorbs the show from
+  // that same trigger.
   const toggle = (key: string, button: HTMLButtonElement) => {
-    const openAtPress = openKeyAtPressRef.current;
-    openKeyAtPressRef.current = null;
-    if (openAtPress === key || (openKey === key && popover.isOpen)) {
-      if (popover.isOpen) {
-        popover.hide();
-      }
+    if (openKey === key && popover.isOpen) {
+      popover.hide();
       return;
     }
     setOpenKey(key);
@@ -182,7 +176,7 @@ export function useScheduleViewPopover(
   return {
     popover,
     openKey,
-    containerProps: {onPointerDownCapture, onKeyDownCapture},
+    containerProps: {onPointerDownCapture},
     getTriggerProps: (key, ownsOpenKey) => {
       paintedKeys.add(key);
       const ownsOpen =

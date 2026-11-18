@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/Markdown/Markdown.test.tsx,
     packages/core/src/Markdown/Markdown.renderBoundary.test.tsx,
+    packages/core/src/Markdown/Markdown.rerender.test.tsx,
     packages/core/src/Markdown/Markdown.public.test.ts,
     packages/core/src/Markdown/MarkdownTable.a11y.chromium.spec.ts,
     packages/core/src/Markdown/parser.test.ts,
@@ -35,7 +36,11 @@ modules:
 families: [family:navigation-destinations]
 design_specs: []
 architecture:
-  [architecture:component-theming-surface, architecture:public-component-api]
+  [
+    architecture:component-theming-surface,
+    architecture:public-component-api,
+    architecture:react-component-runtime,
+  ]
 contributing: []
 system_specs:
   [
@@ -617,6 +622,25 @@ released behavior for every data-driven caller to fix one part's layout;
 widening columns by measuring rendered text, which adds an observer and a
 reflow to a purely declarative path; and adding a prop or option for column
 sizing, which would make a default-path defect into a caller's decision.
+
+### DEC-7 — Streaming fade-in starts may come from refs written during render
+
+**Reference:** `component:Markdown/DEC-7`
+**Decider:** `cixzhang`, `2026-11-09`
+
+While Markdown streams, refs written during render decide where each new
+fade-in span starts. They hold the recent fade boundaries and the last rendered
+blocks or inline nodes. `architecture:react-component-runtime` INV4 records
+this exception.
+
+The exception is cosmetic. Markdown renders text only from its committed,
+smoothed children, never from these refs. A render React discards, as a
+suspended transition does, can only shift the fade spans by the text it added.
+The newest fade starts later. When every span is in use, the oldest fading text
+settles one step early. The streamed text stays exact.
+
+Rejected: syncing these refs at commit, which adds commit-phase work to every
+streaming update for a cosmetic difference.
 
 ## Open questions
 

@@ -47,6 +47,7 @@ import {
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
 import {keepSourceFiles} from './source-file-cache.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
@@ -1213,11 +1214,11 @@ export async function checkDocTypes(files, options) {
   }
   findings.sort(
     (a, b) =>
-      a.doc.localeCompare(b.doc) ||
+      compareText(a.doc, b.doc) ||
       a.line - b.line ||
-      a.field.localeCompare(b.field),
+      compareText(a.field, b.field),
   );
-  unchecked.sort((a, b) => a.doc.localeCompare(b.doc));
+  unchecked.sort((a, b) => compareText(a.doc, b.doc));
   return {
     status: 'checked',
     typescript: version,

@@ -56,6 +56,7 @@ export const SIDEBAR_PARENTS = new Map([
   ['cli-experimental-icon-sets', 'icons'],
   ['cli-experimental-icon-set-files', 'icons'],
   ['styling', 'styling-overview'],
+  ['calendars', 'internationalization'],
 ]);
 
 /**

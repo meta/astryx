@@ -205,7 +205,9 @@ describe('the UI and Node test steps', () => {
       const commands = step.run
         .split('\n')
         .map(line => line.trim())
-        .filter(line => /(pnpm test:|fs-guard-tests\.mjs)/.test(line));
+        .filter(line =>
+          /(pnpm test:|pnpm exec vitest run|fs-guard-tests\.mjs)/.test(line),
+        );
       // The full run is one command; every other command is named.
       const multi = commands.filter(
         line => !/^pnpm test:(ui|node) --shard=/.test(line),
