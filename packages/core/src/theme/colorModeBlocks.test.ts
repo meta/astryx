@@ -18,7 +18,12 @@ const css = (components: Parameters<typeof defineTheme>[0]['components']) =>
 describe('color-mode blocks', () => {
   it('writes a theme without them exactly as before', () => {
     const plain = css({button: {base: {backgroundColor: 'red'}}});
-    expect(plain).not.toMatch(/prefers-color-scheme|data-theme=/);
+    // Only a flipping media surface's dark-page copy reads the page's mode.
+    const rules = plain
+      .split('\n')
+      .filter(line => line.includes('{') && !line.includes('-media-dark-page'));
+    expect(rules.join('\n')).not.toMatch(/data-theme=/);
+    expect(plain).not.toMatch(/astryx-button[^{]*data-theme=/);
   });
 
   it("applies a block only in its mode: the root's mode, the system preference, and the nearest surface", () => {

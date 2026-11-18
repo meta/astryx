@@ -17,6 +17,8 @@ applies_to:
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
     packages/core/src/privateAttributes/scheme.ts,
+    packages/core/src/privateAttributes/mediaDarkPage.ts,
+    packages/core/src/theme/invertedSurfaceSide.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
@@ -277,7 +279,8 @@ Platform-specific details stay inside that compiler.
   base layer's rules in context, applies there as it would without the block.
   A block takes the same derived variables and container padding as the style
   key. On a media surface only the block of the surface's mode is written. A
-  theme without color-mode blocks has no mode rules in its CSS.
+  theme without color-mode blocks has no mode rules in its CSS, apart from
+  INV21's dark-page surface rules.
 - **INV19 — The body font token reaches text outside the theme root.** When a
   theme declares `--font-family-body`, the web compiler gives the theme's scope
   root `font-family: var(--font-family-body)`. Core's reset gives `html` the
@@ -296,6 +299,21 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   size through a font-size on the app's own container inside the Theme, or
   through the theme's `--text-body-size`, which also sizes Core's own body
   text.
+- **INV21 — A surface whose fill flips with the page is right at the first
+  paint.** An inverted surface whose fill the theme sets (a toast's card, on
+  `--color-background-inverted` or `--color-background-error-inverted`) can
+  take one media side on a light page and the other on a dark one. On a
+  system-mode page the server does not know the reader's scheme, so the
+  surface renders its light-page side and names its dark-page side in a
+  private attribute (`architecture:public-component-api` INV23; owner
+  `privateAttributes/mediaDarkPage.ts`) until a script measures it. The web
+  compiler writes that side's surface rules again for that attribute, after
+  both sides' own, under the conditions that make the page dark: a dark root,
+  a system root while the page root names dark, and the reader's preference
+  while it names none. The compiler picks each side by the rule the painted
+  surface is measured with, from the theme's tokens for each mode, and writes
+  these rules only for a theme whose inverted surfaces take different sides
+  in the two page modes.
 
 This record does not own:
 
@@ -409,6 +427,7 @@ tiers.
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
 | INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
 | INV20            | `Theme.test.tsx` (the wrapper's body size) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                                      | Text inside a Theme with no size of its own                                                                                                                                                                                                                                                       |
+| INV21            | `generateThemeRules.test.ts` ("a media surface that flips with the page") and `Toast.mediaFallback.test.tsx` (server markup under a system, a forced and a non-flipping theme)                                                                                                                                                                                                                                                                         | A system-mode page's first paint draws a flipping surface on the wrong side, or a theme whose surfaces keep their side gains dark-page rules                                                                                                                                                      |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

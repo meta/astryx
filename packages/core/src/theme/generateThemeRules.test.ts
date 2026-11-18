@@ -1198,7 +1198,11 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const css = generateThemeCSS(themed).component;
+    const all = generateThemeCSS(themed).component;
+    // The surfaces' own rules, before the dark-page copy of the light side.
+    const copyAt = all.indexOf('data-astryx-media-dark-page');
+    const css = copyAt === -1 ? all : all.slice(0, copyAt);
+    expect(all.slice(copyAt)).toContain('font-weight: 600');
 
     expect(css.lastIndexOf('font-weight: 800')).toBeLessThan(
       css.lastIndexOf('font-weight: 700'),
@@ -2268,5 +2272,34 @@ describe('declaration assembly keeps values as values', () => {
       expect.stringContaining('in onDark.tokens:'),
       expect.stringContaining('in adaptations[0].tokens:'),
     ]);
+  });
+});
+
+describe('a media surface that flips with the page', () => {
+  const surfaces = (tokens: Record<string, [string, string]>) =>
+    generateOnMediaCSS(defineTheme({name: 'flip', tokens}));
+
+  it("writes the light side's rules for a dark page when an inverted surface flips", () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).toContain(
+      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+    );
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\n {2}[^{]*\[data-astryx-media-dark-page="light"\]/,
+    );
+  });
+
+  it('writes no dark-page rules when every inverted surface keeps its side', () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#0a1317'],
+      '--color-background-error-inverted': ['#a8071e', '#a8071e'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).not.toContain('data-astryx-media-dark-page');
   });
 });

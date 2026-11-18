@@ -39,7 +39,11 @@ import {
 } from './themeAdaptations';
 import {parseStyleKey} from '../utils/parseStyleKey';
 import {getDerivedVars} from './derivedVarRegistry';
-import {STATUS_NAMES, deriveStatusRoleTokens} from './statusRoleDerivation';
+import {
+  STATUS_NAMES,
+  deriveStatusRoleTokens,
+  resolveModes,
+} from './statusRoleDerivation';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
@@ -62,6 +66,8 @@ import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
+import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
+import {darkPageSides} from './invertedSurfaceSide';
 
 /**
  * Theme @scope selectors.
@@ -79,9 +85,47 @@ function themeScopeStart(name: string): string {
 /** Scope limit matching the theme attribute (nested-theme boundary). */
 const THEME_SCOPE_TO = `[data-${dataAttrNamespace}-theme]`;
 
-/** Media-surface selector, e.g. for [data-astryx-media="dark"]. */
-function mediaSelector(surface: string): string {
-  return `[data-${dataAttrNamespace}-media="${surface}"]`;
+/**
+ * Media-surface selector, e.g. for [data-astryx-media="dark"]. A dark-page
+ * surface key (`light@dark-page`) selects a surface that takes that side on a
+ * dark page, under the conditions that make the page dark; its
+ * `-preference` form holds the conditions a `prefers-color-scheme` block
+ * must wrap.
+ */
+function mediaSelector(surface: MediaSurface): string {
+  const [side, page] = surface.split('@') as [MediaSide, string | undefined];
+  if (page === undefined) {
+    return `[data-${dataAttrNamespace}-media="${side}"]`;
+  }
+  return darkPageConditions(page === 'dark-page-preference')
+    .map(condition => `${condition} ${mediaDarkPageIs(side)}`)
+    .join(', ');
+}
+
+/**
+ * The ancestors that make a theme's page dark, inside its `@scope`: a forced
+ * dark root, or a system root under no forced mode while the page root names
+ * dark. With `preference`, the conditions where the reader's preference
+ * decides instead, which a `prefers-color-scheme: dark` block wraps.
+ */
+function darkPageConditions(preference: boolean): string[] {
+  const system = `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+  const forcedAround = `:is([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+  const unforced = `${system}:not(${forcedAround} *)`;
+  return preference
+    ? [
+        `${unforced}:where(${ROOT_SCHEME_UNNAMED} *)`,
+        `${forcedAround} ${system}`,
+      ]
+    : [
+        `:scope[${THEME_MODE_ATTR}="dark"]`,
+        `${unforced}:where(${rootSchemeIs('dark')} *)`,
+      ];
+}
+
+/** The side a surface key draws. */
+function sideOf(surface: MediaSurface): MediaSide {
+  return surface.split('@')[0] as MediaSide;
 }
 
 /** Component base-class selector, e.g. '.astryx-button'. */
@@ -89,7 +133,14 @@ function componentClassSelector(component: string, suffix: string): string {
   return `.${classPrefix}-${component}${suffix}`;
 }
 
-type MediaSurface = 'dark' | 'light';
+type MediaSide = 'dark' | 'light';
+
+/**
+ * An on-media surface: a side, or a side a surface takes on a dark page
+ * (written beside the light-page side when the two differ).
+ */
+type MediaSurface =
+  MediaSide | `${MediaSide}@dark-page` | `${MediaSide}@dark-page-preference`;
 
 /** Scope a component selector to an inverted media surface when requested. */
 function componentSelector(
@@ -1164,7 +1215,7 @@ function generateComponentRules(
             );
           if (surface) {
             // A media surface fixes the mode: only its own block applies.
-            if (surface === name) {
+            if (sideOf(surface) === name) {
               modeEmit(selector, wrap);
             }
             continue;
@@ -1243,9 +1294,9 @@ const NEAREST_SURFACE_DEPTH = 5;
  * conditions 1 to NEAREST_SURFACE_DEPTH - 1, that reads R up to
  * NEAREST_SURFACE_DEPTH.
  */
-function nearestSurfaceIs(mode: MediaSurface): string[] {
-  const other: MediaSurface = mode === 'dark' ? 'light' : 'dark';
-  const chain = (length: number, last: MediaSurface) =>
+function nearestSurfaceIs(mode: MediaSide): string[] {
+  const other: MediaSide = mode === 'dark' ? 'light' : 'dark';
+  const chain = (length: number, last: MediaSide) =>
     Array.from({length}, (_, i) =>
       mediaSelector(
         (length - 1 - i) % 2 === 0 ? last : last === mode ? other : mode,
@@ -1585,12 +1636,17 @@ export function generateOnMediaCSS(
     [string, string][]
   >();
 
-  for (const surface of ['dark', 'light'] as const) {
-    const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
+  // One surface's token and component rules, into `out`.
+  // A dark-page copy repeats rules already checked, so it reports nothing.
+  const quiet: DiagnosticSink = () => {};
+  const emitSurface = (surface: MediaSurface, out: string[]): void => {
+    const surfaceSink = surface.includes('@') ? quiet : sink;
+    const side = sideOf(surface);
+    const onMedia = side === 'dark' ? theme.__onDark : theme.__onLight;
     if (!onMedia) {
-      continue;
+      return;
     }
-    const location = surface === 'dark' ? 'onDark.' : 'onLight.';
+    const location = side === 'dark' ? 'onDark.' : 'onLight.';
 
     // Token overrides. MediaTheme writes on a descendant surface, so a source
     // alias must be local unless an authored root/adaptation role owns it.
@@ -1601,7 +1657,7 @@ export function generateOnMediaCSS(
       rules,
       rootAliases,
     );
-    mediaStatusRoleDefaults.set(surface, statusRoleDefaults);
+    mediaStatusRoleDefaults.set(side, statusRoleDefaults);
     const tokenEntries = [
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
@@ -1612,30 +1668,50 @@ export function generateOnMediaCSS(
       const declarations = joinDeclarations(
         readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
-        sink,
+        surfaceSink,
       );
-      parts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      out.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
     }
 
     // Component overrides use the same lowering as root and adaptations so a
     // surface writes the same derived leaf and can win by source order.
     if (onMedia.components) {
-      generateComponentRules(onMedia.components, parts, {
+      generateComponentRules(onMedia.components, out, {
         resetInheritedPaddingSpecificity: true,
         surface,
-        sink,
+        sink: surfaceSink,
         location,
       });
-      generateColorOverrides(onMedia.components, parts, surface);
-      generateSizeOverrides(onMedia.components, parts, surface);
+      generateColorOverrides(onMedia.components, out, surface);
+      generateSizeOverrides(onMedia.components, out, surface);
 
       // Apply the effective explicit Heading weight after media-specific type
       // rules. A surface-authored target wins, followed by the inherited main
       // target and then the built-in token fallback.
-      generateHeadingWeightOverrides(onMedia.components, parts, {
+      generateHeadingWeightOverrides(onMedia.components, out, {
         surface,
         inheritedComponents: theme.components,
       });
+    }
+  };
+  for (const side of ['dark', 'light'] as const) {
+    emitSurface(side, parts);
+  }
+  // A surface that takes another side on a dark page (a toast's card, whose
+  // fill flips with the page) carries that side as a second attribute, so
+  // its first paint is right before any script measures it. Its rules come
+  // after both sides' own and only for a theme whose surfaces flip.
+  const flipped = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
+  for (const side of flipped) {
+    emitSurface(`${side}@dark-page`, parts);
+    const byPreference: string[] = [];
+    emitSurface(`${side}@dark-page-preference`, byPreference);
+    if (byPreference.length > 0) {
+      parts.push(
+        `  @media (prefers-color-scheme: dark) {\n${byPreference.join('\n\n')}\n  }`,
+      );
     }
   }
 
@@ -1666,6 +1742,12 @@ export function generateOnMediaCSS(
         sink,
       );
       roleParts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      if (flipped.has(surface)) {
+        roleParts.push(
+          `  ${mediaSelector(`${surface}@dark-page`)} {\n${declarations}\n  }`,
+          `  @media (prefers-color-scheme: dark) {\n  ${mediaSelector(`${surface}@dark-page-preference`)} {\n${declarations}\n  }\n  }`,
+        );
+      }
     }
     if (roleParts.length > 0) {
       adaptationMediaRoleBlocks.push(

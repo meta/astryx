@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toast/ (showcase blocks)
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+import {use, useCallback, useEffect, useMemo, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
@@ -37,6 +37,11 @@ import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
+import {ThemeContext, useThemeDefinition} from '../theme/useTheme';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {resolveThemeTokens} from '../theme/tokens';
+import {invertedSideIn} from '../theme/invertedSurfaceSide';
+import {MediaDarkPage} from '../theme/MediaDarkPage';
 import {MediaTheme} from '../theme/MediaTheme';
 import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
 import {pickInvertedSide} from '../hooks/mediaSide';
@@ -447,12 +452,44 @@ export function ToastSurface({
           parseColor(tokens['--color-on-light'] ?? ''),
         )
       : null;
+  // A system-mode page's scheme is the reader's, which the server does not
+  // know. The card takes its light-page side, and the side it takes on a
+  // dark page rides beside it; the theme writes that side's rules for a dark
+  // page, so the first paint is right in both.
+  const theme = useThemeDefinition();
+  // While a system-mode page renders on the server (or hydrates the server's
+  // markup), its scheme is the reader's and unknown; later renders know it.
+  const isHydrating = useIsHydrating();
+  const themeMode = use(ThemeContext)?.mode ?? 'system';
+  const isSchemeUnknown = themeMode === 'system' && isHydrating;
+  const sides = useMemo(() => {
+    if (theme == null) {
+      return null;
+    }
+    const token = isError
+      ? '--color-background-error-inverted'
+      : '--color-background-inverted';
+    return {
+      light: invertedSideIn(resolveThemeTokens(theme, {mode: 'light'}), token),
+      dark: invertedSideIn(resolveThemeTokens(theme, {mode: 'dark'}), token),
+    };
+  }, [theme, isError]);
+  const pageSide = isSchemeUnknown
+    ? sides?.light
+    : mode === 'light' || mode === 'dark'
+      ? sides?.[mode]
+      : undefined;
   const fallbackMediaMode =
-    fromTokens === 'dark' || fromTokens === 'light'
+    pageSide ??
+    (fromTokens === 'dark' || fromTokens === 'light'
       ? fromTokens
       : isError || mode === 'light'
         ? 'dark'
-        : 'light';
+        : 'light');
+  const darkPageSide =
+    isSchemeUnknown && sides?.dark != null && sides.dark !== fallbackMediaMode
+      ? sides.dark
+      : null;
   // Once painted, the card's text takes the side that reads best on it.
   const measuredMediaMode = useSurfaceMediaMode(
     rootRef,
@@ -482,36 +519,38 @@ export function ToastSurface({
         ),
       )}>
       <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
-        {renderContent ? (
-          renderContent({
-            body,
-            endContent,
-            type,
-            isAutoHide,
-            autoHideDuration,
-            dismiss: handleDismiss,
-          })
-        ) : (
-          <div {...stylex.props(styles.inner)}>
-            <div ref={bodyRef} {...stylex.props(styles.content)}>
-              {body}
-            </div>
+        <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
+          {renderContent ? (
+            renderContent({
+              body,
+              endContent,
+              type,
+              isAutoHide,
+              autoHideDuration,
+              dismiss: handleDismiss,
+            })
+          ) : (
+            <div {...stylex.props(styles.inner)}>
+              <div ref={bodyRef} {...stylex.props(styles.content)}>
+                {body}
+              </div>
 
-            <div {...stylex.props(styles.endContent)}>
-              {endContent}
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                className={themeProps('toast-close').className}
-                xstyle={styles.close}
-                label={t('@astryx.toast.dismiss')}
-                onClick={handleDismiss}
-                isIconOnly
-              />
+              <div {...stylex.props(styles.endContent)}>
+                {endContent}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Icon icon="close" size="sm" color="inherit" />}
+                  className={themeProps('toast-close').className}
+                  xstyle={styles.close}
+                  label={t('@astryx.toast.dismiss')}
+                  onClick={handleDismiss}
+                  isIconOnly
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </MediaDarkPage>
       </MediaTheme>
     </div>
   );
