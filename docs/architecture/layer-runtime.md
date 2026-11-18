@@ -100,7 +100,8 @@ changes live in `spec:AST-003`; they are not current architecture.
 
 ## Purpose
 
-Layered UI must escape clipping, stay positioned against its trigger, preserve
+Layered UI must escape clipping, stay positioned against its anchor (the
+trigger unless a separate anchor is named), preserve
 nearby theme and writing context, and reconcile browser-owned visibility with
 React state.
 
@@ -146,15 +147,16 @@ owns Theme provider behavior; this record owns where a layer's DOM is hosted.
 
 `useLayer` has three positioning modes:
 
-- **context / anchor:** the trigger receives a unique CSS `anchor-name`; the
+- **context / anchor:** the anchor (the trigger unless a separate anchor is
+  named) receives a unique CSS `anchor-name`; the
   surface receives `position-anchor`, logical `position-area`, and ordered
   fallback positions;
-- **context / custom:** the trigger and `position-anchor` relationship remain,
+- **context / custom:** the anchor and `position-anchor` relationship remain,
   while the caller owns geometry, fallback, offset, and direction handling; and
 - **fixed:** the caller supplies viewport `x` and `y` coordinates and receives no
   CSS-anchor geometry.
 
-Anchor names form a list so several layers may share one trigger without
+Anchor names form a list so several layers may share one anchor without
 clobbering one another. Standard placement uses the `self-*` logical keyword
 family so inherited direction controls RTL behavior. Every anchored placement
 can flip across either axis. Centered placements also gain span fallbacks so the
@@ -315,8 +317,8 @@ Public `useLayer` defaults to `popover="manual"`; Popover-family APIs normally
 select `popover="auto"`. Browser-initiated closes are observed through the queued
 `toggle` event. The browser may already have hidden the surface before `isOpen`,
 `onHide`, or controlled-state synchronization catches up. A show from another
-trigger while such a close is in flight moves the layer to that trigger; that
-close is not reported.
+trigger while such a close is in flight moves the layer to that trigger, unless
+a separate anchor is named; that close is not reported.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
 `useLayer` records the gesture and the trigger associated with a browser close,
@@ -605,7 +607,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
   viewport geometry is measured after paint and then applied, with two
   exceptions. The runtime observes anchor visibility for every layer (which
-  also drives `spec:AST-116` FR7's hide), and,
+  drives `spec:AST-116` FR7's hide once FR7 ships; FR7 gap there), and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
   leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the

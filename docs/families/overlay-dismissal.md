@@ -179,7 +179,8 @@ this record's current membership snapshot must be updated with it.
   to exactly one topmost registered present member. That member either invokes
   its dismissal callback or blocks the request; the request does not continue
   to a member behind it. A non-modal Popover is present for Escape only while
-  focus is inside it or on its anchor or trigger (`spec:AST-116` FR15); otherwise
+  focus is inside it, or on or inside its anchor or trigger (`spec:AST-116`
+  FR15); otherwise
   the press goes to the member beneath it.
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
