@@ -213,8 +213,8 @@ one pending load per module, caches a success, and resets after a failure.
 
   Named entry: the shared theme lookup Spinner reads for a theme's `spinner`
   indicator (`Indicator/useThemeIndicator` through `theme/useTheme` and
-  `theme/themeRegistry`) costs a page that renders only Spinner 467 B gzip
-  (a page that renders only TreeList, 79 B).
+  `theme/themeRegistry`) costs under 0.5 KB gzip on a page that renders only
+  Spinner, and under 0.1 KB on one that renders only TreeList.
   It is not an unused feature: a page that renders an indicator a theme can
   replace uses theming, and the lookup is how the theme reaches it
   (`component:Indicator` DEC-1).
