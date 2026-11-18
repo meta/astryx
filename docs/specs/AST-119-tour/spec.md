@@ -91,8 +91,10 @@ happens between pages.
   app for every step.
 - **FR8 — The app decides about a missing anchor.** When a step shows and its
   anchor resolves to nothing, Tour follows `missingAnchorBehavior`:
-  `'skipStep'` (the default: move to the next step, with a development
-  warning), `'endTour'` (end as `'complete'`) or `'center'` (show the step
+  `'skipStep'` (the default: move on in the direction of travel, to the
+  next step after Next and the previous step after Back, with a development
+  warning; a skipped last step ends the tour as `'complete'`, and a skipped
+  first step on Back keeps the step that was showing), `'endTour'` (end as `'complete'`) or `'center'` (show the step
   centered). Tour sets no timer and does not wait.
 - **FR9 — A step can prepare its anchor.** A step's optional `showAction`
   runs before Tour resolves the anchor, and Tour waits for the promise it
@@ -127,7 +129,7 @@ happens between pages.
   through the page in the browser's order, and the anchor stays operable by
   keyboard, and by pointer when the step has no backdrop (with a backdrop, a
   press on the anchor ends the tour, `component:Tour` FR1). Escape ends the tour with `'escape'` only while focus is
-  in the callout or on its anchor (`spec:AST-116` FR15).
+  in the callout, or on or inside its anchor (`spec:AST-116` FR15).
 - **FR15 — Focus follows the tour, not the app.** When a step shows, focus
   moves to its heading if focus is in the previous callout, on the previous
   anchor, or on the page body. Focus that the person placed anywhere else stays
@@ -158,7 +160,7 @@ happens between pages.
   behavior" line names `activeId`, `onActiveIdChange` and `onEnd` (FR4, FR5) in
   place of `isActive` and `onDismiss`. DEC-1 and FR1 are unchanged.
 - `family:overlay-dismissal` gains a Tour row: Escape ends the tour only while
-  focus is in the callout or on its anchor (FR14). Its Lab TourStep row and
+  focus is in the callout, or on or inside its anchor (FR14). Its Lab TourStep row and
   member entry go with the lab Tour.
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
@@ -177,7 +179,8 @@ FR8 gap: when a lab anchor is not in the document as its step starts, the
 callout shows unanchored, the ring never appears, and nothing reports it.
 FR9 gap: a lab step has no preparation before it shows.
 FR10 gap: a lab callout and ring stay on a removed anchor's last box, or jump
-to the viewport corner after a scroll or resize.
+to the viewport corner after a scroll or resize, and stay shown over an anchor
+scrolled out of a scrolling panel.
 FR11 gap: lab control labels are English only.
 FR12 gap: the lab has no Skip control.
 FR14 gap: lab Escape ends the tour wherever focus is.
