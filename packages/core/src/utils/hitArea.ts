@@ -12,8 +12,8 @@
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
  *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on.
- *   `screenScale` reads how far transforms scale a box (hooks/useOverflow.ts
- *   uses it too)
+ *   `screenScale` reads how far transforms scale a box, and `layoutSize` a
+ *   box's untransformed size (hooks/useOverflow.ts uses both)
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
@@ -477,6 +477,40 @@ function axisScale(onScreen: number, layout: number, ratio: number): number {
 const HIT_AREA_TOLERANCE: ScreenScaleTolerance = {pixels: 1, ratio: 1e-3};
 
 /**
+ * A box's border-box size in layout px, from its computed style. Transforms
+ * do not change it, and it keeps the sub-pixel size a scaled rect loses to
+ * the browser's rounding. Null when the style has no pixel width.
+ */
+export function layoutSize(
+  element: Element,
+): {width: number; height: number} | null {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return null;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  return {
+    width:
+      px(style.width) +
+      (isContentBox
+        ? px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth)
+        : 0),
+    height:
+      px(style.height) +
+      (isContentBox
+        ? px(style.paddingTop) +
+          px(style.paddingBottom) +
+          px(style.borderTopWidth) +
+          px(style.borderBottomWidth)
+        : 0),
+  };
+}
+
+/**
  * How far the transforms around `element` scale its box on screen, per axis.
  * A layer that opens from a smaller scale scales every rect inside it, while
  * the layout box keeps the size the layer settles at. Only a scale is
@@ -506,28 +540,11 @@ export function screenScale(
   ) {
     return UNSCALED;
   }
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style == null || !style.width.endsWith('px')) {
+  const size = layoutSize(element);
+  if (size == null) {
     return UNSCALED;
   }
-  const px = (value: string) => Number.parseFloat(value) || 0;
-  const isContentBox = style.boxSizing !== 'border-box';
-  const width =
-    px(style.width) +
-    (isContentBox
-      ? px(style.paddingLeft) +
-        px(style.paddingRight) +
-        px(style.borderLeftWidth) +
-        px(style.borderRightWidth)
-      : 0);
-  const height =
-    px(style.height) +
-    (isContentBox
-      ? px(style.paddingTop) +
-        px(style.paddingBottom) +
-        px(style.borderTopWidth) +
-        px(style.borderBottomWidth)
-      : 0);
+  const {width, height} = size;
   return {
     x: axisScale(onScreen.right - onScreen.left, width, tolerance.ratio),
     y: axisScale(onScreen.bottom - onScreen.top, height, tolerance.ratio),

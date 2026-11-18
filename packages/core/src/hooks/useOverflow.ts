@@ -22,7 +22,11 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
-import {screenScale, type ScreenScaleTolerance} from '../utils/hitArea';
+import {
+  layoutSize,
+  screenScale,
+  type ScreenScaleTolerance,
+} from '../utils/hitArea';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -129,9 +133,19 @@ function isFlexRow(parent: Element | null): boolean {
 
 /**
  * An element's sub-pixel border-box width in layout pixels; its rounded width
- * without layout.
+ * without layout. Under a scale, the width comes from the computed style: a
+ * scaled rect is rounded on screen, and divided by the scale it can be a
+ * layout unit short, which shrinks an item below its text. The computed
+ * width keeps six significant digits, so half of its last digit is added
+ * back: the sum of the widths is then never short of the items.
  */
 function exactWidth(element: HTMLElement, scale: number): number {
+  if (scale !== 1) {
+    const layout = layoutSize(element)?.width ?? 0;
+    if (layout > 0) {
+      return layout + 0.5 * 10 ** (Math.floor(Math.log10(layout)) - 5);
+    }
+  }
   const width = element.getBoundingClientRect().width;
   return width > 0 ? width / scale : element.offsetWidth;
 }

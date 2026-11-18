@@ -985,6 +985,81 @@ test.describe('a single row’s minimum width', () => {
     expect(during).toBe(6);
     expect(after).toBe(6);
   });
+  test('a list under a scale never narrows an item below its text, across fractional item widths', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const style = await page.addStyleTag({content: '/* sweep */'});
+    const misses: string[] = [];
+    for (const scale of [0.5, 0.9]) {
+      for (let step = 0; step <= 20; step += 1) {
+        const spacing = step / 100;
+        await style.evaluate(
+          (element, [value, factor]) => {
+            element.textContent = `[data-testid="scaled-frame"] button { letter-spacing: ${value}px; } [data-testid="scaled-frame"] { transform: scale(${factor}) !important; }`;
+          },
+          [spacing, scale],
+        );
+        // A row resize makes the list measure again, under the scale.
+        await page.evaluate(() => {
+          const row = document.querySelector<HTMLElement>(
+            '[data-testid="scaled-wide"]',
+          );
+          if (row != null) {
+            row.style.width = row.style.width === '699px' ? '700px' : '699px';
+          }
+        });
+        await page.waitForTimeout(120);
+        const read = await page.evaluate(() => {
+          const list = document.querySelector<HTMLElement>(
+            '[data-testid="scaled-wide"] .astryx-overflow-list',
+          );
+          const host = document.querySelector<HTMLElement>(
+            '[data-testid="scaled-frame"]',
+          )?.parentElement;
+          if (list == null || host == null) {
+            return {count: 0, short: ['missing story parts']};
+          }
+          const items = [...list.children] as HTMLElement[];
+          // Each item's own width: a copy outside the scaled box, sized to
+          // its content.
+          const short = items.flatMap(item => {
+            const copy = item.cloneNode(true) as HTMLElement;
+            copy.style.width = 'max-content';
+            copy.style.flex = 'none';
+            copy.style.maxWidth = 'none';
+            copy.style.letterSpacing = getComputedStyle(
+              item.querySelector('*') ?? item,
+            ).letterSpacing;
+            host.appendChild(copy);
+            const own = Number.parseFloat(getComputedStyle(copy).width);
+            copy.remove();
+            const shown = Number.parseFloat(getComputedStyle(item).width);
+            return own - shown > 0.005
+              ? [`${item.textContent} ${(own - shown).toFixed(4)} px short`]
+              : [];
+          });
+          return {count: items.length, short};
+        });
+        if (read.count !== 6 || read.short.length > 0) {
+          misses.push(
+            `scale ${scale}, ${spacing} px: ${read.count} items; ${read.short.join(', ')}`,
+          );
+        }
+      }
+    }
+    test.info().annotations.push({
+      type: 'scaled-sweep',
+      description: misses.slice(0, 6).join(' | '),
+    });
+    expect(misses).toEqual([]);
+  });
   test('a list that measures in the last frame of a scale-in, at 0.9995, publishes the width it has unscaled', async ({
     page,
   }) => {
