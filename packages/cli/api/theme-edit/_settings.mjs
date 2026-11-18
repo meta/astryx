@@ -6451,7 +6451,11 @@ export function compileTheme(ctx, data, base) {
     if (
       (s.mode || s.when || s.state) &&
       /^background(-image)?$/.test(kebab(prop)) &&
-      /gradient\(/i.test(v)
+      /gradient\(/i.test(v) &&
+      splitTop(
+        kebab(prop) === 'background' ? backgroundColorLayer(v).images : v,
+        ',',
+      ).every(x => !layerParts(x.trim()).other.length)
     ) {
       const mb = s.mode ? modeBlock(s, target, s.mode) : b;
       // The background shorthand's last layer may carry the color under
@@ -8100,17 +8104,19 @@ export function backgroundColorLayer(value) {
 }
 
 /**
- * A background layer's image (its gradient) and what follows it, as the
- * background longhands take them: position, size (after a slash) and
- * repeat.
+ * A background layer's image (a gradient or a `url()`) and what follows it,
+ * as the background longhands take them: position, size (after a slash)
+ * and repeat. `other` holds the words that are none of those (an
+ * attachment, an origin or clip box): a layer with any is not written as
+ * these longhands.
  * @param {string} layer
- * @returns {{image: string, position: string, size: string, repeat: string}}
+ * @returns {{image: string, position: string, size: string, repeat: string, other: string[]}}
  */
 function layerParts(layer) {
-  const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
+  const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient|url)\(/i.exec(
     layer,
   );
-  if (!fn) return {image: layer, position: '', size: '', repeat: ''};
+  if (!fn) return {image: layer, position: '', size: '', repeat: '', other: []};
   let depth = 0;
   let end = layer.length - 1;
   for (let i = fn[0].length - 1; i < layer.length; i++) {
@@ -8124,8 +8130,22 @@ function layerParts(layer) {
   const REPEAT = /^(repeat|no-repeat|repeat-x|repeat-y|space|round)$/i;
   const repeat = rest.filter(w => REPEAT.test(w)).join(' ');
   const words = rest.filter(w => !REPEAT.test(w)).join(' ');
-  const [position = '', size = ''] = words.split('/').map(x => x.trim());
-  return {image: layer.slice(0, end + 1), position, size, repeat};
+  const [position = '', size = '', ...extra] = words
+    .split('/')
+    .map(x => x.trim());
+  const LENGTH =
+    /^(?:0|-?[\d.]+(?:%|[a-z]+)|(?:calc|min|max|clamp|var)\(.*\))$/i;
+  const other = [
+    ...extra,
+    ...splitTop(position, ' ').filter(
+      w =>
+        w && !/^(?:left|right|top|bottom|center)$/i.test(w) && !LENGTH.test(w),
+    ),
+    ...splitTop(size, ' ').filter(
+      w => w && !/^(?:auto|cover|contain)$/i.test(w) && !LENGTH.test(w),
+    ),
+  ];
+  return {image: layer.slice(0, end + 1), position, size, repeat, other};
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */

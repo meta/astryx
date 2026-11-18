@@ -190,6 +190,49 @@ describe('a stress theme of gradients', () => {
 
 describe('beside a variant gradient', () => {
   it(
+    'splits a url() image layered with a gradient into its longhands, and keeps the shorthand for a layer with other words',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('u', {cwd, like: 'neutral'});
+      const sel = '.astryx-button[data-variant="primary"]';
+      const scope = {cwd, on: 'button', when: 'variant:primary'};
+      await themeEditSet(
+        'u',
+        'background',
+        'linear-gradient(#049cdb, #0064cd), url("dots.png") right 4px center / 12px 12px no-repeat',
+        scope,
+      );
+      const body = /** @type {{body: string}} */ (
+        rulesOn(css('u'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        'linear-gradient(#049cdb, #0064cd), url("dots.png")',
+      );
+      expect(valueIn(body, 'background-position')).toBe(
+        '0% 0%, right 4px center',
+      );
+      expect(valueIn(body, 'background-size')).toBe('auto, 12px 12px');
+      expect(valueIn(body, 'background-repeat')).toBe('repeat, no-repeat');
+      expect(body).not.toMatch(/(?:^|[;\s])background:/);
+      // An attachment is no longhand a layer gives here: the value stays
+      // one background shorthand, as written.
+      await themeEditSet(
+        'u',
+        'background',
+        'linear-gradient(#049cdb, #0064cd), url("dots.png") center fixed',
+        scope,
+      );
+      const kept = /** @type {{body: string}} */ (
+        rulesOn(css('u'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(kept, 'background')).toBe(
+        'linear-gradient(#049cdb, #0064cd), url("dots.png") center fixed',
+      );
+    },
+    T,
+  );
+
+  it(
     'takes the color a background shorthand set before it gave, and transparent for one that gave none',
     async () => {
       if (unbuilt) return;
