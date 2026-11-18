@@ -6126,6 +6126,11 @@ async function changeOnce(
   /** The border a border color brought to a part that drew none. @type {import('./_settings.mjs').Setting | null} */
   let borderAdded = null;
   let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
+  // (Whether the theme set its page color before this command: the note
+  // about where it shows is said once, the first time.)
+  const hadPageColor = data.settings.some(
+    x => x.thing === '--color-background-body' && !x.on,
+  );
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
   // A value is compared as `set` reads it: case, spacing around commas,
@@ -7142,7 +7147,7 @@ async function changeOnce(
     ...(sub === 'set' &&
     !s.on &&
     s.thing === '--color-background-body' &&
-    data.settings.filter(x => x.thing === s.thing && !x.on).length <= 1
+    !hadPageColor
       ? [pageColorNote(data.mode)]
       : []),
     // A scale step far outside reading sizes is named.

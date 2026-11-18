@@ -130,6 +130,14 @@ describe('the token path', () => {
     expect(
       JSON.stringify(second.data?.notes ?? second.notes ?? []),
     ).not.toMatch(/page color shows inside AppShell/);
+    // (A plain re-set of the same page color, which replaces the first, is
+    // not the first time either.)
+    const again = /** @type {any} */ (
+      await themeEditSet('pg', '--color-background-body', '#fbf1d9', {cwd})
+    );
+    expect(JSON.stringify(again.data?.notes ?? again.notes ?? [])).not.toMatch(
+      /page color shows inside AppShell/,
+    );
   }, 240_000);
 });
 
