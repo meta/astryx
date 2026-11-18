@@ -33,9 +33,11 @@ screen capture that any number of screens can take and release.
 
 This record details three native pieces of the React Native platform of
 `spec:AST-112` that no Astryx component uses, so they belong to the optional
-add-on package, not the core package (DEC-3). It follows the result
-vocabulary (`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`),
-and additive evolution (`spec:AST-112/FR8`). It specifies the audio recorder
+add-on package, not the core package (DEC-3). It follows the platform code
+rules of `spec:AST-140`: the result vocabulary (`spec:AST-140/FR3`), additive
+evolution (`spec:AST-140/FR5`), and coexistence with an app's own native code
+(`spec:AST-140/FR9`); and the capability shape (`spec:AST-112/FR7`). It
+specifies the audio recorder
 (`AstryxAudioRecorder`), the image code decoder (`AstryxBarcode`), and the
 screen-capture module (`AstryxScreenCapture`).
 Playback and the camera view belong to `spec:AST-132`; the permission module
@@ -257,7 +259,8 @@ contentType, size}`; `durationMs` leaves out paused time. After a
     applies when an activity resumes.
 - **FR11 — No third-party native dependency; libraries beside it.**
   - The group's native code uses only the platform's own frameworks and
-    React Native. It brings no third-party native library into the app.
+    React Native (`spec:AST-140/FR9`). It brings no third-party native
+    library into the app.
   - An app may add an open-source recording, code-scanning, or
     screen-capture library beside the platform without conflict. The
     recorder changes the audio session or audio focus only while it records
@@ -265,7 +268,7 @@ contentType, size}`; `durationMs` leaves out paused time. After a
     the capture count leaves a secure flag set elsewhere alone (FR9).
 - **FR12 — Results and fallbacks.**
   - No call throws. Every asynchronous call resolves `AstryxResult` and never
-    rejects (`spec:AST-112/FR6`). A reason the JavaScript does not know reads
+    rejects (`spec:AST-140/FR3`). A reason the JavaScript does not know reads
     `error`. `message` never carries a file's contents or a decoded value.
   - The recorder adds `not-declared`, `not-granted`, `busy`,
     `invalid-option`, `not-found`, `invalid-state`, `no-input`, `no-space`,
@@ -284,7 +287,7 @@ contentType, size}`; `durationMs` leaves out paused time. After a
     and are announced as those are; the microphone indicators and the
     screenshot refusal are the system's.
 - **FR13 — Contract baseline.** Every contract in the group is at revision 1
-  on each platform it ships on. A behaviour added after revision 1 is a named
+  on each platform it ships on (`spec:AST-140/FR5`). A behaviour added after revision 1 is a named
   feature (`AstryxAudioRecorder.<feature>`, `AstryxBarcode.<feature>`,
   `AstryxScreenCapture.<feature>`) that the binary lists in
   `AstryxPlatformInfo`'s contract features (`spec:AST-130/FR8`) and the
@@ -323,10 +326,11 @@ contentType, size}`; `durationMs` leaves out paused time. After a
 
 ## Current-state impact
 
-- This record details `spec:AST-112`'s FR3 (`microphone` stays opt-in), FR6
-  (the group's closed reasons), FR7 (the probes), and FR8 (the group's
-  revision-1 baseline with no revision counter). It departs from FR7 in two
-  places, the two bullets below, pending OQ1 and OQ2.
+- This record details `spec:AST-112`'s FR3 (`microphone` stays opt-in) and
+  FR7 (the probes), and `spec:AST-140`'s FR3 (the group's closed reasons),
+  FR5 (the group's revision-1 baseline with no revision counter), and FR9
+  (no third-party native dependency). It departs from `spec:AST-112/FR7` in
+  two places, the two bullets below, pending OQ1 and OQ2.
 - `spec:AST-112/FR1` lists the public packages; the optional add-on package
   that carries this group has no name there yet (OQ4).
 - `spec:AST-130/FR9` names `camera` as its one permission, and
