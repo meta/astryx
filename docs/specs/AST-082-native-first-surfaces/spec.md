@@ -107,14 +107,13 @@ depends only on runtimes it can maintain.
     prop. Moving a released prop from the core to the web contract changes no
     web caller's types, because the web types are the core contract plus the web
     contract; native contracts stop offering it.
-  - Every public prop is defined in the private workspace package
-    `@astryxdesign/contracts` (`packages/contracts`), which is never published
-    and which each package builds in; `@astryxdesign/core` still exposes the
-    core contracts (FR5). Astryx manages each prop there for every surface at
-    once. A new prop is a permanent part of every contract that carries it, so
-    admitting one is a high bar (`spec:AST-002/DEC-1`): when a better default
-    behavior meets the need, the component changes its default and adds no
-    prop (DEC-17).
+  - Every public prop has one definition, which every surface's contract builds
+    in; a consumer installs nothing extra for it, and `@astryxdesign/core` still
+    exposes the core contracts (FR5, DEC-7). Astryx manages each prop in that one
+    definition for every surface at once. A new prop is a permanent part of every contract that
+    carries it, so admitting one is a high bar (`spec:AST-002/DEC-1`): when a
+    better default behavior meets the need, the component changes its default
+    and adds no prop (DEC-17).
   - The web contract holds the web base props: styling inputs, DOM events, refs,
     element choice, and HTML attributes.
   - A component may exist on some platforms only; using it elsewhere fails at
@@ -595,8 +594,9 @@ contracts move from `@astryxdesign/native` to the private workspace package
 Core's and React Native's published types build the contract types in at build
 time, and the generated Swift and Kotlin are committed, with a CI drift check.
 No published package depends on the contracts package, and web pages gain 0
-bytes. `@astryxdesign/native` is deprecated when the contracts leave it. FR16 is
-unchanged: Core imports no native package at run time.
+bytes. `@astryxdesign/native` no longer holds the contracts and
+keeps its other roles. FR16 is unchanged: Core imports no native package at
+run time.
 
 Rejected: native types and implementations inside `@astryxdesign/core`, because
 every web consumer would carry them and core's API would grow with each platform.
@@ -735,7 +735,8 @@ would need the same words again.
 A new prop becomes a permanent part of every contract that carries it, so the
 owner holds new props to a high bar. Every public prop lives in the contracts
 package (DEC-7), where it is managed centrally and judged against every surface
-before it ships.
+before it ships. When a better default behavior meets a need, the component
+changes its default and adds no prop.
 
 Rejected: props defined in each package and reconciled later.
 
