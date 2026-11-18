@@ -36,10 +36,11 @@ describe('spec-only change scope', () => {
     expect(result.specOnly).toBe(true);
   });
 
-  it('treats a platform record beside the core record as a component record', () => {
-    const result = classifyChanges([
-      {filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md'},
-    ]);
+  it.each([
+    'docs/specs/components/TextInput/TextInput.swift.spec.md',
+    'docs/specs/components/NavigationStack/NavigationStack.react-native.spec.md',
+  ])('treats platform record %s as a component record', filename => {
+    const result = classifyChanges([{filename}]);
     expect(result.touchesKnowledgeRecords).toBe(true);
     expect(result.specOnly).toBe(true);
     expect(result.surfaces).toEqual([SURFACES.KNOWLEDGE]);

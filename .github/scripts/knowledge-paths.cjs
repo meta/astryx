@@ -29,11 +29,12 @@ const COMPONENT_SPEC_ROOT = 'docs/specs/components';
  * Platform implementation languages whose component records sit beside the
  * core record as `<PublicName>.<language>.spec.md`.
  */
-const PLATFORM_SPEC_LANGUAGES = Object.freeze(['swift']);
+const PLATFORM_SPEC_LANGUAGES = Object.freeze(['swift', 'react-native']);
 
 /**
  * Where each platform language keeps its component code, as
- * `<root>/<Module>/<ComponentRoot>/…`.
+ * `<root>/<Module>/<ComponentRoot>/…`. A language with no entry has no
+ * component code in this repository, so no code path places its records.
  */
 const PLATFORM_SOURCE_ROOTS = Object.freeze({
   swift: 'packages/native/apple/Sources',
