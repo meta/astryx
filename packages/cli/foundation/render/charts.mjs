@@ -9,9 +9,12 @@
  *
  * @input The chart elements the server render set aside.
  * @output Their sizes, the CSS that shows a drawn chart at its box's size,
- *   and the heights the page gives the boxes charts fill.
+ *   the heights the page gives the boxes charts fill, and the SVG drawings
+ *   whose text gets too small on a phone.
  * @position foundation/render — read by page-worker.mjs and render-page.mjs.
  */
+
+import {scanHtml} from './html-reader.mjs';
 
 /** The global the render worker installs to set charts aside. SYNC: page-worker.mjs assigns it by this name. */
 export const CHART_GLOBAL = '__astryxRenderChart';
@@ -442,4 +445,70 @@ export async function chartDocument() {
       return String(this.getAttribute?.('class') ?? '').includes('recharts-legend-wrapper') ? legendBox(this) : box(0, 0);
     },
   });
+}
+
+/** A 375 px phone screen less a 16 px margin on each side: the width a page's drawing fills there. */
+const PHONE_DRAWING_WIDTH = 343;
+/** Text smaller than this on a phone is hard to read. */
+const SMALLEST_READABLE_TEXT = 10;
+/** The text size an SVG uses when the drawing states none. */
+const DEFAULT_TEXT_SIZE = 16;
+
+/**
+ * SVG drawings whose text gets too small on a phone. A drawing with a viewBox
+ * and no fixed width scales to fill its box, and its text scales with it: on
+ * a phone the text shows at its own size times the box width over the
+ * viewBox width.
+ * @param {string} markup the page's server markup
+ * @returns {{count: number, px: number} | null} how many drawings show text
+ *   under 10 px on a phone, and the smallest such size, rounded; null when
+ *   none does
+ */
+export function smallSvgText(markup) {
+  let count = 0;
+  let smallest = Infinity;
+  /** @type {{units: number, sizes: number[], hasText: boolean, depth: number} | null} */
+  let open = null;
+  for (const token of scanHtml(markup)) {
+    if (token.kind === 'start') {
+      const attrs = Object.fromEntries(
+        token.attrs.map(([name, value]) => [name.toLowerCase(), value]),
+      );
+      if (open) {
+        if (token.tag === 'svg' && !token.selfClosing) open.depth += 1;
+        if (token.tag === 'text') open.hasText = true;
+        const size =
+          Number(/^\s*([\d.]+)(?:px)?\s*$/.exec(attrs['font-size'] ?? '')?.[1]) ||
+          Number(/font-size:\s*([\d.]+)px/.exec(attrs.style ?? '')?.[1]);
+        if (size > 0) open.sizes.push(size);
+        continue;
+      }
+      if (token.tag !== 'svg' || token.selfClosing) continue;
+      const units = Number(
+        /^\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/.exec(attrs.viewbox ?? '')?.[1],
+      );
+      // A drawing with a fixed width keeps its size instead of scaling.
+      const fixed = attrs.width != null && attrs.width.trim() !== '100%';
+      if (!(units > PHONE_DRAWING_WIDTH) || fixed) continue;
+      const size =
+        Number(/^\s*([\d.]+)(?:px)?\s*$/.exec(attrs['font-size'] ?? '')?.[1]) ||
+        Number(/font-size:\s*([\d.]+)px/.exec(attrs.style ?? '')?.[1]);
+      open = {units, sizes: size > 0 ? [size] : [], hasText: false, depth: 0};
+    } else if (open && token.kind === 'end' && token.tag === 'svg') {
+      if (open.depth > 0) {
+        open.depth -= 1;
+        continue;
+      }
+      if (open.hasText) {
+        const textSize = open.sizes.length > 0 ? Math.min(...open.sizes) : DEFAULT_TEXT_SIZE;
+        const px = (textSize * PHONE_DRAWING_WIDTH) / open.units;
+        if (px < SMALLEST_READABLE_TEXT) {
+          count += 1;
+          smallest = Math.min(smallest, px);
+        }
+      }
+      open = null;
+    }
+  }
+  return count > 0 ? {count, px: Math.round(smallest)} : null;
 }
