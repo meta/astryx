@@ -381,6 +381,43 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('says a part already has the corners asked, and writes nothing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('t', {cwd, like: 'neutral'});
+    await themeEditSet('t', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    const ask = async (/** @type {string} */ q) =>
+      (await themeEditHow(q, {cwd, theme: 't'})).data;
+    for (const q of [
+      'tabs rounded on top',
+      'tab corners 4px except the bottom',
+      'tabs square at the bottom',
+    ]) {
+      const data = await ask(q);
+      expect(
+        (data.results ?? []).flatMap((/** @type {any} */ r) => r.commands),
+        q,
+      ).toEqual([]);
+      expect(data.hint, q).toMatch(/is already so in t: nothing to change/);
+    }
+  }, 240_000);
+
+  it('reads a corner longhand the theme set after the radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('l', {cwd, like: 'neutral'});
+    await themeEditSet('l', 'border-radius', '4px 4px 0 0', {cwd, on: 'tab'});
+    await themeEditSet('l', 'border-end-end-radius', '8px', {cwd, on: 'tab'});
+    const {data} = await themeEditHow('tabs square at the bottom', {
+      cwd,
+      theme: 'l',
+    });
+    expect(data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set l /, ''),
+      ),
+    ).toEqual(['border-end-end-radius 0 --on tab']);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
