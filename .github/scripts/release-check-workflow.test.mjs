@@ -798,12 +798,13 @@ describe('full release scope without PR metadata or maintenance writes', () => {
       "Keep the failing contracts' Playwright results",
     );
     // Only after the contracts themselves failed: each failing test's
-    // error-context.md (its page snapshot) and any screenshot it took.
+    // error-context.md, and the frames and receipts a component audit writes
+    // after it closes its own page.
     expect(keep.if).toBe("failure() && steps.contracts.outcome == 'failure'");
     expect(keep.uses).toMatch(/^actions\/upload-artifact@/);
     expect(keep.with).toEqual({
       name: 'a11y-contracts-results-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}-${{ github.run_attempt }}',
-      path: 'test-results/',
+      path: 'test-results/\n*-audit-evidence/\n',
       'retention-days': 14,
       'if-no-files-found': 'ignore',
     });

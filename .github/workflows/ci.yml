@@ -3862,14 +3862,19 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      # A failing contract leaves its page snapshot (error-context.md) and any
-      # screenshot under test-results/; this keeps them for the leg's attempt.
+      # A failing contract leaves error-context.md under test-results/, with a
+      # page snapshot only when its page is still open at the failure. A
+      # component audit closes its own page and writes the frames and receipt
+      # of every state it checked to <name>-audit-evidence/. This keeps both
+      # for the leg's attempt.
       - name: Keep the failing contracts' Playwright results
         if: failure() && steps.contracts.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: a11y-contracts-results-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: test-results/
+          path: |
+            test-results/
+            *-audit-evidence/
           retention-days: 14
           if-no-files-found: ignore
 
