@@ -37,16 +37,33 @@ import english from '../i18n/generated-english/Dialog/DialogHeader.generated';
 
 registerEnglishFallback(english);
 
+// Each slot keeps its released block offset from the header row: the title
+// is centred on the medium close action, and the close action (or an
+// explicit block compensation) bleeds by spacing-2. A negative margin on a
+// slot would make the row shorter than that slot, so a theme that paints the
+// row (a title bar) would see its title spill out. The row itself takes the
+// most negative offset instead, and each slot the difference, which is never
+// negative: every slot sits where it did and the row contains them all.
+const TITLE_OFFSET = '--_dialog-header-title-offset';
+const END_OFFSET = '--_dialog-header-end-offset';
+const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;
+
 const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-3'],
+    // The title's centre on the close action's centre: half the medium
+    // action, less its spacing-2 bleed, less half the title's line.
+    [TITLE_OFFSET]: `calc(${sizeVars['--size-element-md']} / 2 - ${spacingVars['--spacing-2']} - ${typeScaleVars['--text-heading-2-size']} * ${typeScaleVars['--text-heading-2-leading']} / 2)`,
+    [END_OFFSET]: '0px',
+    marginBlock: ROW_OFFSET,
   },
   // Compensate for the medium icon button's visual padding on the end slot.
+  // Set on the row as well, whose own offset reads it.
   endBlockEdgeCompensation: {
-    marginBlock: `calc(-1 * ${spacingVars['--spacing-2']})`,
+    [END_OFFSET]: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
   endInlineEdgeCompensation: {
     marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-2']})`,
@@ -57,11 +74,7 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-0'],
     flex: 1,
     minWidth: 0,
-    // Visual centering: align title center with close button center
-    // buttonCenter = size-element-md/2 = 16px (close button midpoint relative to edge)
-    // titleCenter = heading-2-size * heading-2-leading / 2 = 14px
-    // adjustment = 8 - 14 = -6px
-    marginBlock: `calc(${sizeVars['--size-element-md']} / 2 - ${spacingVars['--spacing-2']} - ${typeScaleVars['--text-heading-2-size']} * ${typeScaleVars['--text-heading-2-leading']} / 2)`,
+    marginBlock: `calc(var(${TITLE_OFFSET}) - ${ROW_OFFSET})`,
   },
   titleFocusable: {
     outline: 'none',
@@ -71,6 +84,12 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     flexShrink: 0,
+  },
+  startSlot: {
+    marginBlock: `calc(0px - ${ROW_OFFSET})`,
+  },
+  endSlot: {
+    marginBlock: `calc(var(${END_OFFSET}) - ${ROW_OFFSET})`,
   },
 });
 
@@ -214,13 +233,18 @@ export function DialogHeader({
       <div
         {...mergeProps(
           themeProps('dialog-header'),
-          stylex.props(styles.container),
+          stylex.props(
+            styles.container,
+            shouldCompensateEndBlock &&
+              (hasEndContent || onOpenChange != null) &&
+              styles.endBlockEdgeCompensation,
+          ),
         )}>
         {hasStartContent && (
           <div
             {...mergeProps(
               themeProps('dialog-header-start-content'),
-              stylex.props(styles.actions),
+              stylex.props(styles.actions, styles.startSlot),
             )}>
             {startContent}
           </div>
@@ -251,6 +275,7 @@ export function DialogHeader({
               themeProps('dialog-header-end-content'),
               stylex.props(
                 styles.actions,
+                styles.endSlot,
                 shouldCompensateEndBlock && styles.endBlockEdgeCompensation,
                 shouldCompensateEndInline && styles.endInlineEdgeCompensation,
               ),
