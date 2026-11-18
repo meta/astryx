@@ -126,8 +126,8 @@ no navigation host.
     that router's screens, and its navigation and chrome stay its own (DEC-6).
 - **FR2 — The AstryxRouter protocol.** One serialisable view of a root's
   routes for in-app UI that shows and opens routes.
-  - The default root is the root a caller names, else the outermost root that
-    mounted first and is still mounted. `getRouterState()` returns the default
+  - The default root is the outermost root that mounted first and is still
+    mounted. `getRouterState()` returns the default
     root's snapshot, or `undefined` while no root is mounted. `subscribeRouterState(listener)` calls the listener with
     each new snapshot, after each committed navigation change, and returns an unsubscribe
     function. `useRouterState()` is the hook form: inside a root, that root's;
@@ -173,9 +173,9 @@ no navigation host.
     `button` (the back button or its menu). Pop start groups backs by input
     kind, so the VoiceOver escape counts as `key`, a back without a gesture or
     a button; `onBackPrevented` keeps `escape` because it names the control the
-    person used. A pop or `onGestureCancel` follows it. It reports pops the
-    system starts; a pop the router asked for, a prevented back, and a tab
-    re-select each have their own event. The router passes it to the leaving
+    person used. A pop or `onGestureCancel` follows it. It fires for a back with
+    one of these three sources; a pop the router asked for, a prevented back,
+    and a tab re-select each have their own event. The router passes it to the leaving
     screen as a navigation event: a handler can start work as the pop begins,
     and the pop runs on at its own pace.
   - `colorScheme` (`unspecified | light | dark`) sets the container's interface
@@ -264,8 +264,9 @@ no navigation host.
   host) sets one screen's chrome to light or dark whatever the app's mode.
   - While the screen is on top, its mode applies to the navigation bar, the
     status bar glyphs (and the Android navigation bar glyphs), the background
-    behind the screen, the surfaces the screen presents natively, and the tab
-    bar of the tabs that hold the stack.
+    behind the screen, the surfaces the screen presents natively (through the
+    presentation host's `appearance`, `spec:AST-128/FR9`), and the tab bar of
+    the tabs that hold the stack.
   - The change happens within the frames of the push or pop transition. During
     an interactive back the top screen's mode stays until the back completes;
     a cancelled back changes nothing.
@@ -433,6 +434,8 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   the navigation hosts included, link by default.
 - Relies on `spec:AST-140/FR5`: a native contract's baseline is its first
   release's shape, and it grows by named features.
+- Relies on `spec:AST-128` FR9: the presentation host's `appearance` styles
+  the surfaces a screen presents natively (FR7 here).
 - Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
   only, and a record names its exceptions (FR15 here).
 - Details `spec:AST-112/FR2` (router and hosts), `spec:AST-112/FR5` (the
