@@ -1,4 +1,4 @@
-Results for "icon set" (20 of 399)
+Results for "icon set" (20 of 397)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc
@@ -23,15 +23,15 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme icon-sizes
 parent:      pnpm exec astryx docs theme --index
-name:        ToolbarTableFilter
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ToolbarTableFilter --type block
 name:        Icon
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Icon
 command:     pnpm exec astryx component Icon
+name:        ToolbarTableFilter
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ToolbarTableFilter --type block
 name:        icons
 domain:      doc
 package:     @astryxdesign/cli

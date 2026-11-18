@@ -63,6 +63,9 @@
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
  * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
+ * @property {['iconSets']} [experimentalFields] Set on an entry a discover
+ *   source lists when it carries `iconSets`: the fields that list an
+ *   experimental kind (spec:AST-017 FR27), so a consumer can leave them out.
  * @property {string} [latest] The latest release a discover source knows.
  */
 
@@ -79,6 +82,9 @@
  * @property {string[]} [codemods]
  * @property {string[]} [agentDocs]
  * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
+ * @property {['iconSets']} [experimentalFields] Set on an entry a discover
+ *   source lists when it carries `iconSets`: the fields that list an
+ *   experimental kind (spec:AST-017 FR27), so a consumer can leave them out.
  * @property {string} [description]
  * @property {string[]} [aliases] The integration's other package names.
  * @property {string} source The discover source that lists it; `Astryx` for
@@ -152,6 +158,7 @@
  *   default?: {variant?: string},
  *   definitions?: string[],
  *   command?: string,
+ *   experimental?: true,
  *   sections?: string[],
  *   installed: boolean,
  *   installedAs?: string,
@@ -163,9 +170,11 @@
  *   display name and description, and it carries `license`, `iconCount`, `default` (the variant
  *   an icon's own export draws, when the set names one), the shared icon names
  *   its `map` covers (`definitions`), and `command`, which searches the set's icons. A source's
- *   entry carries `iconCount` and `definitions` when the source lists them.
- *   The icon-set fields (`license`, `iconCount`, `default`, `definitions`,
- *   and `command`) are experimental: they may change or be removed in a patch
+ *   entry carries `license` and `iconCount` when the source lists them; its
+ *   `definitions` are listed only where icon features are on: in a project
+ *   that installs an icon-set package or sets `experimental.iconSet`. An icon set carries `experimental: true`. The
+ *   icon-set fields (`license`, `iconCount`, `default`, `definitions`, and
+ *   `command`) are experimental: they may change or be removed in a patch
  *   release.
  */
 
@@ -186,6 +195,8 @@
  * @property {boolean} installed Whether the project has the package.
  * @property {string} [title]
  * @property {string} [summary]
+ * @property {true} [experimental] Set on an icon set, an experimental kind
+ *   (spec:AST-017 FR27): consumers can leave such matches out.
  */
 
 /**
