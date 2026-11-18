@@ -411,7 +411,7 @@ export const CLOSEST_OPEN_FONT = wordTable({
  * names it: `--color-background-body` paints inside AppShell only.
  */
 export const PAGE_COLOR_NOTE =
-  "Your theme's page color shows inside AppShell. Wrap the page in AppShell; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer AppShell).";
+  "Your theme's page color shows inside AppShell. Wrap the page in AppShell; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer AppShell). An Astryx area embedded in a page another app owns adds no body rule: that page is not its own.";
 
 /**
  * The page color note for a theme in its mode: a theme that ships one mode
