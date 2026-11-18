@@ -461,6 +461,48 @@ describe('truncated text shows one tooltip, not two', () => {
     }
   });
 
+  it('adds no second tab stop inside a grid cell or row that already takes focus', async () => {
+    const restore = withOverflow();
+    try {
+      render(
+        <>
+          <div role="grid">
+            <div role="row" tabIndex={-1}>
+              <div role="gridcell" tabIndex={0}>
+                <Text type="body" maxLines={1}>
+                  In a focusable cell, wider than the space it has
+                </Text>
+              </div>
+            </div>
+            <div role="row" tabIndex={0}>
+              <div role="gridcell">
+                <Text type="body" maxLines={1}>
+                  In a focusable row, wider than the space it has
+                </Text>
+              </div>
+            </div>
+          </div>
+          <Text type="body" maxLines={1}>
+            Beside the grid, wider than the space it has
+          </Text>
+        </>,
+      );
+      await waitFor(() =>
+        expect(
+          textElement('Beside the grid, wider than the space it has'),
+        ).toHaveAttribute('tabindex', '0'),
+      );
+      expect(
+        textElement('In a focusable cell, wider than the space it has'),
+      ).not.toHaveAttribute('tabindex');
+      expect(
+        textElement('In a focusable row, wider than the space it has'),
+      ).not.toHaveAttribute('tabindex');
+    } finally {
+      restore();
+    }
+  });
+
   it('adds no tab stop inside a card or list option whose own control takes focus', async () => {
     const restore = withOverflow();
     try {
