@@ -99,6 +99,45 @@ const ROWS = [
     },
   ],
   [
+    'labels one per line each set their dial',
+    {
+      q: 'Density: roomy\nRadius: small',
+      has: ['spacing roomy', 'corners small'],
+    },
+  ],
+  [
+    'a label that starts its clause sets its dial at the value said',
+    {
+      q: 'Density: roomy. Surface: flat.',
+      has: ['spacing roomy', 'surfaces flat'],
+    },
+  ],
+  [
+    "a label that belongs to a part is that part's, never a dial's",
+    {
+      q: 'Body weight: bold. Letter spacing: tight.',
+      never: /^headings bold|^spacing tight/,
+    },
+  ],
+  [
+    "a label that is a part's dial word keeps the part's reading",
+    {q: 'Tracking: tight.', never: /--on heading$/},
+  ],
+  [
+    'sans between ordinary words is still without',
+    {q: 'cards: simple sans borders', has: ['border none --on card']},
+  ],
+  [
+    'sans after a kind of typeface is the typeface',
+    {
+      q: 'system sans 16px',
+      has: ['font system'],
+      // (The 16px is the base text size, in its own line; nothing is left
+      // unread.)
+      says: /^(?![\s\S]*not used)[\s\S]*the base text size/,
+    },
+  ],
+  [
     "a look's name before its colon is the theme's look, never an unknown part",
     {
       q: 'neon synthwave: deep purple night background, hot pink accent #ff69b4, cyan accent, a glow',

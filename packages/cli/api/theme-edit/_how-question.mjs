@@ -156,9 +156,10 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
     ['цвет\\p{L}*|colore|farbe', '颜色|色', 'color'],
     ['акцент\\p{L}*', '强调', 'accent'],
     ['más|mais|mehr|più|более', '更', 'more'],
-    // "sans" is a typeface word before serif or font.
+    // "sans" is a typeface word before serif or font, or after a kind of
+    // typeface ("system sans", "humanist sans").
     [
-      'sin|sans(?![\\s-]*(serif|fonts?|typefaces?))|ohne|без|sem|senza',
+      'sin|(?<!(?<!\\p{L})(?:system|humanist|geometric|grotesque|grotesk)[\\s-]+)sans(?![\\s-]*(serifs?|fonts?|typefaces?)(?!\\p{L}))|ohne|без|sem|senza',
       '没有|无',
       'without',
     ],
@@ -5666,6 +5667,39 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\bno\s+borders?((?:\s+on\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?)\s*,?\s*(?:except|but|apart from|other than)\s+(?:the\s+|a\s+)?(top|bottom|left|right)(?:\s+(?:one|side|edge|border))?\b/gi,
       'only a $2 border$1',
+    )
+    // ("system sans 16px": the system font, read as "system font" is.)
+    .replace(/\b(?:system|ui)[\s-]+sans\b(?![\s-]*serif)/gi, 'system font')
+    // ("Density: medium.", "Surface: flat"): a label that names a dial,
+    // by its name or the words its help gives, with one of that dial's own
+    // values after the colon, is that dial at that value. Only a label that
+    // starts its clause or its line: "Body weight: bold" is the body's,
+    // never a dial's.
+    .replace(
+      /(^|[.;,!?—\n]\s*)([a-z]+)[ \t]*:[ \t]*([a-z-]+)(?=[ \t]*(?:[.,;!\n]|$))/gim,
+      (m, lead, label, value) => {
+        const l = String(label).toLowerCase();
+        const v = String(value).toLowerCase();
+        // (The label is the dial's own name, or a word only that dial has;
+        // a dial whose name is also a part's, "headings", is left to the
+        // part's readers.)
+        const own = Object.entries(DIALS).find(([name]) => name === l);
+        const byWord = Object.entries(DIALS).filter(([, d]) =>
+          String(d.words ?? '')
+            .split(/\s+/)
+            .includes(l),
+        );
+        const hit = own ?? (byWord.length === 1 ? byWord[0] : null);
+        const dial =
+          hit &&
+          String(hit[1].values ?? '')
+            .split('|')
+            .includes(v) &&
+          !partLexicon(ctx).parts.some(([re]) => re.test(` ${hit[0]} `))
+            ? hit[0]
+            : null;
+        return dial ? `${lead}${dial} ${v}` : m;
+      },
     )
     // ("a confident, modern look: deep navy, …"): the list after a look's
     // colon is pieces of their own.
