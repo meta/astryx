@@ -114,6 +114,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.tests.outcome }}
           SHARD: ${{ matrix.shard }}
+          LEGS: ${{ needs.version.outputs.legs || 6 }}
         run: |
           # Vitest colours its lines on CI: read the log without the colour codes.
           log="$RUNNER_TEMP/cli-tests.plain.log"
@@ -126,7 +127,7 @@ jobs:
           elif [ "$OUTCOME" = failure ]; then verdict=fail
           else verdict=none
           fi
-          echo "Leg $SHARD/4: $verdict"
+          echo "Leg $SHARD/$LEGS: $verdict"
           mkdir -p verdict
           printf '{"shard": %s, "verdict": "%s"}\n' "$SHARD" "$verdict" > "verdict/leg-$SHARD.json"
 

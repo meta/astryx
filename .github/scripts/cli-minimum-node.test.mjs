@@ -235,6 +235,9 @@ describe('the workflow', () => {
     );
     expect(record.if).toBe("always() && steps.tests.outcome != 'skipped'");
     expect(record.run).toContain('Node shard stuck');
+    // The log names the leg out of the legs the plan started.
+    expect(record.env.LEGS).toBe('${{ needs.version.outputs.legs || 6 }}');
+    expect(record.run).toContain('echo "Leg $SHARD/$LEGS: $verdict"');
     const keep = cli.steps.find(
       step => step.name === "Keep this leg's verdict",
     );

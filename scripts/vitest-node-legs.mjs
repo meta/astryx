@@ -256,7 +256,10 @@ export const RECORDS = [DURATIONS, MIN_NODE_DURATIONS];
 // the slowest leg near MIN_NODE_TARGET_MINUTES, well inside the job's 30-minute
 // limit and its watchdog at 28. Measured over the four legs of run
 // 44258944787 on Node 22.13: about 40 s from the job's start to the test step,
-// and 2.40 to 2.48 recorded test seconds a second of the step.
+// and 2.40 to 2.48 recorded test seconds a second of the step. The setup booked
+// here is three times the measured one, and each file adds its import time on
+// top of that pace, so the projection runs 2 to 3 minutes above the legs: a
+// slower runner day still keeps the slowest leg near the target.
 export const MIN_NODE_TARGET_MINUTES = 20;
 export const MIN_NODE_SETUP_SECONDS = 120;
 export const MIN_NODE_TEST_SECONDS_PER_WALL_SECOND = 2.4;
@@ -394,7 +397,9 @@ if (
         }
       : planned;
     console.log(
-      `${files.length} CLI test files plan ${Math.round(plan.total)} s on the minimum Node: ${plan.legs} legs, the slowest ${Math.round(plan.longest)} s, about ${plan.minutes.toFixed(1)} minutes (target ${MIN_NODE_TARGET_MINUTES}).`,
+      problem
+        ? `${plan.reason} The workflow starts ${plan.legs} legs.`
+        : `${files.length} CLI test files plan ${Math.round(plan.total)} s on the minimum Node: ${plan.legs} legs, the slowest ${Math.round(plan.longest)} s, about ${plan.minutes.toFixed(1)} minutes (target ${MIN_NODE_TARGET_MINUTES}).`,
     );
     const outputs = {
       legs: String(plan.legs),
