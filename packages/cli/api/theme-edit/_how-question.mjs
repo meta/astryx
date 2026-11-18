@@ -29672,14 +29672,18 @@ export function draftAnswer(ctx, env, question) {
   }
   // (A light-only theme still has a dark half each color token keeps,
   // which Core's dark media surfaces read: the lightbox, and what sits on
-  // the overlay scrim. A color written for the theme's one mode leaves that
-  // half as it is, never takes the light value: the answer says so, with
-  // the token's dark value now and the line that changes it there.)
+  // the overlay scrim. A line that sets a color token alone for the theme's
+  // one mode leaves that half as it is: the answer says so, with the
+  // token's dark value now and the line that changes it there. A token the
+  // dark media rule replaces (the main text and icon colors and the accent,
+  // drawn there in --color-on-dark) is not read through its dark half, so
+  // it is not named.)
   if (env.data?.mode === 'light-only') {
     const media = Object.entries(C.MAP)
       .filter(([, x]) => x?.media)
       .map(([k]) => k)
       .filter(k => k !== 'toast');
+    const replaced = new Set(Object.keys(env.base.onDark ?? {}));
     for (const d of result) {
       if (d.offer) continue;
       const toks = [
@@ -29691,10 +29695,19 @@ export function draftAnswer(ctx, env, question) {
             )
             .map(st => String(st.thing)),
         ),
-      ].filter(t => current(t, 'dark') != null);
+      ]
+        .filter(t => !replaced.has(t))
+        .filter(t => current(t, 'dark') != null);
       if (!toks.length || !media.length || /dark media surfaces/.test(d.text))
         continue;
-      d.text += ` (${env.slug} is light only, but Core's dark media surfaces (${media.join(', ')}) still read ${toks.map(t => `${t}'s dark half, now ${current(t, 'dark')}`).join('; ')}; to change ${toks.length > 1 ? 'them' : 'it'} there too, set ${toks.length > 1 ? 'each' : 'it'} with --mode dark)`;
+      // A dial's line (accent, neutral) makes the dark shades too, so it is
+      // not the line that keeps them: then the note names the line it is
+      // about. A part's own setting leaves every token as it is.
+      const alone = d.options.every(o =>
+        o.every(st => st.on || /^--/.test(String(st.thing))),
+      );
+      const which = toks.length > 1 ? 'each' : 'it';
+      d.text += ` (${env.slug} is light only: ${alone ? '' : `with the line that sets ${toks.length > 1 ? 'these tokens' : 'the token'} alone, `}dark mode keeps its own value for ${toks.map(t => `${t} (now ${current(t, 'dark')})`).join(', ')}, which Core's dark media surfaces (${media.join(', ')}) draw; to change ${toks.length > 1 ? 'them' : 'it'} there too, set ${which} with --mode dark)`;
     }
   }
   // Every clause ends as a command or a named line, never silence: a
