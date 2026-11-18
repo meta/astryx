@@ -37,13 +37,12 @@ import english from '../i18n/generated-english/Dialog/DialogHeader.generated';
 
 registerEnglishFallback(english);
 
-// Each slot keeps its released block offset from the header row: the title
-// is centred on the medium close action, and the close action (or an
-// explicit block compensation) bleeds by spacing-2. A negative margin on a
-// slot would make the row shorter than that slot, so a theme that paints the
-// row (a title bar) would see its title spill out. The row itself takes the
-// most negative offset instead, and each slot the difference, which is never
-// negative: every slot sits where it did and the row contains them all.
+// Each slot keeps its released block offset from the header row. The title
+// is centred on the medium close action. The close action bleeds by
+// spacing-2. A negative margin on a slot makes the row shorter than that
+// slot, so a painted row (a title bar) would not contain its title. The row
+// takes the most negative offset instead. Each slot takes its own offset
+// less the row's, which is never negative.
 const TITLE_OFFSET = '--_dialog-header-title-offset';
 const END_OFFSET = '--_dialog-header-end-offset';
 const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;

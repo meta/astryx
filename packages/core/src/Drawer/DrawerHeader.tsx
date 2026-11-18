@@ -43,10 +43,12 @@ import english from '../i18n/generated-english/Drawer/DrawerHeader.generated';
 
 registerEnglishFallback(english);
 
-// Each slot keeps its released block offset from the header row, as
-// DialogHeader's do: the row takes the most negative offset and each slot the
-// difference, which is never negative, so the row contains every slot (a
-// theme that paints the row sees its title inside it).
+// Each slot keeps its released block offset from the header row. The title
+// is centred on the medium close action. The close action bleeds by
+// spacing-2. A negative margin on a slot makes the row shorter than that
+// slot, so a painted row (a title bar) would not contain its title. The row
+// takes the most negative offset instead. Each slot takes its own offset
+// less the row's, which is never negative.
 const TITLE_OFFSET = '--_drawer-header-title-offset';
 const END_OFFSET = '--_drawer-header-end-offset';
 const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;
