@@ -56,7 +56,7 @@ system_specs: [spec:AST-085, spec:AST-086]
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public contract         | TextArea is a controlled multi-line field with Field props, `rows`, size, status, start icon, `maxLength` counter, `onChange`, `changeAction`, `isLoading`, disabled and read-only states, `hasSpellCheck`, the touch-keyboard props `enterKeyHint`, `inputMode`, `autoCapitalize`, and `hasAutoCorrect` (FR13), `htmlMaxLength` for the native `maxlength` (FR14), and the input-family part props. |
 | Behavior                | Typing calls `onChange`, then an optional `changeAction` with an optimistic value and one busy Spinner. `maxLength` adds a visual character counter that warns but never blocks typing.                                                                                                                                                                                                              |
-| End-user impact         | People write longer text with a live count that is announced only when they near or pass the limit. Keyboard and screen-reader users can reach a disabled field and its reason. An error without a message has no text.                                                                                                                                                                              |
+| End-user impact         | People write longer text with a live count that is announced only when they near or pass the limit. Keyboard and screen-reader users can reach a disabled field and its reason. An error without a message shows sighted users only color and an icon; screen readers hear a translated fallback.                                                                                                    |
 | Builder impact          | Callers can choose the touch keyboard, its Return key label, capitalization, and correction (FR13); an unset prop leaves the field as it is.                                                                                                                                                                                                                                                         |
 | Compatibility/readiness | The touch-keyboard props are additive, a patch `[feat]` (`spec:AST-017` FR5, FR7). Otherwise the record states shipped behavior. Attached status on a tall surface, dropped grouped container props, text under the counter, an error without text, and a color-only `detached` status are listed under Current-state impact.                                                                        |
 | Review checks           | Reject a counter that truncates input or counts code units, an announcement on every keystroke, text that runs under the icons or counter, a disabled field that leaves the tab order or submits, or root styling props.                                                                                                                                                                             |
@@ -286,9 +286,11 @@ above match the current Field, FieldStatus, Icon, Spinner, and Tooltip targets.
 - **Text under the counter (FR7).** With a value longer than `rows`, the last
   visible line paints under the counter unless the field is scrolled to the
   end.
-- **Error without text.** TextArea accepts an error status without a message,
-  so the error is shown only by color and an icon, against WCAG 2.2 3.3.1. The
-  shared text-input accessibility suite records this as a known failure.
+- **Error without text (FR8).** An error status without a message shows no
+  visible error text, so sighted users get colour and icon only, against WCAG
+  2.2 3.3.1. Assistive technology hears the hidden translated fallback, and
+  the field warns in development. The real-browser accessibility suite records
+  the missing visible text as a known failure.
 - **Color-only detached status (FR8).** A `detached` status without a message
   shows only the colored border, against WCAG 2.2 1.4.1.
 
