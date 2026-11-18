@@ -1,0 +1,288 @@
+diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
+index b4801ce1a88..4146a73d733 100644
+--- a/scripts/release/active-release.mjs
++++ b/scripts/release/active-release.mjs
+@@ -25,6 +25,7 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
+ import {
+   classifyReleaseDiff,
+   diffEntryFiles,
++  isCodemodPromotionApplicabilityPath,
+   isReleaseOutputPath,
+   isReleaseTestRepairPath,
+ } from './release-paths.mjs';
+@@ -1259,7 +1260,104 @@ function validateReleasePolicyCarryAtRef(
+   };
+ }
+ 
+-function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
++const CODEMOD_PROMOTION_SPEC_PATH =
++  'docs/specs/AST-057-row-actions/spec.md';
++const CODEMOD_PROMOTION_POINTERS = [
++  'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
++  'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
++];
++
++function validateCodemodPromotionApplicabilityMove({
++  before,
++  after,
++  entries,
++  status,
++  version,
++}) {
++  const errors = [];
++  if (status !== 'M')
++    errors.push(
++      `${CODEMOD_PROMOTION_SPEC_PATH} may only be modified by a generated codemod promotion`,
++    );
++
++  let expected = before;
++  for (const from of CODEMOD_PROMOTION_POINTERS) {
++    const to = from.replace('/transforms/next/', `/transforms/v${version}/`);
++    if (before.split(from).length !== 2)
++      errors.push(
++        `${CODEMOD_PROMOTION_SPEC_PATH} must contain the exact pre-promotion pointer once: ${from}`,
++      );
++    const hasRename = entries.some(entry => {
++      if (!entry.startsWith('R')) return false;
++      const files = diffEntryFiles(entry);
++      return files?.[0] === from && files[1] === to;
++    });
++    if (!hasRename)
++      errors.push(`codemod promotion does not rename ${from} to ${to}`);
++    expected = expected.replace(from, to);
++  }
++  if (after !== expected)
++    errors.push(
++      `${CODEMOD_PROMOTION_SPEC_PATH} may change only the exact applicability pointers moved by the codemod promotion`,
++    );
++  return errors;
++}
++
++function validateCodemodPromotionApplicabilityAtRef(
++  root,
++  {base, head, entries, version},
++) {
++  const matchingEntries = entries.filter(entry =>
++    (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
++  );
++  if (matchingEntries.length === 0)
++    return {errors: [], validatedPaths: new Set()};
++  if (matchingEntries.length !== 1)
++    return {
++      errors: [
++        `${CODEMOD_PROMOTION_SPEC_PATH} must have exactly one modified diff entry`,
++      ],
++      validatedPaths: new Set(),
++    };
++
++  const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
++    CODEMOD_PROMOTION_SPEC_PATH,
++  );
++  const after = filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
++    CODEMOD_PROMOTION_SPEC_PATH,
++  );
++  if (before === undefined || after === undefined)
++    return {
++      errors: [
++        `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
++      ],
++      validatedPaths: new Set(),
++    };
++
++  const [status] = matchingEntries[0].split('\t');
++  const errors = validateCodemodPromotionApplicabilityMove({
++    before: before.toString('utf8'),
++    after: after.toString('utf8'),
++    entries,
++    status,
++    version,
++  });
++  return {
++    errors,
++    validatedPaths: errors.length
++      ? new Set()
++      : new Set([CODEMOD_PROMOTION_SPEC_PATH]),
++  };
++}
++
++function validateReleaseDiff(
++  entries,
++  {
++    plan,
++    baseChangesets,
++    validatedCodemodPromotionPaths = new Set(),
++  } = {},
++) {
+   const errors = [];
+   const planned = plan
+     ? new Map(plan.changesets.map(entry => [entry.path, entry.sha256]))
+@@ -1273,8 +1371,16 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+       continue;
+     }
+     for (const file of files) {
+-      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file))
+-        errors.push(`release bump contains a non-generated path: ${file}`);
++      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file)) {
++        if (isCodemodPromotionApplicabilityPath(file)) {
++          if (!validatedCodemodPromotionPaths.has(file))
++            errors.push(
++              `release bump contains an unvalidated codemod-promotion applicability move: ${file}`,
++            );
++        } else {
++          errors.push(`release bump contains a non-generated path: ${file}`);
++        }
++      }
+       if (file.startsWith('.changeset/')) {
+         if (status !== 'D')
+           errors.push(
+@@ -1853,7 +1959,20 @@ async function main() {
+       patchId = repair.patchId;
+       diffErrors = repair.errors;
+     } else if (kind === 'version-bump') {
+-      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
++      const promotion = validateCodemodPromotionApplicabilityAtRef(root, {
++        base,
++        head,
++        entries,
++        version: marker.version,
++      });
++      diffErrors = [
++        ...validateReleaseDiff(entries, {
++          plan,
++          baseChangesets,
++          validatedCodemodPromotionPaths: promotion.validatedPaths,
++        }),
++        ...promotion.errors,
++      ];
+     } else {
+       diffErrors = [
+         'release candidate contains paths outside the generated version bump or test-repair classes',
+@@ -1992,6 +2111,7 @@ export {
+   latestStableVersion,
+   listActiveBranches,
+   mergeBackEntries,
++  validateCodemodPromotionApplicabilityMove,
+   validateIdentity,
+   validateRefMarker,
+   validateReleaseDiff,
+diff --git a/scripts/release/active-release.test.mjs b/scripts/release/active-release.test.mjs
+index a7cc3b8a5e0..58bed589f09 100644
+--- a/scripts/release/active-release.test.mjs
++++ b/scripts/release/active-release.test.mjs
+@@ -30,6 +30,7 @@ import {
+   latestStableVersion,
+   mergeBackEntries,
+   nextPlannedVersion,
++  validateCodemodPromotionApplicabilityMove,
+   validateReleaseDiff,
+   validateReleaseTestRepair,
+   validateHistoricalReleaseMergeBack,
+@@ -37,6 +38,7 @@ import {
+   validateReleaseState,
+   writeAuthority,
+ } from './active-release.mjs';
++import {classifyReleaseDiff} from './release-paths.mjs';
+ 
+ const CUT = '1'.repeat(40);
+ const HEAD = '2'.repeat(40);
+@@ -456,6 +458,62 @@ describe('active release branch authority', () => {
+     ).toEqual([]);
+   });
+ 
++  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
++    const spec = 'docs/specs/AST-057-row-actions/spec.md';
++    const sources = [
++      'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
++      'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
++    ];
++    const destinations = sources.map(file =>
++      file.replace('/transforms/next/', '/transforms/v0.7.17/'),
++    );
++    const promotionEntries = sources.map(
++      (file, index) => `R100\t${file}\t${destinations[index]}`,
++    );
++    const entries = [`M\t${spec}`, ...promotionEntries];
++    const before = `{"paths":${JSON.stringify(sources)}}\n`;
++    const after = sources.reduce(
++      (text, file, index) => text.replace(file, destinations[index]),
++      before,
++    );
++    const validateMove = overrides =>
++      validateCodemodPromotionApplicabilityMove({
++        before,
++        after,
++        entries,
++        status: 'M',
++        version: '0.7.17',
++        ...overrides,
++      });
++
++    expect(classifyReleaseDiff(entries)).toBe('version-bump');
++    expect(validateMove()).toEqual([]);
++    expect(
++      validateReleaseDiff(entries, {
++        validatedCodemodPromotionPaths: new Set([spec]),
++      }),
++    ).toEqual([]);
++    expect(validateReleaseDiff(entries)).toContain(
++      `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
++    );
++
++    expect(validateMove({entries: entries.slice(0, -1)})).toContain(
++      `codemod promotion does not rename ${sources[1]} to ${destinations[1]}`,
++    );
++    expect(validateMove({before: `${before}${sources[0]}\n`})).toContain(
++      `${spec} must contain the exact pre-promotion pointer once: ${sources[0]}`,
++    );
++    expect(validateMove({status: 'D'})).toContain(
++      `${spec} may only be modified by a generated codemod promotion`,
++    );
++    expect(validateMove({after: after.replace('{"paths"', '{"other"')})).toContain(
++      `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
++    );
++    expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
++      'invalid',
++    );
++  });
++
+   it('admits one post-bump test repair whose patch already merged on main', () => {
+     const patchId = 'a'.repeat(40);
+     const changeDigest = 'c'.repeat(64);
+diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
+index 8ede431dd48..4895a3fdb82 100644
+--- a/scripts/release/release-paths.mjs
++++ b/scripts/release/release-paths.mjs
+@@ -19,6 +19,13 @@ const RELEASE_OUTPUT_PATTERNS = [
+   /^pnpm-lock\.yaml$/,
+ ];
+ 
++const CODEMOD_PROMOTION_APPLICABILITY_PATH =
++  'docs/specs/AST-057-row-actions/spec.md';
++
++function isCodemodPromotionApplicabilityPath(file) {
++  return file === CODEMOD_PROMOTION_APPLICABILITY_PATH;
++}
++
+ const RELEASE_TEST_REPAIR_PATTERNS = [
+   /(?:^|\/)__tests__\//,
+   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
+@@ -56,7 +63,10 @@ function classifyReleaseDiff(entries) {
+   if (paths.every(isReleaseTestRepairPath)) return 'test-repair';
+   if (
+     paths.every(
+-      file => file.startsWith('.changeset/') || isReleaseOutputPath(file),
++      file =>
++        file.startsWith('.changeset/') ||
++        isReleaseOutputPath(file) ||
++        isCodemodPromotionApplicabilityPath(file),
+     )
+   ) {
+     return 'version-bump';
+@@ -75,6 +85,7 @@ if (process.argv.includes('--classify')) {
+ export {
+   classifyReleaseDiff,
+   diffEntryFiles,
++  isCodemodPromotionApplicabilityPath,
+   isReleaseOutputPath,
+   isReleaseTestRepairPath,
+ };
