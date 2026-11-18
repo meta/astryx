@@ -146,7 +146,7 @@ describe('traits from a picture', () => {
   it('writes the traits enough boxes agree on, as theme-wide settings', () => {
     const {traits} = readTraits(controlsPage());
     const steps = traits.map(t => t.step);
-    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '28px'});
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '28px', on: 'button-like'});
     expect(steps).toContainEqual({verb: 'set', thing: '--radius-element', value: '4px'});
     expect(steps).toContainEqual({verb: 'set', thing: '--border-width', value: '1px'});
     for (const t of traits) expect(t.read).toMatch(/\d+ of \d+ .*boxes/);
@@ -181,7 +181,7 @@ describe('traits from a picture', () => {
       expect(traits.some(t => t.step.thing === thing)).toBe(false);
     const height = unsure.find(u => u.trait === 'height');
     expect(height?.why).toMatch(/read 24px, but only one kind of control shows, so this crop cannot tell controls from badges; send a full page/);
-    expect(height?.options).toEqual(['set my --size-element-md 24px']);
+    expect(height?.options).toEqual(['set my --size-element-md 24px --on button-like']);
   });
 
   it('writes field height on the inputs when it differs from the buttons', () => {
@@ -191,19 +191,33 @@ describe('traits from a picture', () => {
     for (let k = 0; k < 2; k++)
       c.box({x: 10 + k * 205, y: 80, w: 195, h: 56, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
     const steps = readTraits(c.png()).traits.map(t => t.step);
-    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '36px'});
-    expect(steps).toContainEqual({verb: 'set', thing: 'height', value: '56px', on: 'inputs'});
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '36px', on: 'button-like'});
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '56px', on: 'inputs'});
   });
 
-  it('writes no shared control size while the inputs read no clear height', () => {
+  it("writes the buttons' height and names the inputs' when theirs is not clear", () => {
     const c = canvas(420, 260);
     for (let k = 0; k < 3; k++)
       c.box({x: 10 + k * 130, y: 10, w: 110, h: 36, r: 4, fill: [98, 0, 238], label: true});
     c.box({x: 10, y: 80, w: 195, h: 44, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
     c.box({x: 215, y: 80, w: 195, h: 56, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
     const {traits, unsure} = readTraits(c.png());
-    expect(traits.some(t => t.step.thing === '--size-element-md')).toBe(false);
-    expect(unsure.find(u => u.trait === 'height' && u.on === 'button-like')?.why).toMatch(/inputs read 44px, 56px with no clear height/);
+    expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--size-element-md', value: '36px', on: 'button-like'});
+    expect(traits.some(t => t.on === 'inputs' && t.trait === 'height')).toBe(false);
+    expect(unsure.find(u => u.trait === 'height' && u.on === 'inputs')?.why).toMatch(/read 44px, 56px: too few agree/);
+  });
+
+  it('leaves the shared control size alone, so a dialog header keeps its height (a Win98-style picture)', () => {
+    // 23px buttons and 21px fields on a gray page: the control size
+    // goes on the control families, never on the whole theme, where the
+    // dialog header also reads it.
+    const c = canvas(420, 160, [192, 192, 192]);
+    for (let k = 0; k < 4; k++) c.box({x: 10 + k * 100, y: 10, w: 75, h: 23, edge: 2, edgeColor: [10, 10, 10], fill: [192, 192, 192], label: true});
+    for (let k = 0; k < 2; k++) c.box({x: 10 + k * 205, y: 60, w: 195, h: 21, edge: 2, edgeColor: [128, 128, 128], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    const steps = readTraits(c.png()).traits.map(t => t.step);
+    expect(steps.some(st => /^--size-element/.test(st.thing) && !st.on)).toBe(false);
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '23px', on: 'button-like'});
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '21px', on: 'inputs'});
   });
 
   it("gives the same readings as the editor's trait slots, gradients included", () => {
@@ -225,7 +239,7 @@ describe('traits from a picture', () => {
     for (let k = 0; k < 2; k++)
       c.box({x: 20 + k * 380, y: 110, w: 360, h: 56, r: 8, edge: 2, edgeColor: [0, 0, 0], fill: [255, 255, 255], label: true, labelAt: 'start'});
     const {traits} = readTraits(c.png(), 2);
-    expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--size-element-md', value: '28px'});
+    expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--size-element-md', value: '28px', on: 'button-like'});
     expect(traits.map(t => t.step)).toContainEqual({verb: 'set', thing: '--radius-element', value: '4px'});
   });
 
@@ -260,7 +274,7 @@ describe('how <picture>', () => {
     expect(d.colors.length).toBeGreaterThan(0);
     expect(d.look.source).toBe('picture');
     const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
-    expect(commands.some((/** @type {string} */ c) => / set pt --size-element-md 28px$/.test(c))).toBe(true);
+    expect(commands.some((/** @type {string} */ c) => / set pt --size-element-md 28px --on button-like$/.test(c))).toBe(true);
     expect(commands.some((/** @type {string} */ c) => / set pt --radius-element 4px$/.test(c))).toBe(true);
     for (const r of d.results) expect(r.text).toMatch(/read from \d+ of \d+/);
     expect(d.unsure.some((/** @type {any} */ u) => /gradient/.test(u.text))).toBe(true);
