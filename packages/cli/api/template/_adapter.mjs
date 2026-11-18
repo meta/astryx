@@ -40,9 +40,11 @@ export async function loadTemplateIconSets(cwd) {
 /**
  * The packages whose doc `astryx component <name>` reads for a name, Core's
  * and each configured integration's, or none when it answers no such
- * component. A name `astryx component --list` lists answers from the same
- * kept list that command reads; any other name, such as a part a family doc
- * documents, is looked up as `astryx component <name>` looks it up, once. A
+ * component. In a project with no integration, a name `astryx component
+ * --list` lists answers from the same kept list that command reads; any other
+ * name, such as a part a family doc documents, and every name in a project
+ * with an integration, is looked up as `astryx component <name>` looks it
+ * up, once. A
  * project whose components cannot be read answers no name, so no component
  * is named.
  * @param {string} cwd
@@ -82,8 +84,14 @@ export async function loadComponentOwners(cwd) {
     }
     /** @type {ReturnType<typeof discoverExternalPackages> | undefined} */
     let externals;
+    // With an integration, a name the list holds once may still have a
+    // second owner the list hides behind a replacement, so every name is
+    // looked up whole.
+    const listed = integrations.length === 0;
+    /** @type {Map<string, string[]>} */
+    const looked = new Map();
     return name => {
-      const known = owners.get(name);
+      const known = (listed ? owners : looked).get(name);
       if (known) return known;
       /** @type {string[]} */
       let found = [];
@@ -100,7 +108,7 @@ export async function loadComponentOwners(cwd) {
       } catch {
         found = [];
       }
-      owners.set(name, found);
+      (listed ? owners : looked).set(name, found);
       return found;
     };
   } catch {

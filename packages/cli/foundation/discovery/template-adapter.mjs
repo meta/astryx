@@ -2172,7 +2172,9 @@ export function componentsInSource(src) {
  * The components a template source renders that `astryx component` answers
  * in the project, in the order the source first renders them, each once.
  * `ownersOf` names the packages whose doc `astryx component <name>` reads
- * for a name, and none for a name it does not answer. A tag counts only when
+ * for a name, and none for a name it does not answer. Each entry is the
+ * selector that reads it, a bare name unless more than one package answers
+ * the name. A tag counts only when
  * a named import binds it to an Astryx package or to one of those packages;
  * a tag no import binds (a helper the file declares), one from another module
  * (a chart library's `Tooltip`), and text in a comment do not count. A part
@@ -2227,10 +2229,13 @@ export function answeredComponentsInSource(src, ownersOf) {
 }
 
 /**
- * The name `astryx component` answers for an imported tag, or null: the
- * imported name itself, else its family root (the last folder of the module
- * it comes from, when the name starts with it). The module must be an Astryx
- * package or one of the packages that answer the name.
+ * The selector `astryx component` reads an imported tag by, or null when it
+ * answers the tag with no doc: the imported name itself, else its family
+ * root (the last folder of the module it comes from, when the name starts
+ * with it). The module must be an Astryx package or one of the packages that
+ * answer the name. A name more than one package answers is qualified by the
+ * package the import names (`@astryxdesign/core/Button`), so the read is
+ * never ambiguous.
  * @param {{module: string, imported: string}} binding
  * @param {(name: string) => readonly string[]} ownersOf
  * @returns {string | null}
@@ -2240,15 +2245,12 @@ function answeredName({module, imported}, ownersOf) {
   for (const name of [imported, root]) {
     if (!imported.startsWith(name)) continue;
     const owners = ownersOf(name);
-    if (
-      owners.length > 0 &&
-      (module.startsWith(ASTRYX_PACKAGE_SCOPE) ||
-        owners.some(
-          owner => module === owner || module.startsWith(`${owner}/`),
-        ))
-    ) {
-      return name;
-    }
+    const imports = owners.find(
+      owner => module === owner || module.startsWith(`${owner}/`),
+    );
+    if (owners.length === 0) continue;
+    if (!imports && !module.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+    return owners.length > 1 && imports ? `${imports}/${name}` : name;
   }
   return null;
 }

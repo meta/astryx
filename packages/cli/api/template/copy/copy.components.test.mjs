@@ -78,6 +78,14 @@ const MIXED_NAMES = [
   'InputGroupText',
 ];
 
+/** A source that renders Core's Button, a name an integration also ships. */
+const BUTTON_SOURCE = `import {Button} from '@astryxdesign/core/Button';
+
+export default function Page() {
+  return <Button label="Save" />;
+}
+`;
+
 /** A source that renders nothing `astryx component` answers. */
 const EMPTY_SOURCE = `import {Tooltip} from 'recharts';
 
@@ -116,7 +124,10 @@ function makeConsumer(templates) {
     JSON.stringify({
       name: '@acme/widgets',
       version: '1.0.0',
-      exports: {'./AcmeBadge': './src/AcmeBadge.tsx'},
+      exports: {
+        './AcmeBadge': './src/AcmeBadge.tsx',
+        './Button': './src/Button.tsx',
+      },
     }),
   );
   fs.writeFileSync(
@@ -138,6 +149,22 @@ function makeConsumer(templates) {
       props: [],
     })};\n`,
   );
+  // A component under a Core name: `astryx component Button` has two owners.
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'Button.tsx'),
+    'export function Button() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'Button.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'component',
+      name: 'Button',
+      displayName: 'Acme Button',
+      import: '@acme/widgets/Button',
+      usage: {description: 'A pressable action.'},
+      props: [],
+    })};\n`,
+  );
   for (const [id, source] of Object.entries(templates)) {
     fs.writeFileSync(
       path.join(pkgDir, 'templates', `${id}.doc.mjs`),
@@ -153,6 +180,7 @@ beforeEach(() => {
   tmpDir = makeConsumer({
     'acme-mixed': MIXED_SOURCE,
     'acme-empty': EMPTY_SOURCE,
+    'acme-button': BUTTON_SOURCE,
   });
   process.chdir(tmpDir);
 });
@@ -294,6 +322,28 @@ describe('template.copy components from family docs', () => {
       expect(res.data.components).toEqual(
         expect.arrayContaining(['ResizeHandle', 'Layout']),
       );
+    },
+    SLOW,
+  );
+});
+
+describe('a name more than one package answers', () => {
+  it(
+    'is named by the package the import names, so the read is not ambiguous',
+    async () => {
+      const res = await template('acme-button', {
+        targetPath: './out',
+        cwd: tmpDir,
+      });
+      expect(res.data.components).toEqual(['@astryxdesign/core/Button']);
+      const bare = await runCli(['component', 'Button', '--json'], tmpDir);
+      expect(JSON.parse(bare.stdout).code).toBe('ERR_AMBIGUOUS_COMPONENT');
+      const read = await runCli(
+        ['component', ...res.data.components, '--json'],
+        tmpDir,
+      );
+      expect(read.status).toBe(0);
+      expect(JSON.parse(read.stdout).package).toBe('@astryxdesign/core');
     },
     SLOW,
   );
