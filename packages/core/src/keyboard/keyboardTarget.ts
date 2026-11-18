@@ -18,6 +18,7 @@ import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {getTouches, subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {isElement} from '../utils/nodeType';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
@@ -496,6 +497,7 @@ export function deliverTap(
   x: number,
   y: number,
   touch: {screenX: number; screenY: number; identifier: number},
+  touched: Element = control,
 ): void {
   focusAtPoint(control, x, y);
   // The field's own window's constructors, as a click in a frame has.
@@ -520,7 +522,7 @@ export function deliverTap(
           pointerId: touch.identifier,
         })
       : new (view?.MouseEvent ?? MouseEvent)('click', init);
-  control.dispatchEvent(click);
+  touched.dispatchEvent(click);
 }
 
 /**
@@ -672,7 +674,7 @@ export function followKeyboard(
       const control = findTextEntryControl(touched, target);
       return control != null && control !== doc.activeElement ? control : null;
     },
-    deliver: deliverTap,
+    deliver: (control, x, y, touch) => deliverTap(control, x, y, touch),
   });
   const stopMoving: (isFinal?: boolean) => void =
     move === 'ride'
@@ -1050,13 +1052,6 @@ export interface KeepFieldAboveKeyboardOptions {
   tapArea?: HTMLElement | null;
 }
 
-const OTHER_CONTROL_SELECTOR =
-  'a[href], button, input, select, textarea, [contenteditable], [role="button"], [tabindex]';
-
-/**
- * Whether a tap on `touched` is a tap on `field`: on the field itself, or on
- * `tapArea` outside its other controls.
- */
 function tapsField(
   touched: EventTarget | null,
   field: HTMLElement,
@@ -1068,11 +1063,14 @@ function tapsField(
   if (field.contains(touched)) {
     return true;
   }
-  if (tapArea == null || !tapArea.contains(touched)) {
-    return false;
-  }
-  const control = touched.closest(OTHER_CONTROL_SELECTOR);
-  return control == null || !tapArea.contains(control);
+  // The container's own rule (useInputContainer): a press on another control
+  // in it is that control's, and a field that takes no text takes no tap.
+  return (
+    tapArea != null &&
+    tapArea.contains(touched) &&
+    isTextEntryControl(field) &&
+    !hasInteractiveAncestor(touched, tapArea)
+  );
 }
 
 // Whether `scroller`, in a fixed container the app positions, can bring
@@ -1187,7 +1185,16 @@ export function keepFieldAboveKeyboard(
       placementOf(field, offset, win) != null
         ? field
         : null,
-    deliver: deliverTap,
+    // A padding tap's click lands where the browser's own would: on the
+    // container under the finger.
+    deliver: (control, x, y, touch, touched) =>
+      deliverTap(
+        control,
+        x,
+        y,
+        touch,
+        control.contains(touched) ? control : touched,
+      ),
   });
   let stopSession: ((isFinal?: boolean) => void) | null = null;
   // A ride a blur stopped can still wait for the keyboard to go; a detach

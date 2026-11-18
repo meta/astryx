@@ -2049,16 +2049,30 @@ describe('keepFieldAboveKeyboard', () => {
       });
       return end;
     };
-    // A tap on the container's own padding.
+    // A tap on the container's own padding: the field takes focus, and the
+    // tap's click lands on the container, where the browser's would.
+    const clicks: EventTarget[] = [];
+    container.addEventListener('click', event => {
+      if (event.target != null) {
+        clicks.push(event.target);
+      }
+    });
     const padding = tapOn(container);
     expect(padding.defaultPrevented).toBe(true);
     expect(focus).toHaveBeenCalledWith({preventScroll: true});
     expect(document.activeElement).toBe(input);
+    expect(clicks).toEqual([container]);
     // A tap on another control in the container stays that control's.
     act(() => input.blur());
     focus.mockClear();
     const button = tapOn(clear);
     expect(button.defaultPrevented).toBe(false);
+    expect(focus).not.toHaveBeenCalled();
+    // A disabled field (Core makes it read-only) takes no padding tap, as the
+    // container's own click rule takes none.
+    input.setAttribute('readonly', '');
+    const disabled = tapOn(container);
+    expect(disabled.defaultPrevented).toBe(false);
     expect(focus).not.toHaveBeenCalled();
   });
 

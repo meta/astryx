@@ -15,7 +15,7 @@
 
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
-import {useAttachment} from '../hooks/useAttachment';
+import {useAttachment, useAttachmentPair} from '../hooks/useAttachment';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
@@ -233,16 +233,20 @@ export function useMobileKeyboard(
   }, [dismiss, isEnabled, isOpen]);
 
   // A docked target, a scroller or a field, which moves no inset.
-  useAttachment(
+  // A field's tap area defaults to the field itself, so the pair is always
+  // whole and a replaced tap area re-attaches.
+  const tapRef = tapAreaRef ?? targetRef;
+  useAttachmentPair(
     targetRef,
-    target => {
+    tapRef,
+    (target, tapArea) => {
       if (!isEnabled || reservesInset || !isTouch) {
         return () => {};
       }
       return move == null
         ? keepFieldAboveKeyboard(target, {
             offset,
-            tapArea: tapAreaRef?.current,
+            tapArea: tapArea === target ? null : tapArea,
           })
         : followKeyboard(target, {move, offset});
     },

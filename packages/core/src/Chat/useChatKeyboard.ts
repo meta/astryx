@@ -409,7 +409,7 @@ export function useChatKeyboard({
     }
     return claimTapFocus(composer, {
       claim: editableToClaim,
-      deliver: deliverTap,
+      deliver: (control, x, y, touch) => deliverTap(control, x, y, touch),
     });
   }, [touchPresentation.isTouch]);
 
