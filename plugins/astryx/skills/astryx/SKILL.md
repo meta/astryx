@@ -4,13 +4,13 @@ description: "Astryx, a design system and UI library, is available on this compu
 ---
 
 <!-- ASTRYX:START -->
-<!-- astryx-managed sha256:d3361ea124902447e5df8afb23db51b82898911c3c6ab7a959dd3edbf26a1e92 -->
+<!-- astryx-managed sha256:498e62e94dff4f189b50468b97c2d02ac488d80f181d744eb65706892f0f446e -->
 Astryx, a design system and UI library, is available on this computer.
 Use it when you build or change UI, pick components, or style or theme an app.
 Its docs, components, templates, and themes are all reachable through `astryx`. To make a page, run `astryx build "<what the page is for>"` first, as the WORKFLOW below says. Start with `astryx search '<what you need>'` for anything else.
 Then read `astryx component <Name>` or `astryx docs <topic>`, not the package's files.
 In a project, the project's version of Astryx answers automatically.
-To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). Run `astryx init` there and follow the agent docs it writes.
+To build UI, work in a project folder (create one if there is none). In a new project, add `@astryxdesign/core` and `@astryxdesign/cli`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). Run `astryx init` there and follow the agent docs it writes.
 WORKFLOW — start every page from a template, never from scratch:
 1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.
 2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.
