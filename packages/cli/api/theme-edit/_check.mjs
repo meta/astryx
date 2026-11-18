@@ -5150,8 +5150,8 @@ function checkOne(
           },
         );
       // A name that is a part's name with more after it: the longest part
-      // name it starts with. The rest is a variant of that part
-      // (`button-primary`), a state of it (`link-hover`), or a piece it
+      // name it starts with. The rest is a state of that part (`link-hover`,
+      // `tab-selected`), a variant of it (`button-primary`), or a piece it
       // draws (a top nav heading's title, `top-nav-heading-title`): the
       // piece's own name among the parts it holds, or, holding none, an
       // inner element the census saw. A text property those inner elements
@@ -5165,15 +5165,6 @@ function checkOne(
       const variant = Object.entries(record?.attrs ?? {}).find(
         ([, vals]) => Array.isArray(vals) && vals.includes(rest),
       )?.[0];
-      if (holder && variant)
-        refuse(
-          E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; it is ${holder} with ${variant} ${rest}, set on ${holder} --when ${variant}:${rest}.`,
-          {
-            didYouMean: [holder],
-            run: [setLine(slug, thing, v, {...s, on: holder, when: `${variant}:${rest}`}, unset)],
-          },
-        );
       if (holder && (STATE_WORDS.includes(rest) || TARGET.get(holder)?.states?.includes(rest)))
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
@@ -5181,6 +5172,15 @@ function checkOne(
           {
             didYouMean: [holder],
             run: [setLine(slug, thing, v, {...s, on: holder, state: rest}, unset)],
+          },
+        );
+      if (holder && variant)
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part name; it is ${holder} with ${variant} ${rest}, set on ${holder} --when ${variant}:${rest}.`,
+          {
+            didYouMean: [holder],
+            run: [setLine(slug, thing, v, {...s, on: holder, when: `${variant}:${rest}`}, unset)],
           },
         );
       const held = record?.contains ?? [];
@@ -7822,6 +7822,8 @@ function checkOne(
     }
     if (
       !propColor &&
+      // (A value that is no color, "12px", is refused below as no color.)
+      (unset || !v || isColorValue(v)) &&
       (prop === 'color' || prop === '-webkit-text-fill-color') &&
       partsOf(ctx, s).some(t => textParts.includes(t))
     ) {

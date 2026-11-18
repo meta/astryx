@@ -217,7 +217,7 @@ describe('set', () => {
     const r = await refusal(() =>
       themeEditSet('h', 'color', '12px', {cwd, on: 'text'}),
     );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.code).toBe('ERR_THEME_BAD_VALUE');
     expect(r.run.join('\n')).not.toContain('12px');
   });
 

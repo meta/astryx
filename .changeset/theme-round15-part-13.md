@@ -34,6 +34,6 @@
 - A color on a link or a text goes into the token its color prop reads (`--color-text-accent` on links), on that part alone, as a heading's color already did.
 - A text size, weight, line height or letter spacing on a part whose text is drawn by elements that read one token for it (`font-size` on a banner or a code block, `font-weight` on the top nav heading) goes into that token on the part. Where the text reads several tokens (a title and a subtitle), set still refuses and names each.
 - A bare `0` on a padding read inside `calc()` is saved as `0px`.
-- A token the part does not read, where the parts inside it do (`--text-body-size` on a tab list), is refused with those parts' token on the part. A part name with a piece after it (`top-nav-heading-title`) is refused with the part that holds it; a part name with a variant or a state after it (`button-primary`, `link-hover`) is refused with that part and its `--when` or `--state`.
+- A token the part does not read, where the parts inside it do (`--text-body-size` on a tab list), is refused with those parts' token on the part. A part name with a piece after it (`top-nav-heading-title`) is refused with the part that holds it; a part name with a state or a variant after it (`link-hover`, `tab-selected`, `button-primary`) is refused with that part and its `--state` or `--when`. A color that is no color (`color 12px --on heading`) is refused as no color.
 
 @josephfarina
