@@ -392,8 +392,7 @@ export default function FormWizardPage() {
         // stepper and the fields below it share one content line.
         <LayoutHeader hasDivider={false}>
           <VStack gap={isNarrow ? 3 : 5}>
-            {/* On a narrow screen Cancel moves under the title instead of squeezing it. */}
-            <HStack gap={3} vAlign="center" wrap="wrap">
+            <HStack gap={3} vAlign="center">
               <StackItem size="fill">
                 <Heading level={1}>Create workspace</Heading>
               </StackItem>
