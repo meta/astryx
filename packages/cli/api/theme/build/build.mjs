@@ -872,10 +872,42 @@ export function withBuiltByCommandPlaceholder(lines) {
 }
 
 /**
+ * The index of the line that closes a file's first comment, the header a
+ * build writes, or -1 when the file does not start with a comment.
+ * @param {string[]} lines
+ * @returns {number}
+ */
+export function generatedHeaderEnd(lines) {
+  if (lines[0] !== '/*' && lines[0] !== '/**') return -1;
+  return lines.indexOf(' */', 1);
+}
+
+/**
+ * `lines` with the release in the header's `CLI:` line as `<version>`, when
+ * the header ({@link generatedHeaderEnd}) holds exactly one; otherwise
+ * unchanged, so a missing or second line, or one outside the header, stays
+ * significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withCliReleasePlaceholder(lines) {
+  const close = generatedHeaderEnd(lines);
+  if (close === -1) return lines;
+  const header = lines.slice(1, close);
+  if (header.filter(line => CLI_VERSION_LINE.test(line)).length !== 1) {
+    return lines;
+  }
+  return lines.map((line, index) =>
+    index < close ? line.replace(CLI_VERSION_LINE, '$1<version>$3') : line,
+  );
+}
+
+/**
  * Normalize generated file content for staleness comparison: without the
  * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
- * that the header's one `CLI:` line names as `<version>`, and with the command
- * in a built module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * that the header's one `CLI:` line names as `<version>`
+ * ({@link withCliReleasePlaceholder}), and with the command in a built
+ * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
  * answers, and the command that starts it, depend on how the CLI was started
  * (a global install, a tool that runs it, or the project's own copy) and
  * change with each update, so the same outputs built another way are not
@@ -887,23 +919,9 @@ export function withBuiltByCommandPlaceholder(lines) {
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  const lines = withBuiltByCommandPlaceholder(
-    withoutBuildCommandLine(content).split('\n'),
-  );
-  if (lines[0] !== '/*' && lines[0] !== '/**') return lines.join('\n');
-  const close = lines.indexOf(' */', 1);
-  if (close === -1) return lines.join('\n');
-  const releaseLines = lines
-    .slice(1, close)
-    .filter(line => CLI_VERSION_LINE.test(line)).length;
-  if (releaseLines !== 1) return lines.join('\n');
-  return lines
-    .map((line, index) =>
-      index < close && CLI_VERSION_LINE.test(line)
-        ? line.replace(CLI_VERSION_LINE, '$1<version>$3')
-        : line,
-    )
-    .join('\n');
+  return withCliReleasePlaceholder(
+    withBuiltByCommandPlaceholder(withoutBuildCommandLine(content).split('\n')),
+  ).join('\n');
 }
 
 /**

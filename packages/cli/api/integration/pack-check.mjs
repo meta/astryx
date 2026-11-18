@@ -58,8 +58,10 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   CLI_VERSION_LINE,
+  generatedHeaderEnd,
   themeBuildWithHandOff,
   withBuiltByCommandPlaceholder,
+  withCliReleasePlaceholder,
   withoutBuildCommandLine,
 } from '../theme/build/build.mjs';
 import {
@@ -117,8 +119,7 @@ const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
 export function normalizeThemeVerifyForCompare(content) {
   const normalized = withoutBuildCommandLine(content);
   const lines = normalized.split('\n');
-  if (lines[0] !== '/*' && lines[0] !== '/**') return normalized;
-  const close = lines.indexOf(' */', 1);
+  const close = generatedHeaderEnd(lines);
   if (close === -1) return normalized;
   const header = lines.slice(1, close);
   if (header.filter(line => line === GENERATED_HEADER_LINE).length !== 1) {
@@ -130,14 +131,11 @@ export function normalizeThemeVerifyForCompare(content) {
   if (source.length !== 1 || cli.length !== 1 || core.length !== 1) {
     return normalized;
   }
-  return withBuiltByCommandPlaceholder(lines)
+  return withCliReleasePlaceholder(withBuiltByCommandPlaceholder(lines))
     .map((line, index) => {
       if (index >= close) return line;
       if (SOURCE_LINE.test(line)) {
         return line.replace(SOURCE_LINE, '$1<source>$3');
-      }
-      if (CLI_VERSION_LINE.test(line)) {
-        return line.replace(CLI_VERSION_LINE, '$1<version>$3');
       }
       if (CORE_VERSION_LINE.test(line)) {
         return line.replace(CORE_VERSION_LINE, '$1<version>$3');
