@@ -6881,6 +6881,12 @@ export function draftAnswer(ctx, env, question) {
       /\b(\d+(?:\.\d+)?)pt\b/gi,
       (_, n) => `${Math.round((Number(n) * 4) / 3)}px`,
     )
+    // ("pure white instead of its current color": the value it has now,
+    // which the change replaces anyway; never a "no" of its own.)
+    .replace(
+      /\s*\b(?:instead of|rather than|in place of)\s+(?:its|their|the|our|my|your)\s+(?:current|present|existing|old|usual|default)(?:\s+(?:colou?r|one|value|shade|look|background|fill))?\b/gi,
+      '',
+    )
     // "a 1px border instead of a shadow": the border, and no shadow (on
     // the part the ask names: "inputs filled gray instead of outlined"
     // takes the inputs' outline away, never every border).
@@ -28892,6 +28898,92 @@ export function draftAnswer(ctx, env, question) {
     d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
     result.splice(di + 1, 0, {
       text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
+      options: [fixes],
+      ...(fixes.length > 1 ? {sequence: true} : {}),
+    });
+  }
+  // "dark mode should be chocolate brown": a page color typed for a mode
+  // is measured against the theme's text in that mode, as the fill of a
+  // part is; a text token that would not read (under 4.5:1) there takes a
+  // color that does, in its own line: primary text white or black,
+  // secondary text the farthest shade toward the page that still reads.
+  for (const [di, d] of [...result.entries()].reverse()) {
+    if (d.options.length !== 1) continue;
+    const pages = d.options[0].filter(
+      x =>
+        !x.on &&
+        x.thing === '--color-background-body' &&
+        parseColor(String(x.value ?? '')) != null &&
+        alphaOf(String(x.value)) >= 1,
+    );
+    if (
+      !pages.length ||
+      d.options[0].some(
+        x => !x.on && /^--color-text-(?:primary|secondary)$/.test(x.thing),
+      )
+    )
+      continue;
+    /** @type {Step[]} */
+    const fixes = [];
+    /** @type {Set<string>} */
+    const unread = new Set();
+    for (const st of pages) {
+      const ground = /** @type {number[]} */ (
+        parseColor(String(st.value))
+      ).slice(0, 3);
+      const modes = /** @type {Array<'light' | 'dark'>} */ (
+        st.mode
+          ? [st.mode]
+          : modal
+            ? ['light', 'dark']
+            : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+      );
+      for (const m of modes)
+        for (const tok of ['--color-text-primary', '--color-text-secondary']) {
+          const now = String(current(tok, m) ?? '');
+          const ink = parseColor(now);
+          if (!ink || alphaOf(now) < 1 || ratio(ink, ground) >= 4.5) continue;
+          const best =
+            ratio([255, 255, 255], ground) >= ratio([0, 0, 0], ground)
+              ? [255, 255, 255]
+              : [0, 0, 0];
+          let to = best;
+          if (tok === '--color-text-secondary')
+            for (let k = 0.6; k > 0; k -= 0.05) {
+              const mix = best.map((v, i) =>
+                Math.round(v + (ground[i] - v) * k),
+              );
+              if (ratio(mix, ground) >= 4.5) {
+                to = mix;
+                break;
+              }
+            }
+          if (ratio(best, ground) < 4.5) continue;
+          unread.add(String(st.value));
+          fixes.push(
+            set(tok, hex(to), {
+              ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+            }),
+          );
+        }
+    }
+    if (!fixes.length || !env.check([...d.options[0], ...fixes]).ok) continue;
+    const at = [...new Set(fixes.map(x => x.mode).filter(Boolean))]
+      .map(m => `in ${m} mode`)
+      .join(' and ');
+    d.text = `${d.text}; the theme's text would not read on that page${at ? ` ${at}` : ''}: the next line keeps it readable`;
+    // (The answer that runs the whole ask carries the text lines too, so
+    // the theme it writes reads as measured.)
+    for (const o of result)
+      if (
+        o !== d &&
+        o.options.length === 1 &&
+        pages.every(st => o.options[0].includes(st)) &&
+        !fixes.every(f => o.options[0].includes(f))
+      )
+        o.options[0].push(...fixes.filter(f => !o.options[0].includes(f)));
+    result.splice(di + 1, 0, {
+      text: `readable text on that page: ${[...new Set(fixes.map(x => x.thing))].join(' and ')} measure${fixes.length > 1 ? '' : 's'} under 4.5:1 on ${[...unread].join(' and ')}${at ? ` ${at}` : ''}, so ${fixes.map(x => x.value).join(' and ')}`,
       options: [fixes],
       ...(fixes.length > 1 ? {sequence: true} : {}),
     });
