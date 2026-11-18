@@ -268,7 +268,7 @@ shared icon names under FR17.
   - `@astryxdesign/react-native-expo` exports its configuration plugin as
     `./app.plugin.js`, so an Expo app names that package in its plugin list.
     `@astryxdesign/react-native`'s own `./app.plugin.js` stays exported,
-    marked `@deprecated`, for one minor version (DEP-0020): loading it fails
+    marked `@deprecated`, for one minor version (DEP-0032): loading it fails
     with an error that names `@astryxdesign/react-native-expo`, and it writes
     nothing.
   - `.` exports nothing named `*ForTesting`, `reset*`, `SIMULATED_*`, or
@@ -932,12 +932,12 @@ removal is the declared minor and its `[breaking]` Changeset
 | rollback  | Restore the bin's dispatch to the FR13 commands from the last release that had it.                                                                                            |
 | state     | `pending`: lands in the declared minor after DEP-0019, with its `[breaking]` Changeset                                                                                        |
 
-### DEP-0020 — Deprecate the configuration plugin entry of `@astryxdesign/react-native`
+### DEP-0032 — Deprecate the configuration plugin entry of `@astryxdesign/react-native`
 
 | Field            | Value                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id               | `DEP-0020`                                                                                                                                                                |
-| cleanup          | `CLN-0020`                                                                                                                                                                |
+| id               | `DEP-0032`                                                                                                                                                                |
+| cleanup          | `CLN-0032`                                                                                                                                                                |
 | package          | `@astryxdesign/react-native`                                                                                                                                              |
 | surface          | The `./app.plugin.js` entry, which an Expo app names as `@astryxdesign/react-native` in its plugin list                                                                   |
 | old contract     | The package's own configuration plugin writes the host declarations and the capability opt-in in Expo's prebuild                                                          |
@@ -949,15 +949,15 @@ removal is the declared minor and its `[breaking]` Changeset
 | direct authority | `spec:AST-112`                                                                                                                                                            |
 | state            | `proposed`: it starts in the release that first publishes `@astryxdesign/react-native-expo`                                                                               |
 
-### CLN-0020 — Remove the configuration plugin entry of `@astryxdesign/react-native`
+### CLN-0032 — Remove the configuration plugin entry of `@astryxdesign/react-native`
 
 | Field     | Value                                                                                  |
 | --------- | -------------------------------------------------------------------------------------- |
-| id        | `CLN-0020`                                                                             |
-| lifecycle | `DEP-0020`                                                                             |
+| id        | `CLN-0032`                                                                             |
+| lifecycle | `DEP-0032`                                                                             |
 | delta     | `@astryxdesign/react-native` exports no `./app.plugin.js`.                             |
 | rollback  | Restore the failing entry from the last release that had it.                           |
-| state     | `pending`: lands in the declared minor after DEP-0020, with its `[breaking]` Changeset |
+| state     | `pending`: lands in the declared minor after DEP-0032, with its `[breaking]` Changeset |
 
 ## Open questions
 
