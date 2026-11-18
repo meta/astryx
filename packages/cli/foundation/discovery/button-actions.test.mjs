@@ -315,6 +315,13 @@ describe('where the component that holds the button is rendered', () => {
     ).toEqual([]);
   });
 
+  it('a provider imported through a module path only a bundler resolves is not trusted', () => {
+    const knownPackage = (/** @type {string} */ specifier) => !specifier.startsWith('~/');
+    const body = '<AppProvider><Button label="Start" /></AppProvider>';
+    expect(deadButtons({'page.tsx': page(body, "import {AppProvider} from '~/providers';")}, {knownPackage})).toEqual([]);
+    expect(deadButtons({'page.tsx': page(body, "import {AppProvider} from '@acme/providers';")}, {knownPackage})).toEqual(['page.tsx:6 Start']);
+  });
+
   it('an aliased import in the open is followed to the button', () => {
     expect(deadButtons({'Hero.tsx': hero, 'page.tsx': pageWith("import {Hero as Banner} from './Hero';", '<main><Banner /></main>')})).toEqual([
       'Hero.tsx:3 Start',

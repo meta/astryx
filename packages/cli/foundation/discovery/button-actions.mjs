@@ -692,10 +692,12 @@ function rendersInPlace(path, context) {
     tag = target.tag;
     if (ACTING_ELEMENTS.has(tag)) return false;
   } else if (target.kind === 'package') {
+    // A provider is trusted only from a package: a module path only a bundler
+    // resolves may be the app's own code, which may wrap it in anything.
     const layout =
       (isCore(target.source) && LAYOUT_COMPONENTS.has(target.name)) ||
       (target.source === 'react' && REACT_WRAPPERS.has(target.name)) ||
-      /Provider$/.test(target.name);
+      (/Provider$/.test(target.name) && context.knownPackage(target.source));
     if (!layout) return false;
   } else {
     // A context's own Provider (`Theme.Provider`) renders what it holds as it

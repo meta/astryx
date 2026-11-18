@@ -380,13 +380,16 @@ export function findButtonsWithoutAction(projectDir) {
     return texts.get(file) ?? null;
   };
   const declared = declaredPackages(projectDir);
+  const ownName = readPackageJson(path.join(projectDir, 'package.json'))?.name;
   /** @type {Map<string, boolean>} */
   const installed = new Map();
   // A bare module path is a package when Node has it, the project declares
   // it, or it is installed where Node looks; any other is one only a bundler
-  // resolves, such as an alias with no tsconfig path.
+  // resolves, such as an alias with no tsconfig path. The project's own name
+  // (a package.json `exports` path to its own files) is its own code.
   const knownPackage = (/** @type {string} */ specifier, /** @type {string} */ file) => {
     const {name} = splitSpecifier(specifier.replace(/^node:/, ''));
+    if (name === ownName) return false;
     if (specifier.startsWith('node:') || builtinModules.includes(name) || declared.has(name)) return true;
     const key = `${path.dirname(file)}\0${name}`;
     if (!installed.has(key)) installed.set(key, findInstalledPackage(path.dirname(file), name, Infinity) != null);
@@ -436,16 +439,17 @@ export function findButtonsWithoutAction(projectDir) {
 
 /**
  * The packages the project's package.json declares in any dependency field,
- * and its own name.
+ * and, with `ownName`, its own name.
  * @param {string} projectDir
+ * @param {{ownName?: boolean}} [options]
  * @returns {Set<string>}
  */
-function declaredPackages(projectDir) {
+function declaredPackages(projectDir, {ownName = false} = {}) {
   const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
   return new Set(
     ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
       .flatMap(field => Object.keys(pkg[field] ?? {}))
-      .concat(typeof pkg.name === 'string' ? [pkg.name] : []),
+      .concat(ownName && typeof pkg.name === 'string' ? [pkg.name] : []),
   );
 }
 
@@ -462,7 +466,7 @@ function declaredPackages(projectDir) {
  * @returns {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>}
  */
 export function findIconImports(projectDir, iconSets) {
-  const declared = declaredPackages(projectDir);
+  const declared = declaredPackages(projectDir, {ownName: true});
   // Only a file that names a set's module, a wrapped library, or an
   // icon-named export is parsed.
   const needles = [

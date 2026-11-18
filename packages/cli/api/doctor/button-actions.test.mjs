@@ -207,6 +207,29 @@ describe('the button-actions check', () => {
   );
 
   it(
+    "a component imported by the app's own package name is not reported",
+    async () => {
+      const files = {
+        'package.json': JSON.stringify({
+          name: 'app',
+          private: true,
+          exports: {'./components/*': './src/components/*.tsx'},
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+        'src/main.tsx': MAIN,
+        'src/App.tsx': ["import Hero from 'app/components/Hero';", 'export default function App() {', '  return <a href="/start"><Hero /></a>;', '}', ''].join('\n'),
+        'src/components/Hero.tsx': HERO,
+      };
+      expect((await buttonCheck(files))?.status).toBe('pass');
+      // A workspace can also install the app under its own name.
+      fs.mkdirSync(path.join(tmp, 'node_modules'));
+      fs.symlinkSync(path.join(tmp, 'app'), path.join(tmp, 'node_modules', 'app'), 'dir');
+      expect((await buttonCheck(files))?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
     'a component loaded through lazy inside a link is not reported',
     async () => {
       const check = await buttonCheck({
