@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * The header row contains every slot: the row takes the most negative block
- * offset its slots need, and each slot the difference, which is never
- * negative, so a theme that paints the row sees its title inside it.
+ * The header row contains every slot and takes no negative margin: the most
+ * negative block offset its slots need goes to the LayoutHeader, whose
+ * padding gives way by it, and each slot takes the difference, which is never
+ * negative. A theme that paints the row sees its title inside it, and a
+ * theme's padding on the row sets its height.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -37,9 +39,15 @@ describe.each([
     const end = screen.getByRole('button', {name: /close/i})
       .parentElement as HTMLElement;
     const offset = ROW_OFFSET(prefix);
+    expect(getComputedStyle(row).getPropertyValue('margin-block')).toBe('');
+    const header = row.parentElement?.parentElement as HTMLElement;
     expect(
-      squeezed(getComputedStyle(row).getPropertyValue('margin-block')),
-    ).toBe(offset);
+      squeezed(
+        getComputedStyle(header).getPropertyValue(
+          '--_layout-header-block-bleed',
+        ),
+      ),
+    ).toBe(squeezed(`calc(0px - ${offset})`));
     expect(
       squeezed(getComputedStyle(titleBlock).getPropertyValue('margin-block')),
     ).toBe(squeezed(`calc(var(--_${prefix}-header-title-offset) - ${offset})`));

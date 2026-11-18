@@ -43,12 +43,13 @@ import english from '../i18n/generated-english/Drawer/DrawerHeader.generated';
 
 registerEnglishFallback(english);
 
-// Each slot keeps its released block offset from the header row. The title
-// is centred on the medium close action. The close action bleeds by
-// spacing-2. A negative margin on a slot makes the row shorter than that
-// slot, so a painted row (a title bar) would not contain its title. The row
-// takes the most negative offset instead. Each slot takes its own offset
-// less the row's, which is never negative.
+// Each slot keeps its released block offset from the header. The title is
+// centred on the medium close action. The close action bleeds by spacing-2.
+// The row takes no negative margin, so a painted row (a title bar) starts
+// where the header's padding ends and contains its title. The most negative
+// offset goes to the LayoutHeader instead, whose block padding gives way by
+// it (never below zero). Each slot takes its own offset less that, which is
+// never negative, so every slot sits where it did.
 const TITLE_OFFSET = '--_drawer-header-title-offset';
 const END_OFFSET = '--_drawer-header-end-offset';
 const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;
@@ -59,13 +60,16 @@ const styles = stylex.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-3'],
+  },
+  // On the LayoutHeader: the offsets, and the reach its padding gives way by.
+  frame: {
     // The title's centre on the close button's centre, as DialogHeader's.
     [TITLE_OFFSET]: `calc(${sizeVars['--size-element-md']} / 2 - ${spacingVars['--spacing-2']} - ${typeScaleVars['--text-heading-2-size']} * ${typeScaleVars['--text-heading-2-leading']} / 2)`,
     [END_OFFSET]: '0px',
-    marginBlock: ROW_OFFSET,
+    '--_layout-header-block-bleed': `calc(0px - ${ROW_OFFSET})`,
   },
   // Compensate for the medium icon button's visual padding on the end slot.
-  // Set on the row as well, whose own offset reads it.
+  // Set on the LayoutHeader as well, whose padding reads it.
   endBlockEdgeCompensation: {
     [END_OFFSET]: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
@@ -187,23 +191,31 @@ export function DrawerHeader({
       : endContentEdgeCompensation === 'inline' ||
         endContentEdgeCompensation === 'all';
 
+  // The offsets and the reach go on the LayoutHeader, whose padding reads
+  // them; the row's slots inherit them.
+  const frame = stylex.props(
+    styles.frame,
+    shouldCompensateEndBlock &&
+      (hasEndContent || onOpenChange != null) &&
+      styles.endBlockEdgeCompensation,
+  );
+
   return (
     <LayoutHeader
       ref={ref}
       hasDivider={hasDivider}
       xstyle={xstyle}
-      className={className}
-      style={style}
+      className={
+        frame.className == null
+          ? className
+          : [frame.className, className].filter(Boolean).join(' ')
+      }
+      style={frame.style == null ? style : {...frame.style, ...style}}
       {...rest}>
       <div
         {...mergeProps(
           themeProps('drawer-header'),
-          stylex.props(
-            styles.container,
-            shouldCompensateEndBlock &&
-              (hasEndContent || onOpenChange != null) &&
-              styles.endBlockEdgeCompensation,
-          ),
+          stylex.props(styles.container),
         )}>
         {hasStartContent && (
           <div

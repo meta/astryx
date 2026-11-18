@@ -35,6 +35,12 @@ import {
 } from './padding.stylex';
 import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
+/**
+ * The private variable a header's content sets to name its block reach
+ * (DialogHeader and DrawerHeader write it by this name).
+ */
+const BLOCK_BLEED = '--_layout-header-block-bleed';
+
 const styles = stylex.create({
   // Outer shell: owns border/divider and sizing. No padding — that lives on inner.
   header: {
@@ -65,6 +71,14 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
+  },
+  // A header whose own content reaches past its top and bottom edges (a
+  // dialog title centred on its close button) names that reach in a private
+  // variable; the block padding gives way by it, never below zero, so the
+  // content's painted box starts where the padding ends.
+  blockBleed: {
+    paddingBlockStart: `max(0px, calc(var(--container-padding-block-start) - var(${BLOCK_BLEED}, 0px)))`,
+    paddingBlockEnd: `max(0px, calc(var(--container-padding-block-end) - var(${BLOCK_BLEED}, 0px)))`,
   },
   divider: {
     borderBlockEndWidth: 1,
@@ -200,6 +214,7 @@ export function LayoutHeader({
           paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
           paddingBlockEnd != null &&
             containerPaddingBlockEndVarStyles[paddingBlockEnd],
+          styles.blockBleed,
           containerBlockBleedStyles.publish,
         )}>
         {children}
