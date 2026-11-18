@@ -398,7 +398,9 @@ export function useChatStreamScroll({
         setLocked(false);
         animatingRef.current = false;
       }
-      streamScrollPositions.get(el)?.forEach(listener => listener(scrollTop));
+      streamScrollPositions
+        .get(el)
+        ?.forEach(listener => listener(scrollTop, landedAtBottom));
     };
 
     const onScrollEnd = () => {

@@ -7,14 +7,19 @@
  *   streaming reply and jumps through `scrollToItem`
  * @output Real-browser evidence that the windowed list opens at its newest
  *   message and follows a streamed reply, keeps the end in place when a
- *   message above the newest gets shorter, and reveals a message that is
- *   not mounted when its rows are shorter than their estimates
+ *   message above the newest gets shorter, in either order of the clamp's
+ *   scroll event and the row's size, and reveals a message that is not
+ *   mounted when its rows are shorter than their estimates
  * @position Browser proof beside ChatMessageList.virtualization.test.tsx,
  *   whose scripted layout cannot show the browser's own clamping and wrapping
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
+import {
+  frames,
+  openStory,
+  withStorybook,
+} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
 
@@ -94,6 +99,35 @@ test('keeps the end in place when a message above the newest gets shorter', asyn
     above.style.overflow = 'hidden';
   });
   await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
+  await streamReply(page);
+  await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
+});
+
+test('keeps the end when the clamp’s scroll event comes before the shorter message’s size', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  // The order WebKit can deliver: a layout read clamps the position, and the
+  // scroll event reaches the list before the resize observer reports the row.
+  await page.evaluate(() => {
+    const scroller = document.querySelector<HTMLElement>('.astryx-chat-layout');
+    const rows = [
+      ...document.querySelectorAll<HTMLElement>(
+        '.astryx-chat-layout .astryx-chat-message',
+      ),
+    ];
+    const above = rows.at(-2);
+    if (scroller == null || above == null) {
+      throw new Error('No scroller or no message above the newest');
+    }
+    above.style.height = `${above.getBoundingClientRect().height - 40}px`;
+    above.style.overflow = 'hidden';
+    void scroller.scrollTop;
+    scroller.dispatchEvent(new Event('scroll'));
+  });
+  // Read once the resize observer has reported the row, two frames later.
+  await frames(page, 2);
+  expect(await distanceFromEnd(page)).toBeLessThan(1);
   await streamReply(page);
   await expect.poll(async () => distanceFromEnd(page)).toBeLessThan(1);
 });

@@ -103,7 +103,7 @@ function shiftScroller(scroller: HTMLElement, delta: number) {
 /** Takes the position the stream scroll on `scroller` reads for each scroll event. */
 function subscribePosition(
   scroller: HTMLElement,
-  listener: (top: number) => void,
+  listener: (top: number, isAtEnd: boolean) => void,
 ): () => void {
   let listeners = streamScrollPositions.get(scroller);
   if (listeners == null) {

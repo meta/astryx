@@ -534,6 +534,26 @@ describe('ChatMessageList windowing', () => {
     expect(distanceFromEnd(scroller)).toBe(0);
   });
 
+  it('keeps the end when the clamp’s scroll event comes before the shorter row’s size', async () => {
+    const {scroller} = await mount(messages(5000));
+    flushFrame();
+    const lastTop = screenTop('m4999');
+    // The browser clamps the position, and its scroll event is delivered
+    // before the resize observer reports the row.
+    layout.sizes.set('m4997', 40);
+    await scrolled(scroller);
+    await resized(['m4997']);
+    await flushMicrotasks();
+    expect(screenTop('m4999')).toBe(lastTop);
+    expect(distanceFromEnd(scroller)).toBe(0);
+    expect(isFollowingNewest(scroller)).toBe(true);
+    await scrolled(scroller);
+    layout.sizes.set('m4999', 400);
+    await resized(['m4999']);
+    expect(distanceFromEnd(scroller)).toBe(0);
+    expect(isFollowingNewest(scroller)).toBe(true);
+  });
+
   it('is the stream scroll that moves: a correction never reads as the reader scrolling', async () => {
     const {scroller} = await mount(messages(5000));
     flushFrame();

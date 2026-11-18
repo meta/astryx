@@ -75,12 +75,12 @@ export interface UseMeasuredListWindowOptions {
   writer: MeasuredListWindowWriter;
   /**
    * Calls `listener` with the position the scroller's own owner reads for
-   * each scroll event, so the hook reads no layout on the scroll path.
-   * Returns the unsubscribe.
+   * each scroll event, and whether it lands at the end of the scroll range,
+   * so the hook reads no layout on the scroll path. Returns the unsubscribe.
    */
   subscribePosition: (
     scroller: HTMLElement,
-    listener: (top: number) => void,
+    listener: (top: number, isAtEnd: boolean) => void,
   ) => () => void;
   /** Whether the end stays in place now, as while new items are followed. */
   isEndAnchored: () => boolean;
@@ -424,7 +424,19 @@ function createMeasuredListEngine() {
     }
   }
 
-  function onPosition(top: number) {
+  function onPosition(top: number, isAtEnd: boolean) {
+    // While the end is followed, a move up onto the end is the browser's
+    // clamp onto shorter content. The measured pass for that change takes it
+    // with the sizes from before the change; taking it here first would
+    // correct the end twice.
+    if (
+      isAtEnd &&
+      top < scrollTop - EPSILON &&
+      reveal === undefined &&
+      latest?.isEndAnchored() === true
+    ) {
+      return;
+    }
     if (Math.abs(top - scrollTop) >= 1) {
       noteMove();
       scrollTop = top;

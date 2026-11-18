@@ -54,8 +54,11 @@ export const streamScrollShifts = sharedWeakMap<Element, ChatStreamScrollShift>(
   1,
 );
 
-/** Listeners for the position the stream scroll reads for a scroll event. */
+/**
+ * Listeners for the position the stream scroll reads for a scroll event, and
+ * whether it lands at the end of the scroll range.
+ */
 export const streamScrollPositions = sharedWeakMap<
   Element,
-  Set<(top: number) => void>
+  Set<(top: number, isAtEnd: boolean) => void>
 >('chat/position', 1);
