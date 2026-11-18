@@ -40,7 +40,7 @@ audio module (`AstryxAudio`), the video view (`AstryxVideoView`), and the
 camera view (`AstryxCameraView`), and how the library's `VideoView`,
 `CameraView`, `useVideoPlayer`, and `useAudioPlayer` use them. `VideoView` and
 `CameraView` are the public faces of the two native views, which are internal
-implementation behind them (`spec:AST-112/FR5`, `spec:AST-112/FR21`).
+implementation behind them (`spec:AST-112/FR5`).
 
 ## Why this exists
 
@@ -334,7 +334,7 @@ isPossible})`.
 ## Current-state impact
 
 - This record details `spec:AST-112`'s FR3 (`media` and `camera` stay
-  opt-in), FR5 and FR21 (the native views are internal behind `VideoView` and
+  opt-in), FR5 (the native views are internal behind `VideoView` and
   `CameraView`), and FR7 (the probes and a camera view that leaves the prompt
   to the app), and `spec:AST-140`'s FR3 (the group's closed reasons) and FR5
   (contracts grow by named features).
