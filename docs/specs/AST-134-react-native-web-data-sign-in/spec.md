@@ -36,9 +36,9 @@ This record details five web modules of `spec:AST-112`: `AstryxWebSessions`,
 part of the core package's `web` capability, and `AstryxWebData`,
 `AstryxWebBundles`, `AstryxPageSnapshots`, and `AstryxAuthSession`, part of
 the optional add-on package, not the core package. They follow the opt-in
-rule (`spec:AST-112/FR3`), the result vocabulary (`spec:AST-112/FR6`), the
+rule (`spec:AST-112/FR3`), the result vocabulary (`spec:AST-140/FR3`), the
 capability shape (`spec:AST-112/FR7`), and additive evolution
-(`spec:AST-112/FR8`). The web view
+(`spec:AST-140/FR5`). The web view
 itself, its feature report, and the part of `AstryxWebSessions` the view
 depends on are `spec:AST-131`; this record states the modules' own contracts
 and stays consistent with `spec:AST-131/FR7` (bundled folders) and
@@ -112,7 +112,7 @@ optional add-on package, not the core package. `WebView` uses
   of the optional add-on package, not the core package. Each package's
   `./web` entry exports its objects. Each module is read
   with `TurboModuleRegistry.get`, only by its own wrapper
-  (`spec:AST-112/FR8`).
+  (`spec:AST-140/FR1`).
 
   | Contract              | Kind                                | Methods                                                                                        | Platforms    |
   | --------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
@@ -123,7 +123,7 @@ optional add-on package, not the core package. `WebView` uses
   | `AstryxAuthSession`   | native module (Turbo Native Module) | `isSupported`, `start`, `cancel`, `getRedirectUri`, `createPkce`                               | iOS, Android |
   - Every method other than `getConstants` takes one request object and
     resolves one result object
-    with `status`, `reason`, and `message` (`spec:AST-112/FR8`), `cancel`
+    with `status`, `reason`, and `message` (`spec:AST-140/FR3`), `cancel`
     included.
   - `prewarm` and `releaseWarm` exist on iOS only (FR13).
 
@@ -131,7 +131,7 @@ optional add-on package, not the core package. `WebView` uses
   `AstryxWebData`, `AstryxWebBundles`, and
   `AstryxAuthSession`, which have named features (FR13), have
   `supports(feature)` (`spec:AST-112/FR7`). Their calls resolve
-  `AstryxResult` (`spec:AST-112/FR6`):
+  `AstryxResult` (`spec:AST-140/FR3`):
   - `AstryxWebSessions`: `create({cookies?, isEphemeral?, allowsPageStorage?,
 pin?})` answers `{sessionId}`; `remove(sessionId)`.
   - `AstryxWebData`: `clear()` answers `{isHttpCacheCleared,
@@ -296,7 +296,7 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 - **FR9 — Security and privacy.**
   - Cookie values, callback URLs, codes, states, and verifiers never appear
-    in props, logs, traces, or a result `message` (`spec:AST-112/FR6`).
+    in props, logs, traces, or a result `message` (`spec:AST-140/FR3`).
   - Every identifier a module makes (session ids, request ids, nonces,
     verifiers, states) comes from the system's secure generator.
   - A bundled page reaches no network and has no file access; a snapshot runs
@@ -309,7 +309,7 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 - **FR10 — Results never throw, and reasons are a closed set.** Every call
   resolves `AstryxResult` and never rejects; a reason the JavaScript does not
-  know reads `error` (`spec:AST-112/FR6`). Each module adds these reasons to
+  know reads `error` (`spec:AST-140/FR3`). Each module adds these reasons to
   the common ones:
 
   | Contract              | Reasons                                                                                                                                                                               |
@@ -320,9 +320,10 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
   | `AstryxPageSnapshots` | `timeout`, `unsupported-content` (the engine refused the document, or its content process ended), `unavailable`, `invalid-option` (a size, time, colour, or pixel count out of range) |
   | `AstryxAuthSession`   | `no-window`, `busy`, `invalid-url`, `scheme-not-registered`, `no-browser`, `state-mismatch`                                                                                           |
   - `cancelled` is a sign-in the person closed or one that `cancel()` closed
-    (`spec:AST-112/FR6`).
+    (`spec:AST-140/FR3`).
 
-- **FR11 — Threads and lifecycle.** No call blocks the UI thread. Snapshot
+- **FR11 — Threads and lifecycle.** The group follows `spec:AST-140/FR6`.
+  No call blocks the UI thread. Snapshot
   and cache work runs off the main thread. The web engine's own calls run on
   the main thread, and the byte route answers on the engine's request thread
   without blocking the page's main thread. A runtime's reload ends its
@@ -340,7 +341,7 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 - **FR13 — Every contract is at revision 1; later behaviour is a named
   feature.**
   - Every contract in the group is at revision 1 on iOS and Android and
-    carries no revision counter (`spec:AST-112/FR8`). A
+    carries no revision counter (`spec:AST-140/FR5`). A
     behaviour beyond revision 1 is a named feature, `<Contract>.<feature>`,
     that the binary lists in `AstryxPlatformInfo`'s `contractFeatures`
     constant, and JavaScript checks it with `hasContractFeature` before use
@@ -406,9 +407,11 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
   optional add-on package, not the core package: it amends FR1's `web` entry
   to the web view and its sessions, and takes those modules off the core
   package's app-level modules.
-- Otherwise none beyond `spec:AST-112`. This record details its FR3 (the
-  `web` capability stays opt-in), FR6 (the modules' closed reasons), FR7
-  (their probes and features), and FR8 (the group's revision-1 baseline).
+- Otherwise none beyond `spec:AST-112` and `spec:AST-140`. This record
+  details `spec:AST-112`'s FR3 (the `web` capability stays opt-in) and FR7
+  (their probes and features), and `spec:AST-140`'s FR1 (registration), FR3
+  (the modules' closed reasons), FR5 (the group's revision-1 baseline), and
+  FR6 (threads).
 - It states the full contract of `AstryxWebSessions`, `AstryxWebData`,
   `AstryxWebBundles`, `AstryxPageSnapshots`, and `AstryxAuthSession`, which
   `spec:AST-131` places in the `web` capability and leaves to this record. It
