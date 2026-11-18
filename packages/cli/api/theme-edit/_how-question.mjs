@@ -2698,12 +2698,26 @@ const REMOVAL_VERBS =
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /**
  * A clause that forbids a change ("don't make buttons rounder", "never hide
- * the tab underline", "inputs shouldn't be round", "ghost buttons not look
- * like primary buttons"): nothing changes.
+ * the tab underline", "inputs shouldn't be round", a likeness said with
+ * "not", "never" or "don't let/want", "ghost buttons not look like primary
+ * buttons"): nothing changes.
  */
 const PROHIBITION = new RegExp(
-  `^\\s*(?:(?:but|and)\\s+)?(?:please\\s+)?(?:don'?t|do not|never)\\s+(?:make|hide|${REMOVAL_VERBS})\\b|\\b(?:(?:should|must|shall|do|does)(?:n'?t| not)|not|never)\\s+(?:be|get|look|become)\\b`,
+  `^\\s*(?:(?:but|and)\\s+)?(?:please\\s+)?(?:don'?t|do not|never)\\s+(?:make|hide|${REMOVAL_VERBS})\\b|\\b(?:should|must|shall)(?:n'?t| not)\\s+(?:be|get|look|become)\\b|\\b(?:not|never|(?:do|does)(?:n'?t| not)|(?:don'?t|do not)\\s+(?:let|want)\\b[^,;.]*?)\\s+(?:to\\s+)?(?:look|be|become)\\s+(?:just\\s+|exactly\\s+)?like\\b`,
 );
+/**
+ * How a clause says a piece taken away, when it does: 'show' when the
+ * removal stops or is undone ("stop hiding", "un-hide", "stop removing"),
+ * 'keep' when it is ruled out ("avoid hiding", "isn't hidden", "I don't want
+ * it removed"), else 'remove'. Null with no hide or remove word.
+ * @param {string} t
+ */
+const removalSaid = t => {
+  const verb = String.raw`(?:hid(?:e|es|den|ing)|remov(?:e|es|ed|ing))\b`;
+  if (!new RegExp(String.raw`\b${verb}`).test(t)) return null;
+  if (new RegExp(String.raw`\bun-?hid(?:e|den|ing)\b|\b(?:stop|quit|no longer)\s+${verb}`).test(t)) return 'show';
+  return new RegExp(String.raw`(?:\b(?:not|never|avoid(?:ing)?|don'?t want|do not want)|n't)(?:\s+\S+){0,6}?\s+${verb}`).test(t) ? 'keep' : 'remove';
+};
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
@@ -18780,11 +18794,13 @@ export function draftAnswer(ctx, env, question) {
     // the piece even where a look word is part of its name (a tab's
     // underline); "no" or "without" does so only with no look asked
     // ("cards without borders" is a border).
-    // ("un-hide", "stop hiding": a hide said negated is a show.)
-    const shown = /\bun-?hid(?:e|den|ing)\b|\b(?:stop|quit|no longer)\s+hid(?:e|ing)\b/.test(c.text);
+    // (A removal stopped or undone, "stop hiding", is a show; one ruled out,
+    // "avoid hiding", keeps the piece.)
+    const removal = removalSaid(c.text);
+    const shown = removal === 'show';
     if (
       c.parts.length &&
-      (shown || /\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
+      ((removal && removal !== 'remove') || /\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
     ) {
       const names = c.parts.map(p => one(p.on));
       // (An owner and its piece said apart, "alerts without icons": the
@@ -18802,6 +18818,14 @@ export function draftAnswer(ctx, env, question) {
           ctx.project.components?.[String(TARGET.get(k)?.component)]
             ?.targets?.[0]?.className !== `astryx-${k}`,
       );
+      if (pieces.length === 1 && C.MAP[pieces[0]] && removal === 'keep') {
+        seenPart(pieces[0]);
+        push({
+          text: `"${c.text.trim()}" asks for no change, so nothing is set there; ${pieces[0]} stays as it is`,
+          options: [],
+        });
+        continue;
+      }
       if (pieces.length === 1 && C.MAP[pieces[0]] && shown) {
         const own = pieces[0];
         seenPart(own);
@@ -19258,6 +19282,14 @@ export function draftAnswer(ctx, env, question) {
           ? def
           : null;
     if (from.length !== 1 || !to || from[0] === to) return null;
+    // (The look is copied whole, at rest and in both modes: a state or a
+    // mode said with it is named, never written as the resting look.)
+    const scope = [c.state && `when ${c.state}`, c.mode && `in ${c.mode} mode`].filter(Boolean);
+    if (scope.length)
+      return {
+        text: `${from[0]} ${on[0]} takes the ${to} ${on[0]}'s look only whole, at rest and in both modes, so nothing is written for "${scope.join(' ')}": ask for the ${to} look alone, then for what changes ${scope.join(' ')}`,
+        options: [],
+      };
     const A = `variant:${from[0]}`;
     const B = `variant:${to}`;
     // Its look: what the theme sets on that variant, as set; then, for the
@@ -27299,20 +27331,18 @@ export function draftAnswer(ctx, env, question) {
     // theme; "make it look like before" asks undo. Beside other asks, or
     // "by default", it is theirs.)
     const back = clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
-    // (A going-back word said as a look, after "a", "more", "it" or "look":
-    // "make it clear", "more original", "a clear theme", describes; it
-    // never goes back.)
-    const said = t
-      .split(/\s+/)
-      .filter((w, k, all) => !(k && /^(?:a|an|more|less|very|so|too|it|look|looks|is|be)$/.test(all[k - 1]) && GOING_BACK.test(w)))
-      .join(' ');
-    if (back && GOING_BACK.test(/\b(\w+) theme\b/.exec(said)?.[1] ?? ''))
+    // (Only words that name the earlier look go back, "like before", "clear
+    // everything", "the default theme"; a describing word, "make it clear",
+    // "more original", never does.)
+    const earlier =
+      /\b(?:before|back|reset|revert|restore|previous|earlier|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all))\b/;
+    if (back && /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(t))
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
         options: [],
         lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
       };
-    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && GOING_BACK.test(said)))
+    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && earlier.test(t)))
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
@@ -32116,7 +32146,7 @@ export function draftAnswer(ctx, env, question) {
         // name.)
         dialWords.has(word) ||
         DESCRIBING.test(word) ||
-        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly)$/.test(word)
+        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(word)
       )
         return false;
       return new RegExp(
