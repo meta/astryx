@@ -61,6 +61,23 @@ function visible(cmd) {
 }
 
 /**
+ * Whether the run's base serves the command at `words` below `program`:
+ * each word names a command people and agents see.
+ * @param {CommandLike} program
+ * @param {string[]} words
+ * @returns {boolean}
+ */
+function served(program, words) {
+  /** @type {CommandLike | undefined} */
+  let node = program;
+  for (const word of words) {
+    node = node && visible(node).find(c => c.name() === word);
+    if (!node) return false;
+  }
+  return true;
+}
+
+/**
  * Whether `cmd` offers the long option `long` to people and agents: listed,
  * and served by the run's base.
  * @param {CommandLike} cmd
@@ -624,7 +641,8 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   // An experimental command a stable answer may name, asked for by a word
   // that means it (`share page.tsx` is `experimental export page.tsx`).
   // A share word before a name another command reads (`export Button`)
-  // leaves that name to the lookup below.
+  // leaves that name to the lookup below, and a base that does not serve the
+  // command gets no suggestion of it.
   const asked = NAMED_EXPERIMENTAL.find(e =>
     spellings(word).some(w => e.asks.includes(w)),
   );
@@ -635,6 +653,7 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   if (
     asked &&
     !(readName && topNames.includes(readName.command)) &&
+    served(program, asked.words) &&
     runParses(program, [...before, ...asked.words])
   ) {
     // `render experimental page.tsx` already named the group: drop that

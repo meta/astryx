@@ -619,6 +619,19 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
+    'suggests no experimental export for a share word where the base does not serve it',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const run = astryx(['share', 'page.tsx'], dir);
+      expect(run.status).toBe(1);
+      expect(run.stdout + run.stderr).not.toContain('experimental export');
+      const json = astryx(['--json', 'share', 'page.tsx'], dir);
+      expect(JSON.stringify(json.json())).not.toContain('experimental export');
+    },
+    SLOW,
+  );
+
+  it(
     "names the step on a hidden command's own help",
     () => {
       const dir = project({'@acme/native-ui': CONTENT_BASE});
