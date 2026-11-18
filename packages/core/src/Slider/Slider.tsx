@@ -1678,35 +1678,32 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
   // Text value display. The box reserves the width of the texts at, and one
-  // step in from, each end of the range, so the track keeps its length while
-  // the value changes and a dragged thumb stays under the pointer. Reserved
-  // per character: a tabular digit at 0.6em (a body font's is about 0.57em),
-  // a space at 0.3em, anything else at 1em, which no glyph exceeds.
+  // step in from, each end of the range. The track then keeps its length while
+  // the value changes, and a dragged thumb stays under the pointer. A tabular
+  // digit or a space counts as 1ch, the width of the font's own zero, which no
+  // tabular digit or space exceeds. Any other character counts as 1em. One
+  // more pixel covers the browser's rounding of a text run's width.
   const textOf = (vs: ReadonlyArray<number>): string =>
     vs.map(displayValue).join(' – ');
-  const emWidth = (text: string): number =>
-    [...text].reduce(
-      (em, c) => em + (c >= '0' && c <= '9' ? 0.6 : c === ' ' ? 0.3 : 1),
-      0,
-    );
   let textDisplay = null;
   if (valueDisplay === 'text') {
     const reach = (value: number) =>
       Math.min(max, Math.max(min, snapToStep(value, min, step)));
     const ends = [min, reach(min + step), reach(max - step), max];
-    const reserve = Math.max(
-      ...ends.flatMap(a =>
-        isRange
-          ? ends.map(b => emWidth(textOf([a, b])))
-          : [emWidth(textOf([a]))],
-      ),
-    );
+    // The most ch and the most em any end text needs.
+    const [ch, em] = ends
+      .flatMap(a => (isRange ? ends.map(b => textOf([a, b])) : [textOf([a])]))
+      .reduce(
+        ([c, e], text) => {
+          const n = text.replace(/[^\d ]/g, '').length;
+          return [Math.max(c, n), Math.max(e, text.length - n)];
+        },
+        [0, 0],
+      );
+    const reserve = `calc(${ch}ch + ${em}em + 1px)`;
     textDisplay = (
       <span
-        {...stylex.props(
-          styles.textValue,
-          styles.textValueReserve(`${reserve}em`),
-        )}>
+        {...stylex.props(styles.textValue, styles.textValueReserve(reserve))}>
         {textOf(values)}
       </span>
     );

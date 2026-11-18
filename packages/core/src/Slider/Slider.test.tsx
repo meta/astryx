@@ -2306,7 +2306,7 @@ describe('Slider after a render React discards', () => {
 });
 
 describe('Slider text value', () => {
-  it('renders one copy per distinct text when both ends format alike', () => {
+  it('renders without a duplicate-key warning when both ends format alike', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(
       <Slider label="Fixed" min={5} max={5} value={5} valueDisplay="text" />,

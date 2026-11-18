@@ -95,6 +95,32 @@ for (const direction of ['ltr', 'rtl'] as const) {
   });
 }
 
+// Fonts whose digits are wider than 0.6em: a monospace font, whose space is
+// as wide as its digits, and DejaVu Sans, whose tabular digits are 0.636em.
+for (const font of ['monospace', '"DejaVu Sans"']) {
+  test(`the track keeps its length under a wide-digit font (${font})`, async ({
+    page,
+  }) => {
+    await mount(page, 'core-slider--text-value-widths', 'ltr');
+    await page.addStyleTag({
+      content: `.astryx-slider-control ~ span { font-family: ${font} !important; }`,
+    });
+    await page.evaluate(async () => document.fonts.ready);
+    const [start, end] = await page
+      .getByRole('group', {name: 'Price range'})
+      .getByRole('slider')
+      .all();
+    const widths = new Set([
+      ...(await widthsWhilePressing(page, start, 'Home', 1)),
+      ...(await widthsWhilePressing(page, end, 'End', 1)),
+      ...(await widthsWhilePressing(page, start, 'End', 1)),
+      ...(await widthsWhilePressing(page, start, 'Home', 1)),
+      ...(await widthsWhilePressing(page, end, 'Home', 1)),
+    ]);
+    expect([...widths]).toHaveLength(1);
+  });
+}
+
 test('a fractional step keeps the track length from 0 to 0.8', async ({
   page,
 }) => {
