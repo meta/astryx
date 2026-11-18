@@ -898,7 +898,10 @@ export default function PaymentFormPage() {
                                         gap={2}
                                         hAlign="between"
                                         vAlign="start">
-                                        <HStack gap={2} vAlign="center">
+                                        <HStack
+                                          gap={2}
+                                          vAlign="center"
+                                          wrap="wrap">
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
