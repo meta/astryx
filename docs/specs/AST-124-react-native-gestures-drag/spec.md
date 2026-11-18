@@ -80,10 +80,10 @@ components.
   `DropZone`, `ReorderableList`, `Lightbox`, and the others under "Who uses
   it"), including their gesture numbers (detents, thresholds, springs,
   durations); each component's own record owns them.
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - `AstryxTouchShieldView`: Preview and inspector tooling, part of the Astryx
-  app's Preview host (`spec:AST-139`), outside this record.
+  app's Preview host (`spec:AST-141`), outside this record.
 - The native stack's back gesture itself, the menu hosts, and the presentation
   hosts, which `spec:AST-125` and `spec:AST-128` own.
   This record owns only how a drag yields to them.
@@ -375,7 +375,7 @@ components.
   named features that JavaScript checks before it uses them.
 - Changes `spec:AST-112` FR1: the touch shield, which FR1 lists in the core,
   is Preview and inspector tooling in the Astryx app's Preview host
-  (`spec:AST-139`).
+  (`spec:AST-141`).
 - Changes `spec:AST-112` FR5: `./controls` also holds the pan-zoom view as app
   API, and the zoom pager is internal (FR8).
 
