@@ -14,7 +14,8 @@
  *   nested default card, a transparent card, a text field, inline code, an
  *   open menu, a selected segment, an input group addon, a step number, a
  *   banner and a striped table row (whose cell color the table root fixes);
- * - a nav item's text at rest, hovered, pressed and selected on the top bar;
+ * - a nav item's text at rest, hovered, pressed and selected, on the page and
+ *   on a surface (the top bar paints one or the other);
  * - a ghost or secondary button's label at rest, hovered and pressed, on the
  *   page and on a surface;
  * - secondary text on a selected row, a dropzone and a numbered citation on
@@ -383,25 +384,36 @@ function rows() {
           selected,
           modeIndex,
         );
-        // A nav item sits on the top bar, which paints the surface.
-        const bar = [at(page, '--color-background-surface'), body];
+        // A nav item sits on the top bar, which paints the page (AppShell's
+        // default elevated and wash bars) or the surface.
         const text = drawn(navRule.color, nav, '--color-text-secondary');
-        for (const [state, layers] of [
-          ['nav item', bar],
-          ['hovered nav item', [at(page, '--color-overlay-hover'), ...bar]],
-          ['pressed nav item', [at(page, '--color-overlay-pressed'), ...bar]],
-        ])
-          push({...base, where: state, role: 'nav item text', text, layers});
-        push({
-          ...base,
-          where: 'selected nav item',
-          role: 'nav item text',
-          text: drawn(selectedRule.color, selected, '--color-text-primary'),
-          layers:
-            selectedFill && selectedRule.backgroundColor !== 'transparent'
-              ? [selectedFill, ...bar]
-              : bar,
-        });
+        for (const [ground, bar] of [
+          ['the page', [body]],
+          ['a surface', [at(page, '--color-background-surface'), body]],
+        ]) {
+          for (const [state, layers] of [
+            ['nav item', bar],
+            ['hovered nav item', [at(page, '--color-overlay-hover'), ...bar]],
+            ['pressed nav item', [at(page, '--color-overlay-pressed'), ...bar]],
+          ])
+            push({
+              ...base,
+              where: `${state} on ${ground}`,
+              role: 'nav item text',
+              text,
+              layers,
+            });
+          push({
+            ...base,
+            where: `selected nav item on ${ground}`,
+            role: 'nav item text',
+            text: drawn(selectedRule.color, selected, '--color-text-primary'),
+            layers:
+              selectedFill && selectedRule.backgroundColor !== 'transparent'
+                ? [selectedFill, ...bar]
+                : bar,
+          });
+        }
       }
       // A ghost or secondary button's label on its fill at rest, hovered and
       // pressed, on the page and on a surface.

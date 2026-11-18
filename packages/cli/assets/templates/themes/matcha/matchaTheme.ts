@@ -314,6 +314,14 @@ export const matchaTheme = defineTheme({
         borderRadius: 'var(--radius-full)',
       },
     },
+    // Secondary text on a pressed nav item takes the next stop in light: it
+    // reads on the pressed fill over the page, which the default top bar
+    // paints.
+    'top-nav-item': {
+      base: {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
+      },
+    },
     // Secondary text on a coloured or muted card steps to the nearest neutral
     // stop that reads at 4.5:1 on that fill.
     card: {

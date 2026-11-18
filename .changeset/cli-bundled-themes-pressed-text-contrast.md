@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] The bundled butter and neutral themes' accent and nav item text read at 4.5:1 on pressed fills and the accent tint.
+[fix] The bundled butter, neutral, matcha and y2k themes' accent and nav item text read at 4.5:1 on pressed fills and the accent tint.
 
 @josephfarina
