@@ -188,10 +188,10 @@ describe('generateCompressedIndex', () => {
       return root;
     };
     it.each([
-      ['an installed CLI 0.7.17', '0.7.17', true],
+      ['an installed CLI 0.7.18', '0.7.18', true],
       ['an installed CLI 0.8.0', '0.8.0', true],
-      ['an installed CLI 0.7.16', '0.7.16', false],
-      ['an installed 0.7.17 canary', '0.7.17-canary.b25f95e', false],
+      ['an installed CLI 0.7.17 (cut before export)', '0.7.17', false],
+      ['an installed 0.7.18 canary', '0.7.18-canary.b25f95e', false],
       ['no installed CLI', null, false],
     ])('%s', (_label, cliVersion, expected) => {
       const root = project(cliVersion);
