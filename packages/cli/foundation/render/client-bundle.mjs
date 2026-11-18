@@ -564,27 +564,27 @@ export async function bundleForBrowser({
   ).length;
   const astryx = graphHoldsAstryx(
     Object.keys(result.metafile?.inputs ?? {}),
-    ownerName(entry),
+    entry,
   );
   return {code, modules, astryx};
 }
 
 /**
- * Whether a build's module graph holds a module an Astryx package owns. The
- * owner is the package whose package.json holds the file, by its name: a
- * workspace copy of Core counts as an installed one does. The page's own
- * package is not counted, so a page inside an Astryx package's folder still
- * needs an import.
+ * Whether a build's module graph holds a module an Astryx package owns,
+ * other than the page itself. The owner is the package whose package.json
+ * holds the file, by its name: a workspace copy of Core counts as an
+ * installed one does, and a page inside an Astryx package's own folder
+ * counts the modules of that package it imports.
  * @param {string[]} inputs the metafile's input keys
- * @param {string | null} own the name of the package that holds the page
+ * @param {string} entry the page
  * @returns {boolean}
  */
-export function graphHoldsAstryx(inputs, own) {
+export function graphHoldsAstryx(inputs, entry) {
+  const page = path.resolve(entry);
   return inputs.some(key => {
     const file = inputFile(key);
-    if (!file) return false;
-    const name = ownerName(file);
-    return name !== null && name !== own && name.startsWith('@astryxdesign/');
+    if (!file || path.resolve(file) === page) return false;
+    return ownerName(file)?.startsWith('@astryxdesign/') === true;
   });
 }
 

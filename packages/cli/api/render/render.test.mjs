@@ -289,6 +289,13 @@ describe('render(): a page that uses nothing from Astryx', () => {
     expect(exported('none/page.tsx')).toBe(false);
   });
 
+  it('refuses a page alone in an Astryx package\'s folder: the page itself does not count', async () => {
+    put('kitalone/package.json', JSON.stringify({name: '@astryxdesign/rl3-kit-alone', private: true}));
+    put('kitalone/page.tsx', 'export default function Page() {\n  return <p>Alone</p>;\n}\n');
+    expect(await codeOf(() => render('kitalone/page.tsx', {cwd: dir}))).toBe('ERR_RENDER_NOT_ASTRYX');
+    expect(exported('kitalone/page.tsx')).toBe(false);
+  });
+
   it.each([
     [
       'a direct import',
@@ -304,6 +311,21 @@ describe('render(): a page that uses nothing from Astryx', () => {
     [
       'only an Astryx stylesheet',
       {'cssonly/page.tsx': "import '@astryxdesign/core/astryx.css';\nexport default function Page() {\n  return <p>Styled</p>;\n}\n"},
+    ],
+    [
+      'its own stylesheet that imports an Astryx stylesheet',
+      {
+        'globals/globals.css': "@import '@astryxdesign/core/astryx.css';\n",
+        'globals/page.tsx': "import './globals.css';\nexport default function Page() {\n  return <p>Styled</p>;\n}\n",
+      },
+    ],
+    [
+      "the modules of the Astryx package whose folder holds it",
+      {
+        'kit/package.json': JSON.stringify({name: '@astryxdesign/rl3-kit', private: true}),
+        'kit/Badge.tsx': "export function Badge() {\n  return <span>Kit</span>;\n}\n",
+        'kit/page.tsx': "import {Badge} from './Badge';\nexport default function Page() {\n  return <Badge />;\n}\n",
+      },
     ],
     [
       'a re-export chain',

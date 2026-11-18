@@ -72,6 +72,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
+ * @property {boolean | null} [astryx] - Whether the script's module graph, or a package stylesheet a module imports, is Astryx's; null in a markup-only render.
  */
 
 /** An error carrying a render error code. */
@@ -223,9 +224,11 @@ function importParams(params) {
  * cut.
  * @param {string} file the stylesheet's own path
  * @param {string} css its text
- * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
+ * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], astryx?: {found: boolean}, served: ServedSet | null, seen?: Set<string>}} ctx
  *   `included`: stylesheet files already in the page (Core's, say), never
- *   inlined twice; `packageSheets`: package stylesheets this pulled in
+ *   inlined twice; `packageSheets`: package stylesheets this pulled in;
+ *   `astryx.found` turns true when a sheet imports an Astryx package's
+ *   stylesheet, inlined already or not
  * @returns {string}
  */
 function expandImports(file, css, ctx) {
@@ -242,6 +245,7 @@ function expandImports(file, css, ctx) {
     const parsed = importParams(rule.params);
     if (!parsed || !parsed.url) return;
     const {url} = parsed;
+    if (ctx.astryx && /^~?@astryxdesign\//.test(url)) ctx.astryx.found = true;
     if (/^([a-z]+:)?\/\//i.test(url)) {
       ctx.warnings.push({
         code: 'remote-asset',
@@ -1204,6 +1208,8 @@ export async function renderPage(entry, options = {}) {
   const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
+  /** Whether one of the page's stylesheets imports an Astryx one. */
+  const astryxSheet = {found: false};
   try {
     // A stylesheet's url()s are relative to the stylesheet, not the page: a
     // theme's font, or an image beside an imported stylesheet.
@@ -1218,6 +1224,7 @@ export async function renderPage(entry, options = {}) {
           carried: carriedCss,
           included,
           packageSheets,
+          astryx: astryxSheet,
           served,
         });
         return inlineAssets(cutCss(own, kept, {states}), 'css', {
@@ -1254,6 +1261,18 @@ export async function renderPage(entry, options = {}) {
     if (err instanceof RenderAssetError)
       throw new RenderError(err.code, err.message, err.detail);
     throw e;
+  }
+  // A page that uses nothing from Astryx is not what the command makes: its
+  // own app's build shares it. Its script's module graph (local components,
+  // re-exports and lazy imports included) and the Astryx stylesheets it
+  // imports, directly or through its own stylesheets, decide, before
+  // anything is fetched or written. A markup-only render builds no script
+  // and is not checked.
+  if (message.astryx === false && !astryxSheet.found) {
+    throw new RenderError(
+      'ERR_RENDER_NOT_ASTRYX',
+      `${path.basename(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
+    );
   }
   // Keep inlined CSS from ending its own <style> element.
   css = css.replace(/<\/style/gi, '<\\/style');

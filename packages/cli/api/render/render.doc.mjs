@@ -106,7 +106,7 @@ export const doc = {
     {code: 'ERR_RENDER_FAILED', when: 'the page throws while rendering for any other reason, or Node itself crashes (a crash signal, or a crash status on Windows) or is stopped by a signal while it renders the page (the message names the Node version and path)'},
     {
       code: 'ERR_RENDER_NOT_ASTRYX',
-      when: 'reversing a file a render did not write, with no embedded source and no Astryx markup; the suggestion is `astryx build "<what the page is>"`',
+      when: 'exporting a page that uses no Astryx components or styles (its script holds no module of an Astryx package, and neither it nor its own stylesheets import an Astryx stylesheet), or reversing a file a render did not write, with no embedded source and no Astryx markup; for a reverse, the suggestion is `astryx build "<what the page is>"`',
     },
     {code: 'ERR_RENDER_SOURCE_DAMAGED', when: 'reversing a file a render wrote whose embedded source was removed (and that has no Astryx components to rebuild from), a file a render wrote that ends before its embedded source, a file that holds merge conflict markers, a file whose embedded source is cut short or damaged (or names a CLI version that is not a release version), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds (a dotfile or dot-folder, `node_modules`, a package manifest, lockfile or tool configuration, or any kind but a module, stylesheet, JSON or image)'},
     {

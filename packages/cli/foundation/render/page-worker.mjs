@@ -1875,43 +1875,33 @@ try {
       }
     }
   }
-  // A page that uses nothing from Astryx is not what the command makes: its
-  // own app's build shares it. Its script's module graph (local components,
-  // re-exports and lazy imports included) and the package stylesheets it
-  // imports decide, before anything is fetched or written.
-  if (
-    script &&
-    !script.astryx &&
-    !packageCss.some(({spec}) => spec.startsWith('@astryxdesign/'))
-  ) {
-    fail(
-      'ERR_RENDER_NOT_ASTRYX',
-      `${describeFile(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
-    );
-  } else {
-    parentPort?.postMessage({
-      ok: true,
-      markup,
-      css,
-      importedCss,
-      packages: [...packages],
-      packageCss,
-      skippedCss,
-      fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
-      chartsFailed,
-      chartsAlone,
-      assets: [...assetsInlined],
-      files: localFiles,
-      uncarried: outsideFiles,
-      aliasImports,
-      texts,
-      fnTexts,
-      screenQueries,
-      logs,
-      script: script?.code ?? null,
-      scriptModules: script?.modules ?? 0,
-    });
-  }
+  parentPort?.postMessage({
+    ok: true,
+    markup,
+    css,
+    importedCss,
+    packages: [...packages],
+    packageCss,
+    skippedCss,
+    fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
+    chartsFailed,
+    chartsAlone,
+    assets: [...assetsInlined],
+    files: localFiles,
+    uncarried: outsideFiles,
+    aliasImports,
+    texts,
+    fnTexts,
+    screenQueries,
+    logs,
+    script: script?.code ?? null,
+    scriptModules: script?.modules ?? 0,
+    // Whether the script's module graph or a package stylesheet a module
+    // imports is Astryx's; null when no script was built.
+    astryx: script
+      ? script.astryx || packageCss.some(({spec}) => spec.startsWith('@astryxdesign/'))
+      : null,
+  });
 } catch (e) {
   if (e !== null) classify(e);
 }
