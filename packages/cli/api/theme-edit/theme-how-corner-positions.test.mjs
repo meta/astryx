@@ -157,6 +157,32 @@ describe('the corners an ask names', () => {
     ).toEqual(["border-radius '16px 16px 0 0' --on tab"]);
   }, 240_000);
 
+  it('squares the corners a negative corner ask names', async ctx => {
+    if (needBases(ctx)) return;
+    expect(await writes('no rounding on the bottom corners of tabs')).toEqual([
+      'border-end-start-radius 0 --on tab',
+      'border-end-end-radius 0 --on tab',
+    ]);
+  }, 240_000);
+
+  it('rounds only the named corners of a radius of several, leaving the rest as the theme has them', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m', {cwd, like: 'neutral'});
+    await themeEditSet('m', 'border-radius', '4px 8px 0 0', {cwd, on: 'card'});
+    const {data} = await themeEditHow('cards rounded on the bottom', {
+      cwd,
+      theme: 'm',
+    });
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set m /, ''),
+      ),
+    ).toEqual([
+      'border-end-start-radius 4px --on card',
+      'border-end-end-radius 4px --on card',
+    ]);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
