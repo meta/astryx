@@ -128,14 +128,11 @@ no navigation host.
     scroll-edge and bar behaviour, and the insets they report.
   - The header and tab bar components decide their own rendering in their own
     component records, through the components' rendering axis
-    (`spec:AST-123/FR1`), where `render` names who draws the pixels. The stack
-    host's system bar and the tabs host's tab bar are `render: 'system'`: the
-    platform draws them. A header or tab bar that Astryx draws in React is
-    `render: 'drawn'`. The hosts host either: the stack host carries a screen
-    with the system bar or with a header the component draws, and a drawn tab
-    bar renders without the tabs host (FR12).
-  - FR1 gap: the code spells the axis two ways, `render: 'system' | 'drawn'`
-    on the navigators and `presentation: 'native' | …` on components.
+    (`spec:AST-112/FR21`): the stack host's bar and the tabs host's tab bar are
+    its `system` form, and a header or tab bar Astryx draws is `drawn`. The
+    hosts host either: the stack host carries a screen with the system bar or
+    with a header the component draws, and a drawn tab bar renders without the
+    tabs host (FR12).
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
@@ -363,7 +360,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     (`spec:AST-112/FR3`).
   - The router checks that the hosts are present before it renders through
     them (`spec:AST-140/FR2`). When they are absent (an app that opted out of the default set, or a
-    binary without them), a navigator with `render: 'system'` fails at its first
+    binary without them), a navigator whose rendering resolves to `system` fails at its first
     render with an error that names the missing capability. It never renders
     a blank screen.
   - Drawn tabs render without a host. The stack needs its host for transitions
