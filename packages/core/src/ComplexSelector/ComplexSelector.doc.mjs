@@ -128,6 +128,34 @@ export const docs = {
           default: "'Select...'",
         },
         {
+          name: 'isLabelHidden',
+          type: 'boolean',
+          description: 'Visually hides the label while keeping it accessible.',
+          default: 'false',
+        },
+        {
+          name: 'description',
+          type: 'string',
+          description: 'Helper text displayed below the label.',
+        },
+        {
+          name: 'labelTooltip',
+          type: 'string',
+          description: 'Tooltip text displayed next to the label.',
+        },
+        {
+          name: 'isOptional',
+          type: 'boolean',
+          description: 'Marks the field as optional.',
+          default: 'false',
+        },
+        {
+          name: 'isRequired',
+          type: 'boolean',
+          description: 'Marks the field as required.',
+          default: 'false',
+        },
+        {
           name: 'isDisabled',
           type: 'boolean',
           description: 'Disables the selector.',

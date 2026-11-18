@@ -198,6 +198,12 @@ export const docs = {
       description: 'Callback fired when the selection changes.',
     },
     {
+      name: 'changeAction',
+      type: '(value: string | null) => void | Promise<void>',
+      description:
+        'Async action on change. Fires after onChange; the selector shows the new value and a busy state while it runs. Receives null on clear only with hasClear.',
+    },
+    {
       name: 'hasClear',
       type: 'boolean',
       description:
@@ -287,6 +293,12 @@ export const docs = {
       description: 'Helper text displayed below the label.',
     },
     {
+      name: 'labelTooltip',
+      type: 'string',
+      description:
+        'Tooltip text displayed in an info icon at the end of the label.',
+    },
+    {
       name: 'isOptional',
       type: 'boolean',
       description: 'Marks the field as optional.',
@@ -336,6 +348,19 @@ export const docs = {
       description:
         'How the option list is presented. adaptive uses a bottom sheet on compact touch screens and an anchored popover otherwise.',
       default: "'popover'",
+    },
+    {
+      name: 'placement',
+      type: 'LayerPlacement',
+      description:
+        'Position of the popup relative to the trigger. Omit it to place the selected option over the trigger, kept inside the viewport. Set it for explicit layer positioning, such as placement="above" for a toolbar fixed to the bottom.',
+    },
+    {
+      name: 'isDefaultOpen',
+      type: 'boolean',
+      description:
+        'Whether the dropdown starts open on mount. Useful for showcases and previews.',
+      default: 'false',
     },
     {
       name: 'width',
