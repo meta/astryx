@@ -311,7 +311,9 @@ Dialog and DropdownMenu.
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a non-modal participant takes Escape only
   while focus is inside it, or on or inside its anchor or trigger (FR15). A platform close
-  request follows the same presence rule (FR3). Its `FR2 and FR3 gap:` line cites the
+  request follows the same presence rule (FR3). Its matrix rows for a
+  Popover inside a Dialog, in the page and in an iframe, name the modal or
+  focus-holding Popover. Its `FR2 and FR3 gap:` line cites the
   FR15 gap.
 - Consumer docs: `usePopover.doc.mjs` documents the anchoring inputs;
   `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
