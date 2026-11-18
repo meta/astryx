@@ -259,7 +259,8 @@ off screen scrolls into view. The default, `'center'`, never drops a step:
 with no timer, a skip cannot tell a control the person lacks from one that
 renders late.
 
-Rejected: waiting a fixed time for an anchor to appear.
+Rejected: waiting a fixed time for an anchor to appear, by default or as an
+option; a step's `showAction` promise waits for exactly what the app needs.
 
 ### DEC-4 — Tour owns the chrome; the app owns the words and the journey
 
