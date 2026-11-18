@@ -184,6 +184,35 @@ describe('traits from a picture', () => {
     expect(height?.options).toEqual(['set my --size-element-md 24px']);
   });
 
+  it('writes field height on the inputs when it differs from the buttons', () => {
+    const c = canvas(420, 200);
+    for (let k = 0; k < 3; k++)
+      c.box({x: 10 + k * 130, y: 10, w: 110, h: 36, r: 4, fill: [98, 0, 238], label: true});
+    for (let k = 0; k < 2; k++)
+      c.box({x: 10 + k * 205, y: 80, w: 195, h: 56, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    const steps = readTraits(c.png()).traits.map(t => t.step);
+    expect(steps).toContainEqual({verb: 'set', thing: '--size-element-md', value: '36px'});
+    expect(steps).toContainEqual({verb: 'set', thing: 'height', value: '56px', on: 'inputs'});
+  });
+
+  it('writes no shared control size while the inputs read no clear height', () => {
+    const c = canvas(420, 260);
+    for (let k = 0; k < 3; k++)
+      c.box({x: 10 + k * 130, y: 10, w: 110, h: 36, r: 4, fill: [98, 0, 238], label: true});
+    c.box({x: 10, y: 80, w: 195, h: 44, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    c.box({x: 215, y: 80, w: 195, h: 56, r: 4, edge: 1, edgeColor: [150, 150, 150], fill: [255, 255, 255], label: true, labelAt: 'start'});
+    const {traits, unsure} = readTraits(c.png());
+    expect(traits.some(t => t.step.thing === '--size-element-md')).toBe(false);
+    expect(unsure.find(u => u.trait === 'height' && u.on === 'button-like')?.why).toMatch(/inputs read 44px, 56px with no clear height/);
+  });
+
+  it("gives the same readings as the editor's trait slots, gradients included", () => {
+    const {slots} = readTraits(controlsPage());
+    expect(slots['button-like'].height).toEqual({value: 28, source: 'picture', confidence: 1});
+    expect(slots['button-like'].radius.value).toBe(4);
+    expect(slots['button-like'].fill.value).toEqual({direction: 'to bottom', stops: expect.arrayContaining([expect.stringMatching(/^#/)])});
+  });
+
   it('never names a typeface', () => {
     const {unsure} = readTraits(controlsPage());
     expect(unsure.find(u => u.trait === 'font')?.why).toMatch(/not read from pictures/);

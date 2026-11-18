@@ -26,6 +26,7 @@
  * @property {boolean} round whether the corners are half the height (a pill or circle)
  * @property {'none' | 'soft' | 'hard'} shadow
  * @property {boolean} bevel light top-left edge and dark bottom-right edge
+ * @property {{light: string, dark: string} | null} bevelColors the bevel's edge colors next to the fill
  * @property {string} outside the color around the box
  * @property {'centered' | 'start' | 'none'} text where its text sits
  */
@@ -255,12 +256,17 @@ function readBox(id, s, rgb, label, stats, W, H, at) {
   if (outside_ < 0) return null;
   const outI = outside_ * 3;
   const outside = hexAt(rgb, outside_);
-  const edge = usual;
+  // The edge (border) is what all four sides draw.
+  const edge = Math.min(t.edge, b.edge, l.edge, r.edge);
   const edgeColor = edge && l.first >= 0 ? hexAt(rgb, l.first) : null;
   // Light top-left edge and dark bottom-right: a bevel.
   /** @param {{first: number, last: number}} o how much lighter its edge is than the fill next to it */
   const lift = o => (o.first >= 0 ? lum(rgb.subarray(o.first * 3)) - lum(rgb.subarray(o.last * 3)) : 0);
   const bevel = [t, l].every(o => lift(o) > 12) && [b, r].every(o => lift(o) < -12);
+  // A bevel's outermost light (top) and dark (bottom) colors.
+  const bevelColors = bevel && t.first >= 0 && b.first >= 0
+    ? {light: hexAt(rgb, t.first), dark: hexAt(rgb, b.first)}
+    : null;
   // The box's outermost color at the middle of its left side.
   const edgeI = (edge && l.first >= 0 ? l.first : l.last) * 3;
   const reach = dist(rgb, edgeI, rgb, outI);
@@ -281,6 +287,7 @@ function readBox(id, s, rgb, label, stats, W, H, at) {
     round: radius >= h / 2 - 1,
     shadow: shadowBelow(rgb, W, H, x, y + h, w, outI),
     bevel,
+    bevelColors,
     outside,
     text: textPlace(id, s, label, W),
   };
@@ -698,7 +705,7 @@ export function pixelScale(bytes) {
  * where enough boxes agree; the rest is named with what was seen.
  * @param {Picture} pic
  * @param {number} [scale] picture pixels per CSS pixel
- * @returns {{traits: Trait[], unsure: Unsure[], scale: number, boxes: number, lines: number}}
+ * @returns {{traits: Trait[], unsure: Unsure[], slots: Record<string, Record<string, {value: unknown, source: 'picture', confidence: number}>>, scale: number, boxes: number, lines: number}}
  */
 export function readTraits(pic, scale = 1) {
   const read = measureBoxes(pic);
@@ -717,7 +724,9 @@ export function readTraits(pic, scale = 1) {
     else if (b.w >= 0.9 * W) continue;
     // (A control holds text, or is an empty field far wider than tall; a
     // solid shape with neither is a letter's core.)
-    else if (b.h >= 16 * scale && b.h <= 64 * scale && b.w >= 1.2 * b.h && b.w <= 12 * b.h && (b.text !== 'none' || b.w >= 5 * b.h))
+    // (A thin field may be much wider than tall; a taller strip that wide is
+    // a banner, not a field.)
+    else if (b.h >= 16 * scale && b.h <= 64 * scale && b.w >= 1.2 * b.h && (b.w <= 8 * b.h || (b.w <= 12 * b.h && b.h <= 40 * scale)) && (b.text !== 'none' || b.w >= 5 * b.h))
       groups[b.text === 'centered' ? 'button-like' : 'inputs'].push(b);
     else if (b.h > 64 * scale && b.w >= 120 * scale) groups.containers.push(b);
   }
@@ -757,16 +766,52 @@ export function readTraits(pic, scale = 1) {
       });
   };
   const controls = [...groups['button-like'], ...groups.inputs];
-  // Height of controls: the whole theme's control size when buttons and
-  // inputs agree; else the buttons' is the theme's and the inputs' their own.
+  // Height of controls. The shared control size feeds buttons and inputs
+  // alike, so it is written only when each kind agrees on its own height:
+  // one value when they match, else the buttons' as the shared size and the
+  // inputs' on the inputs. When the inputs' height is not clear, the shared
+  // size is not written either (it would resize them).
   const heightStep = (/** @type {number} */ v) => ({verb: /** @type {const} */ ('set'), thing: '--size-element-md', value: `${px(v)}px`});
-  const tall = agreed(controls.map(b => b.h), 1 * scale);
-  if (controls.length && tall.n >= controls.length * 0.6)
-    fromBoxes('height', 'button-like', controls, b => b.h, 1, heightStep, v => `${px(v)}px`);
-  else {
-    fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, heightStep, v => `${px(v)}px`);
-    fromBoxes('height', 'inputs', groups.inputs, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'inputs'}), v => `${px(v)}px`);
-  }
+  const showPx = (/** @type {number} */ v) => `${px(v)}px`;
+  const ofKind = (/** @type {Box[]} */ boxes, /** @type {number} */ near) => {
+    const a = agreed(boxes.map(b => b.h), near * scale);
+    return boxes.length && a.n >= 2 && a.n >= boxes.length * 0.6 ? a.value : null;
+  };
+  // An input's focus ring reads as a wider edge around the same field, so
+  // inputs agree on their height inside the edge, and the height written is
+  // the one drawn with the inputs' usual edge.
+  // A ring drawn outside adds to the height, one drawn inside does not, so
+  // inputs agree when their heights agree either with or inside the edge.
+  // Focus only adds, so the inputs' own edge is the thinnest one drawn.
+  const usualEdge = groups.inputs.length ? Math.min(...groups.inputs.map(b => b.edge)) : 0;
+  const outerAgree = agreed(groups.inputs.map(b => b.h), 2 * scale);
+  const innerAgree = agreed(groups.inputs.map(b => b.h - 2 * b.edge), 2 * scale);
+  const inner = outerAgree.n >= innerAgree.n ? outerAgree : innerAgree;
+  const plainInputs = groups.inputs.filter(b => b.edge === usualEdge);
+  const inputsAgree = groups.inputs.length >= 2 && inner.n >= 2 && inner.n >= groups.inputs.length * 0.6;
+  const inputsH = inputsAgree ? mode(plainInputs.map(b => b.h)) : null;
+  const buttonsH = ofKind(groups['button-like'], 1);
+  if (buttonsH != null && inputsH != null && Math.abs(buttonsH - inputsH) <= 1 * scale)
+    fromBoxes('height', 'button-like', controls, b => b.h, 1, heightStep, showPx);
+  else if (buttonsH != null && inputsH != null) {
+    fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, heightStep, showPx);
+    traits.push({
+      trait: 'height',
+      on: 'inputs',
+      value: showPx(/** @type {number} */ (inputsH)),
+      read: `${inner.n} of ${groups.inputs.length} inputs boxes (${whereIn(groups.inputs, W, H)})`,
+      sure: inner.n >= 3 ? 'sure' : 'about',
+      step: {verb: 'set', thing: 'height', value: showPx(/** @type {number} */ (inputsH)), on: 'inputs'},
+    });
+  } else if (buttonsH != null && groups.inputs.length)
+    unsure.push({
+      trait: 'height',
+      on: 'button-like',
+      why: `buttons read ${showPx(buttonsH)}, but the inputs read ${[...new Set(groups.inputs.map(b => showPx(b.h)))].join(', ')} with no clear height, and the shared control size would resize them too`,
+      options: [stepText(heightStep(buttonsH))],
+    });
+  else if (buttonsH != null) fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, heightStep, showPx);
+  else if (controls.length) fromBoxes('height', 'button-like', controls, b => b.h, 1, heightStep, showPx);
   // Corners: controls and inputs together when they agree, else apart.
   const cornerOf = (/** @type {Box} */ b) => (b.round ? Infinity : b.radius);
   const cornerStep = (/** @type {string} */ on, /** @type {string | null} */ token) => (/** @type {number} */ v) =>
@@ -786,8 +831,16 @@ export function readTraits(pic, scale = 1) {
   fromBoxes('corners', 'containers', groups.containers, cornerOf, 1, cornerStep('containers', '--radius-container'), showCorner, median);
   fromBoxes('corners', 'checks', groups.checks, cornerOf, 1, cornerStep('checks', null), showCorner, median);
   // Edge width: inputs always draw one when the look has edges.
-  const edged = groups.inputs.length >= 2 ? groups.inputs : controls;
-  fromBoxes('edges', edged === controls ? 'button-like' : 'inputs', edged, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
+  if (inputsAgree)
+    traits.push({
+      trait: 'edges',
+      on: 'inputs',
+      value: showPx(usualEdge),
+      read: `${plainInputs.length} of ${groups.inputs.length} inputs boxes (${whereIn(groups.inputs, W, H)}), the thinnest edge (a focused one draws more)`,
+      sure: plainInputs.length >= 2 ? 'sure' : 'about',
+      step: {verb: 'set', thing: '--border-width', value: showPx(usualEdge)},
+    });
+  else fromBoxes('edges', 'button-like', controls, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
   // Checks size.
   fromBoxes('height', 'checks', groups.checks, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'checks'}), v => `${px(v)}px`);
   // Surfaces: how containers sit on the page.
@@ -898,5 +951,32 @@ export function readTraits(pic, scale = 1) {
       });
     }
   unsure.push({trait: 'font', on: 'theme', why: 'the typeface is not read from pictures; set the family you want with `set my font`'});
-  return {traits, unsure, scale, boxes: read.boxes.length, lines: lines.length};
+  // The same readings as trait slots per family, for the editor's traits
+  // (fill with gradient, edge with bevel, depth): measured looks no setting
+  // writes yet ride here, each with how many boxes agree.
+  /** @type {Record<string, Record<string, {value: unknown, source: 'picture', confidence: number}>>} */
+  const slots = {};
+  const slot = (/** @type {string} */ role, /** @type {string} */ name, /** @type {unknown} */ value, /** @type {number} */ n, /** @type {number} */ of) => {
+    (slots[role] ??= {})[name] = {value, source: 'picture', confidence: Number((n / of).toFixed(2))};
+  };
+  if (graded.length >= 2) {
+    const lead = graded.find(b => chroma(/** @type {NonNullable<Box['gradient']>} */ (b.gradient).stops[1]) >= 60) ?? graded[0];
+    const g = /** @type {NonNullable<Box['gradient']>} */ (lead.gradient);
+    slot('button-like', 'fill', {direction: g.direction === 'vertical' ? 'to bottom' : 'to right', stops: g.stops}, graded.length, controls.length);
+  }
+  const bevelled = controls.filter(b => b.bevelColors);
+  if (bevelled.length >= 2) {
+    const c = /** @type {NonNullable<Box['bevelColors']>} */ (bevelled[0].bevelColors);
+    slot('button-like', 'edge', {width: px(bevelled[0].edge), light: c.light, dark: c.dark, rings: Math.max(1, Math.round(bevelled[0].edge / scale))}, bevelled.length, controls.length);
+  }
+  if (shadowed.length >= 2) slot('button-like', 'depth', shadowed[0].shadow, shadowed.length, controls.length);
+  for (const t of traits) {
+    const name = {height: 'height', corners: 'radius'}[t.trait];
+    const role = t.on === 'inputs' ? 'inset-fields' : t.on;
+    if (name && role !== 'checks' && role !== 'containers') {
+      const [n, of] = (/(\d+) of (\d+)/.exec(t.read) ?? [0, 1, 1]).slice(1).map(Number);
+      slot(role, name, t.value === 'pill' ? 'pill' : parseFloat(t.value), n, of);
+    }
+  }
+  return {traits, unsure, slots, scale, boxes: read.boxes.length, lines: lines.length};
 }
