@@ -100,6 +100,34 @@ describe('a part setting Core already draws', () => {
     await themeEditUndo('t', {cwd, thing: '--radius-full'});
   }, 240_000);
 
+  it('a fill Core draws at rest but not when checked is written', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet(
+        't',
+        'background-color',
+        'var(--color-background-surface)',
+        {cwd, on: 'checkbox-indicator'},
+      )
+    );
+    expect(JSON.stringify(r)).not.toContain('no change: checkbox-indicator');
+    await themeEditUndo('t', {
+      cwd,
+      thing: 'background-color',
+      on: 'checkbox-indicator',
+    });
+  }, 240_000);
+
+  it('the missed line names the variant a miss is in', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'danger', '#e11d48', {cwd})
+    );
+    const where = /** @type {string[]} */ (r.data?.missedWhere ?? []);
+    expect(where).toContain('toast type:error at rest');
+    await themeEditUndo('t', {cwd, thing: 'danger'});
+  }, 240_000);
+
   it('square corners on a badge are written and styled', async () => {
     if (unbuilt) return;
     const r = /** @type {any} */ (

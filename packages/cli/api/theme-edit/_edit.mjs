@@ -6355,15 +6355,19 @@ async function changeOnce(
    * renders with no state, when they all agree: as written (a token
    * reference, `var(--radius-full)`), or, with `resolve`, as drawn now, the
    * theme's own token values first, then the base theme's and Core's.
+   * With `everyState`, every look the part renders counts, its states too.
    * @param {string} part @param {string} prop @param {boolean} [resolve]
+   * @param {boolean} [everyState]
    * @returns {string | null}
    */
-  const coreAtRest = (part, prop, resolve = false) => {
+  const coreAtRest = (part, prop, resolve = false, everyState = false) => {
     const at = /** @type {Record<string, string>} */ (
       ctx.C?.MAP?.[part]?.at?.[prop] ?? {}
     );
     const rests = Object.entries(at)
-      .filter(([k]) => !/[:\s]|state|open|pressed|checked/.test(k))
+      .filter(
+        ([k]) => everyState || !/[:\s]|state|open|pressed|checked/.test(k),
+      )
       .map(([, v]) => v);
     if (!rests.length) return null;
     const own = /** @type {Record<string, unknown>} */ (
@@ -6408,8 +6412,10 @@ async function changeOnce(
   // matches what is drawn today is the person's own choice, which holds
   // when a token changes later.)
   /** @param {string} part @param {string} prop */
+  // (Every look the write reaches, its states included: a write that
+  // recolors a checked box changes what shows, whatever it draws at rest.)
   const drawnAtRest = (part, prop) => {
-    const ref = coreAtRest(part, prop);
+    const ref = coreAtRest(part, prop, false, true);
     return ref && /var\(/.test(ref) ? ref : null;
   };
   // A new plain part setting that only writes what Core already draws
@@ -8686,7 +8692,12 @@ async function missedSummary(ctx, slug, data, res) {
   const on = [...new Set(list.map(m => m.part))];
   // (Where each part keeps the base look: the state named, or at rest.)
   const where = [
-    ...new Set(list.map(m => `${m.part} ${m.state ? m.state : 'at rest'}`)),
+    ...new Set(
+      list.map(
+        m =>
+          `${m.part}${m.when ? ` ${m.when}` : ''} ${m.state ? m.state : 'at rest'}`,
+      ),
+    ),
   ];
   return list.length
     ? {
@@ -8719,19 +8730,26 @@ async function missedSummary(ctx, slug, data, res) {
  * @param {Record<string, any>} base
  * @param {{count?: boolean}} [opts] `count`: the entries alone, their lines
  *   not built (a change counts them; show lists each with its line)
- * @returns {Promise<Array<{part: string, state?: string, why: string, line: string}>>}
+ * @returns {Promise<Array<{part: string, state?: string, when?: string, why: string, line: string}>>}
  */
 async function missedParts(ctx, slug, data, res, base, opts = {}) {
   const ordered = missedSteps(ctx, data, res, base);
-  /** @type {Array<{part: string, state?: string, why: string, line: string}>} */
+  /** @type {Array<{part: string, state?: string, when?: string, why: string, line: string}>} */
   const out = [];
   if (opts.count)
-    return ordered.map(x => ({
-      part: x.part,
-      ...(x.state ? {state: x.state} : {}),
-      why: x.why,
-      line: '',
-    }));
+    return ordered.map(x => {
+      // (The variant the miss is in, as its lines name it.)
+      const when = x.steps.find(
+        (/** @type {{when?: string}} */ st) => st.when,
+      )?.when;
+      return {
+        part: x.part,
+        ...(x.state ? {state: x.state} : {}),
+        ...(when ? {when} : {}),
+        why: x.why,
+        line: '',
+      };
+    });
   for (const x of ordered) {
     /** @type {string[]} */
     const lines = [];

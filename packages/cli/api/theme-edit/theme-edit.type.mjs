@@ -109,7 +109,7 @@
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
- * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: `<part> <state>`, or `<part> at rest`; the text output names them.
+ * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
