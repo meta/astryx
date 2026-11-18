@@ -21,11 +21,15 @@ const GITHUB_PROFILE_PICTURE = /^\/[^/]+\.png$/;
 
 /** The parsed URL and its size parameter, or null when GitHub does not serve the URL. */
 function githubAvatar(url: string): {parsed: URL; parameter: string} | null {
-  // A site path such as `/blog/authors/team.png` is not an absolute URL.
-  if (!URL.canParse(url)) {
+  let parsed: URL;
+  try {
+    // This also runs in the browser, and `URL.canParse` is missing in some
+    // browsers that the site supports.
+    parsed = new URL(url);
+  } catch {
+    // A site path such as `/blog/authors/team.png` is not an absolute URL.
     return null;
   }
-  const parsed = new URL(url);
   const parameter = SIZE_PARAMETER[parsed.hostname];
   if (parameter == null) {
     return null;

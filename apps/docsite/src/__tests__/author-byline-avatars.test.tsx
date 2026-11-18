@@ -22,8 +22,10 @@ const {Box} = vi.hoisted(() => ({
   Box: ({children}: {children?: ReactNode}) => children ?? null,
 }));
 
-// An avatar that shows the file it asks for.
-vi.mock('@astryxdesign/core/Avatar', () => ({
+// An avatar that shows the file it asks for. The size scale is the real one.
+// The mock loads it while the file loads, so no test waits for the module.
+vi.mock('@astryxdesign/core/Avatar', async importOriginal => ({
+  resolveSize: (await importOriginal<typeof AvatarModule>()).resolveSize,
   Avatar: ({src, name}: {src?: string; name?: string}) => (
     <img src={src} alt={name} />
   ),
@@ -38,6 +40,7 @@ vi.mock('@astryxdesign/core/Link', () => ({Link: Box}));
 vi.mock('@astryxdesign/core/Layout', () => ({HStack: Box}));
 vi.mock('@astryxdesign/core/Divider', () => ({Divider: () => null}));
 
+import {resolveSize} from '@astryxdesign/core/Avatar';
 import {AuthorByline} from '../components/blog/AuthorByline';
 
 /** The avatar files a byline asks for, in author order. */
@@ -62,11 +65,7 @@ describe('blog byline avatars', () => {
     ]);
   });
 
-  it('takes its pixel sizes from the Avatar size scale', async () => {
-    const {resolveSize} = await vi.importActual<typeof AvatarModule>(
-      '@astryxdesign/core/Avatar',
-    );
-
+  it('takes its pixel sizes from the Avatar size scale', () => {
     expect(avatarFiles('compact', ['ernest'])).toEqual([
       `https://github.com/ernestt.png?size=${2 * resolveSize('xsm')}`,
     ]);

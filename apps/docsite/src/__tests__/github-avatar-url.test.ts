@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {githubAvatarImage, githubAvatarUrl} from '../lib/githubAvatarUrl';
 
 describe('githubAvatarUrl', () => {
@@ -48,6 +48,26 @@ describe('githubAvatarUrl', () => {
     ['no avatar', ''],
   ])('leaves %s as it is', (_what, url) => {
     expect(githubAvatarUrl(url, 48)).toBe(url);
+  });
+});
+
+describe('githubAvatarUrl in a browser without URL.canParse', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sizes a GitHub avatar and leaves a site path as it is', () => {
+    // Chrome and Edge before version 120 have no `URL.canParse`.
+    vi.spyOn(URL, 'canParse').mockImplementation(() => {
+      throw new TypeError('URL.canParse is not a function');
+    });
+
+    expect(githubAvatarUrl('https://github.com/octocat.png', 20)).toBe(
+      'https://github.com/octocat.png?size=40',
+    );
+    expect(githubAvatarUrl('/blog/authors/astryx-team.png', 20)).toBe(
+      '/blog/authors/astryx-team.png',
+    );
   });
 });
 
