@@ -62,6 +62,7 @@ export type ActionListPreload =
  * fails there reaches the menu through lazy().
  */
 export async function preloadMenuBottomSheetActionList(): Promise<ActionListPreload> {
+  isActionListWanted = true;
   try {
     await loadActionList();
     return {isLoaded: true};
@@ -70,15 +71,22 @@ export async function preloadMenuBottomSheetActionList(): Promise<ActionListPrel
   }
 }
 
-// The sheet reveals only once its rows' module has loaded too. A menu opened
-// before the at-rest preload finishes (a press right after mount) then shows
-// the sheet with its actions in one commit, never an empty sheet first. A
-// failed row load does not hold the sheet: the rows then fail through lazy().
+// Whether a menu on the page renders the action list: its preload is the
+// signal. A compound sheet (ContextMenu `menuContent`) never preloads, so it
+// never loads or waits for the rows.
+let isActionListWanted = false;
+
+// A sheet whose menu renders the action list reveals only once the rows'
+// module has loaded too. A menu opened before the at-rest preload finishes (a
+// press right after mount) then shows the sheet with its actions in one
+// commit, never an empty sheet first. The preload runs after the first render,
+// so the check comes once the sheet's own module has loaded. A failed row load
+// does not hold the sheet: the rows then fail through lazy().
 const LazyMenuBottomSheet = lazy(async () => {
-  const [module] = await Promise.all([
-    import('./MenuBottomSheet'),
-    loadActionList().catch(() => undefined),
-  ]);
+  const module = await import('./MenuBottomSheet');
+  if (isActionListWanted) {
+    await loadActionList().catch(() => undefined);
+  }
   return {default: module.MenuBottomSheet};
 });
 
