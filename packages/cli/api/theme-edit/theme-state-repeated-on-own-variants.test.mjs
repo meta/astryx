@@ -2,10 +2,10 @@
 
 /**
  * @file A setting on the plain part that a more specific rule would beat is
- * repeated on that rule's key: a rule under several attributes at once (a
- * table row's `parity:odd+striped`), and one Core scopes to a mode, are found
- * like a single-attribute one; a setting made for one mode is repeated in that
- * mode's block.
+ * repeated on that rule's key: a rule under several visual props at once, and
+ * one Core scopes to a mode, are found like a single-attribute one; a setting
+ * made for one mode is repeated in that mode's block, and only onto a variant
+ * that holds a fill in that mode.
  */
 
 import * as fs from 'node:fs';
@@ -61,6 +61,29 @@ describe('findOverrides', () => {
         prop: 'backgroundColor',
         value: '#f5f5f5',
         mode: 'light',
+      },
+    ]);
+  });
+
+  it("reads each rule's mode, in its scope or its prefers-color-scheme block", () => {
+    const dark = [
+      ':is(.astryx-tab[data-selected="selected"]):where(:scope[data-theme="dark"] *):where(:not(:scope [data-astryx-media] *)) { background-color: #111; }',
+      '@media (prefers-color-scheme: dark) {',
+      '  :is(.astryx-tab[data-selected="selected"]):where(:scope:not([data-theme="light"], [data-theme="dark"]) *):where(html:not([data-astryx-scheme]) *) { background-color: #111; }',
+      '}',
+      ':is(.astryx-tab[data-selected="selected"]):where(:scope [data-astryx-media="dark"] *:not(:scope [data-astryx-media="dark"] [data-astryx-media="light"] *), :scope [data-astryx-media="light"] [data-astryx-media="dark"] *) { background-color: #111; }',
+    ].join('\n');
+    const theme = (/** @type {string} */ m) => ({
+      components: {tab: {base: {[`@${m}`]: {backgroundColor: '#eee'}}}},
+    });
+    expect(findOverrides(dark, theme('light'))).toEqual([]);
+    expect(findOverrides(dark, theme('dark'))).toEqual([
+      {
+        target: 'tab',
+        key: 'selected',
+        prop: 'backgroundColor',
+        value: '#eee',
+        mode: 'dark',
       },
     ]);
   });
@@ -150,6 +173,32 @@ describe('a whole-part state setting on a theme with its own variant rule', () =
     const block = selected.slice(0, selected.indexOf('\n      }'));
     expect(block).not.toMatch(/^\s{8}"backgroundColor": "#eeeeee"/m);
     for (const mode of ['light', 'dark']) await themeEditUndo('q', {cwd});
+    await themeEditUndo('q', {cwd});
+  }, 120_000);
+
+  it('lifts a one-mode setting only onto variants the theme fills in that mode', async () => {
+    // A selected tab filled in dark mode only: a light-only tab fill meets
+    // nothing there in light, so it is not repeated onto it.
+    await themeEditSet('q', 'background-color', '#222222', {
+      cwd,
+      on: 'tab',
+      state: 'selected',
+      mode: 'dark',
+    });
+    const r = await themeEditSet('q', 'background-color', '#eeeeee', {
+      cwd,
+      on: 'tab',
+      mode: 'light',
+    });
+    expect(r.data.lifted).toEqual([]);
+    const settings = fs.readFileSync(
+      path.join(cwd, 'themes/q/q.settings.ts'),
+      'utf8',
+    );
+    expect(settings).not.toMatch(
+      /"selected": \{[^]*?"@light": \{\s*"backgroundColor": "#eeeeee"/,
+    );
+    await themeEditUndo('q', {cwd});
     await themeEditUndo('q', {cwd});
   }, 120_000);
 

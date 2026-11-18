@@ -8315,22 +8315,89 @@ function withoutWhere(text) {
 }
 
 /**
+ * The color mode each `@media (prefers-color-scheme: …)` block of a built
+ * stylesheet holds its rules for, as [start, end, mode] spans of the text.
+ * @param {string} cssText
+ * @returns {Array<[number, number, 'light' | 'dark']>}
+ */
+function schemeBlocks(cssText) {
+  /** @type {Array<[number, number, 'light' | 'dark']>} */
+  const out = [];
+  for (const m of cssText.matchAll(
+    /@media\s*\(prefers-color-scheme:\s*(light|dark)\)\s*\{/g,
+  )) {
+    let depth = 1;
+    let i = (m.index ?? 0) + m[0].length;
+    for (; i < cssText.length && depth > 0; i++) {
+      if (cssText[i] === '{') depth++;
+      else if (cssText[i] === '}') depth--;
+    }
+    out.push([m.index ?? 0, i, /** @type {'light' | 'dark'} */ (m[1])]);
+  }
+  return out;
+}
+
+/**
+ * The color mode a rule's selector scopes it to, as Core writes a one-mode
+ * rule: the theme root's `data-theme`, the page's `data-astryx-scheme`, or the
+ * nearest media surface's `data-astryx-media`, the nearest one deciding in
+ * each alternative. Null when the selector names no mode, or alternatives
+ * name both.
+ * @param {string} scope the selector text after the element's own attributes
+ * @returns {'light' | 'dark' | null}
+ */
+function scopeMode(scope) {
+  // Take out every `:not(…)` group: the modes it names are the ones the rule
+  // is not in.
+  let text = '';
+  for (let i = 0; i < scope.length;) {
+    if (scope.startsWith(':not(', i)) {
+      let depth = 0;
+      let j = i + ':not'.length;
+      for (; j < scope.length; j++) {
+        if (scope[j] === '(') depth++;
+        else if (scope[j] === ')' && --depth === 0) break;
+      }
+      i = j + 1;
+    } else text += scope[i++];
+  }
+  const modes = new Set(
+    text
+      .split(',')
+      .map(
+        alt =>
+          [
+            ...alt.matchAll(
+              /\[data-(?:theme|astryx-scheme|astryx-media)="(light|dark)"\]/g,
+            ),
+          ].at(-1)?.[1] ?? null,
+      )
+      .filter(Boolean),
+  );
+  return modes.size === 1
+    ? /** @type {'light' | 'dark'} */ ([...modes][0])
+    : null;
+}
+
+/**
  * The rules the built stylesheet gives a part's own element under its visual
  * props or states: one attribute (`.astryx-heading[data-level="1"]`) or
- * several (`[data-parity="odd"][data-striped="striped"]`), bare or inside the
- * `:is(…)` and mode `:where(…)` scopes Core writes a mode-only rule in. Each
- * with its attributes, the one pseudo-class it holds (null at rest) and the
- * properties it declares. A rule of an element inside the part is none.
+ * several (`[data-variant="ghost"][data-size="sm"]`), bare or inside the
+ * `:is(…)` and mode `:where(…)` scopes Core writes a one-mode rule in. Each
+ * with its attributes, the one pseudo-class it holds (null at rest), the
+ * properties it declares, and the color mode it holds in (null: both). A
+ * rule of an element inside the part is none.
  * @param {string} cssText
  * @param {string} target
- * @returns {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[]}>}
+ * @returns {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[], mode: 'light' | 'dark' | null}>}
  */
 function variantRules(cssText, target) {
+  const blocks = schemeBlocks(cssText);
   const re = new RegExp(
     `\\.astryx-${target.replace(/-/g, '\\-')}((?:\\[data-[a-z-]+="[^"]*"\\])+)([^{}]*)\\{([^}]*)\\}`,
     'g',
   );
-  /** @type {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[]}>} */
+  /** @type {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[], mode: 'light' | 'dark' | null}>} */
   const out = [];
   for (const m of cssText.matchAll(re)) {
     const rest = withoutWhere(m[2]);
@@ -8346,6 +8413,10 @@ function variantRules(cssText, target) {
       ]),
       state: pseudo[0] ?? null,
       declared: [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(d => d[1]),
+      mode:
+        blocks.find(
+          ([start, end]) => (m.index ?? 0) > start && (m.index ?? 0) < end,
+        )?.[2] ?? scopeMode(m[2]),
     });
   }
   return out;
@@ -8354,9 +8425,10 @@ function variantRules(cssText, target) {
 /**
  * A plain part setting can lose to a more specific rule for the same part
  * and property, such as a base theme's `.astryx-heading[data-level="1"]
- * {font-weight}` or the theme's own stripe on `parity:odd+striped`. Find
- * those rules in the built stylesheet. A setting made for one mode (`@light`)
- * is found with its mode.
+ * {font-weight}` or the theme's own fill on a selected tab. Find those rules
+ * in the built stylesheet. A setting made for one mode (`@light`) is found
+ * with its mode, and only where a rule holds in that mode: a fill a variant
+ * has in dark mode only beats nothing in light.
  * @param {string} cssText
  * @param {any} theme
  * @returns {Array<{target: string, key: string, prop: string, value: string, state?: string, mode?: 'light' | 'dark'}>}
@@ -8406,7 +8478,10 @@ export function findOverrides(cssText, theme) {
       // Core writes a rule once per place a mode is decided (the root, the
       // system, each media surface): one copy per variant and property.
       const seenResting = new Set();
-      for (const r of rules.filter(x => x.state == null))
+      // A setting for one mode meets only the rules that hold in it.
+      const inMode = (/** @type {{mode: string | null}} */ r) =>
+        !mode || !r.mode || r.mode === mode;
+      for (const r of rules.filter(x => x.state == null && inMode(x)))
         for (const prop of last) {
           // The override may set the property or one of its longhands.
           if (ownChoice(kebab(prop), r.attrs)) continue;
@@ -8437,7 +8512,9 @@ export function findOverrides(cssText, theme) {
         );
         if (!stateProps.length) continue;
         const seen = new Set();
-        for (const r of rules.filter(x => x.state == null || x.state === state))
+        for (const r of rules.filter(
+          x => (x.state == null || x.state === state) && inMode(x),
+        ))
           for (const prop of stateProps) {
             const css = kebab(prop);
             if (ownChoice(css, r.attrs)) continue;
