@@ -163,14 +163,10 @@ module stays private while OQ1 is open.
 **Reference:** `architecture:list-windowing/DEC-2`
 **Decider:** `cixzhang`, `2026-11-09`
 
-> any visualizer engine needs to be able to attach to any scroll ref
+Every virtualizer works inside a container scroll area and with page
+(document) scroll (INV4, FR4). No scroll-ref API is required.
 
-> i want to instead require that visualizers should work in both container
-> scroll areas as well as page scroll
-
-The second statement refines the first; "visualizer" means virtualizer. Every
-virtualizer works inside a container scroll area and with page (document)
-scroll (INV4, FR4). No scroll-ref API is required.
+Rejected: a caller-provided scroll ref.
 
 ### DEC-3 — Common engine requirements
 
