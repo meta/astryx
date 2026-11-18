@@ -10,7 +10,7 @@
 
 - `astryx experimental theme editor` is faster: a picture's faint-text measurement reads the page's images once and each text once, and a change makes its color mapping and reads the theme's own token values once.
 
-- `astryx experimental theme editor how`: a font family named before or after the text it's for, without the word "font", now sets that font. Examples: "Fraunces headings", "use Playfair Display for headings", "headings in Lora". Before the text, the family must be one the editor knows (a built-in preset or a Fontsource family); after "in" or "use", any family `set` accepts works. A casing said in words ("titles in All Caps") is the text's case, never a family.
+- `astryx experimental theme editor how`: a font family named before or after the text it's for, without the word "font", now sets that font. Examples: "Inter headings", "use Playfair Display for headings", "headings in Lora". Before the text, the family must be one the editor knows: a built-in or system font, an installed package, or a name of two or more words that Fontsource publishes. A one-word name such as "Stylish headings" may be a plain word, so it is offered, not written. After "in" or "use", any family `set` accepts works. A casing said in words ("titles in All Caps") is the text's case, never a family.
 
 - In `astryx experimental theme editor how`, a list piece that is only a color, with no look or part word of its own ("big buttons, a sky blue, high contrast"), is the theme's accent. It no longer fills the button named in a piece before it, and it is no longer dropped. "buttons rounder and red" still reds the buttons, and a part's colon list ("badges: green, amber, red") still colors that part.
 

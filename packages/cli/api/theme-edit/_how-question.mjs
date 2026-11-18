@@ -4524,7 +4524,20 @@ export function draftAnswer(ctx, env, question) {
           const cue = /\buse\s+$/.test(lead);
           if (cue && cued(run)) return `${lead}font ${run}`;
           if (!inCatalog(run)) return m;
-          if (editorReads(run)) {
+          // (Said with no cue, a one-word name Fontsource only publishes,
+          // "Stylish", "Content", may be a plain word: the family is
+          // offered, never written. A system font, a family the editor's
+          // font table holds, an installed one or a longer name is proof.)
+          const one = run.trim();
+          const s = fontsourceSuggestion(one);
+          const proven =
+            isSystemFamily(one) ||
+            s?.known ||
+            /\s/.test(one) ||
+            Boolean(
+              s && ctx.project?.cwd && packageInstalled(ctx.project.cwd, s.pkg),
+            );
+          if (editorReads(run) || !proven) {
             familyOffers.push({
               name: run.trim(),
               on: /^(?:headings?|titles?)$/i.test(noun) ? 'heading' : 'body',
