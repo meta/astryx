@@ -6,6 +6,7 @@ import {
   generateAdaptationCSS,
   generateThemeRules,
 } from '@astryxdesign/core/theme';
+import {codemodOutcome} from '../../../outcome.mjs';
 import transform from '../preserve-chat-radius.mjs';
 
 async function applyTransform(source) {
@@ -41,7 +42,7 @@ export const theme = defineTheme({name: 'app'});`),
     expect(output).toMatch(/tokens: \{ ?'--radius-chat': '28px' ?\}/);
   });
 
-  it('keeps the page step of a literal radius scale, and leaves a scale whose steps match', async () => {
+  it('keeps the page step of a literal radius scale', async () => {
     const scaled = flat(
       await applyTransform(
         `${IMPORT}export const theme = defineTheme({name: 'app', radius: {base: 4, multiplier: 1.35}});`,
@@ -49,13 +50,23 @@ export const theme = defineTheme({name: 'app'});`),
     );
     expect(scaled).toMatch(/'--radius-chat': '38px'/);
 
-    const square = `${IMPORT}export const theme = defineTheme({name: 'app', radius: {base: 4, multiplier: 0}});`;
-    expect(await applyTransform(square)).toBe(square);
+    const square = flat(
+      await applyTransform(
+        `${IMPORT}export const theme = defineTheme({name: 'app', radius: {base: 4, multiplier: 0}});`,
+      ),
+    );
+    expect(square).toMatch(/tokens: \{ ?'--radius-chat': '0px' ?\}/);
   });
 
-  it('compares with the container radius the theme ends up with', async () => {
-    const container = `${IMPORT}export const theme = defineTheme({name: 'app', tokens: {'--radius-container': '28px'}});`;
-    expect(await applyTransform(container)).toBe(container);
+  it('sets the old value where the container radius has it too, so an extending theme keeps it', async () => {
+    const container = flat(
+      await applyTransform(
+        `${IMPORT}export const theme = defineTheme({name: 'app', tokens: {'--radius-container': '28px'}});`,
+      ),
+    );
+    expect(container).toMatch(
+      /tokens: \{ ?'--radius-chat': '28px', '--radius-container': '28px' ?\}/,
+    );
 
     const square = flat(
       await applyTransform(
@@ -126,14 +137,22 @@ export const theme = defineTheme({name: 'app', extends: neutralTheme, radius: {b
     );
   });
 
-  it('migrates a default-exported theme object', async () => {
-    const output = flat(
-      await applyTransform(
-        `export default {name: 'app', tokens: {'--radius-container': '16px'}};`,
-      ),
+  it('reports a default-exported object shaped like a theme for manual migration, and leaves it unchanged', async () => {
+    const source = `export default {name: 'app', tokens: {'--radius-container': '16px'}};`;
+    const error = await applyTransform(source).then(
+      () => null,
+      thrown => thrown,
     );
-    expect(output).toMatch(/'--radius-chat': '28px'/);
+    expect(codemodOutcome(error)).toMatchObject({
+      kind: 'manual',
+      line: 1,
+    });
+    expect(error.message).toContain(
+      "add '--radius-chat': '28px' to its tokens",
+    );
 
+    const done = `export default {name: 'app', tokens: {'--radius-chat': '28px'}};`;
+    expect(await applyTransform(done)).toBe(done);
     const other = `export default {name: 'app', title: 'Not a theme'};`;
     expect(await applyTransform(other)).toBe(other);
   });
@@ -214,6 +233,11 @@ function effectiveChatRadius(source) {
 }
 
 const BASE = `defineTheme({name: 'base', tokens: {'--radius-chat': '28px'}})`;
+/** Bases that set no chat radius, so the codemod sets theirs. */
+const SQUARE_BASE = `defineTheme({name: 'base', radius: {base: 4, multiplier: 0}})`;
+const ROUND_BASE = `defineTheme({name: 'base', tokens: {'--radius-container': '28px'}})`;
+/** As Y2K now ships: square, with the chat radius set. */
+const Y2K_BASE = `defineTheme({name: 'y2k', radius: {base: 4, multiplier: 0}, tokens: {'--radius-chat': '0px'}})`;
 const COARSE = `when: {pointer: 'coarse'}`;
 const BELOW_MD = `when: {width: {below: 'md'}}`;
 
@@ -281,6 +305,27 @@ const DOWNSTREAM = [
     root: '28px',
     rules: ['28px'],
     changes: true,
+  },
+  {
+    config: `{name: 'a', extends: ${SQUARE_BASE}, tokens: {'--radius-container': '8px'}}`,
+    root: '0px',
+    changes: true,
+  },
+  {
+    config: `{name: 'a', extends: ${ROUND_BASE}, tokens: {'--radius-container': '8px'}}`,
+    root: '28px',
+    changes: true,
+  },
+  {
+    config: `{name: 'a', extends: ${ROUND_BASE}, adaptations: {rules: [{${BELOW_MD}, value: {tokens: {'--radius-container': '16px'}}}]}}`,
+    root: '28px',
+    rules: ['28px'],
+    changes: true,
+  },
+  {
+    config: `{name: 'a', extends: ${Y2K_BASE}, tokens: {'--radius-container': '8px'}}`,
+    root: '0px',
+    changes: false,
   },
   {
     config: `{name: 'a', extends: ${BASE}, adaptations: {rules: [{${COARSE}, value: {radius: {base: 4, multiplier: 2}}}]}}`,

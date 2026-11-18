@@ -6,23 +6,25 @@
  * `--radius-chat` used to default to 28px, and a radius scale gave it the page
  * step (base × 7 × multiplier), in a theme and in each adaptation rule. It now
  * follows the theme's container radius, and a radius scale no longer sets it.
- * This codemod keeps the old chat corners in each Astryx `defineTheme()` config
- * and each default-exported theme object:
+ * This codemod keeps the old chat corners in each Astryx `defineTheme()` config:
  *
  * - The theme's tokens get `'--radius-chat'`: 28px, or the page step of its
- *   literal radius scale. A theme whose container radius already equals that
- *   value needs nothing, unless an adaptation rule changes its radius.
+ *   literal radius scale, also where its container radius has that value, so a
+ *   theme that extends it and sets its own container keeps it.
  * - A theme that extends another one and has no radius scale of its own
- *   inherits that theme's chat radius, so its tokens are left alone.
+ *   inherits that theme's chat radius, so its tokens are left alone: every
+ *   Astryx theme, and every theme this codemod migrates, sets the token.
  * - Each adaptation rule with a radius scale gets its page step in its own
  *   tokens, with `base` and `multiplier` completed from the theme's scale.
  *
  * It leaves a TODO comment where it cannot read the theme: a non-literal
  * config, a spread at the top of the config, tokens that are not an object
  * literal, a radius scale that is not numeric literals, or adaptations it
- * cannot read (api.report is a stub; comments are the only warning channel).
+ * cannot read. A default-exported object shaped like a theme is not proven to
+ * be one, so it stays unchanged and the file is reported for manual migration.
  */
 
+import {ManualMigrationRequired} from '../../outcome.mjs';
 import {
   importedComponents,
   resolveImportedComponent,
@@ -43,9 +45,7 @@ export const meta = {
 
 const ASTRYX_MODULE = /^@(astryxdesign|xds)\//u;
 const TOKEN = '--radius-chat';
-const CONTAINER = '--radius-container';
 const PREVIOUS_CHAT_RADIUS = 28;
-const CORE_CONTAINER_RADIUS = 12;
 
 const TODO_COMMENT =
   ' TODO(astryx upgrade): --radius-chat now follows the container radius. ' +
@@ -94,12 +94,6 @@ function hasSpread(object) {
   return (object.properties ?? []).some(isSpread);
 }
 
-/** Whether a spread follows `property`, so it can replace it. @param {any} object @param {any} property */
-function spreadFollows(object, property) {
-  const index = object.properties.indexOf(property);
-  return object.properties.slice(index + 1).some(isSpread);
-}
-
 /** Strips TypeScript `as`, `satisfies` and `!` wrappers. @param {any} node */
 function unwrap(node) {
   let current = node;
@@ -130,19 +124,6 @@ function numericLiteral(node) {
   return null;
 }
 
-/** A length from a string literal in px ('8px', or '0'), else null. @param {any} node */
-function pxLiteral(node) {
-  const value = unwrap(node);
-  const text =
-    value?.type === 'StringLiteral' ||
-    (value?.type === 'Literal' && typeof value.value === 'string')
-      ? value.value.trim()
-      : null;
-  const match = text == null ? null : /^(\d+(?:\.\d+)?)(px)?$/u.exec(text);
-  if (!match || (!match[2] && Number(match[1]) !== 0)) return null;
-  return Number(match[1]);
-}
-
 /**
  * A radius scale's `base` and `multiplier`, completed from `fallback`.
  * `undefined` when a field is missing or not a numeric literal.
@@ -165,8 +146,6 @@ function readScale(node, fallback = {}) {
 
 /** @param {{base: number, multiplier: number}} scale */
 const pageStep = scale => Math.round(scale.base * 7 * scale.multiplier);
-/** @param {{base: number, multiplier: number}} scale */
-const containerStep = scale => Math.round(scale.base * 3 * scale.multiplier);
 
 /**
  * The adaptation rules of a config. `null` when the config has none, and
@@ -200,16 +179,6 @@ function readRules(config) {
     values.push(valueObject);
   }
   return values;
-}
-
-/** Whether an adaptation rule's value can change the container radius. @param {any} value */
-function changesRadius(value) {
-  if (findProperty(value, 'radius')) return true;
-  const tokensProperty = findProperty(value, 'tokens');
-  const tokens = tokensProperty ? unwrap(tokensProperty.value) : null;
-  return Boolean(
-    tokens && (hasSpread(tokens) || findProperty(tokens, CONTAINER)),
-  );
 }
 
 /**
@@ -257,12 +226,18 @@ function addTodo(j, fromPath, text) {
 }
 
 /**
- * Migrate one theme config. Returns whether it changed the source.
- * @param {any} j @param {any} config @param {any} path
+ * @typedef {object} Edits
+ * @property {(object: any, value: string) => void} token Add the token to an object's tokens.
+ * @property {(text: string) => void} todo Leave a TODO comment.
  */
-function migrateConfig(j, config, path) {
+
+/**
+ * Migrate one theme config. Returns whether it needs a change.
+ * @param {any} config @param {Edits} edits
+ */
+function migrateConfig(config, edits) {
   const todo = (/** @type {string} */ text) => {
-    addTodo(j, path, text);
+    edits.todo(text);
     return true;
   };
 
@@ -298,25 +273,8 @@ function migrateConfig(j, config, path) {
     !(tokens && findProperty(tokens, TOKEN)) &&
     (radius || !extendsTheme)
   ) {
-    const previous = scale ? pageStep(scale) : PREVIOUS_CHAT_RADIUS;
-    /** The container radius the theme ends up with; `null` when unknown. */
-    let container = scale ? containerStep(scale) : CORE_CONTAINER_RADIUS;
-    const explicit = tokens ? findProperty(tokens, CONTAINER) : null;
-    if (explicit) {
-      container = spreadFollows(tokens, explicit)
-        ? null
-        : pxLiteral(explicit.value);
-    } else if (tokens && hasSpread(tokens)) {
-      container = null;
-    }
-    // The chat radius follows the container into an adaptation rule.
-    if (extendsTheme || rules === undefined || rules?.some(changesRadius)) {
-      container = null;
-    }
-    if (container !== previous) {
-      addToken(j, config, `${previous}px`);
-      changed = true;
-    }
+    edits.token(config, `${scale ? pageStep(scale) : PREVIOUS_CHAT_RADIUS}px`);
+    changed = true;
   }
 
   // Each adaptation rule's radius scale.
@@ -331,8 +289,8 @@ function migrateConfig(j, config, path) {
         ? unwrap(ruleTokensProperty.value)
         : null;
       if (ruleTokens && findProperty(ruleTokens, TOKEN)) continue;
-      // Core completes a rule's scale from the theme's own scale only; a
-      // base theme's scale is out of reach here.
+      // A base theme's scale completes the rule in Core, but this file cannot
+      // read it.
       const ruleScale = readScale(
         ruleRadius.value,
         extendsTheme && !scale ? {} : (scale ?? {}),
@@ -341,7 +299,7 @@ function migrateConfig(j, config, path) {
         changed = todo(TODO_SCALE_COMMENT) || changed;
         continue;
       }
-      addToken(j, value, `${pageStep(ruleScale)}px`);
+      edits.token(value, `${pageStep(ruleScale)}px`);
       changed = true;
     }
   }
@@ -390,16 +348,52 @@ export default function transform(file, api) {
       changed = true;
       return;
     }
-    changed = migrateConfig(j, config, callPath) || changed;
+    const edits = {
+      token: (/** @type {any} */ object, /** @type {string} */ value) =>
+        addToken(j, object, value),
+      todo: (/** @type {string} */ text) => addTodo(j, callPath, text),
+    };
+    changed = migrateConfig(config, edits) || changed;
   });
 
+  // A default-exported object shaped like a theme is not proven to be one:
+  // it stays unchanged, and the file is reported with what to add.
+  /** @type {string[]} */
+  const steps = [];
+  /** @type {number | undefined} */
+  let line;
   root
     .find(j.ExportDefaultDeclaration)
     .forEach((/** @type {any} */ exportPath) => {
-      const declaration = exportPath.node.declaration;
-      if (!isThemeObject(declaration)) return;
-      changed = migrateConfig(j, unwrap(declaration), exportPath) || changed;
+      const config = unwrap(exportPath.node.declaration);
+      if (!isThemeObject(config)) return;
+      const edits = {
+        token: (/** @type {any} */ object, /** @type {string} */ value) =>
+          steps.push(
+            object === config
+              ? `add '--radius-chat': '${value}' to its tokens`
+              : `add '--radius-chat': '${value}' to the tokens of the adaptation rule with that radius scale`,
+          ),
+        todo: () =>
+          steps.push(
+            "add '--radius-chat' at its previous chat radius (28px, or the page step of its radius scale) to its tokens",
+          ),
+      };
+      if (migrateConfig(config, edits)) {
+        line = line ?? exportPath.node.loc?.start.line;
+      }
     });
+  if (steps.length > 0) {
+    throw new ManualMigrationRequired(
+      '--radius-chat now follows the container radius. The default export ' +
+        'looks like a theme, but nothing proves it is an Astryx theme, so ' +
+        `it is unchanged. To keep its chat corners, ${[...new Set(steps)].join('; ')}.` +
+        (changed
+          ? ' Then run the upgrade again to migrate the defineTheme() themes in this file.'
+          : ''),
+      {line},
+    );
+  }
 
   return changed ? root.toSource({quote: 'single'}) : undefined;
 }
