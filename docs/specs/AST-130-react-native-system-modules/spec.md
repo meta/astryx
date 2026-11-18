@@ -78,7 +78,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 | Native piece                  | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                    | What a person sees                                                                                                                       |
 | ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAppearance`            | native module (Turbo Native Module) | No Astryx component; app API (`.` entry). The theme follows its effect through React Native's colour scheme.                                                                                                                                                                                                                                                                                                                                     | The app opens in the saved light or dark appearance, with no flash of the system's.                                                      |
+| `AstryxAppearance`            | native module (Turbo Native Module) | `AstryxProvider`, the theme provider every Astryx component renders under, which applies the app's light or dark override through it; app API (`.` entry)                                                                                                                                                                                                                                                                                        | The app opens in the saved light or dark appearance, with no flash of the system's.                                                      |
 | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `AstryxProvider` and every component styled with `createStyles` (`./styles` entry); through the library's system-settings hook also `BottomSheet`, `Popover`, `Overlay`, `HoverCard`, `ContextMenu`, `Switch`, `SegmentedControl`, `ProgressBar`, `Carousel`, `TabBar`, `TopNav`, `Header`, `Toolbar`, `Table`, `Item`, `Markdown`, `SearchField`, `BarButton`, `Button` and the glass and material surfaces; app API `useAccessibilitySettings` | Drawn bars, sheets and menus turn opaque under Reduce Transparency, show borders under Show Borders, and cross-fade under Reduce Motion. |
 | `AstryxHaptics`               | native module (Turbo Native Module) | Through the library's moment table (`useHaptics`): `Button`, `Switch`, `Slider`, `SegmentedControl`, `Selector`, `TabList`, `ToggleButton`, `Toast`, `BottomSheet`, `InlineSheet`, `ContextMenu`, `ReorderableList`, `Item` swipe actions, `Calendar`'s picker field, `DonutChart` and the charts                                                                                                                                                | A tick on a selection change, a click on a toggle, a bump at a slider's end, a threshold tick in a swipe.                                |
 | `AstryxClipboard`             | native module (Turbo Native Module) | `PasteButton` (reads on the person's press); `CodeBlock`, `Chat` message actions and `Timestamp` through the library's copy hook (`useCopy`)                                                                                                                                                                                                                                                                                                     | A copy button shows its check glyph and announces "Copied"; a paste fills the field.                                                     |
@@ -93,7 +93,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 - The data and security modules (files, secure storage) and their records.
 - Capabilities that no Astryx component uses. They are outside the core
-  package; OQ4 asks whether `AstryxAppearance` is an exception.
+  package.
 - Client identity, crash reports, daily metrics, the frame recorder, and
   image markup. Each is part of the platform package and has its own record.
 - Camera capture. The `camera` capability owns it, the camera source of a
@@ -189,6 +189,10 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     learns from a `get` or a `request` anywhere in the app.
 
 - **FR4 — `AstryxAppearance` keeps the app's light or dark choice natively.**
+  - `AstryxAppearance` is core: the library's theme provider, which every
+    Astryx component renders under, reads the system appearance and applies
+    the app's light or dark override through this module, so it is native code
+    Astryx itself uses (`spec:AST-112/FR20`).
   - `setOverride('light' | 'dark' | 'system')` applies the choice to every
     window of the app at once and saves it; `system` removes the saved choice.
     `getOverride()` answers the saved choice synchronously.
@@ -200,6 +204,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     app's code runs, so it keeps the system's appearance; on Android 12 and
     later the splash uses the night mode the system stores for the app, which
     is the saved choice.
+  - FR4 gap: the theme provider follows React Native's colour scheme and does
+    not call `AstryxAppearance`; an app calls `setOverride` itself.
   - `setOverride(value, {persist: false})` (feature `persist-false`) applies the
     choice for this run only and saves nothing. `getOverride()` and the next
     launch keep the saved choice, and `setOverride(getOverride())` restores
@@ -464,6 +470,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   behaviour is a named feature that the platform info module reports.
 - Relies on `spec:AST-112` DEC-15 (amended): native code uses public platform
   API only.
+- Relies on `spec:AST-112` FR20 (amended): the package covers the native code
+  Astryx itself uses; every module of this group is such code.
 - Changes `spec:AST-112/FR1`: the core's list gains appearance, accessibility
   settings, platform info, the Android back gate and launch hold, and the
   file picker; the `camera` capability gains camera capture, the camera source
@@ -590,9 +598,3 @@ answered.
   - Tokens resolved in JavaScript: one token pipeline shared with the web, and
     any computed token works. Each flip costs a JavaScript re-resolve and a
     re-render.
-- **OQ4 — Does `AstryxAppearance` stay in the core?** (`human-design`) No
-  Astryx component or create template calls it; the theme follows its effect
-  through React Native's colour scheme. Options: keep it in the core as a
-  named exception, because the native shell applies the saved choice before
-  the first frame (DEC-1); or move it outside the core package with the other
-  capabilities no Astryx component uses.
