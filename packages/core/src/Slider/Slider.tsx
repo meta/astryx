@@ -506,8 +506,8 @@ const styles = stylex.create({
     cursor: 'default',
   },
   textValue: {
-    display: 'inline-grid',
-    justifyItems: 'end',
+    display: 'inline-block',
+    textAlign: 'end',
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     fontVariantNumeric: 'tabular-nums',
@@ -515,13 +515,8 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  // Every copy sits in one grid cell, so the cell is as wide as the widest.
-  textValueCopy: {
-    gridArea: '1 / 1',
-  },
-  textValueReserve: {
-    visibility: 'hidden',
-  },
+  // The width the widest end text needs, so the box keeps one width.
+  textValueReserve: (minInlineSize: string) => ({minInlineSize}),
   marksContainer: {
     position: 'absolute',
   },
@@ -1682,48 +1677,40 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display. Hidden copies of the texts at and one step in from
-  // each end of the range hold the box at its widest, so the track keeps its
-  // length while the value changes and a dragged thumb stays under the pointer.
+  // Text value display. The box reserves the width of the texts at, and one
+  // step in from, each end of the range, so the track keeps its length while
+  // the value changes and a dragged thumb stays under the pointer. Reserved
+  // per character: a tabular digit at 0.6em (a body font's is about 0.57em),
+  // a space at 0.3em, anything else at 1em, which no glyph exceeds.
   const textOf = (vs: ReadonlyArray<number>): string =>
     vs.map(displayValue).join(' – ');
-  const textDisplay =
-    valueDisplay === 'text'
-      ? (() => {
-          const ends = [
-            min,
-            Math.min(max, min + step),
-            Math.max(min, max - step),
-            max,
-          ];
-          const reserved = [
-            ...new Set(
-              isRange
-                ? ends.flatMap(a => ends.map(b => textOf([a, b])))
-                : ends.map(v => textOf([v])),
-            ),
-          ];
-          return (
-            <span {...stylex.props(styles.textValue)}>
-              {reserved.map(text => (
-                <span
-                  // The copies are deduplicated, so each text is unique.
-                  key={text}
-                  aria-hidden="true"
-                  {...stylex.props(
-                    styles.textValueCopy,
-                    styles.textValueReserve,
-                  )}>
-                  {text}
-                </span>
-              ))}
-              <span {...stylex.props(styles.textValueCopy)}>
-                {textOf(values)}
-              </span>
-            </span>
-          );
-        })()
-      : null;
+  const emWidth = (text: string): number =>
+    [...text].reduce(
+      (em, c) => em + (c >= '0' && c <= '9' ? 0.6 : c === ' ' ? 0.3 : 1),
+      0,
+    );
+  let textDisplay = null;
+  if (valueDisplay === 'text') {
+    const reach = (value: number) =>
+      Math.min(max, Math.max(min, snapToStep(value, min, step)));
+    const ends = [min, reach(min + step), reach(max - step), max];
+    const reserve = Math.max(
+      ...ends.flatMap(a =>
+        isRange
+          ? ends.map(b => emWidth(textOf([a, b])))
+          : [emWidth(textOf([a]))],
+      ),
+    );
+    textDisplay = (
+      <span
+        {...stylex.props(
+          styles.textValue,
+          styles.textValueReserve(`${reserve}em`),
+        )}>
+        {textOf(values)}
+      </span>
+    );
+  }
 
   return (
     <Field

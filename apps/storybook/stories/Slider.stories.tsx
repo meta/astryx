@@ -118,6 +118,7 @@ export const TextValueWidths: Story = {
     const [range, setRange] = useState<[number, number]>([20, 80]);
     const [rating, setRating] = useState(3);
     const [opacity, setOpacity] = useState(0.5);
+    const [blend, setBlend] = useState(0.4);
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
         <Slider
@@ -127,6 +128,15 @@ export const TextValueWidths: Story = {
           step={10}
           value={range}
           onChange={setRange}
+          valueDisplay="text"
+        />
+        <Slider
+          label="Blend"
+          min={0}
+          max={0.8}
+          step={0.1}
+          value={blend}
+          onChange={setBlend}
           valueDisplay="text"
         />
         <Slider
