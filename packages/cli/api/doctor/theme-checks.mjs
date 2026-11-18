@@ -501,12 +501,68 @@ function pageFontLinks(projectDir) {
     const source = readTextFileIfExists(file);
     if (source == null) continue;
     head ??= name;
-    for (const href of stylesheetLinkHrefs(source)) {
+    const hrefs = /\.html?$/i.test(name)
+      ? stylesheetLinkHrefs(source)
+      : jsxStylesheetHrefs(source);
+    for (const href of hrefs) {
       if (!FONT_SERVICE_HREF.test(href)) continue;
       for (const family of fontServiceFamilies(href)) families.add(family);
     }
   }
   return {families, head};
+}
+
+/**
+ * The `href` of every stylesheet `<link>` a layout module renders, read from
+ * its syntax tree, so a link in any comment never counts. Only string
+ * attribute values are read; a `rel` must be the word `stylesheet`.
+ * @param {string} source
+ * @returns {string[]}
+ */
+function jsxStylesheetHrefs(source) {
+  let ast;
+  try {
+    ast = parseModule(source);
+  } catch {
+    return [];
+  }
+  /** @param {any} attribute */
+  const text = attribute => {
+    const v = attribute?.value;
+    if (v?.type === 'StringLiteral') return v.value;
+    const e = v?.type === 'JSXExpressionContainer' ? v.expression : null;
+    if (e?.type === 'StringLiteral') return e.value;
+    if (e?.type === 'TemplateLiteral' && !e.expressions.length)
+      return e.quasis[0]?.value?.cooked ?? null;
+    return null;
+  };
+  /** @type {string[]} */
+  const out = [];
+  walkAst(ast, node => {
+    if (
+      node.type !== 'JSXOpeningElement' ||
+      node.name?.type !== 'JSXIdentifier' ||
+      node.name.name !== 'link'
+    )
+      return;
+    /** @param {string} name */
+    const attr = name =>
+      text(
+        (node.attributes ?? []).find(
+          (/** @type {any} */ a) =>
+            a.type === 'JSXAttribute' && a.name?.name === name,
+        ),
+      );
+    const rel = attr('rel');
+    const href = attr('href');
+    if (
+      href &&
+      rel &&
+      rel.split(/\s+/u).some(word => /^stylesheet$/iu.test(word))
+    )
+      out.push(href);
+  });
+  return out;
 }
 
 /** @param {string} value */

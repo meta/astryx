@@ -1749,6 +1749,17 @@ describe('app-theme doctor checks', () => {
       status: 'pass',
     });
 
+    const lineComment = await fixture([
+      {slug: 'ocean', fontFamily: 'Ocean Sans'},
+    ]);
+    write(
+      path.join(lineComment.dir, 'app/layout.tsx'),
+      'export default function RootLayout({children}) {\n  // <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans" />\n  return <html><head /><body>{children}</body></html>;\n}\n',
+    );
+    expect(
+      check(await checkAppThemes(lineComment.dir), 'theme-fonts'),
+    ).toMatchObject({status: 'warn'});
+
     const commented = await fixture([
       {slug: 'ocean', fontFamily: 'Ocean Sans'},
     ]);

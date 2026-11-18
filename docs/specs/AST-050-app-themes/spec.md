@@ -279,7 +279,7 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      font stylesheet the module imports, with an `@font-face` rule or a font
      service URL that names the family (a warning that names the family when
      this cannot be shown, as when the stylesheet imports a font service URL
-     that does not name it); a known font service's stylesheet `<link>` in
+     that does not name it); a Google Fonts or Bunny Fonts stylesheet `<link>` in
      the app's page head (its HTML page, or a framework root layout or
      document) that names the family also loads it;
   10. no two added themes write different rules outside their own theme scope
