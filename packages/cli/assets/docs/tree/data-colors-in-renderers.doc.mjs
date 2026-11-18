@@ -78,7 +78,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The examples in this guide pick tokens only to show how a value reaches the renderer. Which token suits which part of a chart is not covered yet. Axes, grid lines, and tick and axis labels (the chart chrome) are not covered yet either, so the examples keep each library's default chrome.",
+          text: 'These examples show how colors reach the renderer, with its default axes and labels. {@link generic:choosing-data-colors} explains palette choice. {@link generic:chart-styling} covers axes, grids, labels, legends, and tooltips with existing theme tokens.',
         },
         {
           type: 'list',
