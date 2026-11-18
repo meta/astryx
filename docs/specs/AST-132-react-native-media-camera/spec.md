@@ -237,7 +237,7 @@ isPossible})`.
   - `ref` is a handle with `takePhoto(options?)` and `focus({x, y})`, which
     focuses and exposes at a point in the view's coordinates and returns to
     continuous focus when the subject changes. `takePhoto` resolves
-    `{ok: true, photo}` (`uri`, a JPEG in the app's temporary or cache folder;
+    `{ok: true, photo}` (`uri`, a JPEG in the core's cache location (`spec:AST-130/FR14`);
     `width` and `height` in pixels with the orientation applied; `facing`;
     `takenAt`; `isSimulated`) or a failure with `not-ready`, `timeout`
     (`timeoutMs`), `cancelled` (the view went away, `spec:AST-140/FR3`), or
@@ -344,7 +344,7 @@ isPossible})`.
   Native's minimum, Android API level 24, the New Architecture only).
   Automatic picture in picture needs iOS 14.2 or later.
 - Unsupported behavior: a call the binary lacks answers `unsupported`
-  (FR13); a view the binary lacks reports itself unavailable and the
+  (`spec:AST-140/FR3`, `spec:AST-140/FR5`); a view the binary lacks reports itself unavailable and the
   library draws its fallback (FR13).
 - Browser evidence: none. Native claims are proven on the iOS Simulator, the
   Android emulator, and devices (`spec:AST-112/FR15`).
