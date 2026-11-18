@@ -68,7 +68,7 @@
  * @position foundation/discovery — read by api/icon and icon-set-checks
  */
 
-import {definitionsByIcon} from './icon-set-discovery.mjs';
+import {ICON_EXPORT_NAME_RE, definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {iconIdOf} from '../text/icon-id.mjs';
 
@@ -259,9 +259,6 @@ const FILLER_WORDS = new Set([
   ...ICON_WORDS,
 ]);
 
-/** A word written as an icon export name: `SearchIcon`, `ChevronDownIcon`. */
-const ICON_EXPORT_NAME = /^[A-Z][A-Za-z0-9]*Icon$/u;
-
 /**
  * Whether a query asks for an icon: one word as typed is `icon` or `icons` in
  * any case, names a set in `setNames`, or is written as an icon export name
@@ -282,7 +279,9 @@ export function asksForIcon(query, {setNames, declaredNames}) {
       if (declared.has(word)) return false;
       const lower = word.toLowerCase();
       return (
-        ICON_WORDS.has(lower) || sets.has(lower) || ICON_EXPORT_NAME.test(word)
+        ICON_WORDS.has(lower) ||
+        sets.has(lower) ||
+        ICON_EXPORT_NAME_RE.test(word)
       );
     });
 }

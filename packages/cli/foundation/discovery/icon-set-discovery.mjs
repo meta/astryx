@@ -580,10 +580,7 @@ export function missingIconLook(icon, set, variant) {
  */
 export function unlistedIconSets(installed, main, backups, unlisted, variant) {
   /** @param {{package: string, name: string}} set */
-  const named = set =>
-    installed.filter(each => each.name === set.name).length > 1
-      ? iconSetKey(set)
-      : set.name;
+  const named = set => iconSetName(set, installed);
   const left = unlisted.map(named);
   const them = left.length === 1 ? 'it' : 'them';
   const command = iconUseCommand(
@@ -664,6 +661,19 @@ export function chooseProjectIconSet(
     status: 'ambiguous',
     reason: `${sets.length} icon sets are installed (${sets.map(iconSetKey).join(', ')}) and astryx.config sets no experimental.iconSet, so none is your main set.`,
   };
+}
+
+/**
+ * How a command names a set: by its name when no other installed set has
+ * that name, else as `<package>/<set>`, which a name two packages ship needs
+ * (FR7).
+ * @param {{package: string, name: string}} set
+ * @param {ReadonlyArray<{name: string}>} installed every installed set
+ */
+export function iconSetName(set, installed) {
+  return installed.filter(each => each.name === set.name).length > 1
+    ? iconSetKey(set)
+    : set.name;
 }
 
 /**

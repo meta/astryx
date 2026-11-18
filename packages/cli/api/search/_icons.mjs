@@ -12,6 +12,7 @@
  */
 
 import {asksForIcon} from '../../foundation/discovery/icon-ranking.mjs';
+import {iconSetName} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {projectLooks, rankIconSets} from '../icon/search/search.mjs';
 
 /** The most icons the section lists. */
@@ -53,16 +54,19 @@ export async function iconSection(query, source, declaredNames, limit) {
   if (data.matchCount === 0) return null;
   return {
     matchCount: data.matchCount,
-    results: data.matches.map(match => ({
-      domain: 'icon',
-      name: `${match.set}/${match.id}`,
-      set: match.set,
-      id: match.id,
-      package: match.package,
-      score: match.score,
-      reason: match.reason,
-      import: match.import,
-      command: `astryx experimental icon ${match.set}/${match.id}`,
-    })),
+    results: data.matches.map(match => {
+      const reference = `${iconSetName({package: match.package, name: match.set}, sets)}/${match.id}`;
+      return {
+        domain: 'icon',
+        name: reference,
+        set: match.set,
+        id: match.id,
+        package: match.package,
+        score: match.score,
+        reason: match.reason,
+        import: match.import,
+        command: `astryx experimental icon ${reference}`,
+      };
+    }),
   };
 }

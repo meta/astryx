@@ -280,6 +280,41 @@ describe('search icon section', () => {
   );
 
   it(
+    'names a set two packages ship as <package>/<set>, so its command runs',
+    async () => {
+      const twin = path.join(root, 'twin');
+      writeProject(twin, true);
+      writeIconPackage(path.join(twin, 'node_modules', '@other', 'glyphs'), {
+        name: '@other/glyphs',
+        set: 'glyphs',
+        data: {...glyphsData(), module: '@other/glyphs'},
+      });
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(twin, 'package.json'), 'utf8'),
+      );
+      pkg.dependencies['@other/glyphs'] = '1.0.0';
+      fs.writeFileSync(path.join(twin, 'package.json'), JSON.stringify(pkg));
+      const {data} = await search('trash icon', {cwd: twin});
+      const entries = data.icons?.results ?? [];
+      expect(entries.map(each => [each.name, each.command])).toEqual([
+        [
+          '@acme/glyphs/glyphs/trash',
+          'astryx experimental icon @acme/glyphs/glyphs/trash',
+        ],
+        [
+          '@other/glyphs/glyphs/trash',
+          'astryx experimental icon @other/glyphs/glyphs/trash',
+        ],
+      ]);
+      for (const entry of entries) {
+        const detail = await icon(entry.name, {cwd: twin});
+        expect(detail.type, entry.name).toBe('icon.detail');
+      }
+    },
+    SLOW,
+  );
+
+  it(
     'lists at most three icons, fewer when `limit` is smaller',
     async () => {
       const {data} = await search('shape icon', {cwd: packed});
