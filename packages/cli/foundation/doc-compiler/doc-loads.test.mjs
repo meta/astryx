@@ -61,8 +61,8 @@ const RUNNERS = {
     sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
-    runs: 'recorded built theme modules through the shared app-theme loader',
-    sites: ['importThemeArtifact'],
+    runs: "recorded built theme modules through the shared app-theme loader, and the app's package manager to install the Astryx packages a shared theme imports",
+    sites: ['child_process.spawnSync', 'importThemeArtifact'],
   },
   'api/theme-edit/_context.mjs': {
     runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
