@@ -1760,20 +1760,63 @@ function fileHash(file) {
  * @returns {{from: string, files: Record<string, string>, installed: string[], madeRoot?: boolean} | null}
  */
 function readSharedReceipt(dir) {
+  /** @type {any} */
+  let receipt;
   try {
-    const receipt = JSON.parse(
+    receipt = JSON.parse(
       fs.readFileSync(path.join(dir, SHARED_RECEIPT), 'utf-8'),
     );
-    if (
-      receipt &&
-      typeof receipt.files === 'object' &&
-      Array.isArray(receipt.installed)
-    )
-      return receipt;
   } catch {
     // No receipt, or not one this CLI wrote.
+    return null;
   }
-  return null;
+  if (
+    !receipt ||
+    typeof receipt.files !== 'object' ||
+    receipt.files === null ||
+    !Array.isArray(receipt.installed)
+  )
+    return null;
+  // A receipt is a file in the app, which anyone can edit: only the files
+  // inside the copy itself, and only the Astryx packages an add installs,
+  // are ever read from it.
+  return {
+    ...receipt,
+    files: Object.fromEntries(
+      Object.entries(receipt.files).filter(
+        ([name, hash]) =>
+          typeof hash === 'string' && sharedFileIn(dir, name) != null,
+      ),
+    ),
+    installed: receipt.installed.filter(
+      (/** @type {unknown} */ name) =>
+        typeof name === 'string' &&
+        /^@astryxdesign\/[a-z0-9][a-z0-9.-]*$/.test(name),
+    ),
+  };
+}
+
+/**
+ * A file a receipt names, inside the copy's folder by its path and by where
+ * it really is (no link on the way), and a regular file; null otherwise.
+ * @param {string} dir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function sharedFileIn(dir, name) {
+  try {
+    const file = assertWithin(name, dir, {label: 'receipt entry'});
+    if (file === path.resolve(dir) || path.basename(file) === SHARED_RECEIPT)
+      return null;
+    const realDir = fs.realpathSync(dir);
+    const realParent = fs.realpathSync(path.dirname(file));
+    if (realParent !== realDir && !realParent.startsWith(realDir + path.sep))
+      return null;
+    const st = fs.lstatSync(file, {throwIfNoEntry: false});
+    return st == null || st.isFile() ? file : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

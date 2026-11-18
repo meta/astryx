@@ -476,6 +476,26 @@ describe('theme add with a shared theme', () => {
     }
   });
 
+  it('theme remove deletes and uninstalls only what a receipt may name: files inside the copy, Astryx packages', async () => {
+    writeTheme(path.join(shared, 'ocean'), 'ocean');
+    writeTheme(path.join(shared, 'sunset'), 'sunset');
+    await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    await themeAdd(path.join(shared, 'sunset'), {cwd: app});
+    fs.writeFileSync(path.join(app, 'vite.config.ts'), 'export default {};\n');
+    // (A hand-edited receipt that reaches out of the copy.)
+    const receiptFile = path.join(app, 'src/themes/ocean/.astryx-shared.json');
+    const receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
+    receipt.files['../../../vite.config.ts'] = 'x';
+    receipt.files['/etc/hostname'] = 'x';
+    receipt.installed = ['react', '@astryxdesign/theme-neutral'];
+    fs.writeFileSync(receiptFile, JSON.stringify(receipt));
+    runs.length = 0;
+    const removed = await themeRemove('ocean', {cwd: app});
+    expect(fs.existsSync(path.join(app, 'vite.config.ts'))).toBe(true);
+    expect(removed.data.undo?.removed.join('\n')).not.toMatch(/vite|etc/);
+    expect(runs.flatMap(r => r.args)).not.toContain('react');
+  });
+
   it('theme remove keeps a package a theme still in the record imports', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean', {
       imports: ['@astryxdesign/theme-neutral/built'],

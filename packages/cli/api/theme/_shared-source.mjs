@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import {AstryxError} from '../error.mjs';
+import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   THEME_DOC_SUFFIX,
@@ -267,15 +268,13 @@ export function extractTgz(packed, dest, arg) {
     if (type !== '0' && type !== '5') {
       throw bad(`${name} is a link or a special file`);
     }
-    if (
-      path.isAbsolute(name) ||
-      /^[a-z]:/i.test(name) ||
-      name.split(/[\\/]/).includes('..')
-    ) {
-      throw bad(`${name} would land outside the archive's folder`);
-    }
-    const target = path.resolve(root, name);
-    if (target !== root && !target.startsWith(root + path.sep)) {
+    // (A drive-letter path is absolute on Windows only; refused anywhere.)
+    /** @type {string} */
+    let target;
+    try {
+      if (/^[a-z]:/i.test(name)) throw new Error('drive');
+      target = assertWithin(name, root, {label: 'archive entry'});
+    } catch {
       throw bad(`${name} would land outside the archive's folder`);
     }
     if (type === '5') fs.mkdirSync(target, {recursive: true});
