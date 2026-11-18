@@ -764,13 +764,16 @@ export function MobileNav({
             <div
               ref={drawerRef}
               tabIndex={-1}
-              {...stylex.props(
-                styles.drawer,
-                dynamicStyles.width(width),
-                isStart && styles.drawerStart,
-                isStart && isOpen && styles.drawerStartOpen,
-                !isStart && styles.drawerEnd,
-                !isStart && isOpen && styles.drawerEndOpen,
+              {...mergeProps(
+                themeProps('mobile-nav-drawer', {side: resolvedSide}),
+                stylex.props(
+                  styles.drawer,
+                  dynamicStyles.width(width),
+                  isStart && styles.drawerStart,
+                  isStart && isOpen && styles.drawerStartOpen,
+                  !isStart && styles.drawerEnd,
+                  !isStart && isOpen && styles.drawerEndOpen,
+                ),
               )}>
               {/* Header — content + close button */}
               <div

@@ -158,7 +158,10 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-mobile-nav', visualProps: ['side']}],
+    targets: [
+      {className: 'astryx-mobile-nav', visualProps: ['side']},
+      {className: 'astryx-mobile-nav-drawer', visualProps: ['side']},
+    ],
   },
   usage: {
     anatomy,
@@ -234,7 +237,10 @@ export const docsZh = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-mobile-nav', visualProps: ['side']}],
+    targets: [
+      {className: 'astryx-mobile-nav', visualProps: ['side']},
+      {className: 'astryx-mobile-nav-drawer', visualProps: ['side']},
+    ],
   },
   usage: {
     anatomy,
