@@ -159,11 +159,13 @@ that times motion with it. Everything here is internal to
   focus leaves; one ride moves a target at a time. Where the path places the
   field, focus moves and first taps arrive without the browser's reveal. A
   field's `tapArea`, its own input container, counts as the field for a first
-  tap outside the container's other controls, so a tap on its padding or
-  border focuses it the same way. A
-  claimed tap raises the tap's click on the field afterwards, a synthetic touch
-  `PointerEvent` (a `MouseEvent` where none exists), so a caller's `onClick`
-  still runs once. A pan the browser makes on its own after a report, as after a
+  tap where the container's own click rule would focus the field: not on
+  another control inside it (`hasInteractiveAncestor`), and not on a field
+  that takes no text, such as a disabled one. A claimed tap raises the tap's
+  click afterwards where the browser's own click would land: on the field for a
+  tap on the field, on the element under the finger for a padding tap. It is a
+  synthetic touch `PointerEvent` (a `MouseEvent` where none exists), so a
+  caller's `onClick` still runs once. A pan the browser makes on its own after a report, as after a
   script's `focus()` that no claim saw, is put back (`watchRevealPan`).
 - **The surface hook (FR4, FR5):** `useMobileKeyboard(targetRef, options)`
   (`useMobileKeyboard.ts`) keeps a focused field in a target above the
