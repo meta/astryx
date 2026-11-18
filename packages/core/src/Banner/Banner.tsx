@@ -738,10 +738,11 @@ export function Banner({
             )}>
             {title}
           </div>
-          {/* A flex container renders no whitespace-only text, so this space
-              only separates the title and the description in the alert's
-              text. */}
-          {isUrgentAlert && isRenderable(description) && ' '}
+          {/* A flex container renders no whitespace-only text, so in the
+              default layout this space only separates the title and the
+              description in the message's text. A theme that lays them out
+              on one line shows it as the gap between them. */}
+          {isRenderable(description) && ' '}
           {isRenderable(description) && (
             <div
               {...mergeProps(

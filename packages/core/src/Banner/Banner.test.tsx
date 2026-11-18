@@ -680,6 +680,25 @@ describe('Banner', () => {
     expect(container.querySelectorAll('.astryx-banner-title')).toHaveLength(1);
   });
 
+  it('separates the title and the description by one space in every banner', () => {
+    // A theme that lays the message out on one line gets the same gap for
+    // an urgent banner and any other one.
+    for (const role of [undefined, 'alert'] as const) {
+      const {container, unmount} = render(
+        <Banner
+          status="error"
+          title="Upload failed"
+          description="Retry."
+          role={role}
+        />,
+      );
+      expect(
+        container.querySelector('.astryx-banner-message')?.textContent,
+      ).toBe('Upload failed Retry.');
+      unmount();
+    }
+  });
+
   it('keeps role="alert" on the \'banner-message\' element', () => {
     const {container} = render(
       <Banner
