@@ -2,7 +2,7 @@
 
 /**
  * @file Sticky.tsx
- * @input Uses React, StyleX, CSS position: sticky, prefers-reduced-motion
+ * @input Uses React, StyleX, CSS position: sticky
  * @output Exports Sticky component and StickyProps type
  * @position Core implementation of sticky positioning component
  *
@@ -24,30 +24,25 @@ import type {BaseProps} from '../BaseProps';
 
 const styles = stylex.create({
   sticky: {
-    // Core sticky positioning
     position: 'sticky',
   },
-  stickyAxisVertical: {
+  axisVertical: {
     top: 0,
   },
-  stickyAxisHorizontal: {
+  axisHorizontal: {
     insetInlineStart: 0,
   },
-  stickyAxisBoth: {
+  axisBoth: {
     top: 0,
     insetInlineStart: 0,
   },
-  stickyEnabled: {
-    // Ensure the sticky behavior is applied
-    position: 'sticky',
-  },
-  // Reduced motion: disable sticky positioning when user prefers reduced motion
-  // Using the standard codebase pattern: media query within stylex.create
-  stickyReducedMotion: {
-    '@media (prefers-reduced-motion: reduce)': {
-      position: 'static',
-    },
-  },
+});
+
+const dynamicStyles = stylex.create({
+  top: (offset: number) => ({top: offset}),
+  insetInlineEnd: (offset: number) => ({insetInlineEnd: offset}),
+  bottom: (offset: number) => ({bottom: offset}),
+  insetInlineStart: (offset: number) => ({insetInlineStart: offset}),
 });
 
 // =============================================================================
@@ -77,23 +72,14 @@ export interface StickyProps extends BaseProps<HTMLDivElement> {
    */
   offsetTop?: number;
 
-  /**
-   * Offset from the right edge of the container
-   * @default 0
-   */
-  offsetRight?: number;
+  /** Offset from the inline end when `axis` includes horizontal positioning. */
+  offsetInlineEnd?: number;
 
-  /**
-   * Offset from the bottom edge of the container
-   * @default 0
-   */
+  /** Offset from the bottom edge when `axis` includes vertical positioning. */
   offsetBottom?: number;
 
-  /**
-   * Offset from the left edge of the container
-   * @default 0
-   */
-  offsetLeft?: number;
+  /** Offset from the inline start when `axis` includes horizontal positioning. */
+  offsetInlineStart?: number;
 
   /**
    * Whether the sticky effect is enabled
@@ -127,8 +113,9 @@ export interface StickyProps extends BaseProps<HTMLDivElement> {
 // =============================================================================
 
 /**
- * A sticky component that fixes an element to the viewport during scrolling.
- * Provides StyleX theming support, and reduced motion awareness.
+ * Keeps an element attached to the nearest scroll container while it scrolls.
+ *
+ * StyleX styles passed through `xstyle` can customize the root element.
  *
  * @example
  * ```
@@ -136,7 +123,7 @@ export interface StickyProps extends BaseProps<HTMLDivElement> {
  *   <Header />
  * </Sticky>
  *
- * <Sticky axis="vertical" offsetLeft={24} offsetTop={64}>
+ * <Sticky axis="both" offsetInlineStart={24} offsetTop={64}>
  *   <Sidebar />
  * </Sticky>
  *
@@ -149,31 +136,45 @@ export function Sticky({
   children,
   axis = 'vertical',
   offsetTop = 0,
-  offsetRight = 0,
-  offsetBottom = 0,
-  offsetLeft = 0,
+  offsetInlineEnd,
+  offsetBottom,
+  offsetInlineStart,
   isEnabled = true,
   className,
   style,
+  xstyle,
   ref,
   'data-testid': testId,
   ...restProps
 }: StickyProps) {
-  // Determine the sticky axis styles based on the axis prop
-  const axisStyles = stylex.props(
-    styles['stickyAxis' + axis.charAt(0).toUpperCase() + axis.slice(1)],
-  );
-
-  // Build the stylex props for the root element
+  const axisStyles =
+    axis === 'vertical'
+      ? styles.axisVertical
+      : axis === 'horizontal'
+        ? styles.axisHorizontal
+        : styles.axisBoth;
+  const hasVerticalAxis = axis === 'vertical' || axis === 'both';
+  const hasHorizontalAxis = axis === 'horizontal' || axis === 'both';
   const stickyStylexProps = stylex.props(
     styles.sticky,
-    axisStyles,
-    isEnabled ? styles.stickyEnabled : {},
-    stylex.props(styles.stickyReducedMotion),
+    isEnabled ? axisStyles : null,
+    isEnabled && hasVerticalAxis && offsetTop !== undefined
+      ? dynamicStyles.top(offsetTop)
+      : null,
+    isEnabled && hasHorizontalAxis && offsetInlineEnd !== undefined
+      ? dynamicStyles.insetInlineEnd(offsetInlineEnd)
+      : null,
+    isEnabled && hasVerticalAxis && offsetBottom !== undefined
+      ? dynamicStyles.bottom(offsetBottom)
+      : null,
+    isEnabled && hasHorizontalAxis && offsetInlineStart !== undefined
+      ? dynamicStyles.insetInlineStart(offsetInlineStart)
+      : null,
+    xstyle,
   );
 
   // Merge with any additional props
-  const finalStyle = {
+  const finalStyle: React.CSSProperties = {
     ...style,
     ...(isEnabled ? {} : {position: 'static'}), // override to static when disabled
   };
@@ -182,7 +183,8 @@ export function Sticky({
     <div
       ref={ref}
       data-testid={testId}
-      {...mergeProps(stickyStylexProps, className, finalStyle, restProps)}>
+      {...mergeProps(stickyStylexProps, className, finalStyle)}
+      {...restProps}>
       {children}
     </div>
   );
