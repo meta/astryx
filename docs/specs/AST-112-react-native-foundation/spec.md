@@ -365,8 +365,10 @@ shared icon names under FR17.
     | Photos                     | `spec:AST-135` | core, opt-in (`photos`) |
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
-  never silently wrong. `spec:AST-140/FR5` owns the rules and the check that
-  enforces them.
+  never silently wrong. A contract has no revision number: its baseline is its
+  shape in the first release that carries it, release candidates included, and
+  later behavior is a named feature (DEC-14). `spec:AST-140/FR5` owns the rules
+  and the check that enforces them.
   - FR6, FR7, and FR8 are internal conventions while the package is
     canary-only, and they may change in any canary; the public promise is
     decided when the package leaves the canary channel (FR14). The API shape
@@ -925,14 +927,16 @@ source falls back to the system photo picker, which needs no permission.
 Rejected: opt-in capabilities for the library's own native pieces, because an
 app would have to know which component needs which capability.
 
-### DEC-14 — Contracts start at revision 1 and grow by named features
+### DEC-14 — Contracts grow by named features, with no revisions
 
 **Reference:** `spec:AST-112/DEC-14`
 **Decider:** imdreamrunner, 2026-11-17
 
-A named feature says which behavior a binary has, so JavaScript asks for the
-behavior it is about to use and an older binary answers with a fallback or a
-loud refusal.
+A contract's baseline is its shape in the first release that carries it,
+release candidates included. Behavior added after that baseline is a named
+feature. A named feature says which behavior a binary has, so JavaScript asks
+for the behavior it is about to use and an older binary answers with a fallback
+or a loud refusal. No contract carries a revision number.
 
 Rejected: a revision counter per contract, because a number says that a
 contract changed, not which behavior a binary has.
