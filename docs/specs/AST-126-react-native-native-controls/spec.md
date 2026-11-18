@@ -435,6 +435,8 @@ FR7's results.
 - Follows `spec:AST-082/FR11`'s native-first default for `auto` (OQ7 asks
   whether React Native departs from it). The date family follows
   `spec:AST-043`'s `presentation` and takes no `render` (OQ3).
+- Extends `spec:AST-043`'s `presentation`, with the values `DateInput` takes,
+  to `DateRangeInput` on React Native (OQ3).
 - iOS's button and text field draw UIButton and UITextField; whether they wrap
   the shared Swift controls of `spec:AST-112/FR10` is OQ9.
 - No other record changes.
@@ -540,7 +542,8 @@ read call, and no code reads the pasteboard before the tap.
   picks system or drawn (its `native` becomes `render: 'system'`, its
   `adaptive-native` becomes `render: 'auto'`); or keep `spec:AST-043`'s
   `presentation` on React Native, as FR2 states, and give the date family no
-  `render`.
+  `render`. Either way, `DateRangeInput` takes the same choice as `DateInput`,
+  which `spec:AST-043` does not list.
 - **OQ6 — Does Switch get a native contract?** (`human-design`) Options: an
   Astryx switch contract over UISwitch and Material 3's switch, with this
   group's appearance mapping and named features; or React
