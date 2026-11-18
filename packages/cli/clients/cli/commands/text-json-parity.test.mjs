@@ -509,8 +509,8 @@ const CASES = [
     ],
   },
   {
-    name: 'experimental render',
-    args: ['experimental', 'render', 'page.jsx'],
+    name: 'experimental export',
+    args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
     // A page with no imports, in a folder that can resolve React and Core, so
     // the page gets Core's stylesheets in every runner.
@@ -537,10 +537,10 @@ const CASES = [
   },
   {
     // The --reverse projection (same command, same folder as the case above).
-    name: 'experimental render',
+    name: 'experimental export',
     args: [
       'experimental',
-      'render',
+      'export',
       '--reverse',
       'carried.html',
       '--out',

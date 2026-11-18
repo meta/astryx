@@ -29,7 +29,8 @@
  * `PaperClip` still finds a `paperclip` icon.
  *
  * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
- * icon carries every word. For the finder's own search answers only, when
+ * icon carries every word. For the finder's own search answers and
+ * search's icons block only, when
  * no reading answers a query of several words, each icon that carries one
  * or more of its words, as typed or split from an export name, is a word
  * match. An icon carries a word when the word, or its
@@ -67,7 +68,7 @@
  * @position foundation/discovery — read by api/icon and icon-set-checks
  */
 
-import {definitionsByIcon} from './icon-set-discovery.mjs';
+import {ICON_EXPORT_NAME_RE, definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {iconIdOf} from '../text/icon-id.mjs';
 
@@ -239,6 +240,9 @@ function sameWord(a, b) {
   return short.length >= 2 && (long === `${short}s` || long === `${short}es`);
 }
 
+/** Words that ask for an icon outright. */
+const ICON_WORDS = new Set(['icon', 'icons']);
+
 /**
  * Words that phrase a query without naming anything: left out of a query of
  * several words that nothing answers as typed (`go home` asks for `home`).
@@ -252,9 +256,55 @@ const FILLER_WORDS = new Set([
   'my',
   'of',
   'for',
-  'icon',
-  'icons',
+  ...ICON_WORDS,
 ]);
+
+/** Words that may sit between `with` and the icon word of a feature. */
+const ARTICLES = new Set(['a', 'an', 'the']);
+
+/** Words after an icon word that describe the glyph itself. */
+const GLYPH_WORDS = new Set(['of', 'for']);
+
+/**
+ * Whether the icon word at `at` names a feature of something else: it comes
+ * right after `with`, with only articles between (`card with an icon`), and
+ * no `of` or `for` follows it to describe the glyph (`with an icon of a
+ * star`).
+ * @param {string[]} words the query's lower-case words
+ * @param {number} at
+ */
+function featureIconWord(words, at) {
+  let before = at - 1;
+  while (before >= 0 && ARTICLES.has(words[before])) before--;
+  return words[before] === 'with' && !GLYPH_WORDS.has(words[at + 1]);
+}
+
+/**
+ * Whether a query asks for an icon: one word as typed is `icon` or `icons` in
+ * any case, names a set in `setNames`, or is written as an icon export name
+ * (`SearchIcon`). A word that is the exact name of a component or hook in
+ * `declaredNames` asks for that entry, not an icon, so `Icon`, `NavIcon` and
+ * `IconButton` stay lookups. When the answer already holds a component or a
+ * template (`answersEntry`), an icon word that names a feature of it asks for
+ * nothing: `card with an icon` asks for a card.
+ * @param {string} query
+ * @param {{setNames: string[], declaredNames: string[], answersEntry: boolean}} context
+ *   the installed sets' names, the names of the components and hooks search
+ *   reads, and whether search's answer holds a component or a template
+ */
+export function asksForIcon(query, {setNames, declaredNames, answersEntry}) {
+  const sets = new Set(setNames.map(name => name.toLowerCase()));
+  const declared = new Set(declaredNames);
+  const words = query.trim().split(/\s+/u);
+  const lower = words.map(word => word.toLowerCase());
+  return words.some((word, at) => {
+    if (declared.has(word)) return false;
+    if (ICON_WORDS.has(lower[at])) {
+      return !(answersEntry && featureIconWord(lower, at));
+    }
+    return sets.has(lower[at]) || ICON_EXPORT_NAME_RE.test(word);
+  });
+}
 
 /**
  * A query as typed: trimmed and lower-case, one space between words.
@@ -398,8 +448,8 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * answers, the one without filler words on a tie. With `words`, a query
  * of several words that no reading answers is ranked by the words each
  * icon carries ({@link rankWords}), the words of both readings together:
- * the finder's own search answers ask for that, while callers that look for
- * a near spelling or a fitting definition do not.
+ * the finder's own search answers and search's icons block ask for that,
+ * while callers that look for a near spelling or a fitting definition do not.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
  * @param {{words?: boolean}} [options]

@@ -147,26 +147,42 @@ export function discoverIconSetDirectory(root, owner) {
   const sets = [];
   /** @type {Array<{name: string, message: string}>} */
   const errors = [];
-  let entries;
-  try {
-    entries = fs.readdirSync(root, {withFileTypes: true});
-  } catch {
-    return {sets, errors};
-  }
-  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
-    if (isIgnoredThemeEntry(entry.name) || !entry.isDirectory()) continue;
-    // Only a lower-kebab directory is a set (FR1).
-    if (!SET_NAME_RE.test(entry.name)) continue;
+  for (const name of iconSetDirectoryNames(root)) {
     try {
-      sets.push(readIconSet(root, entry.name, owner));
+      sets.push(readIconSet(root, name, owner));
     } catch (error) {
       errors.push({
-        name: entry.name,
+        name,
         message: error instanceof Error ? error.message : String(error),
       });
     }
   }
   return {sets, errors};
+}
+
+/**
+ * The names of the set directories under one `iconSets` root, in order,
+ * without reading any set.
+ * @param {string} root absolute `iconSets` root
+ * @returns {string[]}
+ */
+export function iconSetDirectoryNames(root) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  return entries
+    .sort((a, b) => compareText(a.name, b.name))
+    .filter(
+      entry =>
+        !isIgnoredThemeEntry(entry.name) &&
+        entry.isDirectory() &&
+        // Only a lower-kebab directory is a set (FR1).
+        SET_NAME_RE.test(entry.name),
+    )
+    .map(entry => entry.name);
 }
 
 /**
@@ -564,10 +580,7 @@ export function missingIconLook(icon, set, variant) {
  */
 export function unlistedIconSets(installed, main, backups, unlisted, variant) {
   /** @param {{package: string, name: string}} set */
-  const named = set =>
-    installed.filter(each => each.name === set.name).length > 1
-      ? iconSetKey(set)
-      : set.name;
+  const named = set => iconSetName(set, installed);
   const left = unlisted.map(named);
   const them = left.length === 1 ? 'it' : 'them';
   const command = iconUseCommand(
@@ -648,6 +661,19 @@ export function chooseProjectIconSet(
     status: 'ambiguous',
     reason: `${sets.length} icon sets are installed (${sets.map(iconSetKey).join(', ')}) and astryx.config sets no experimental.iconSet, so none is your main set.`,
   };
+}
+
+/**
+ * How a command names a set: by its name when no other installed set has
+ * that name, else as `<package>/<set>`, which a name two packages ship needs
+ * (FR7).
+ * @param {{package: string, name: string}} set
+ * @param {ReadonlyArray<{name: string}>} installed every installed set
+ */
+export function iconSetName(set, installed) {
+  return installed.filter(each => each.name === set.name).length > 1
+    ? iconSetKey(set)
+    : set.name;
 }
 
 /**

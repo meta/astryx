@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/experimental/render-pages`: turn a page into one
+ * @file `astryx docs cli/experimental/export-pages`: turn a page into one
  * self-contained HTML file to share or embed, and turn that file back into
  * the page.
  */
@@ -9,13 +9,14 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
 export const docs = {
   type: 'generic',
-  name: 'render-pages',
+  name: 'export-pages',
   placement: {parent: 'namespace:experimental', slot: 'guides', order: 20},
   stability: 'experimental',
   title: 'Pages as one HTML file',
   category: 'guide',
   keywords: [
     'render',
+    'export',
     'static html',
     'single file',
     'artifact',
@@ -52,7 +53,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental render src/app/page.tsx --out page.html',
+          code: 'astryx experimental export src/app/page.tsx --out page.html',
         },
         {
           type: 'prose',
@@ -60,7 +61,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'What the markup cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint come from the page\u2019s script once it runs (see The page\u2019s script), so a viewer that blocks scripts shows none of them. Charts made with recharts are the exception: the render draws each chart and ResponsiveContainer a module of the page (not an installed package) imports from recharts by name (`import {LineChart} from \'recharts\'`), inside the page, so a custom tick, label or shape sees the page\'s React context. A chart sized by its container is drawn at a set of widths, and the file shows the drawing nearest the width the reader\'s browser gives it, with no script. The widths run from 60 pixels (a sparkline in a narrow table cell) to 1920 (a chart across a wide screen), each the square root of two times the one before, so the drawing shown scales by at most the fourth root of two (about 1.19) either way. The chart keeps the height the page gives it (a number, the width over `aspect`, or its share of the height that the box it fills states in its own style) and fits that box whole, so its text stays within a fifth of its own size. A box whose height comes from a stylesheet gives no height the render can read: the chart is drawn 300 pixels high and fits inside the box, scaled down in a shorter box (its text shrinks with it) and with empty space above and below in a taller one. Each such chart carries eleven drawings, so it takes several times the room in the file that one drawing takes. A legend keeps the place its props give it, in a chart of either kind. Charts show the data and props of the page\'s first render, before its effects run: when the page cannot be drawn again without a browser, or its effects change its charts or re-render the component that makes them, each chart is drawn by itself and its parts see React context defaults. A value a chart\'s parts read from a React context that an effect changes may still show its later value. A `chart-size` warning counts the charts the render cannot draw (one used through `import * as R`, say), and says when charts were drawn by themselves. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.',
+          text: "What the markup cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint come from the page\u2019s script once it runs (see The page\u2019s script), so a viewer that blocks scripts shows none of them. Charts made with recharts are the exception: the render draws each chart and ResponsiveContainer a module of the page (not an installed package) imports from recharts by name (`import {LineChart} from 'recharts'`), inside the page, so a custom tick, label or shape sees the page's React context. A chart sized by its container is drawn at a set of widths, and the file shows the drawing nearest the width the reader's browser gives it, with no script. The widths run from 60 pixels (a sparkline in a narrow table cell) to 1920 (a chart across a wide screen), each the square root of two times the one before, so the drawing shown scales by at most the fourth root of two (about 1.19) either way. The chart keeps the height the page gives it (a number, the width over `aspect`, or its share of the height that the box it fills states in its own style) and fits that box whole, so its text stays within a fifth of its own size. A box whose height comes from a stylesheet gives no height the render can read: the chart is drawn 300 pixels high and fits inside the box, scaled down in a shorter box (its text shrinks with it) and with empty space above and below in a taller one. Each such chart carries eleven drawings, so it takes several times the room in the file that one drawing takes. A legend keeps the place its props give it, in a chart of either kind. Charts show the data and props of the page's first render, before its effects run: when the page cannot be drawn again without a browser, or its effects change its charts or re-render the component that makes them, each chart is drawn by itself and its parts see React context defaults. A value a chart's parts read from a React context that an effect changes may still show its later value. A `chart-size` warning counts the charts the render cannot draw (one used through `import * as R`, say), and says when charts were drawn by themselves. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.",
         },
       ],
     },
@@ -95,7 +96,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental render --reverse page.html --out page.tsx',
+          code: 'astryx experimental export --reverse page.html --out page.tsx',
         },
         {
           type: 'prose',
@@ -103,7 +104,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'It writes the page, the modules, stylesheets and JSON files the page reaches through its own imports, and the images, fonts and media the render carried (however the page named them, as long as their bytes really are one): each goes where the page\'s relative imports find it from wherever you put the page, and a file the page imports through a path alias (`@/components/Header`) goes where your project\'s `tsconfig.json` or `jsconfig.json` alias points. Every file but the page goes inside the one new folder the restore creates (the topmost folder on the page\'s path that does not exist yet), never into a folder that already exists: a page that imports other files comes back into a new folder (`--out restored/app/page.tsx`), and a file it imports through a path alias comes back only when that alias points inside the new folder. Where no alias of yours names such an import, the file comes back in the page\'s own layout inside the new folder, and the result (`aliased`) names each such import, the whole `paths` the page needs to build (the entries your config has now, with the new ones), and the tsconfig.json or jsconfig.json they belong in. Only an import that cannot be a package name or a package\'s own subpath import is followed this way (`@/…`, `~/…`), so a received file can never remap a package or your own imports. Nor does it write a file that a test, story or benchmark runner would run by its default patterns (Jest, Vitest, Bun, AVA, Playwright, Storybook, Cypress and `node --test`: names such as `*.test.*`, `*.spec.*`, `*_test.*`, `*-test.*`, `*.bench.*`, `*.stories.*`, `*.cy.*`, and anything under `test/`, `tests/` or `__tests__/`), judged from the repository root (every folder above the file up to it), else the topmost folder with a package.json. Restored files are the sender\'s code: read them before you run or import them. Without `--out`, everything comes back into a new folder beside the HTML file, named after it (`page.html` comes back into `page-restored/`). A received file that carries anything else (a file the page never imports, a dotfile, `package.json`, a tool configuration, a path that leaves the folder) is refused with nothing written. A rendered file that lost its embedded source on the way (a sanitizer or an editor strips `<script>` blocks) and has no Astryx components to rebuild from is refused with `ERR_RENDER_SOURCE_DAMAGED`, as is a rendered file cut short before its embedded source, and a file a merge left with conflict markers (keep the whole file from one side, or render the merged page again). An existing file is never replaced unless you pass `--overwrite`, and the refusal names every one; a generated, vendored or ignored file, and any path through a symbolic link, is not written even then. Add `--json` for the result as data: what was written, how big it is, and every warning.',
+          text: "It writes the page, the modules, stylesheets and JSON files the page reaches through its own imports, and the images, fonts and media the render carried (however the page named them, as long as their bytes really are one): each goes where the page's relative imports find it from wherever you put the page, and a file the page imports through a path alias (`@/components/Header`) goes where your project's `tsconfig.json` or `jsconfig.json` alias points. Every file but the page goes inside the one new folder the restore creates (the topmost folder on the page's path that does not exist yet), never into a folder that already exists: a page that imports other files comes back into a new folder (`--out restored/app/page.tsx`), and a file it imports through a path alias comes back only when that alias points inside the new folder. Where no alias of yours names such an import, the file comes back in the page's own layout inside the new folder, and the result (`aliased`) names each such import, the whole `paths` the page needs to build (the entries your config has now, with the new ones), and the tsconfig.json or jsconfig.json they belong in. Only an import that cannot be a package name or a package's own subpath import is followed this way (`@/…`, `~/…`), so a received file can never remap a package or your own imports. Nor does it write a file that a test, story or benchmark runner would run by its default patterns (Jest, Vitest, Bun, AVA, Playwright, Storybook, Cypress and `node --test`: names such as `*.test.*`, `*.spec.*`, `*_test.*`, `*-test.*`, `*.bench.*`, `*.stories.*`, `*.cy.*`, and anything under `test/`, `tests/` or `__tests__/`), judged from the repository root (every folder above the file up to it), else the topmost folder with a package.json. Restored files are the sender's code: read them before you run or import them. Without `--out`, everything comes back into a new folder beside the HTML file, named after it (`page.html` comes back into `page-restored/`). A received file that carries anything else (a file the page never imports, a dotfile, `package.json`, a tool configuration, a path that leaves the folder) is refused with nothing written. A rendered file that lost its embedded source on the way (a sanitizer or an editor strips `<script>` blocks) and has no Astryx components to rebuild from is refused with `ERR_RENDER_SOURCE_DAMAGED`, as is a rendered file cut short before its embedded source, and a file a merge left with conflict markers (keep the whole file from one side, or render the merged page again). An existing file is never replaced unless you pass `--overwrite`, and the refusal names every one; a generated, vendored or ignored file, and any path through a symbolic link, is not written even then. Add `--json` for the result as data: what was written, how big it is, and every warning.",
         },
       ],
     },

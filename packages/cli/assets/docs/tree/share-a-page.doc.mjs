@@ -80,7 +80,7 @@ export const docs = {
             'A column\u2019s floor includes its cells\u2019 24 px of padding. It must fit the column\u2019s longest word, because wrapped text breaks inside a word that does not fit, and its header, which stays on one line and is cut off with an ellipsis: `width: pixel(64)` holds a short number under a one-word header such as \u201cp95\u201d, and a two-word header such as \u201cError rate\u201d needs about 100 px.',
             'Give each CodeBlock `isWrapped`, so a reader on a phone sees whole lines.',
             'Charts use recharts: install it in the page\u2019s folder first (`{@pm install recharts}`). Size a chart with `<ResponsiveContainer width="100%" aspect={2.5}>`, and color each series with a theme variable, such as `stroke="var(--color-data-categorical-blue)"`, so it follows the theme too.',
-            'Controls that need a browser (buttons, filters, tabs, menus) work once the page\u2019s script runs, and do nothing in a viewer that blocks scripts. Keep what a reader must see in the first paint, not behind a click (see `astryx docs cli/experimental/render-pages interactive`).',
+            'Controls that need a browser (buttons, filters, tabs, menus) work once the page\u2019s script runs, and do nothing in a viewer that blocks scripts. Keep what a reader must see in the first paint, not behind a click (see `astryx docs cli/experimental/export-pages interactive`).',
           ],
         },
       ],
@@ -92,7 +92,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental render page.tsx --out page.html',
+          code: 'astryx experimental export page.tsx --out page.html',
         },
         {
           type: 'prose',
@@ -127,9 +127,9 @@ export const docs = {
           style: 'ordered',
           items: [
             'Get the current file, such as the latest version of the artifact: the shared copy can be newer than yours.',
-            'Turn it back into source. `astryx experimental render --reverse page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
+            'Turn it back into source. `astryx experimental export --reverse page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
             'Edit the page in that folder, such as `page-restored/page.tsx`.',
-            'Render it over the old file: `astryx experimental render page-restored/page.tsx --out page.html`. The command replaces a file only when a render wrote it.',
+            'Render it over the old file: `astryx experimental export page-restored/page.tsx --out page.html`. The command replaces a file only when a render wrote it.',
             'Share the new file, or upload it as a new version of the same artifact.',
           ],
         },
@@ -154,7 +154,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Every detail of the command, such as what it carries, its warnings, and files from other CLI versions: {@link generic:render-pages}.',
+          text: 'Every detail of the command, such as what it carries, its warnings, and files from other CLI versions: {@link generic:export-pages}.',
         },
       ],
     },
