@@ -8104,29 +8104,22 @@ export function backgroundColorLayer(value) {
 }
 
 /**
- * A background layer's image (a gradient or a `url()`) and what follows it,
- * as the background longhands take them: position, size (after a slash)
- * and repeat. `other` holds the words that are none of those (an
- * attachment, an origin or clip box): a layer with any is not written as
- * these longhands.
+ * A background layer's image (a gradient or a `url()`) and the words beside
+ * it, as the background longhands take them: position, size (after a
+ * slash) and repeat. The image may come before or after those words, as
+ * CSS allows. `other` holds the words that are none of those (an
+ * attachment, an origin or clip box, a second image): a layer with any is
+ * not written as these longhands.
  * @param {string} layer
  * @returns {{image: string, position: string, size: string, repeat: string, other: string[]}}
  */
 function layerParts(layer) {
-  const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient|url)\(/i.exec(
-    layer,
-  );
-  if (!fn) return {image: layer, position: '', size: '', repeat: '', other: []};
-  let depth = 0;
-  let end = layer.length - 1;
-  for (let i = fn[0].length - 1; i < layer.length; i++) {
-    if (layer[i] === '(') depth++;
-    if (layer[i] === ')' && --depth === 0) {
-      end = i;
-      break;
-    }
-  }
-  const rest = splitTop(layer.slice(end + 1).trim(), ' ');
+  const IMAGE = /^(?:(?:repeating-)?(?:linear|radial|conic)-gradient|url)\(/i;
+  const all = splitTop(layer.trim(), ' ').filter(Boolean);
+  const at = all.findIndex(w => IMAGE.test(w));
+  if (at < 0)
+    return {image: layer, position: '', size: '', repeat: '', other: []};
+  const rest = all.filter((_, i) => i !== at);
   const REPEAT = /^(repeat|no-repeat|repeat-x|repeat-y|space|round)$/i;
   const repeat = rest.filter(w => REPEAT.test(w)).join(' ');
   const words = rest.filter(w => !REPEAT.test(w)).join(' ');
@@ -8145,7 +8138,7 @@ function layerParts(layer) {
       w => w && !/^(?:auto|cover|contain)$/i.test(w) && !LENGTH.test(w),
     ),
   ];
-  return {image: layer.slice(0, end + 1), position, size, repeat, other};
+  return {image: all[at], position, size, repeat, other};
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
