@@ -260,7 +260,6 @@ function over(color, alpha, under) {
     .join('')}`;
 }
 
-/** @param {string} a @param {string} b */
 /**
  * A contrast ratio to two decimals, cut down and never rounded up, so a
  * pair just under the bar never prints as meeting it.
@@ -271,6 +270,7 @@ export function ratioDown(ratio) {
   return Math.floor(ratio * 100 + 1e-9) / 100;
 }
 
+/** @param {string} a @param {string} b */
 function contrast(a, b) {
   const x = luminance(a);
   const y = luminance(b);
