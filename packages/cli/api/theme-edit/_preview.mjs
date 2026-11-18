@@ -170,16 +170,18 @@ export function familyOf(project, name) {
  * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
  * corners) sets no section here: the sample page and the open states show
  * it.
- * @param {import('./_project.mjs').ThemeProject} project
+ * A family role (`--on option-rows`) is read from the census, as the
+ * change itself reads it, so the pictured set is what the change touched.
+ * @param {{project: import('./_project.mjs').ThemeProject, C?: any}} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
-export function touchedFamilies(project, data) {
-  // A group (`--on inputs`) sets each of its parts.
+export function touchedFamilies(ctx, data) {
+  const {project} = ctx;
+  // A group (`--on inputs`, `--on option-rows`) sets each of its parts.
+  const groups = groupsOf(ctx);
   const parts = new Set(
-    (data.settings ?? []).flatMap(s =>
-      s.on ? (groupsOf({project})[s.on] ?? [s.on]) : [],
-    ),
+    (data.settings ?? []).flatMap(s => (s.on ? (groups[s.on] ?? [s.on]) : [])),
   );
   /** @type {Set<string>} */
   const out = new Set();

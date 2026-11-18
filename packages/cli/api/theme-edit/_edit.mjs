@@ -8106,7 +8106,7 @@ export async function themeEditShow(theme, options = {}) {
   // Each takes a browser run, so --png pictures the families the theme sets
   // a part of (the buttons when it sets none); --section <family> takes any
   // other, and sheet.html holds every component.
-  const touched = touchedFamilies(ctx.project, data).filter(f =>
+  const touched = touchedFamilies(ctx, data).filter(f =>
     FAMILY_SECTIONS.includes(f),
   );
   const families =
