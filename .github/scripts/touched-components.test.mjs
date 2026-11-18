@@ -292,6 +292,23 @@ describe('wide changes', () => {
     expect(summaryMarkdown(report)).toContain('Wide change (6 components)');
     expect(summaryMarkdown(report)).toContain('`ci:run-visual`');
   });
+
+  it('pairs each label with the one suite it runs, so no label reads as running the visual suite', () => {
+    const scope = owners(9);
+    const text = summaryMarkdown(
+      wideReport({
+        headSha: 'abc',
+        scope,
+        decision: decideWideChange(scope, []),
+      }),
+    );
+    expect(text).toContain(
+      'Each label runs only its own full suite: `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.',
+    );
+    expect(text).not.toMatch(
+      /`ci:run-a11y` or `ci:run-rtl` to run the full suite/,
+    );
+  });
 });
 
 describe('per-component results', () => {

@@ -750,6 +750,44 @@ describe('CheckboxInput', () => {
       expect(checkbox).not.toBeChecked();
     });
   });
+  describe('required invalid state', () => {
+    it('exposes invalid only with an error status, while required still blocks submission', () => {
+      const {rerender} = render(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+          />
+        </form>,
+      );
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toHaveAttribute('aria-invalid', 'false');
+      expect(checkbox).toBeRequired();
+      expect(checkbox.closest('form')!.checkValidity()).toBe(false);
+      rerender(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+            status={{type: 'error', message: 'Accept the terms to go on'}}
+          />
+        </form>,
+      );
+      expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('leaves the invalid state unset on a box that is not required', () => {
+      render(
+        <CheckboxInput label="Newsletter" value={false} onChange={() => {}} />,
+      );
+      expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    });
+  });
+
   describe('form participation', () => {
     it('submits under htmlName when checked', () => {
       const {container} = render(

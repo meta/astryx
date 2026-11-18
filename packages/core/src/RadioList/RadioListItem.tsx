@@ -25,7 +25,6 @@ import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
-import {radiusVars} from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -82,7 +81,8 @@ const styles = stylex.create({
       content: '""',
       position: 'absolute',
       inset: 0,
-      borderRadius: radiusVars['--radius-full'],
+      // The radio's circle, as the indicator draws it.
+      borderRadius: '50%',
       pointerEvents: 'none',
       backgroundColor: `var(${ROW_PRESS}, transparent)`,
     },

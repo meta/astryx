@@ -13,18 +13,32 @@
  *   astryx experimental render --reverse page.html --out page.tsx
  */
 
+import * as path from 'node:path';
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
+import {shellArg} from '../../../../foundation/text/shell-arg.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {emit, section, text, record, list} from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
+import {freeRestoreFolder} from '../../../../foundation/render/restore-folder.mjs';
 import {doc as renderCommand} from '../experimental-render.doc.mjs';
 import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 
 /** @param {number} n */
 const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+
+/**
+ * A file rendered outside the current folder comes back into it: --reverse
+ * writes only inside the folder it runs from, so the command names the first
+ * free restore folder here, as a restore beside the file would.
+ * @param {{output: string, files: string[]}} d
+ */
+const restoreHere = d =>
+  path.isAbsolute(d.output)
+    ? ` --out ${shellArg(`${path.relative(process.cwd(), freeRestoreFolder(process.cwd(), path.basename(d.output)))}/${d.files[0]}`)}`
+    : '';
 
 /**
  * Register `render` under the `experimental` group.
@@ -72,15 +86,18 @@ export function registerExperimentalRender(group, program) {
             images: d.images,
             files: d.files.join(', '),
             stylesheets: d.stylesheets.join(', ') || 'none',
+            scriptBytes: kb(d.scriptBytes),
+            scriptModules: d.scriptModules,
           }),
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),
-          text(`Give it back: ${run} experimental render --reverse ${d.output}`),
+          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}${restoreHere(d)}`),
         );
         return answered;
       }
       const d = result.data;
+      const edits = d.edits ?? [];
       emit(
         section(d.mode === 'embedded' ? `Restored ${d.output}` : `Rebuilt ${d.output}`),
         record({
@@ -90,6 +107,7 @@ export function registerExperimentalRender(group, program) {
           output: d.output,
           files: d.files.join(', '),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
+          ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'
             ? {
                 components: (d.components ?? []).join(', ') || 'none',
@@ -98,11 +116,49 @@ export function registerExperimentalRender(group, program) {
                 ...(d.unknown?.length ? {unknown: d.unknown.join(', ')} : {}),
               }
             : {}),
+          ...(d.format === undefined ? {} : {format: d.format}),
+          ...(d.renderedBy ? {renderedBy: d.renderedBy} : {}),
+          ...(d.packages ? {packages: d.packages.join(', ') || 'none'} : {}),
+          ...(d.title === undefined ? {} : {title: d.title}),
+          ...(d.edited === undefined ? {} : {edited: d.edited}),
+          ...(d.stylesEdited === undefined ? {} : {stylesEdited: d.stylesEdited}),
         }),
         ...(d.mode === 'rebuilt'
           ? [
               text(
                 'The file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.',
+              ),
+            ]
+          : []),
+        ...(d.aliased
+          ? [
+              text(
+                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, set the "paths" of ${d.aliased.config} (create it if it is not there) to: ${Object.entries(d.aliased.paths)
+                  .map(([key, targets]) => `${JSON.stringify(key)}: ${JSON.stringify(targets)}`)
+                  .join(', ')}.`,
+              ),
+            ]
+          : []),
+        ...(d.edited
+          ? [
+              section('Changed after the render'),
+              ...(edits.length > 0
+                ? edits.map(edit =>
+                    record({
+                      was: edit.was ?? '(added after the render)',
+                      now: edit.now ?? '(removed after the render)',
+                      ...(edit.file ? {file: edit.file, line: edit.line} : {}),
+                    }),
+                  )
+                : [text(d.stylesEdited ? 'Only the styles changed after the render; the text did not.' : 'The markup changed after the render, but its text did not: only attributes, elements or formatting.')]),
+              ...(d.moreEdits ? [record({moreEdits: d.moreEdits})] : []),
+              text('The restored files are the page as rendered, without these changes: make them in the restored files, then render again.'),
+            ]
+          : []),
+        ...(d.mode === 'embedded'
+          ? [
+              text(
+                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
               ),
             ]
           : []),

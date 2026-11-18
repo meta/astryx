@@ -14,7 +14,11 @@ import {
   findHookDoc,
 } from '../../../foundation/discovery/hook-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
-import {formatAccessibility, mdCell} from './component-format.mjs';
+import {
+  formatAccessibility,
+  formatBestPractices,
+  mdCell,
+} from './component-format.mjs';
 
 /**
  * Build a signature string from hook docs.
@@ -60,7 +64,7 @@ function formatParamsTable(params) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Param | Type | Default | Description |');
-  lines.push('|-------|------|---------|-------------|');
+  lines.push('|---|---|---|---|');
   for (const p of params) {
     const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
@@ -81,7 +85,7 @@ function formatReturnsTable(returns) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Field | Type | Description |');
-  lines.push('|-------|------|-------------|');
+  lines.push('|---|---|---|');
   for (const r of returns) {
     lines.push(
       `| \`${mdCell(r.name)}\` | \`${mdCell(r.type)}\` | ${mdCell(r.description)} |`,
@@ -107,14 +111,7 @@ export function formatHookFull(docs) {
   if (desc) sections.push(desc + '\n');
 
   // Best Practices (same position as component format)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
@@ -161,14 +158,7 @@ export function formatHookCompact(docs, importPath) {
   }
 
   // Best Practices (matches component compact)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 

@@ -77,13 +77,17 @@ function discoverChangelogs() {
 // entry whose body has several paragraphs renders as `- head`, prose, blank
 // line, indented prose — so treating every blank line as a terminator dropped
 // each paragraph after the first, silently, on its way into the changelog.
+//
+// Only an unindented `- ` starts an entry. An indented `- ` is a list inside
+// the entry's own body (renderReleaseLine indents the body two spaces), so it
+// stays under that entry.
 function splitBullets(body) {
   const lines = body.split('\n');
   const bullets = [];
   let cur = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^\s*-\s+/.test(line)) {
+    if (/^-\s+/.test(line)) {
       if (cur) bullets.push(cur);
       cur = line;
     } else if (cur && line.trim() !== '') {

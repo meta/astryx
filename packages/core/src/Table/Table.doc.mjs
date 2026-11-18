@@ -139,7 +139,7 @@ export const docs = {
       {className: 'astryx-table-header'},
       {className: 'astryx-table-body'},
       {className: 'astryx-table-footer'},
-      {className: 'astryx-table-row'},
+      {className: 'astryx-table-row', states: ['selected']},
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
     ],

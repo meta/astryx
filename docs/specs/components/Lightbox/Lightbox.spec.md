@@ -207,6 +207,12 @@ return included, plays `springs.settle`.
 
 - **PR1 — Settles survive a busy page.** Zoom, page, dismiss, and transition
   settles keep moving while the main thread is busy (`spec:AST-094`).
+- **PR2 — The caption's measurement is Lightbox's own.** The open caption's
+  line count and the toggle's inline place are Lightbox's own measurement:
+  `useTruncation` reports only whether a clamped block overflows, and no
+  shared engine counts an unclamped block's laid-out lines or places an
+  inline float beside its last line, so `architecture:react-component-runtime`
+  INV19's shared engines do not fit.
 
 ## Accessibility contract
 

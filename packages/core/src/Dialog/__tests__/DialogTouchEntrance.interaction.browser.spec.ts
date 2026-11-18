@@ -322,6 +322,9 @@ test.describe('under a finger (spec:AST-094 FR35)', () => {
 
     await finishEntrance(page);
     await expect(openDialogs(page)).toHaveCount(1);
+    // Under a finger the alert plays its own entrance. Its input hold ends
+    // when the motion animator retires that finished entrance.
+    await expect(page.locator('dialog[open] > [popover]')).toHaveCount(0);
 
     await driver.tap(await centerOf(action));
     await expect(openDialogs(page)).toHaveCount(0);

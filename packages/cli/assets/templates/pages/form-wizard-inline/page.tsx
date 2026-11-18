@@ -626,7 +626,7 @@ export default function FormWizardInlinePage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={6}>
             {/* The automatic steps advance on a timer, which is a change of
                 context nobody asked for. Focus deliberately stays where it is;

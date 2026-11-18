@@ -135,18 +135,17 @@ const tableStyles = stylex.create({
 });
 
 const scrollWrapperStyles = stylex.create({
-  // A windowed table scrolls inside the height its parent gives it. As its
-  // container's first or last child, the region bleeds over that block edge's
-  // padding (containerBleed), so its height adds that padding back and it
-  // ends at the same edge.
+  // A windowed table scrolls inside the height its parent gives it. Where a
+  // padding host publishes block bleed to the region (containerBleed), its
+  // height adds that padding back, so it ends at the same edge.
   blockViewport: {
     '--_table-bleed-block-start': {
       default: '0px',
-      ':first-child': 'var(--container-padding-block-start, 0px)',
+      ':first-child': 'var(--_container-bleed-block-start, 0px)',
     },
     '--_table-bleed-block-end': {
       default: '0px',
-      ':last-child': 'var(--container-padding-block-end, 0px)',
+      ':last-child': 'var(--_container-bleed-block-end, 0px)',
     },
     height:
       'calc(100% + var(--_table-bleed-block-start) + var(--_table-bleed-block-end))',
@@ -163,15 +162,17 @@ const scrollWrapperStyles = stylex.create({
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
     marginTop: {
       default: null,
-      ':first-child': 'calc(-1 * var(--container-padding-block-start, 0px))',
+      ':first-child': 'calc(-1 * var(--_container-bleed-block-start, 0px))',
     },
     marginBottom: {
       default: null,
-      ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
+      ':last-child': 'calc(-1 * var(--_container-bleed-block-end, 0px))',
     },
-    // As its container's first or last child, the region reaches that block
-    // edge. There it takes the published corner, so its ring and fills follow
-    // the curve. Every other corner is square.
+    // A padding host publishes block bleed only to its direct first or last
+    // child, never through a Stack or wrapper. A nested table therefore keeps
+    // the host's block padding and cannot overlap the next sibling. Where the
+    // region reaches a block edge, it takes the published corner, so its ring
+    // and fills follow the curve. Every other corner is square.
     borderStartStartRadius: {
       default: '0px',
       ':first-child': 'var(--container-corner-start-start, 0px)',

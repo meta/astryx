@@ -55,7 +55,7 @@ interface Box {
 
 /** Opens the story's viewer with the mouse and waits for the photo. */
 async function openViewer(page: Page) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -146,7 +146,7 @@ test("a caption sits in its band under the photo's box, zoomed or not, as in a g
   page,
 }) => {
   // A 3:1 panorama leaves the photo's box most of its height free.
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(3000, 1000),
@@ -188,7 +188,7 @@ test("a caption sits in its band under the photo's box, zoomed or not, as in a g
 
 /** Opens the gallery story (zoom on) at its first photo with the mouse. */
 async function openGallery(page: Page) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -213,7 +213,7 @@ async function openGallery(page: Page) {
 
 /** Opens the "Gallery with captions" story with the mouse and waits for the photo. */
 async function openCaptionGallery(page: Page) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -320,7 +320,7 @@ test('a photo without zoom leaves its touches to the page where the primary poin
   // The drag to close belongs to the touch presentation, which a coarse
   // primary pointer brings. A touchscreen laptop's finger scrolls and zooms
   // the page around a photo without zoom, as on main.
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -457,7 +457,7 @@ test('at 1280 × 800, a mouse click 4 or 20 px beside a gallery photo scaled dow
 }) => {
   await page.setViewportSize({width: 1280, height: 800});
   // The story's own photo size, which the window scales down to fit.
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(1200, 800),
@@ -518,7 +518,7 @@ test('without zoom, a mouse click at the far edge beside a large gallery photo c
   page,
 }) => {
   await page.setViewportSize({width: 1280, height: 800});
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -849,7 +849,7 @@ test('a mouse press on the fitted photo released above it closes the viewer, as 
 test('without zoom, a mouse click beside the photo or above it closes the viewer', async ({
   page,
 }) => {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -929,7 +929,7 @@ test('a mouse click between a gallery photo and its caption band closes the view
 test('with zoom, a mouse double-click on a single photo’s caption zooms the photo, and the caption stays its description', async ({
   page,
 }) => {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(PHOTO.width, PHOTO.height),
@@ -989,7 +989,7 @@ test('in a gallery with zoom, a mouse click beside a narrow photo, level with it
   // A photo narrower than its caption. The caption's band sits under the
   // photo, so the dark space beside the photo is the backdrop's.
   await page.setViewportSize({width: 1280, height: 1100});
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(200, 1200)}),
   );
   const open = async () => {

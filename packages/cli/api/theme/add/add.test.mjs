@@ -6,11 +6,13 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {themeAdd} from './add.mjs';
 import {themeEject} from '../eject/eject.mjs';
+import {themeListAvailable} from '../list/list.mjs';
 import {
   THEME_MODULE_MARKER,
   parseThemeModuleRecord,
 } from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 
@@ -256,18 +258,38 @@ describe('themeAdd', () => {
     try {
       fs.mkdirSync(path.join(app, 'src'));
       fs.writeFileSync(path.join(app, 'package.json'), '{"name":"app"}\n');
+      fs.writeFileSync(path.join(app, 'package-lock.json'), '{}\n');
+      // With no Core in the app, the theme comes at the release of the CLI
+      // that answers, whose Core it brings as its peer.
       await expect(themeAdd('butter', {cwd: app})).rejects.toMatchObject({
         message: expect.stringContaining(
           'The app imports butter from it, so install it, then add the theme',
         ),
         suggestions: [
-          {name: expect.stringMatching(/@astryxdesign\/theme-butter$/)},
+          {name: `npm install @astryxdesign/theme-butter@${CLI_VERSION}`},
           {name: expect.stringMatching(/ theme add butter$/)},
         ],
       });
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
     }
+  });
+
+  it('adds a bundled theme exactly when theme list calls its package installed', async () => {
+    installBuiltThemePackage('neutral');
+    const listed = (await themeListAvailable({cwd: tmpDir})).data;
+    const installed = (/** @type {string} */ slug) =>
+      listed.find(theme => theme.slug === slug)?.installed;
+    expect(installed('neutral')).toBe(true);
+    expect(installed('butter')).toBe(false);
+    await expect(themeAdd('neutral', {cwd: tmpDir})).resolves.toMatchObject({
+      type: 'theme.app',
+    });
+    await expect(themeAdd('butter', {cwd: tmpDir})).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'Theme package "@astryxdesign/theme-butter" is not installed',
+      ),
+    });
   });
 
   it('keeps the released CLI selector while recording the import package', async () => {

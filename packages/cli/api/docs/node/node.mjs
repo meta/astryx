@@ -295,7 +295,7 @@ export function typedEdges(tree, node) {
 export async function node(route, options = {}) {
   const found = await resolveDocsArgument(route, options);
   if (found.kind !== 'node')
-    throw await unknownTopicError(route, found.catalog);
+    throw await unknownTopicError(route, found.catalog, options);
   return {
     type: 'docs.node',
     // The docs tree names each node's npm package as its provider.

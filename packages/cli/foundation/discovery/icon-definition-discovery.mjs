@@ -20,6 +20,7 @@ import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/pars
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} IconDefinitionDoc */
 
@@ -60,7 +61,7 @@ export function readDefinitionsDir(dir, owner) {
   } catch {
     return {definitions, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (!entry.name.endsWith('.doc.mjs')) continue;
     const file = path.join(dir, entry.name);
     const label = `Icon definition ${entry.name} in ${owner}`;

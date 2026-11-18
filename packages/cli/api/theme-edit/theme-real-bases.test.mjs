@@ -9,7 +9,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import * as os from 'node:os';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
@@ -18,6 +19,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {modeValue} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -30,6 +32,38 @@ let cwd;
 
 /** Why a bundled theme could not be built here, when it could not. */
 let unbuilt = '';
+
+// The render check runs in the Chromium the repository pins for Playwright,
+// launched once. Each launch and render has this bound; one that does not
+// finish fails naming what it waited on, and a missing browser fails the case.
+const BROWSER_WAIT_MS = 60_000;
+// The text-direction case runs only in test-node's "Theme editor browser
+// case" step, after the Chromium install; the Node shard lists it as skipped.
+const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';
+const {chromium} = createRequire(import.meta.url)('playwright');
+
+/**
+ * @template T
+ * @param {Promise<T>} work
+ * @param {string} what what the case waits on, for the failure
+ * @param {number} [ms]
+ * @returns {Promise<T>}
+ */
+function within(work, what, ms = BROWSER_WAIT_MS) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  // A late failure of work that already timed out is not a second failure.
+  work.catch(() => {});
+  return Promise.race([
+    work,
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${what} did not finish within ${ms / 1000} s`)),
+        ms,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-real-bases-', FIXTURE_PACKAGES);
@@ -117,7 +151,7 @@ describe('padding on real base themes', () => {
     expect(reset).not.toMatch(/--astryx-card-padding-inline-start/);
   }, 240_000);
 
-  it("lets the own source's padding on a part win over an editor padding there, base and variant (parts40)", async ctx => {
+  it("lets the own source's padding on a part win over an editor padding there, base and variant", async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -173,7 +207,7 @@ describe('padding on real base themes', () => {
     );
   }, 240_000);
 
-  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet (parts41)', async ctx => {
+  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet', async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -211,7 +245,7 @@ describe('padding on real base themes', () => {
     }
   }, 240_000);
 
-  it('reads an own-source padding edited since the last build, so the set and its note agree (11490)', async ctx => {
+  it('reads an own-source padding edited since the last build, so the set and its note agree', async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -240,7 +274,7 @@ describe('padding on real base themes', () => {
     expect(ruleOf('ed', '.astryx-card')).not.toMatch(/20px/);
   }, 240_000);
 
-  describe('parts42', () => {
+  describe('one-mode colors, kept sizes and own padding sides', () => {
     /** @param {string} slug @param {string} mine */
     const ownEdit = (slug, mine) => {
       const ts = path.join(cwd, 'themes', slug, `${slug}.theme.ts`);
@@ -259,7 +293,7 @@ describe('padding on real base themes', () => {
     const cssOf = slug =>
       fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
 
-    it("fills only its mode's half with a color set in a one-mode theme, and keeps a saved --mode half", async ctx => {
+    it("writes a color set in a one-mode theme in its mode's block, and keeps a saved --mode block", async ctx => {
       if (unbuilt) return ctx.skip();
       await themeEditNew('om1', {cwd, like: 'neutral'});
       await themeEditSet('om1', 'background', '#eeeeee', {
@@ -269,12 +303,20 @@ describe('padding on real base themes', () => {
         mode: 'light',
       });
       await themeEditSet('om1', 'mode', 'light-only', {cwd});
-      expect(ruleOf('om1', '.astryx-button[data-variant="secondary"]')).toMatch(
-        /background(-color)?:\s*light-dark\(#eeeeee,/,
-      );
+      const sec = '.astryx-button[data-variant="secondary"]';
+      expect(
+        modeValue(cssOf('om1'), sec, 'background-color', 'light') ??
+          modeValue(cssOf('om1'), sec, 'background', 'light'),
+      ).toBe('#eeeeee');
       await themeEditSet('om1', 'background', '#f4f4f4', {cwd, on: 'card'});
-      expect(ruleOf('om1', '.astryx-card')).toMatch(
-        /background(-color)?:\s*light-dark\(#f4f4f4,/,
+      // Each card variant reads its own background: each takes the color in
+      // its light block, and the dark mode keeps its own (parts43).
+      const card = '.astryx-card[data-variant="default"]';
+      expect(modeValue(cssOf('om1'), card, 'background-color', 'light')).toBe(
+        '#f4f4f4',
+      );
+      expect(modeValue(cssOf('om1'), card, 'background-color', 'dark')).toBe(
+        undefined,
       );
       await themeEditSet('om1', '--color-background-card', '#fafafa', {cwd});
       expect(cssOf('om1')).toMatch(
@@ -362,53 +404,69 @@ describe('padding on real base themes', () => {
       expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).not.toMatch(
         /padding-right/,
       );
-      // In a page under each direction (a dir="rtl" ancestor), the own start
-      // side holds and the editor's sides land on the other side.
-      const chromium = ['chromium-browser', 'chromium', 'google-chrome'].find(
-        bin => {
-          try {
-            execFileSync('which', [bin], {stdio: 'ignore'});
-            return true;
-          } catch {
-            return false;
-          }
-        },
-      );
-      if (!chromium) {
-        console.warn('no headless Chromium here: the render check did not run');
-        return;
-      }
-      const css = fs.readFileSync(path.join(cwd, 'themes/pl/pl.css'), 'utf8');
-      /** @param {'ltr' | 'rtl'} dir */
-      const padding = dir => {
-        const page = path.join(path.dirname(cwd), `pl-${dir}.html`);
-        fs.writeFileSync(
-          page,
-          `<!doctype html><html><head><style>${css}</style></head><body>` +
-            `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
-            '<pre id="r"></pre><script>const c=getComputedStyle(document.getElementById("b"));' +
-            'document.getElementById("r").textContent=c.paddingLeft+" "+c.paddingRight</script></body></html>',
-        );
-        const dom = execFileSync(
-          chromium,
-          [
-            '--headless=new',
-            '--no-sandbox',
-            '--disable-gpu',
-            '--dump-dom',
-            `file://${page}`,
-          ],
-          {
-            encoding: 'utf8',
-            timeout: 60_000,
-            stdio: ['ignore', 'pipe', 'ignore'],
-          },
-        );
-        return /<pre id="r">([^<]*)<\/pre>/.exec(dom)?.[1];
-      };
-      expect(padding('ltr')).toBe('30px 4px');
-      expect(padding('rtl')).toBe('8px 30px');
     }, 240_000);
+
+    it.runIf(BROWSER_STEP)(
+      'renders own and editor sides in each text direction (butter)',
+      async () => {
+        // In its browser step a theme that cannot be built is a failure, not a skip.
+        if (unbuilt)
+          throw new Error(`the base themes could not be built: ${unbuilt}`);
+        await themeEditNew('plr', {cwd, like: 'butter'});
+        ownEdit('plr', "button: {base: {paddingInlineStart: '30px'}},");
+        await themeEditSet('plr', 'padding-left', '8px', {cwd, on: 'button'});
+        await themeEditSet('plr', 'padding-right', '4px', {cwd, on: 'button'});
+        // In a page under each direction (a dir="rtl" ancestor), the own start
+        // side holds and the editor's sides land on the other side.
+        const executablePath = chromium.executablePath();
+        if (!fs.existsSync(executablePath))
+          throw new Error(
+            `Playwright's Chromium is not installed at ${executablePath}: run npx playwright install chromium`,
+          );
+        const css = fs.readFileSync(
+          path.join(cwd, 'themes/plr/plr.css'),
+          'utf8',
+        );
+        const browser = await within(
+          chromium.launch({
+            args: ['--no-sandbox'],
+            timeout: BROWSER_WAIT_MS + 5000,
+          }),
+          "launching Playwright's Chromium",
+        );
+        try {
+          const page = await within(browser.newPage(), 'opening a page');
+          /** @param {'ltr' | 'rtl'} dir */
+          const padding = async dir => {
+            await within(
+              page.setContent(
+                `<!doctype html><html><head><style>${css}</style></head><body>` +
+                  `<div data-astryx-theme="plr" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
+                  '</body></html>',
+                {timeout: BROWSER_WAIT_MS + 5000},
+              ),
+              `rendering the ${dir} page`,
+            );
+            return within(
+              page.$eval('#b', element => {
+                // Through the element's own window: this file lints with Node globals.
+                const view = /** @type {any} */ (
+                  element.ownerDocument.defaultView
+                );
+                const c = view.getComputedStyle(element);
+                return `${c.paddingLeft} ${c.paddingRight}`;
+              }),
+              `reading the ${dir} page's padding`,
+            );
+          };
+          expect(await padding('ltr')).toBe('30px 4px');
+          expect(await padding('rtl')).toBe('8px 30px');
+        } finally {
+          await browser.close();
+        }
+      },
+      240_000,
+    );
 
     it('lets an own variant padding win over an unequal editor padding on the plain rule', async ctx => {
       if (unbuilt) return ctx.skip();
@@ -428,4 +486,24 @@ describe('padding on real base themes', () => {
         );
     }, 240_000);
   });
+
+  it('names what it waited on when the browser does not start', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'real-bases-browser-'));
+    try {
+      // A browser that never starts: it never opens the channel Playwright waits on.
+      const hanging = path.join(dir, 'chromium');
+      fs.writeFileSync(hanging, '#!/bin/sh\nsleep 30\n', {mode: 0o755});
+      await expect(
+        within(
+          chromium.launch({executablePath: hanging, timeout: 3000}),
+          "launching Playwright's Chromium",
+          1000,
+        ),
+      ).rejects.toThrow(
+        "launching Playwright's Chromium did not finish within 1 s",
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 20_000);
 });

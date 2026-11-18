@@ -25,6 +25,7 @@ import {Avatar} from '@astryxdesign/core/Avatar';
 import {AvatarGroup} from '@astryxdesign/core/AvatarGroup';
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {Link} from '@astryxdesign/core/Link';
@@ -42,7 +43,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
@@ -51,7 +52,6 @@ import {
   TrashIcon,
   PhotoIcon,
   ViewColumnsIcon,
-  InformationCircleIcon,
   BellIcon,
   ShareIcon,
   EyeIcon,
@@ -255,11 +255,12 @@ const ATTACHMENT_ICONS = {
   file: DocumentTextIcon,
 };
 
-// Identical for every row, so it is built once rather than per render.
-const ATTACHMENT_ACTIONS: DropdownMenuOption[] = [
-  {label: 'Edit', icon: PencilIcon},
-  {label: 'Delete', icon: TrashIcon, variant: 'destructive'},
-];
+// The parts of every row's Delete that do not depend on the row.
+const ATTACHMENT_DELETE: DropdownMenuOption = {
+  label: 'Delete',
+  icon: TrashIcon,
+  variant: 'destructive',
+};
 
 const HEADER_ACTIONS = [
   {label: 'Watch', icon: EyeIcon},
@@ -374,6 +375,7 @@ function PageHeader({
   onToggleDetails: () => void;
   isNarrow: boolean;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <VStack gap={4}>
@@ -403,14 +405,7 @@ function PageHeader({
               Refresh onboarding flow for workspaces
             </Heading>
           </VStack>
-          {isNarrow ? (
-            <IconButton
-              label="Show details"
-              variant="secondary"
-              icon={<Icon icon={InformationCircleIcon} size="sm" />}
-              onClick={onToggleDetails}
-            />
-          ) : (
+          {!isNarrow && (
             <HStack gap={1}>
               {HEADER_ACTIONS.map(action => (
                 <IconButton
@@ -418,6 +413,13 @@ function PageHeader({
                   label={action.label}
                   variant="secondary"
                   icon={<Icon icon={action.icon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would happen here`,
+                      uniqueID: `header-${action.label}`,
+                    })
+                  }
                 />
               ))}
               <Button
@@ -521,13 +523,25 @@ function SubtasksSection({
   onSetDone: (id: number, isDone: boolean) => void;
 }) {
   const doneCount = subtasks.filter(task => task.isDone).length;
+  const showToast = useToast();
 
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Subtasks"
-          action={<Button label="Add subtask" />}
+          action={
+            <Button
+              label="Add subtask"
+              onClick={() =>
+                // Demo only: replace this toast with the call that adds a subtask.
+                showToast({
+                  body: 'Demo: a new subtask would be added here',
+                  uniqueID: 'add-subtask',
+                })
+              }
+            />
+          }
         />
         <HStack gap={3} vAlign="center">
           <Text type="supporting" color="secondary">
@@ -570,12 +584,25 @@ function SubtasksSection({
 
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Attachments"
-          action={<Button label="Add attachment" />}
+          action={
+            <Button
+              label="Add attachment"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a file picker would open here',
+                  uniqueID: 'add-attachment',
+                })
+              }
+            />
+          }
         />
         <VStack gap={1}>
           {ATTACHMENTS.map(attachment => (
@@ -608,12 +635,41 @@ function AttachmentsSection() {
                 <MoreMenu
                   presentation="adaptive"
                   label={`Actions for ${attachment.title}`}
-                  items={ATTACHMENT_ACTIONS}
+                  items={[
+                    {
+                      label: 'Edit',
+                      icon: PencilIcon,
+                      onClick: () =>
+                        // Demo only: replace this toast with the call that edits the attachment.
+                        showToast({
+                          body: `Demo: ${attachment.title} would open for editing here`,
+                          uniqueID: `edit-${attachment.id}`,
+                        }),
+                    },
+                    {
+                      ...ATTACHMENT_DELETE,
+                      onClick: () =>
+                        confirm.show({
+                          title: `Delete ${attachment.title}?`,
+                          description: "This demo won't delete anything.",
+                          actionLabel: 'Delete',
+                          onAction: () => {
+                            confirm.hide();
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: `Demo: ${attachment.title} would be deleted here`,
+                              uniqueID: `delete-${attachment.id}`,
+                            });
+                          },
+                        }),
+                    },
+                  ]}
                 />
               </HStack>
             </ClickableCard>
           ))}
         </VStack>
+        {confirm.element}
       </VStack>
     </Section>
   );
@@ -628,6 +684,7 @@ function ActivitySection({
   onCommentChange: (value: string) => void;
 }) {
   const commentFieldRef = useRef<HTMLTextAreaElement>(null);
+  const showToast = useToast();
 
   const focusCommentField = () => {
     const field = commentFieldRef.current;
@@ -701,11 +758,23 @@ function ActivitySection({
             rows={5}
           />
           <HStack gap={2} hAlign="end">
-            <Button label="Cancel" variant="ghost" />
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onClick={() => onCommentChange('')}
+            />
             <Button
               label="Comment"
               variant="primary"
               isDisabled={comment.trim().length === 0}
+              onClick={() => {
+                // Demo only: replace this toast with the call that posts the comment.
+                showToast({
+                  body: 'Demo: the comment would be posted here',
+                  uniqueID: 'comment',
+                });
+                onCommentChange('');
+              }}
             />
           </HStack>
         </VStack>
@@ -824,14 +893,11 @@ export default function WorkItemDetailTemplate() {
   const [subtasks, setSubtasks] = useState(SUBTASKS);
   const [comment, setComment] = useState('');
 
-  const isNarrow = useMediaQuery('(max-width: 1024px)');
-  // The details live in a rail on wide screens and a dialog on narrow ones.
-  // Each keeps its own flag: the rail is open by default, while the dialog must
-  // stay shut until asked for, so one shared initial value cannot serve both.
-  const [isRailOpen, setRailOpen] = useState(true);
-  const [isDialogOpen, setDialogOpen] = useState(false);
-  const isDetailsOpen = isNarrow ? isDialogOpen : isRailOpen;
-  const setDetailsOpen = isNarrow ? setDialogOpen : setRailOpen;
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get the narrow layout, which reads well at every width. Once
+  // script runs, wide screens move the details to a rail that can be hidden.
+  const isNarrow = useMediaQuery('(max-width: 1024px)', true);
+  const [isDetailsOpen, setDetailsOpen] = useState(true);
   const toggleDetails = () => setDetailsOpen(isOpen => !isOpen);
 
   const updateFields = (patch: Partial<WorkItemFields>) =>
@@ -843,59 +909,47 @@ export default function WorkItemDetailTemplate() {
     );
 
   return (
-    <>
-      <Layout
-        height="fill"
-        contentWidth={1260}
-        header={
-          <PageHeader
-            fields={fields}
-            onFieldsChange={updateFields}
-            isDetailsOpen={isDetailsOpen}
-            onToggleDetails={toggleDetails}
-            isNarrow={isNarrow}
-          />
-        }
-        content={
-          <LayoutContent padding={6} role="main">
-            <VStack gap={6}>
-              <DescriptionSection />
-              <Divider />
-              <SubtasksSection subtasks={subtasks} onSetDone={setSubtaskDone} />
-              <Divider />
-              <AttachmentsSection />
-              <Divider />
-              <ActivitySection comment={comment} onCommentChange={setComment} />
-            </VStack>
-          </LayoutContent>
-        }
-        end={
-          !isNarrow && isDetailsOpen ? (
-            <LayoutPanel
-              width={340}
-              padding={6}
-              role="complementary"
-              hasDivider>
-              <DetailsPanel fields={fields} />
-            </LayoutPanel>
-          ) : undefined
-        }
-      />
-      <Dialog
-        variant="fullscreen"
-        isOpen={isNarrow && isDetailsOpen}
-        onOpenChange={setDialogOpen}>
-        <Layout
-          header={
-            <DialogHeader title="Task details" onOpenChange={setDialogOpen} />
-          }
-          content={
-            <LayoutContent padding={4}>
-              <DetailsPanel fields={fields} />
-            </LayoutContent>
-          }
+    <Layout
+      height="fill"
+      contentWidth={1260}
+      header={
+        <PageHeader
+          fields={fields}
+          onFieldsChange={updateFields}
+          isDetailsOpen={isDetailsOpen}
+          onToggleDetails={toggleDetails}
+          isNarrow={isNarrow}
         />
-      </Dialog>
-    </>
+      }
+      content={
+        <LayoutContent padding={6} role="main">
+          <VStack gap={6}>
+            <DescriptionSection />
+            <Divider />
+            <SubtasksSection subtasks={subtasks} onSetDone={setSubtaskDone} />
+            <Divider />
+            <AttachmentsSection />
+            <Divider />
+            <ActivitySection comment={comment} onCommentChange={setComment} />
+            {/* Narrow screens: the details follow the main column instead
+                of squeezing beside it. */}
+            {isNarrow && (
+              <>
+                <Divider />
+                <Heading level={2}>Task details</Heading>
+                <DetailsPanel fields={fields} />
+              </>
+            )}
+          </VStack>
+        </LayoutContent>
+      }
+      end={
+        !isNarrow && isDetailsOpen ? (
+          <LayoutPanel width={340} padding={6} role="complementary" hasDivider>
+            <DetailsPanel fields={fields} />
+          </LayoutPanel>
+        ) : undefined
+      }
+    />
   );
 }

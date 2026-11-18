@@ -23,6 +23,7 @@ export default function OutlineDensity() {
           Default
         </Text>
         <Outline
+          label="Table of contents, default density"
           items={items}
           density="default"
           activeId="density-configuration"
@@ -33,6 +34,7 @@ export default function OutlineDensity() {
           Compact
         </Text>
         <Outline
+          label="Table of contents, compact density"
           items={items}
           density="compact"
           activeId="density-configuration"

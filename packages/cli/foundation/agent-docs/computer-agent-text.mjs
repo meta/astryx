@@ -261,7 +261,7 @@ function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
     'Use it when you build or change UI, pick components, or style or theme an app.',
-    `Its docs, components, templates, and themes are all reachable through \`${run}\`. Start with \`${run} search '<what you need>'\`.`,
+    `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
     "In a project, the project's version of Astryx answers automatically.",
     // How to build, which discovery alone leaves to the agent's own page
@@ -269,7 +269,7 @@ function bodyLines(run, install) {
     // own workflow lines.
     // A project that already installs Core gets the CLI at that version, as
     // the CLI's own hint for that state says, never a newer CLI beside it.
-    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version. Run \`${run} init\` there and follow the agent docs it writes.`,
+    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). Run \`${run} init\` there and follow the agent docs it writes.`,
     WORKFLOW_TITLE,
     ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
     `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
