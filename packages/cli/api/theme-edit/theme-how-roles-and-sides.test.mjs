@@ -132,6 +132,15 @@ describe('plain looks', () => {
         ask,
       ).toBe(false);
     }
+    // (A hue on a part, or the last of a list of fills, is still its fill.)
+    expect(writes(await how('q0', 'yellow on badges'))[0]).toMatch(
+      /^set q0 background-color '#eab308' --on badge/,
+    );
+    expect(
+      writes(
+        await how('q0', 'green, blue, red, yellow on badges and status'),
+      ).some(c => /^set q0 color '#eab308'/.test(c)),
+    ).toBe(false);
     expect(
       writes(await how('q0', 'cards in the admin dashboard: 8px corners'))[0],
     ).toMatch(/--on card$/);
@@ -154,6 +163,19 @@ describe('plain looks', () => {
       ]),
     );
     expect(corners.some(c => /corners|radius/.test(c))).toBe(true);
+    // (A status may lead with its label.)
+    expect(
+      top(
+        await how(
+          'q0',
+          'status colors: approved green #15803d, pending amber #b45309, rejected red #b91c1c',
+        ),
+      ),
+    ).toEqual([
+      `set q0 success '#15803d'`,
+      `set q0 warning '#b45309'`,
+      `set q0 danger '#b91c1c'`,
+    ]);
     const accent = writes(
       await how('q0', 'status colors: green, amber, red, with a blue accent'),
     );
