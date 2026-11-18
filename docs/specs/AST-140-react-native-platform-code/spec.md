@@ -346,13 +346,13 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     from React Native's Fabric and Turbo Native Modules today, and another
     engine can bind the same members. A native class adopts its seam, and the
     seam carries its own typed values (DEC-8).
-  - The seam is internal to the package's native layer: React Native's glue
-    and other engines bind through it, and apps reach the platform through its
-    JavaScript API (FR1).
-  - Every engine binding depends on the seam's exact members: React Native's
-    Fabric components, view managers, and Turbo Native Modules call them by
-    name, and another engine's binding calls the same names, so each member's
-    name and type are part of the seam's contract with those bindings.
+  - The seam is a published protocol for engine bindings: React Native's
+    binding in the package and any other engine's binding call these exact
+    members; apps use the JavaScript API (FR1).
+  - An engine binding is compiled against the generated members and names, so
+    a seam of a different shape breaks it. That is why this record fixes the
+    seam's shape below, and why an equivalent interface cannot stand in for
+    it.
   - The native seam is how an engine reaches a native view or module; the
     host seam is how a host shell forwards app lifecycle into the package
     (`spec:AST-112/FR4`).
@@ -415,8 +415,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     language. Inline C entry points per prop and command
     (`<Name>HostSet<Prop>(host, value)`, `<Name>Host<Command>(host, …)`) let a
     C caller reach a host directly.
-  - On Android the seam is Kotlin interfaces in one package of the platform
-    module, the module that holds React Native's binding. A public class
+  - On Android the seam is Kotlin interfaces in one package, internal to the
+    platform module until an engine outside it binds them. A public class
     adopts its seam through an internal host object over its own state.
   - A class adopts its seam and keeps its behavior. For React Native, the
     Fabric component or view manager compares old and new props, writes the
