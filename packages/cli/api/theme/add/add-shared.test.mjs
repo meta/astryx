@@ -814,6 +814,36 @@ describe('theme add with a shared theme', () => {
     ).toMatch(/^\/\/ Written by `astryx experimental theme editor/);
   });
 
+  it("leaves the bundle's system files out of the editor copy, so a re-add after one changes still replaces it", async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    fs.writeFileSync(path.join(shared, 'b', 'editor', '.DS_Store'), 'a');
+    const first = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(first.data.copy?.editor?.files).toEqual(['ocean.settings.json']);
+    expect(fs.existsSync(path.join(app, 'themes/ocean/.DS_Store'))).toBe(false);
+    // (The system writes its own file there later.)
+    fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), 'b');
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean', 'dark-only'),
+    );
+    const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(again.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(
+      fs.readFileSync(
+        path.join(app, 'themes/ocean/ocean.settings.json'),
+        'utf8',
+      ),
+    ).toBe(SETTINGS('ocean', 'dark-only'));
+    expect(
+      fs.readFileSync(path.join(app, 'themes/ocean/.DS_Store'), 'utf8'),
+    ).toBe('b');
+  });
+
   it('names two folders of editor state, and copies neither', async () => {
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
     for (const dir of ['one', 'two']) {
