@@ -94,8 +94,11 @@ export async function eachAtOnce(jobs, atOnce, run) {
  * The script run on a sheet before its picture: text a part cuts with an
  * ellipsis when it is narrow (a stepper's step names, a section heading)
  * gets the room it needs. Each sheet item holding such text grows by what
- * the text lacks, up to the sheet's width, a few rounds while the layout
- * settles. A part whose own width is fixed keeps it, and what it still cuts
+ * the text lacks, a few rounds while the layout settles, up to the room an
+ * item has in a cell as wide as the sheet's content box (the sheet's width
+ * less its padding, the cell's padding and border, and the item's margins),
+ * so a grown cell stays inside the sheet and the picture keeps the window's
+ * width. A part whose own width is fixed keeps it, and what it still cuts
  * is the theme's to fix. A page with no sheet items is left as it is.
  */
 export const FIT_CELLS = `(() => {
@@ -110,7 +113,22 @@ export const FIT_CELLS = `(() => {
       }
       if (!need) continue;
       const width = item.getBoundingClientRect().width;
-      const most = item.closest('.cs-sheet')?.clientWidth ?? width;
+      const sheet = item.closest('.cs-sheet');
+      if (!sheet) continue;
+      const sides = (el, a, b) => {
+        const s = getComputedStyle(el);
+        return (parseFloat(s[a]) || 0) + (parseFloat(s[b]) || 0);
+      };
+      const cell = item.closest('.cs-cell');
+      const most = Math.floor(
+        sheet.clientWidth -
+          sides(sheet, 'paddingLeft', 'paddingRight') -
+          (cell
+            ? sides(cell, 'paddingLeft', 'paddingRight') +
+              sides(cell, 'borderLeftWidth', 'borderRightWidth')
+            : 0) -
+          sides(item, 'marginLeft', 'marginRight'),
+      );
       const next = Math.min(Math.ceil(width + need), most);
       if (next > width + 0.5) {
         item.style.minWidth = next + 'px';
