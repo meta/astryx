@@ -634,8 +634,10 @@ async function drawOpenLayers(elements, React) {
 
 /**
  * Babel plugin: a bare import that a path alias places loads from that file,
- * as in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads. It runs on the page's
+ * as in TypeScript, before any installed copy. A relative `.js`-family import
+ * that names no file loads the TypeScript source it stands for (`./fmt.js`
+ * for fmt.ts). Any other import is left alone, so an installed package
+ * loads. It runs on the page's
  * own files, before {@link pagePlugin}, and on every module the page loads
  * from outside them and outside `node_modules` (a sibling package's source,
  * say).
