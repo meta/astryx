@@ -280,6 +280,16 @@ export const samples = {
       },
       'aria-label': 'Dot',
     }),
+  lab__ChatVirtualizer: ({C, React}) =>
+    React.createElement(C, {
+      data: [
+        {id: 'a', text: 'Hello'},
+        {id: 'b', text: 'How can I help?'},
+      ],
+      getRowKey: item => item.id,
+      renderItem: ({item}) => React.createElement('span', null, item.text),
+      style: {height: 240},
+    }),
   lab__ChatReactionBar: ({C, React}) =>
     React.createElement(C, {
       reactions: [
