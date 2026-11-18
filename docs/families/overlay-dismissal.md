@@ -185,8 +185,8 @@ this record's current membership snapshot must be updated with it.
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
   registered present member. A request aimed at a lower member is declined.
-  Presence follows FR2, so a non-modal Popover that does not hold focus does
-  not take the request, and it goes to the member beneath it.
+  Presence follows FR2, so a non-modal Popover that is not present does not
+  take the request, and it goes to the member beneath it.
 - **FR4 — Available nesting signals outrank host placement.** When a member
   provides `LayerDepthProvider`, React-tree depth orders its descendant layers
   ahead of the member even when both mount in the same commit. DOM containment
@@ -250,6 +250,10 @@ this record's current membership snapshot must be updated with it.
   that closes only the layer leaves focus inside the host: where the closed
   layer returns it, or else on the host itself. The rule is the same for a
   mouse, a pen, and a finger.
+
+FR2 gap: Escape and platform close requests reach a non-modal Popover through
+the shared stack and native auto light dismiss wherever focus is
+(`spec:AST-116` FR15 gap).
 
 ## Allowed component variation
 

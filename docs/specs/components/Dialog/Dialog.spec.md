@@ -97,7 +97,7 @@ current family and architecture owners.
 | FR9  | On every pointer, the modal backdrop is the theme's `--color-overlay` dim with no blur (no `backdrop-filter`); under forced colors the dialog keeps a visible edge (a system-colour border) so it stays apart from the page. A full-screen Dialog (`variant="fullscreen"`) covers the page and draws none.                                                                                                                                                                                                                                                         | Owner decision, 2026-10-25: the overlay stays theme-controlled and unblurred on every pointer. | settled            |
 | FR10 | The dialog surface sets its text color to `--color-text-primary`, so text in it that sets no color of its own draws in the surface's text color and not the browser's `CanvasText`.                                                                                                                                                                                                                                                                                                                                                                                | Current source                                                                                 | settled            |
 
-FR4 gap: closing takes focus back to the invoker even when a caller moved it
+FR4 and AR2 gap: closing takes focus back to the invoker even when a caller moved it
 outside the Dialog, and when the invoker is gone focus falls to the body
 (`spec:AST-116` FR17, FR19 and FR20 gaps).
 
