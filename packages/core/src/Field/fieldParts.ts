@@ -125,9 +125,8 @@ export function useFieldInputStyling<R extends object>(
   restProps: R,
   containerProps: FieldContainerStyleProps,
 ): FieldInputStyling<R> {
-  // Hears pointer and keyboard input on the page, so a disabled field's ring,
-  // which `:focus-visible` alone shows after a tap or a click, shows for
-  // keyboard focus only.
+  // `:focus-visible` alone rings a disabled field after a tap or a click.
+  // Tracking input on the page limits that ring to keyboard focus.
   useInteractionModalityTracking();
   const inputGroup = useInputGroup();
   const {direction} = use(FormLayoutContext);

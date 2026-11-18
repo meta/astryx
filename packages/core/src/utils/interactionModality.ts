@@ -57,10 +57,22 @@ type InteractionModalityStore = {
   /** Undefined in a store that an older bundle made. */
   onPointerOver?: (event: PointerEvent) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /**
+   * Where focus went when it left this document's own elements: into a child
+   * frame, or out of the window. Undefined in a store that an older bundle
+   * made.
+   */
+  focusAway?: 'frame' | 'window' | null;
+  /** The element that had focus when it left the window. */
+  focusLeftFrom?: Element | null;
+  onFocusIn?: (event: FocusEvent) => void;
+  onWindowBlur?: (event: FocusEvent) => void;
+  /** Whether the window's blur is heard: from the first pointer press on. */
+  isHearingWindow?: boolean;
 };
 
-// Core's private ring switch, which the shared rings in focusOutline.stylex.ts
-// read as `var(--_focus-ring, 1)`.
+// Core's private ring switch. The shared rings read it as
+// `var(--_focus-ring, 1)`.
 const FOCUS_RING_PROPERTY = '--_focus-ring';
 
 /**
@@ -103,7 +115,21 @@ function getStore(targetDocument: Document): InteractionModalityStore {
       store.lastPointerType = event?.pointerType ?? store.lastPointerType;
       store.modality = 'pointer';
       store.isTextEntrySincePointer = true;
+      store.focusAway = null;
       setFocusRings(targetDocument, false);
+      // Rings can only need turning back on once a press turned them off.
+      if (
+        store.isListening &&
+        store.isHearingWindow !== true &&
+        store.onWindowBlur != null
+      ) {
+        store.isHearingWindow = true;
+        targetDocument.defaultView?.addEventListener(
+          'blur',
+          store.onWindowBlur,
+          {capture: true, passive: true},
+        );
+      }
     },
     // A mouse or pen announces itself with `pointerover` before its
     // `mouseover`. A tap's compatibility mouse events follow a touch pointer
@@ -112,10 +138,9 @@ function getStore(targetDocument: Document): InteractionModalityStore {
       store.lastPointerType = event.pointerType;
     },
     onKeyDown: event => {
-      // Modifier-only presses are not navigation — holding Shift before a
-      // click must not turn that click into "keyboard". They leave the
-      // modality alone; Tab with them still moves focus (Safari moves it with
-      // Option+Tab), so it shows the rings again.
+      // A key with Meta, Alt or Control held is a shortcut, so it leaves the
+      // modality alone. Tab with them still moves focus (Safari's Option+Tab),
+      // so it shows the rings.
       if (event.metaKey || event.altKey || event.ctrlKey) {
         if (event.key === 'Tab') {
           setFocusRings(targetDocument, true);
@@ -127,6 +152,39 @@ function getStore(targetDocument: Document): InteractionModalityStore {
       if (!isTextEntryKey(event)) {
         store.isTextEntrySincePointer = false;
       }
+    },
+    // Focus that leaves for a child frame or the browser's own interface can
+    // come back by keyboard, with no key event in this document. Coming back
+    // with no pointer press here first shows the rings. The window giving
+    // focus back to the element it left from is a restore, not a move.
+    onWindowBlur: event => {
+      if (event.target !== targetDocument.defaultView) {
+        return;
+      }
+      const left = targetDocument.activeElement;
+      store.focusAway =
+        left != null && (left.tagName === 'IFRAME' || left.tagName === 'FRAME')
+          ? 'frame'
+          : 'window';
+      store.focusLeftFrom = left;
+    },
+    onFocusIn: event => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        (target.tagName === 'IFRAME' || target.tagName === 'FRAME')
+      ) {
+        store.focusAway = 'frame';
+        return;
+      }
+      if (
+        store.focusAway === 'frame' ||
+        (store.focusAway === 'window' && target !== store.focusLeftFrom)
+      ) {
+        setFocusRings(targetDocument, true);
+      }
+      store.focusAway = null;
+      store.focusLeftFrom = null;
     },
   };
   Object.defineProperty(singletonDocument, interactionModalityStoreKey, {
@@ -196,6 +254,13 @@ function setListening(
         passive: true,
       });
     }
+    // A store an older bundle made has no focus listener.
+    if (store.onFocusIn != null) {
+      targetDocument.addEventListener('focusin', store.onFocusIn, {
+        capture: true,
+        passive: true,
+      });
+    }
   } else {
     targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
       capture: true,
@@ -207,6 +272,19 @@ function setListening(
       targetDocument.removeEventListener('pointerover', store.onPointerOver, {
         capture: true,
       });
+    }
+    if (store.onFocusIn != null) {
+      targetDocument.removeEventListener('focusin', store.onFocusIn, {
+        capture: true,
+      });
+    }
+    if (store.isHearingWindow === true && store.onWindowBlur != null) {
+      store.isHearingWindow = false;
+      targetDocument.defaultView?.removeEventListener(
+        'blur',
+        store.onWindowBlur,
+        {capture: true},
+      );
     }
   }
 }

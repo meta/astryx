@@ -44,7 +44,11 @@ async function mount(page: Page, story: string) {
 /** The disabled field's ring: its wrapper's inset shadow width, in px. */
 async function fieldRing(input: Locator): Promise<number> {
   return input.evaluate(element => {
-    const shadow = getComputedStyle(element.parentElement!).boxShadow;
+    const wrapper = element.parentElement;
+    if (wrapper == null) {
+      return 0;
+    }
+    const shadow = getComputedStyle(wrapper).boxShadow;
     const lengths = shadow.match(/(-?[\d.]+)px/g) ?? [];
     return lengths.length >= 4 ? parseFloat(lengths[3]) : 0;
   });
@@ -100,9 +104,10 @@ test.describe('a disabled text field', () => {
           document.body.append(probe);
           const highlight = getComputedStyle(probe).color;
           probe.remove();
+          const wrapper = element.parentElement;
           return (
-            getComputedStyle(element.parentElement!).borderTopColor ===
-            highlight
+            wrapper != null &&
+            getComputedStyle(wrapper).borderTopColor === highlight
           );
         }),
       )
@@ -123,6 +128,41 @@ test.describe('a disabled text field', () => {
       await expect(input).toBeFocused();
       expect(await fieldRing(input)).toBe(0);
     });
+  });
+});
+
+test.describe('keyboard focus that arrives from a child frame', () => {
+  test('shows the ring after a mouse press on the page', async ({
+    page,
+    browserName,
+  }) => {
+    await mount(page, 'core-bottomsheet--modal-autofocus-row');
+    const opener = page.getByRole('button', {name: 'Open actions'});
+    await opener.waitFor();
+    // A frame with a text field just before the opener in the page order.
+    await opener.evaluate(button => {
+      const frame = document.createElement('iframe');
+      frame.title = 'Notes';
+      frame.srcdoc = '<input aria-label="Note">';
+      button.before(frame);
+    });
+    const field = page.frameLocator('iframe[title="Notes"]').getByLabel('Note');
+    await field.waitFor();
+    // A mouse press on the page turns the rings off; one in the frame does
+    // not reach the page.
+    const box = await opener.boundingBox();
+    if (box == null) {
+      throw new Error('The opener has no box');
+    }
+    await page.mouse.move(box.x - 40, box.y - 40);
+    await page.mouse.down();
+    await page.mouse.up();
+    await field.click();
+    await page.keyboard.type('a');
+    // Tab leaves the frame for the opener, with no key event in the page.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(opener).toBeFocused();
+    await expect.poll(async () => outlineWidth(opener)).toBeGreaterThan(0);
   });
 });
 
