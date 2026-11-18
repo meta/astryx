@@ -262,13 +262,14 @@ no app opts them in (`spec:AST-112/FR3`).
 
 ### Behaviour across binaries
 
-- **FR10 — Every contract in the group is at revision 1.** A behavior added
+- **FR10 — Every contract in the group is at revision 1 on every platform it
+  lists.** The iOS and Android binaries report revision 1 for each contract,
+  `isLargeContentImage` included. A behavior added
   after revision 1 is a named feature (`<Contract>.<feature>`) that the binary
   lists and the JavaScript checks with `hasContractFeature` before it uses it.
   Without the feature the JavaScript keeps the revision-1 behavior or answers
   `unsupported`, and a warning names the missing feature; it never takes a
-  silent weaker path. A later scene version is such a feature of
-  `AstryxVectorView` (OQ2).
+  silent weaker path. A scene version after 2 is such a named feature (OQ2).
 - **FR11 — Astryx Stage pairs through the version floor.** The package names the
   oldest Astryx Stage that implements its contract set. An older Stage refuses
   the project and lists the gaps.
@@ -278,6 +279,9 @@ no app opts them in (`spec:AST-112/FR3`).
   `isPlatformEnabled={false}` switch sends `SymbolView`, `NativeIconView`, and
   `Vector` to their fallbacks; `Icon` still draws its built-in glyphs, because
   the vector view is core.
+- **FR13 — Native code uses public platform API only.** The views and modules
+  use the public APIs of UIKit, Core Graphics, Foundation, the Android SDK, and
+  React Native. This group needs no exception.
 
 ### Platform support
 
@@ -334,6 +338,7 @@ no app opts them in (`spec:AST-112/FR3`).
 | FR10     | The platform's spec rules check; unit tests of `hasContractFeature` with and without a feature                                       | a binary that lists a feature; one that does not                                                                    | A contract above revision 1, or a feature used without its check                                                                           |
 | FR11     | Astryx Stage refusal test against the version floor                                                                                  | a Stage below the floor                                                                                             | A project that runs on a Stage below the floor                                                                                             |
 | FR12     | Unit tests of every probe, call, and view in the absent shape; `isPlatformEnabled={false}` library tests                             | Jest with no natives; the platform off                                                                              | A throw, a rejection, or an `Icon` glyph missing with the platform off                                                                     |
+| FR13     | Review of the native sources' imports and calls                                                                                      | each view and module on iOS and Android                                                                             | A call to an API outside the platform's public SDKs                                                                                        |
 
 ## Decision log
 
@@ -403,10 +408,11 @@ host that draws the same glyph and can disagree with it.
   drawn glyphs as the default and amend FR17 for this platform; or default to
   SF Symbols on iOS and Material Symbols on Android, which needs an Android
   symbol view and a faithful system glyph for every built-in name.
-- **OQ2 — Do scene versions stay a number that `AstryxVectorInfo` reports, or
-  become named features of `AstryxVectorView`?** (`human-api`) Options: keep
-  the reported number; or list each scene version after 1 as a named feature
-  and retire `AstryxVectorInfo`.
+- **OQ2 — Does `AstryxVectorInfo` fold into the platform info's named
+  features?** (`human-api`) Options: keep `AstryxVectorInfo` and its reported
+  scene version; or list each scene version after 1 as a named feature of
+  `AstryxVectorView` in the platform info's list and retire
+  `AstryxVectorInfo`.
 - **OQ3 — Is `cacheInfo` part of the `AstryxIcons` API?** (`checkable`)
   Options: expose it on `AstryxIcons` for an app's status page; or keep it a
   native diagnostic that only tests read.
