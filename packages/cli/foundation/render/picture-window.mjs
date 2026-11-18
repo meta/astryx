@@ -195,30 +195,156 @@ function featureHolds(feature) {
   return ok;
 }
 
+/** @typedef {boolean | null} Answer true, false, or null where the window does not judge */
+
+/** @param {Answer} a @returns {Answer} */
+const not = a => (a == null ? null : !a);
+
+/**
+ * The answer of a media condition (Media Queries level 4): a feature in
+ * parentheses, `not` before one, or several joined by `and` or by `or` (not
+ * both at one level), each of which can be a condition in parentheses.
+ * A feature the window does not judge holds; with `sure` its answer is
+ * unknown, stays unknown through `not`, and decides `and` and `or` only when
+ * no known answer does. Throws on text it cannot read.
+ * @param {string} text
+ * @param {boolean} sure
+ * @returns {Answer}
+ */
+function conditionAnswer(text, sure) {
+  let at = 0;
+  const skip = () => {
+    while (at < text.length && /\s/.test(text[at])) at += 1;
+  };
+  /** @param {string} word */
+  const take = word => {
+    skip();
+    const found = new RegExp(`^${word}(?![\\w-])`, 'i').exec(text.slice(at));
+    if (found) at += found[0].length;
+    return found != null;
+  };
+  /** @returns {Answer} */
+  const inParens = () => {
+    skip();
+    if (text[at] !== '(') throw new SyntaxError(text);
+    at += 1;
+    skip();
+    if (text[at] === '(' || /^not(?![\w-])/i.test(text.slice(at))) {
+      const answer = condition();
+      skip();
+      if (text[at] !== ')') throw new SyntaxError(text);
+      at += 1;
+      return answer;
+    }
+    const end = text.indexOf(')', at);
+    const feature = text.slice(at, end);
+    if (end < 0 || feature.includes('(')) throw new SyntaxError(text);
+    at = end + 1;
+    return featureHolds(feature) ?? (sure ? null : true);
+  };
+  /** @returns {Answer} */
+  const condition = () => {
+    if (take('not')) return not(inParens());
+    const answers = [inParens()];
+    let join = '';
+    for (;;) {
+      const word = take('and') ? 'and' : take('or') ? 'or' : '';
+      if (!word) break;
+      if (join && word !== join) throw new SyntaxError(text);
+      join = word;
+      answers.push(inParens());
+    }
+    const decided = join === 'or' ? true : false;
+    if (answers.includes(decided)) return decided;
+    if (answers.includes(null)) return null;
+    return !decided;
+  };
+  const answer = condition();
+  skip();
+  if (at !== text.length) throw new SyntaxError(text);
+  return answer;
+}
+
+/**
+ * Whether one query of a list matches: its media type is the screen's and
+ * its condition holds (conditionAnswer); `not` turns it round. Throws on text
+ * conditionAnswer cannot read.
+ * @param {string} part
+ * @param {boolean} sure
+ * @returns {Answer}
+ */
+function queryAnswer(part, sure) {
+  const text = part.trim();
+  if (/^(\(|not\s*\()/i.test(text)) return conditionAnswer(text, sure);
+  const head = /^(?:(not|only)\s+)?([a-z]+)(?:\s+and\s+([\s\S]+))?$/i.exec(
+    text,
+  );
+  if (!head) throw new SyntaxError(text);
+  const [, modifier, type, rest] = head;
+  const screen = !/^(print|speech)$/i.test(type);
+  const answer = !screen
+    ? false
+    : rest == null
+      ? true
+      : conditionAnswer(rest, sure);
+  return modifier?.toLowerCase() === 'not' ? not(answer) : answer;
+}
+
+/**
+ * The reading for a query that queryAnswer cannot parse: every feature in
+ * innermost parentheses must hold, and a leading `not` turns it round.
+ * @param {string} part
+ * @param {boolean} sure
+ * @returns {boolean}
+ */
+function featuresMatch(part, sure) {
+  const type = /^\s*(?:not\s+|only\s+)?([a-z]+)\s*(?:and\b|$)/i.exec(part)?.[1];
+  const screen = type == null || !/^(print|speech)$/i.test(type);
+  const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
+    featureHolds(feature),
+  );
+  if (sure && answers.includes(null)) return false;
+  const all = screen && answers.every(a => a !== false);
+  return /^\s*not\s/.test(part) ? !all : all;
+}
+
+/**
+ * The queries of a list, split at the commas outside parentheses.
+ * @param {string} query
+ * @returns {string[]}
+ */
+function queryList(query) {
+  const parts = [''];
+  let depth = 0;
+  for (const char of query) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) parts.push('');
+    else parts[parts.length - 1] += char;
+  }
+  return parts;
+}
+
 /**
  * Whether a media query matches in the window a picture is taken in
- * (PICTURE_WINDOW, a desktop's, with a mouse): each comma-separated query
- * matches when its media type is the screen's and every feature holds
- * (featureHolds); `not` turns it round. A feature the window does not judge
- * holds, as in the chart document (no motion); with `sure`, a query that
- * holds one never matches, so only what the window answers counts.
+ * (PICTURE_WINDOW, a desktop's, with a mouse): one query of the list must
+ * match, by its media type and its condition, read as Media Queries level 4
+ * reads it (queryAnswer). A feature the window does not judge holds, as in
+ * the chart document (no motion); with `sure`, a query whose answer depends
+ * on one never matches, so only what the window answers counts. A query the
+ * reader cannot parse falls back to featuresMatch.
  * @param {string} query
  * @param {{sure?: boolean}} [options]
  * @returns {boolean}
  */
 export function desktopMatches(query, {sure = false} = {}) {
-  return String(query)
-    .split(',')
-    .some(part => {
-      const type = /^\s*(?:not\s+|only\s+)?([a-z]+)\s*(?:and\b|$)/i.exec(
-        part,
-      )?.[1];
-      const screen = type == null || !/^(print|speech)$/i.test(type);
-      const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
-        featureHolds(feature),
-      );
-      if (sure && answers.includes(null)) return false;
-      const all = screen && answers.every(a => a !== false);
-      return /^\s*not\s/.test(part) ? !all : all;
-    });
+  return queryList(String(query)).some(part => {
+    let answer;
+    try {
+      answer = queryAnswer(part, sure);
+    } catch {
+      return featuresMatch(part, sure);
+    }
+    return answer === true;
+  });
 }
