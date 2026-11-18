@@ -37,7 +37,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Hook for showing toast notifications from anywhere in your component tree. Returns the show function itself (not an object): `const showToast = useToast()`; call it with toast options to show the notification. Works automatically with LayerProvider or self-mounts a fallback viewport.',
+      'Hook for showing toast notifications from anywhere in your component tree; it needs no provider or mounted ToastViewport: inside LayerProvider (or a ToastViewport) it uses that viewport, and otherwise the first toast mounts a fallback viewport on document.body with a development warning. Returns the show function itself (not an object): `const showToast = useToast()`; call it with toast options to show the notification.',
     bestPractices: [
       {
         guidance: true,
@@ -75,14 +75,14 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Show toast notifications from anywhere in component tree. Returns the show fn itself, not an object (`const showToast = useToast()`); call it w/ toast options to show notification. Works automatically w/ LayerProvider / self-mounts fallback viewport.',
+    'Show toast notifications from anywhere in component tree; no provider needed: uses LayerProvider/ToastViewport if present, else first toast mounts fallback viewport on document.body (dev warning). Returns the show fn itself, not an object (`const showToast = useToast()`); call it w/ toast options to show notification.',
   returnDescriptions: {
     value:
       'Returns the show fn itself, not an object: `const showToast = useToast(); showToast({body: \'Saved\'})`. Shows toast; returns dismiss fn. ToastOptions: body: ReactNode (required); type?: "info"|"error" (default "info"); isAutoHide?: boolean (default true for info, false for error); autoHideDuration?: ms (default 5000); endContent?: ReactNode (e.g. Undo Button); uniqueID?: string (dedupe); collisionBehavior?: "overwrite"|"ignore" (same uniqueID; default "overwrite"); onHide?: (reason: "auto"|"manual") => void; renderContent?: (toast) => ReactNode (own card content; gets body, endContent, type, isAutoHide, autoHideDuration, dismiss; must render its own close control). Type: ToastOptions from @astryxdesign/core/Toast.',
   },
   usage: {
     description:
-      'Show toast notifications from anywhere in component tree. Returns the show fn itself, not an object (`const showToast = useToast()`); call it w/ toast options to show notification. Works automatically w/ LayerProvider / self-mounts fallback viewport.',
+      'Show toast notifications from anywhere in component tree; no provider needed: uses LayerProvider/ToastViewport if present, else first toast mounts fallback viewport on document.body (dev warning). Returns the show fn itself, not an object (`const showToast = useToast()`); call it w/ toast options to show notification.',
     bestPractices: [
       {
         guidance: true,
