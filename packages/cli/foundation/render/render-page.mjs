@@ -740,8 +740,13 @@ export function withCarriedPaths(script, rewrites) {
   return out;
 }
 
-/** A call of the script's `carried(sha256, prefix)`, which reads an image from the embedded source. */
-const CARRIED_CALL = /[A-Za-z_$][\w$]*\((["'])([0-9a-f]{64})\1,\s*(["'])(data:[^"']*;base64)\3\)/g;
+/**
+ * A call of the script's `carried(sha256, prefix)`, which reads an image from
+ * the embedded source. It starts only where a name starts, so a long run of
+ * name characters (a large string in the page) is read once, not once per
+ * character.
+ */
+const CARRIED_CALL = /(?<![\w$])[A-Za-z_$][\w$]*\((["'])([0-9a-f]{64})\1,\s*(["'])(data:[^"']*;base64)\3\)/g;
 
 /**
  * The script with each image the embedded source does not carry written in
