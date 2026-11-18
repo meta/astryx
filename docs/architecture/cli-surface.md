@@ -160,8 +160,9 @@ and remains available through explicit Core package selection.
   every field. A component read (`astryx component <Name>` with no `--detail`)
   prints the short answer, the `--detail compact` level: the description's
   first paragraph, the import, a usage line, each prop with its description's
-  first sentence, the accessibility requirements, the component's pieces, and
-  as its last line the `--detail full` command that prints the whole doc.
+  first sentence, the accessibility requirements, the component's pieces, a
+  hook's returns, and as its last line the `--detail full` command that prints
+  the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
   The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and
