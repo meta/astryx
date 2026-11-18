@@ -103,6 +103,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [innerSets] - inherited text properties a visible unnamed element inside the part that holds text sets to values of its own -> those values (a code block's lines: white-space pre or pre-wrap)
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Array<{name: string | null, props: Record<string, string>}>} [pieces] - each distinct piece of text drawn inside it (a dialog title block's title and description, a top nav heading's superheading and heading): the theming target of the element that draws it (null for an element with none) and the token it reads, at rest, for each text property it reads one for
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
@@ -1391,6 +1392,15 @@ function resolvePrivate(v, env, tokens, depth = 0) {
   return out === v ? v : resolvePrivate(out, env, tokens, depth + 1);
 }
 
+/** The text properties each piece of text records the token it reads for. */
+const TEXT_PIECE_PROPS = [
+  'color',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'letter-spacing',
+];
+
 /**
  * Walk server-rendered markup: for each element, its classes' declarations
  * become what its part reads; text records the color pair it sits on.
@@ -1401,9 +1411,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, pieces?: Array<{name: string | null, props: Record<string, string>}>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>, piece?: {name: string | null, props: Record<string, string>}}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1439,6 +1449,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       const t = text.trim();
       if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
         addPair(top.target, top.fg, top.bg, t);
+      // (Each piece of text, in each part it sits in: what it reads.)
+      const piece = top.piece;
+      if (t && piece && !/^skip to/i.test(t))
+        for (const anc of stack)
+          if (anc.owns)
+            for (const at of anc.all ?? (anc.target ? [anc.target] : [])) {
+              const P = (map[at].pieces ??= []);
+              /** @param {Record<string, string>} x */
+              const keyOf = x =>
+                JSON.stringify(
+                  Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)),
+                );
+              const key = keyOf(piece.props);
+              if (P.length < 8 && !P.some(x => keyOf(x.props) === key))
+                P.push({name: piece.name, props: {...piece.props}});
+            }
       continue;
     }
     if (close) {
@@ -1777,6 +1803,21 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         (stack[i].kids ??= []).push(...named.map(c => c.slice(7)));
         if (stack[i].owns) break;
       }
+    // The piece of text the element draws: its own target's name, else its
+    // parent's; and the token it reads, at rest, for each text property
+    // (inherited, as CSS inherits them).
+    const pieceProps = {...(parent.piece?.props ?? {})};
+    for (const d of own)
+      if (!d.cond && TEXT_PIECE_PROPS.includes(d.prop)) {
+        const [tok] = expand(d.value, env, tokens);
+        if (tok) pieceProps[d.prop] = tok;
+        else if (!/^(inherit|unset|initial|currentcolor)$/i.test(d.value))
+          delete pieceProps[d.prop];
+      }
+    const piece = {
+      name: ownsTarget ? named[0].slice(7) : (parent.piece?.name ?? null),
+      props: pieceProps,
+    };
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({
         env,
@@ -1786,6 +1827,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         bg,
         cond: condHere,
         owns: ownsTarget,
+        piece,
       });
   }
   // A part that holds other parts (a layout, an outline, a slider's
@@ -1851,6 +1893,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.listed?.size ? {listed: [...v.listed]} : {}),
+      ...(v.pieces ? {pieces: v.pieces} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(

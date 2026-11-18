@@ -10,7 +10,6 @@ import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -80,20 +79,17 @@ describe('titles', () => {
     expect(card.text).toMatch(/no card title part of its own/);
   }, 240_000);
 
-  it('refuses a weight or color on a title block and answers with its tokens', async ctx => {
+  it('writes a weight on a title block to its title, the heading level it draws', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('w', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('w', 'font-weight', '700', {
-        cwd,
-        on: 'dialog-header-title-block',
-      }),
-    );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(
-      /--text-heading-\d-weight 700 --on dialog-header-title-block/,
-    );
-    const bold = await top('make dialog titles bold', 'w');
+    const r = await themeEditSet('w', 'font-weight', '700', {
+      cwd,
+      on: 'dialog-header-title-block',
+    });
+    expect(JSON.stringify(r.data.setting)).toContain('--text-heading-2-weight');
+    // (Asked, on a theme with no weight of its own there yet: its title.)
+    await themeEditNew('w2', {cwd, like: 'neutral'});
+    const bold = await top('make dialog titles bold', 'w2');
     expect(bold.commands.join(' ')).toMatch(
       /--text-heading-2-weight 700 --on dialog-header-title-block/,
     );

@@ -181,15 +181,17 @@ describe('a text size or weight on a part that holds its text', () => {
   );
 
   it(
-    'is refused with each token where the text reads several (a title and a subtitle)',
+    'where the text reads several (a heading and a smaller line), goes into the larger one, naming the other',
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await set(['font-size', '20px', '--on', 'top-nav-heading']);
-      expect(r.error).toMatch(/never reaches it/);
-      expect(lines(r)).toEqual([
-        "set t --text-large-size 20px --on top-nav-heading",
-        "set t --text-supporting-size 20px --on top-nav-heading",
-      ]);
+      expect(r.error).toBeUndefined();
+      expect(JSON.stringify(r)).toContain(
+        'so this sets --text-large-size on top-nav-heading',
+      );
+      expect(JSON.stringify(r)).toContain(
+        'its smaller text reads --text-supporting-size',
+      );
     },
     T,
   );

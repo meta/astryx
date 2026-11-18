@@ -129,6 +129,7 @@ import {
   colorPropTokens,
   innerPropTokens,
   columnLineTokens,
+  mainTextPiece,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -211,6 +212,19 @@ function basePartRadiusPx(ctx, base, part, when) {
   if (tokenName) return tokenPx(base, tokenName);
   const px = lengthPx(own);
   return px == null ? null : Math.min(px, 9999);
+}
+
+/**
+ * The main piece of text a part draws a text property through, its sizes
+ * measured from the base theme (mainTextPiece).
+ * @param {any} ctx
+ * @param {string} part
+ * @param {string} prop
+ */
+function mainTextPieceHere(ctx, part, prop) {
+  return mainTextPiece(ctx.C, part, prop, tok =>
+    ctx.base ? tokenPx(ctx.base, tok) : null,
+  );
 }
 
 /**
@@ -8163,6 +8177,30 @@ function checkOne(
         s.note = s.note ? `${s.note}; ${said}` : said;
       } else if (inner.length && inner.length === partsOf(ctx, s).length) {
         const [part, toks] = inner[0];
+        // The pieces of text the part draws (its title and description):
+        // set on the main one, the largest text at rest, through the token
+        // it reads, and the result names the other pieces' tokens.
+        const main = mainTextPieceHere(ctx, part, prop);
+        if (main && partsOf(ctx, s).length === 1) {
+          const done = checkOne(
+            ctx,
+            slug,
+            data,
+            main.token,
+            value,
+            flags,
+            unset,
+            reads,
+            element,
+          );
+          const others = main.others.map(
+            o =>
+              `${o.label} reads ${o.token}: ${P} set ${slug} ${o.token} ${quoteCommandArgument(v)} --on ${part}`,
+          );
+          const said = `${part} draws no ${prop} of its own: ${main.label} is its ${main.others.length ? 'main text (the largest at rest)' : 'text'}, so this sets ${main.token} on ${part}${others.length ? `; ${others.join('; ')}` : ''}`;
+          done.note = done.note ? `${said}. ${done.note}` : said;
+          return done;
+        }
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks.join(', ')}, so a ${prop} on ${part} never reaches it; set ${toks.length > 1 ? 'one of those tokens' : 'that token'} on ${part} instead.`,

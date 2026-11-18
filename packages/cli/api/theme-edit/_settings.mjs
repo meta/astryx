@@ -15002,15 +15002,13 @@ export function innerPropTokens(C, part, prop) {
     held.length &&
     held.every((/** @type {any} */ x) => x?.own?.[prop])
   )
-    toks = [
-      ...new Set(
-        held.flatMap((/** @type {any} */ x) =>
-          Object.keys(x.own[prop].tokens ?? {}),
-        ),
-      ),
-    ]
-      .filter(tok => !/disabled|placeholder|accent/.test(tok))
-      .slice(0, 4);
+    // (The tokens those parts draw the property with here, at rest: a
+    // dialog title block's title is one heading level, never every level
+    // the heading draws elsewhere.)
+    toks = Object.entries(rec.held ?? {})
+      .filter(([, props]) => /** @type {string[]} */ (props).includes(prop))
+      .map(([tok]) => tok)
+      .filter(tok => !/disabled|placeholder|accent/.test(tok));
   if (!toks.length) toks = columnLineTokens(C, part, prop);
   return toks;
 }
@@ -15057,6 +15055,61 @@ export function columnLineTokens(C, part, prop) {
   ]
     .filter(tok => !/disabled|placeholder|accent/.test(tok))
     .slice(0, 4);
+}
+
+/**
+ * The main piece of text a part draws a text property through (a dialog
+ * title block's title, beside its description): the piece named, when one
+ * is asked for and reads a token for the property, else the largest text at
+ * rest among the pieces that do, with the token it reads and the others'.
+ * Null when the part records no such pieces.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {string} prop
+ * @param {(token: string) => number | null} pxOf a size token's value in px
+ * @param {string | null} [named] the piece asked for (a title: `heading`)
+ * @returns {{token: string, label: string, others: Array<{token: string, label: string}>} | null}
+ */
+export function mainTextPiece(C, part, prop, pxOf, named = null) {
+  /** @type {Array<{name: string | null, props: Record<string, string>}>} */
+  const pieces = C.MAP[part]?.pieces ?? [];
+  /** @type {Map<string, {name: string | null, px: number}>} */
+  const byToken = new Map();
+  for (const piece of pieces) {
+    const token = piece.props[prop];
+    if (!token || /disabled|placeholder|accent|^--color-on-/.test(token))
+      continue;
+    const sizeToken = piece.props['font-size'];
+    const px = (sizeToken && pxOf(sizeToken)) || 0;
+    const had = byToken.get(token);
+    if (!had || px > had.px) byToken.set(token, {name: piece.name, px});
+  }
+  if (!byToken.size) return null;
+  const ranked = [...byToken].sort(
+    (a, b) =>
+      Number(b[1].name === named && named != null) -
+        Number(a[1].name === named && named != null) || b[1].px - a[1].px,
+  );
+  const sizes = new Set(ranked.map(([, x]) => x.px));
+  /** @param {string | null} name @param {number} i */
+  const label = (name, i) =>
+    name && name !== part
+      ? `its ${name}`
+      : ranked.length === 1
+        ? 'its text'
+        : i === 0 && sizes.size > 1
+          ? 'its larger text'
+          : i === 0
+            ? 'its first text'
+            : sizes.size > 1
+              ? 'its smaller text'
+              : 'its other text';
+  const [[token, first], ...rest] = ranked;
+  return {
+    token,
+    label: label(first.name, 0),
+    others: rest.map(([t, x], i) => ({token: t, label: label(x.name, i + 1)})),
+  };
 }
 
 /**

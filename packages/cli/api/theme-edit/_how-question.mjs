@@ -82,6 +82,7 @@ import {
   groupsOf,
   fontsourceSuggestion,
   partComponentDocs,
+  mainTextPiece,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -19697,6 +19698,16 @@ export function draftAnswer(ctx, env, question) {
       return [];
     const names = rec.contains ?? [];
     if (!names.length || !names.every(x => C.MAP[x]?.own?.[prop])) return [];
+    // (The pieces of text it draws, its title and description: the one
+    // asked for, else its main text, the largest at rest.)
+    const main = mainTextPiece(
+      C,
+      part,
+      prop,
+      tok => lengthPx(String(resolvedValue(tok) || '')),
+      title ? 'heading' : null,
+    );
+    if (main) return [main.token];
     const asked = title && names.includes('heading') ? ['heading'] : names;
     return [
       ...new Set(
