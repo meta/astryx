@@ -55,7 +55,7 @@ API, with the theme reaching the system control (FR11), only the platform SDKs
 and React Native as required dependencies (`spec:AST-082/FR13`). Per piece:
 
 - `AstryxNativeButton`: Astryx's variants, sizes, busy state and theme reach
-  UIButton.Configuration (Liquid Glass on iOS 26 and later) and Material 3's
+  UIButton.Configuration and Material 3's
   button.
 - `AstryxNativeSlider`: a throttled value with a separate commit, and a
   controlled value (FR4, FR9). Beyond that the gap is small (OQ1).
@@ -123,7 +123,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   pixels. The spelling is `system`, never `native`. The date family takes no
   `render`: it keeps `spec:AST-043`'s `presentation` as that record's own
   value, and its `native` value maps to `render: 'system'` (`adaptive-native`
-  to `render: 'auto'`) (OQ3).
+  to `render: 'auto'`) (OQ3). The date family's `presentation` resolves only
+  as `spec:AST-043` says; the theme's `render.default` does not reach it.
   - `system`: the platform draws it, as the native control of this record
     where a host exists here; otherwise the component draws its own control
     and warns once per component in development.
@@ -131,7 +132,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   - `auto`, the default: the component's own default, per platform where it
     differs. For these controls it is the system control wherever a host exists
     (`spec:AST-082/FR11`), and the component's own control elsewhere,
-    silently. The theme's `render.default` overrides every `auto`
+    silently. The theme's `render.default` overrides every `auto` of these
+    six components
     (`spec:AST-112`, under `spec:AST-082/FR10`).
   - Glass is not a `render` value: a drawn control takes its look from
     `surface` (`glass`, `material`, `plain`), which applies only when the
@@ -161,14 +163,12 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     `presentation: 'native' | 'adaptive-native' | 'default'`.
 - **FR3 — Native button.** `AstryxNativeButton` takes the title, Astryx's
   `variant` (`primary`, `secondary`, `ghost`, `destructive`) and `size` (`sm`,
-  `md`, `lg`), `buttonStyle` (`standard`, `glass`), an iOS-only SF Symbol
+  `md`, `lg`), an iOS-only SF Symbol
   (`systemImage`), loading and enabled states, the appearance of FR11, the press
   slop and the accessibility props of FR12. It reports each completed press and
   its fitting size.
   - iOS draws UIButton with UIButton.Configuration: filled, tinted or plain by
-    variant, the destructive role in the system red. `glass` draws
-    `prominentGlass` (primary, destructive) or `glass` (secondary, ghost) on
-    iOS 26 and later, and the standard mapping below. `systemImage` is drawn
+    variant, the destructive role in the system red. `systemImage` is drawn
     before the title; the library resolves its icon names to SF Symbols.
   - Android draws a Material 3 button: filled, tonal or text by variant, the
     theme's error colour for `destructive`. It draws no icon.
@@ -383,7 +383,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 
 | Contract                 | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                                     | Commands               | Events                                                                 | Platforms    |
 | ------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- | ------------ |
-| `AstryxNativeButton`     | native component (Fabric Native Component) | `title`, `variant`, `size`, `buttonStyle`, `systemImage` (iOS), `loading`, `enabled`, `appearance`, `tintForeground`, `destructiveTint`, `pressSlop`, `axLabel`, `axHint`, `axLink`, `axBusy`, `axAccessible`, `axSelected`, `axValue`, `axLanguage`                                                                                                                                                                      | none                   | `onNativePress`, `onIntrinsicSize`                                     | iOS, Android |
+| `AstryxNativeButton`     | native component (Fabric Native Component) | `title`, `variant`, `size`, `systemImage` (iOS), `loading`, `enabled`, `appearance`, `tintForeground`, `destructiveTint`, `pressSlop`, `axLabel`, `axHint`, `axLink`, `axBusy`, `axAccessible`, `axSelected`, `axValue`, `axLanguage`                                                                                                                                                                                     | none                   | `onNativePress`, `onIntrinsicSize`                                     | iOS, Android |
 | `AstryxNativeSlider`     | native component (Fabric Native Component) | `value`, `minimumValue`, `maximumValue`, `step`, `changeInterval`, `enabled`, `layoutDirection`, `appearance`, `minimumTrackTint`, `maximumTrackTint`, `thumbTint`, `axLabel`, `axHint`, `axValueText`, `axStep`                                                                                                                                                                                                          | `restoreValue`         | `onValueChange`, `onValueCommit`, `onSlidingChange`, `onIntrinsicSize` | iOS          |
 | `AstryxNativeTextField`  | native component (Fabric Native Component) | `text`, `mostRecentEventCount`, `placeholder`, `size`, `secure`, `keyboard`, `contentType`, `returnKey`, `capitalize`, `autoCorrect`, `spellCheck`, `clearButton`, `startSystemImage` (iOS), `loading`, `editable`, `enabled`, `status`, `autoFocus`, `appearance`, `statusTint`, `fieldStyle` (iOS), `fill` (iOS), `cornerRadius` (iOS), `insetX` (iOS), `axLabel`, `axHint`, `axAccessible`, `axSelected`, `axLanguage` | `focus`, `blur`        | `onTextChange`, `onFocusChange`, `onReturn`, `onIntrinsicSize`         | iOS, Android |
 | `AstryxSegmentedControl` | native component (Fabric Native Component) | `segments`, `selectedIndex`, `layout`, `size`, `enabled`, `appearance`, `selectedTint`, `selectedForeground`, `axGroupLabel`                                                                                                                                                                                                                                                                                              | `restoreSelectedIndex` | `onNativeChange`, `onIntrinsicSize`                                    | iOS          |
@@ -404,18 +404,18 @@ FR7's results.
 
 ### Platform support
 
-| Contract                 | iOS                                                                            | Android                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `AstryxNativeButton`     | UIButton with UIButton.Configuration; glass configurations on iOS 26 and later | Material 3 MaterialButton                                                     |
-| `AstryxNativeSlider`     | UISlider                                                                       | No host; Slider draws its Astryx control (OQ2)                                |
-| `AstryxNativeTextField`  | UITextField, rounded or filled                                                 | Material 3 TextInputLayout with TextInputEditText                             |
-| `AstryxSegmentedControl` | UISegmentedControl                                                             | No host; SegmentedControl draws its Astryx control (OQ2)                      |
-| `AstryxDatePickerView`   | UIDatePicker (compact, inline, wheels) and the pill                            | No host                                                                       |
-| `AstryxDatePicker`       | No module: the view and the library's sheet                                    | MaterialDatePicker (date, date range), MaterialTimePicker as dialog fragments |
-| `AstryxPasteControl`     | UIPasteControl, iOS 16 and later                                               | No host: the library Button reads the clipboard                               |
+| Contract                 | iOS                                                 | Android                                                                       |
+| ------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `AstryxNativeButton`     | UIButton with UIButton.Configuration                | Material 3 MaterialButton                                                     |
+| `AstryxNativeSlider`     | UISlider                                            | No host; Slider draws its Astryx control (OQ2)                                |
+| `AstryxNativeTextField`  | UITextField, rounded or filled                      | Material 3 TextInputLayout with TextInputEditText                             |
+| `AstryxSegmentedControl` | UISegmentedControl                                  | No host; SegmentedControl draws its Astryx control (OQ2)                      |
+| `AstryxDatePickerView`   | UIDatePicker (compact, inline, wheels) and the pill | No host                                                                       |
+| `AstryxDatePicker`       | No module: the view and the library's sheet         | MaterialDatePicker (date, date range), MaterialTimePicker as dialog fragments |
+| `AstryxPasteControl`     | UIPasteControl, iOS 16 and later                    | No host: the library Button reads the clipboard                               |
 
 - Supported feature/engine floor: iOS at React Native's own minimum, with
-  UIPasteControl from iOS 16 and Liquid Glass from iOS 26; Android API level 24
+  UIPasteControl from iOS 16; Android API level 24
   with Material Components 3; React Native's New Architecture (Fabric and
   TurboModules) only (`spec:AST-112`).
 - Unsupported behavior: where a view is absent its probe answers false and
@@ -456,7 +456,7 @@ FR7's results.
 | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | FR1      | Built app without any opt-in: binary symbols and the probes; unit tests of the entry through the `./testing` doubles       | default link, gesture views included; opted out where an opt-out exists; each probe                                                                                                                                                                 | A default build lacks a control, or an opted-out build answers a probe true                                                                      |
 | FR2      | Unit tests of the `render` resolution and of each component's shape rules                                                  | `render` `auto`, `system` and `drawn`; the theme's `render.default`; no host; the date family's `presentation` with no `render`; each ineligible shape, icons on Android and an icon-and-label segment included; a focused field switching `render` | A wrong control, a missing or repeated development warning, a system control for an ineligible shape, or a lost value                            |
-| FR3      | Simulator and emulator checks of each variant, size and style                                                              | each variant; glass on iOS 26 and earlier; loading; disabled; a drag past the press slop                                                                                                                                                            | A wrong system style, a press after the slop, a press that does not reach `onClick`, or no development warning for `systemImage` on Android      |
+| FR3      | Simulator and emulator checks of each variant, size and style                                                              | each variant; loading; disabled; a drag past the press slop                                                                                                                                                                                         | A wrong system style, a press after the slop, a press that does not reach `onClick`, or no development warning for `systemImage` on Android      |
 | FR4      | Simulator drag and VoiceOver checks; UI-thread frame check                                                                 | a drag; step snapping; a value during a drag; an accessibility step; right to left                                                                                                                                                                  | More than one value per interval, a missing commit, a held value applied before release, or JavaScript run per frame                             |
 | FR5      | Simulator and emulator checks of each style and status; unit tests of the handle                                           | bordered and filled; each status; secure entry; focus and blur                                                                                                                                                                                      | A wrong border or caret colour, a filled box on Android, a handle that misses focus, or no development warning for an iOS-only member on Android |
 | FR6      | Simulator checks at the default text size and at AX1                                                                       | `hug` and `fill`; an image segment; disabled segments; a title that does not fit                                                                                                                                                                    | A cut title, a native control at AX1, or a wrong fitting size                                                                                    |
