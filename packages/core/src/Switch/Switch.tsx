@@ -123,18 +123,36 @@ const wrapperSizeStyles = stylex.create({
 // Every touch value sits in the same property as the mouse value, as a
 // nested condition, never in a later style. A later style that names a
 // property replaces all of it, mouse value included.
+// Under a finger the track has no padding: everything in it is placed by
+// insets (the thumb, the press and fade layers), so its content box is its
+// own box, and the thumb's insets read its height from it (100cqb).
 const trackSizeStyles = stylex.create({
   sm: {
     width: 32,
     height: 20,
-    padding: 2,
+    padding: {default: 2, [TOUCH]: 0},
   },
   md: {
     width: 40,
     height: 24,
-    padding: 4,
+    padding: {default: 4, [TOUCH]: 0},
   },
 });
+
+// The thumb's size: a private variable when a theme sizes the thumb
+// (`width` and `height` on `switch-thumb`, through the derived-variable
+// registry), else the size's own. Its touch rest reads the same value, so the
+// thumb sits as far from the track's end as from its top and bottom.
+const thumbWidth = (px: number) => `var(--_switch-thumb-width, ${px}px)`;
+const thumbHeight = (px: number) => `var(--_switch-thumb-height, ${px}px)`;
+// The gap between a thumb and the track's end under a finger: the gap above
+// and below it, from the track's height (100cqb).
+const restInset = (px: number) => `calc(50cqb - ${thumbWidth(px)} / 2)`;
+// The thumb's place with a mouse, from where the track's padding puts it:
+// as far from its end as from the top and bottom. The padding cancels out:
+// 100cqi and 100cqb read the track's content box, and 50% is the thumb.
+const OFF_PLACE = 'calc(50cqb - 50%)';
+const ON_TRAVEL = 'calc(100cqi - 50cqb - 50%)';
 
 // The thumb is one circle under any pointer, at each state's size. Under a
 // finger it rests by insets instead of a transform, centered in the track's
@@ -142,20 +160,28 @@ const trackSizeStyles = stylex.create({
 // scale alone; useSwitchTouch measures the box it renders.
 const thumbOffSizeStyles = stylex.create({
   sm: {
-    width: 14,
-    height: 14,
-    insetInlineStart: {default: null, [TOUCH]: 3},
+    width: thumbWidth(14),
+    height: thumbHeight(14),
+    insetInlineStart: {default: null, [TOUCH]: restInset(14)},
     transform: {
-      default: 'translateX(0)',
+      default: `translateX(${OFF_PLACE})`,
+      ':is([dir="rtl"] *)': {
+        default: `translateX(calc(-1 * ${OFF_PLACE}))`,
+        [TOUCH]: 'none',
+      },
       [TOUCH]: 'none',
     },
   },
   md: {
-    width: 16,
-    height: 16,
-    insetInlineStart: {default: null, [TOUCH]: 4},
+    width: thumbWidth(16),
+    height: thumbHeight(16),
+    insetInlineStart: {default: null, [TOUCH]: restInset(16)},
     transform: {
-      default: 'translateX(0)',
+      default: `translateX(${OFF_PLACE})`,
+      ':is([dir="rtl"] *)': {
+        default: `translateX(calc(-1 * ${OFF_PLACE}))`,
+        [TOUCH]: 'none',
+      },
       [TOUCH]: 'none',
     },
   },
@@ -163,33 +189,33 @@ const thumbOffSizeStyles = stylex.create({
 
 const thumbOnSizeStyles = stylex.create({
   sm: {
-    width: 16,
-    height: 16,
+    width: thumbWidth(16),
+    height: thumbHeight(16),
     insetInlineStart: {default: null, [TOUCH]: 'auto'},
-    insetInlineEnd: {default: null, [TOUCH]: 2},
+    insetInlineEnd: {default: null, [TOUCH]: restInset(16)},
     // The thumb rests at the inline-start edge (flex-start, which flexbox
     // already mirrors under RTL). The on-state travel toward the inline-end
     // edge is a physical translateX, so it must flip sign under RTL — right
     // in LTR, left in RTL — so the switch mirrors per convention (Material,
     // iOS): off-thumb on the reading-start side, on-thumb on the reading-end.
     transform: {
-      default: 'translateX(12px)',
+      default: `translateX(${ON_TRAVEL})`,
       ':is([dir="rtl"] *)': {
-        default: 'translateX(-12px)',
+        default: `translateX(calc(-1 * ${ON_TRAVEL}))`,
         [TOUCH]: 'none',
       },
       [TOUCH]: 'none',
     },
   },
   md: {
-    width: 20,
-    height: 20,
+    width: thumbWidth(20),
+    height: thumbHeight(20),
     insetInlineStart: {default: null, [TOUCH]: 'auto'},
-    insetInlineEnd: {default: null, [TOUCH]: 2},
+    insetInlineEnd: {default: null, [TOUCH]: restInset(20)},
     transform: {
-      default: 'translateX(14px)',
+      default: `translateX(${ON_TRAVEL})`,
       ':is([dir="rtl"] *)': {
-        default: 'translateX(-14px)',
+        default: `translateX(calc(-1 * ${ON_TRAVEL}))`,
         [TOUCH]: 'none',
       },
       [TOUCH]: 'none',
@@ -326,6 +352,8 @@ const styles = stylex.create({
   track: {
     display: 'flex',
     alignItems: 'center',
+    // The thumb's travel and touch rest read the track's size (cq units).
+    containerType: 'size',
     // Under a finger the press layer (::before), the colour fade (::after)
     // and the thumb sit in the track, in a stacking context of its own.
     position: {default: null, [TOUCH]: 'relative'},

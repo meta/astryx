@@ -300,6 +300,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
+  Switch: 'switch-thumb',
   TextArea: 'text-area',
 };
 

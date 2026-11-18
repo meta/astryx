@@ -89,6 +89,10 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'borderRadius', vars: ['--_segmented-control-radius']},
     {property: 'padding', vars: ['--_segmented-control-padding']},
   ],
+  'switch-thumb': [
+    {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+    {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
+  ],
   'text-area': [
     {
       property: 'paddingInline',
