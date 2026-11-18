@@ -16,13 +16,15 @@ affects_contributing: []
 affects_consumer_docs: []
 ---
 
-# React Native: Preview in the Astryx app system spec
+# React Native: Preview in the Astryx app (experimental) system spec
 
 <!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, research, or project status (what is built so far, what goes first) in the record. A requirement gap reads `<FR or INV id> gap: <observable mismatch>`; one line such as `Status: in progress` may say the record is still in progress. See docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
 
-Preview runs a project built with `@astryxdesign/react-native` on a real phone
+Preview in the Astryx app is an experimental feature: its commands, flags,
+results and behaviour may change or be removed in any release, and nothing in
+Astryx React Native depends on it (DEC-6). Preview runs a project built with `@astryxdesign/react-native` on a real phone
 without building or installing it. The Astryx app, the native iOS and Android
 app for Astryx React Native, is the Preview host: a person opens a project
 from a developer's computer or from a hosted bundle, and the project's own
@@ -210,8 +212,10 @@ project away from the app's own identity and data.
 
 - **FR11 — `astryx rn preview` makes what a Preview host opens.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
-  its other commands, and the group follows their rules
-  (`spec:AST-112/FR13`): it asks no question, prints one envelope under
+  its other commands as an experimental group (DEC-6): its help text and its
+  documentation say that it is experimental, and it is outside the stable
+  compatibility promise (`spec:AST-017/FR21`). The group follows the rules of
+  the other commands (`spec:AST-112/FR13`): it asks no question, prints one envelope under
   `--json`, prints plain text otherwise, exits 0 or 1 the same in text and
   JSON, and its outcomes differ by `code`.
 
@@ -267,6 +271,8 @@ project away from the app's own identity and data.
 
 ### Platform support
 
+- Compatibility: experimental. Preview's commands, flags, results, and
+  host behavior may change or be removed in any release (DEC-6).
 - Supported feature/engine floor: the Astryx app runs on iOS and Android at
   the platform floor of `spec:AST-112`; encrypted hosted bundles need
   Android 11 or later on Android.
@@ -375,6 +381,16 @@ A project checked in Astryx Stage and opened on a phone has to meet the same
 limits, or a check on one says nothing about the other. This record owns the
 namespaces and the per-module policy, and every host that runs a Preview
 project, Astryx Stage included, applies them.
+
+### DEC-6 — Preview is experimental
+
+**Reference:** `spec:AST-141/DEC-6`
+**Decider:** imdreamrunner, 2026-11-17
+
+Preview is a development feature whose security and distribution questions
+are open (OQ2 to OQ4). It ships as an explicit experimental surface
+(`spec:AST-017/FR21`): its commands say so, any release may change or remove
+it, and nothing in Astryx React Native depends on it.
 
 ## Open questions
 
