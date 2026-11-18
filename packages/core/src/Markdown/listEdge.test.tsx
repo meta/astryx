@@ -4,13 +4,16 @@
  * @file listEdge.test.tsx
  * @input Markdown ordered, unordered, nested, and task lists
  * @output Unit proof that Markdown's lists use List's `flush` edge, so a
- *   list fits its column instead of stepping out past both edges
+ *   list fits its column instead of stepping out past both edges, and that
+ *   the task list drops List's inline clip, so an edge focus ring draws whole
  * @position Markdown regression test; real-browser widths are in
  *   __tests__/MarkdownListBounds.a11y.chromium.spec.ts
  */
 
 import {render} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
+import {List} from '../List/List';
+import {ListItem} from '../List/ListItem';
 import {Markdown} from './Markdown';
 
 /** The edge each row resolved, read from the row's own edge class. */
@@ -31,5 +34,24 @@ describe('Markdown lists fit their column', () => {
     const edges = rowEdges(container);
     expect(edges.length).toBeGreaterThan(0);
     expect(new Set(edges)).toEqual(new Set(['Flush']));
+  });
+});
+
+describe('Markdown task lists keep focus rings whole', () => {
+  it('drops the inline clip on the task list only', () => {
+    const {container} = render(<Markdown>{'- [x] done\n- [ ] open'}</Markdown>);
+    const list = container.querySelector('ul');
+    expect(list?.className).toMatch(/noInlineClip/);
+  });
+
+  it('keeps the inline clip on a plain List', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="one" />
+      </List>,
+    );
+    expect(container.querySelector('ul')?.className).not.toMatch(
+      /noInlineClip/,
+    );
   });
 });

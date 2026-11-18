@@ -10,7 +10,9 @@
  *   Also exports ListMarkerScope, which sets the marker for the items inside
  *   it, or a task item's checkbox in its place. It also says whether their
  *   List has a marker gutter whose outside counters keep the themed inset.
- *   ListEdgeScope sets the row edge treatment for the items inside it
+ *   ListEdgeScope sets the row edge treatment for the items inside it.
+ *   ListStaticScope marks the Lists inside it as static, without the inline
+ *   clip that swiped rows need
  * @position Internal context. Consumed by List.tsx and ListItem.tsx
  */
 
@@ -152,4 +154,29 @@ export function ListEdgeScope({
   ) : (
     <ListContext value={value}>{children}</ListContext>
   );
+}
+
+/**
+ * Whether the Lists inside a ListStaticScope are static; internal. List reads
+ * it for its own inline clip.
+ */
+export const ListStaticContext = createLayerScopedContext<boolean>(
+  'ListStaticContext',
+  1,
+  false,
+);
+ListStaticContext.displayName = 'ListStaticContext';
+
+/**
+ * Marks the Lists inside it as static: their rows never swipe aside, so each
+ * List paints without its inline clip, and a focus ring on the list's edge
+ * draws whole; internal. Markdown's task lists use it around the CheckboxList
+ * they render, as Markdown's other lists drop the clip through `xstyle`.
+ */
+export function ListStaticScope({
+  children,
+}: {
+  readonly children: ReactNode;
+}): ReactNode {
+  return <ListStaticContext value={true}>{children}</ListStaticContext>;
 }

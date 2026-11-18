@@ -41,6 +41,7 @@ import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {
   ListEdgeScope,
+  ListStaticScope,
   ListMarkerScope,
   type ListMarker,
 } from '../List/ListContext';
@@ -1809,80 +1810,84 @@ function renderBlock(
                 isLast && styles.noMarginBlockEnd,
               ),
             )}>
-            <CheckboxList
-              label={t('@astryx.markdown.taskList')}
-              isLabelHidden
-              value={checkedValues}
-              isReadOnly
-              density="compact">
-              {/* Flush rows put each checkbox on the text line inside the
-                  column, as Markdown's other lists do. */}
-              <ListEdgeScope edge="flush">
-                {node.children.map((item, i) => {
-                  const firstChild = item.children[0];
-                  const isInline =
-                    item.children.length === 1 &&
-                    firstChild?.type === 'paragraph';
+            {/* Task rows never swipe, so the list drops its inline clip and
+                each checkbox's focus ring draws whole on the column edge. */}
+            <ListStaticScope>
+              <CheckboxList
+                label={t('@astryx.markdown.taskList')}
+                isLabelHidden
+                value={checkedValues}
+                isReadOnly
+                density="compact">
+                {/* Flush rows put each checkbox on the text line inside the
+                    column, as Markdown's other lists do. */}
+                <ListEdgeScope edge="flush">
+                  {node.children.map((item, i) => {
+                    const firstChild = item.children[0];
+                    const isInline =
+                      item.children.length === 1 &&
+                      firstChild?.type === 'paragraph';
 
-                  const label = isInline ? (
-                    <>
-                      {firstChild.children.map((c, j) =>
-                        renderInline(
-                          c,
-                          j,
-                          onLinkClick,
-                          cursor,
-                          citationCtx,
-                          linkComponent,
-                          inlinePlugins,
-                          components,
-                          preparedPlugins,
-                        ),
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {item.children.map((c, j) =>
-                        renderBlock(
-                          c,
-                          j,
-                          item.children.length,
-                          density,
-                          headingLevelStart,
-                          onLinkClick,
-                          cursor,
-                          citationCtx,
-                          contentWidthValue,
-                          contentAlign,
-                          linkComponent,
-                          inlinePlugins,
-                          components,
-                          preparedPlugins,
-                          t,
-                          codeLanguages,
-                          headingProjection,
-                          listDepth + 1,
-                          innerDirectionScope(item, directionScope),
-                        ),
-                      )}
-                    </>
-                  );
+                    const label = isInline ? (
+                      <>
+                        {firstChild.children.map((c, j) =>
+                          renderInline(
+                            c,
+                            j,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                          ),
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {item.children.map((c, j) =>
+                          renderBlock(
+                            c,
+                            j,
+                            item.children.length,
+                            density,
+                            headingLevelStart,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            contentWidthValue,
+                            contentAlign,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                            t,
+                            codeLanguages,
+                            headingProjection,
+                            listDepth + 1,
+                            innerDirectionScope(item, directionScope),
+                          ),
+                        )}
+                      </>
+                    );
 
-                  return (
-                    <CheckboxListItem
-                      // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
-                      key={i}
-                      value={`task-${i}`}
-                      label={label}
-                      dir={blockDirection(item, directionScope)}
-                      {...(recordsSourceLines
-                        ? sourceLineAttributes(blockSourceLines(item))
-                        : undefined)}
-                    />
-                  );
-                })}
-              </ListEdgeScope>
-            </CheckboxList>
+                    return (
+                      <CheckboxListItem
+                        // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
+                        key={i}
+                        value={`task-${i}`}
+                        label={label}
+                        dir={blockDirection(item, directionScope)}
+                        {...(recordsSourceLines
+                          ? sourceLineAttributes(blockSourceLines(item))
+                          : undefined)}
+                      />
+                    );
+                  })}
+                </ListEdgeScope>
+              </CheckboxList>
+            </ListStaticScope>
           </div>
         );
       }
