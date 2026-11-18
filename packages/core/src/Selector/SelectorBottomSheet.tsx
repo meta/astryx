@@ -43,6 +43,7 @@ interface SelectorBottomSheetProps {
   finalFocusRef: RefObject<HTMLElement | null>;
   initialFocusRef: RefObject<HTMLElement | null>;
   isOpen: boolean;
+  isSearchRequested?: boolean;
   label: string;
   onOpenChange: (isOpen: boolean) => void;
 }
@@ -52,6 +53,7 @@ export function SelectorBottomSheet({
   finalFocusRef,
   initialFocusRef,
   isOpen,
+  isSearchRequested = false,
   label,
   onOpenChange,
 }: SelectorBottomSheetProps) {
@@ -61,22 +63,39 @@ export function SelectorBottomSheet({
         return;
       }
       const view = panel.ownerDocument.defaultView;
-      if (
+      const hasTouchSearch =
         initialFocusRef.current?.tagName === 'INPUT' &&
         view != null &&
-        isCoarsePointer(view)
-      ) {
+        isCoarsePointer(view);
+      const defersSearch = hasTouchSearch && !isSearchRequested;
+      const focusAtOpen = panel.ownerDocument.activeElement;
+      if (hasTouchSearch) {
         // The panel ref attaches before showModal runs. Native focusing must
         // not reach search, even before a deferred focus move could correct it.
+        // A typed opener already seeds its key; native search focus would
+        // insert it twice.
         panel.setAttribute('autofocus', '');
-        return () => panel.removeAttribute('autofocus');
       }
       const frame = requestAnimationFrame(() => {
-        initialFocusRef.current?.focus({preventScroll: true});
+        // A reopen during exit keeps the native dialog open, so its focusing
+        // steps do not run again. Keep any focus the person has already moved
+        // into the panel.
+        const active = panel.ownerDocument.activeElement;
+        if (defersSearch && active !== focusAtOpen && panel.contains(active)) {
+          return;
+        }
+        (defersSearch ? panel : initialFocusRef.current)?.focus({
+          preventScroll: true,
+        });
       });
-      return () => cancelAnimationFrame(frame);
+      return () => {
+        cancelAnimationFrame(frame);
+        if (hasTouchSearch) {
+          panel.removeAttribute('autofocus');
+        }
+      };
     },
-    [initialFocusRef, isOpen],
+    [initialFocusRef, isOpen, isSearchRequested],
   );
   return (
     <Suspense fallback={null}>

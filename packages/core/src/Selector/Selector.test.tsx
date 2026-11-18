@@ -389,6 +389,19 @@ describe('Selector', () => {
     expect(focus.mock.contexts).not.toContain(reopenedSearch);
     await user.click(reopenedSearch);
     await user.paste('Banana');
+    await user.keyboard('{Escape}');
+    focus.mockClear();
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('dialog', {name: 'Fruit'})
+          .querySelector('.astryx-bottom-sheet'),
+      ).toHaveFocus(),
+    );
+    expect(focus.mock.contexts).not.toContain(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('combobox'));
+    await user.paste('Banana');
     await user.click(screen.getByRole('option', {name: /Banana/}));
     expect(onChange).toHaveBeenCalledWith('Banana');
   });
@@ -2444,6 +2457,60 @@ describe('Selector', () => {
       const search = screen.getByPlaceholderText('Search…');
       expect(search).toHaveValue('c');
       await waitFor(() => expect(search).toHaveFocus());
+    });
+
+    it('keeps typing in search when a character opens a touch sheet', async () => {
+      vi.mocked(window.matchMedia).mockImplementation(query => ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+      vi.mocked(HTMLDialogElement.prototype.showModal).mockImplementation(
+        function (this: HTMLDialogElement) {
+          this.setAttribute('open', '');
+          (
+            this.querySelector<HTMLElement>('[autofocus]') ??
+            this.querySelector('input')
+          )?.focus();
+        },
+      );
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          hasSearch
+          presentation="bottom-sheet"
+        />,
+      );
+
+      const trigger = screen.getByRole('button', {name: SEARCH_TRIGGER_NAME});
+      await user.tab();
+      await user.keyboard('B');
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      await waitFor(() => expect(trigger).not.toHaveFocus());
+      await user.keyboard('an');
+      const search = screen.getByRole('combobox');
+      expect(search).toHaveValue('Ban');
+      expect(search).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
+        propertyName: 'transform',
+      });
+      await user.click(trigger);
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole('dialog', {name: 'Fruit'})
+            .querySelector('.astryx-bottom-sheet'),
+        ).toHaveFocus(),
+      );
     });
 
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {

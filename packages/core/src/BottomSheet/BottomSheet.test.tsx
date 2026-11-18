@@ -2247,48 +2247,6 @@ describe('BottomSheet', () => {
   });
 
   describe('mobile keyboard', () => {
-    it('fits a hug sheet only while its field uses the keyboard and retains the fit through close', () => {
-      mockWindowHeight(800);
-      const viewport = mockVisualViewport(800);
-      mockPrimaryPointer('coarse');
-      const content = (isOpen: boolean) => (
-        <BottomSheet
-          isOpen={isOpen}
-          onOpenChange={() => {}}
-          label="Search"
-          height="hug">
-          <input aria-label="Query" />
-        </BottomSheet>
-      );
-      const {rerender} = render(content(true));
-      const sheet = getSheet();
-      const field = screen.getByRole('textbox', {name: 'Query'});
-      act(() => {
-        viewport.height = 500;
-        viewport.dispatchEvent(new Event('resize'));
-      });
-      expect(sheet.getAttribute('style')).not.toContain('300px');
-      act(() => field.focus());
-      expect(sheet.getAttribute('style')).toContain('300px');
-      expect(keyboardInsetOf(getBody())).toBe(0);
-      act(() => {
-        viewport.offsetTop = 80;
-        viewport.dispatchEvent(new Event('scroll'));
-      });
-      expect(sheet.getAttribute('style')).toContain('300px');
-      rerender(content(false));
-      expect(field).not.toHaveFocus();
-      expect(sheet.getAttribute('style')).toContain('300px');
-      const exitMotion = vi.spyOn(animatorFor(sheet), 'set');
-      act(() => {
-        viewport.height = 800;
-        viewport.offsetTop = 0;
-        viewport.dispatchEvent(new Event('resize'));
-      });
-      expect(sheet.getAttribute('style')).not.toContain('300px');
-      expect(exitMotion).not.toHaveBeenCalled();
-    });
-
     // The reveal-pan watch reads touches to leave a reader's own pan alone:
     // the most touch listeners registered at once.
     function trackTouchListeners(): () => number {
@@ -3567,6 +3525,7 @@ describe('BottomSheet', () => {
     });
 
     it.each([
+      ['Hug', 'hug'],
       ['Capped', 'capped'],
       ['numeric', 480],
       ['custom CSS', '70dvh'],

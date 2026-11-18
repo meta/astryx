@@ -74,7 +74,6 @@ import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
 import {resolveMoveTiming} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
-import {FIELD_OFFSET} from '../keyboard/keyboardTarget';
 import {
   scrollPreservationPadding,
   sheetLayoutHeight,
@@ -562,10 +561,6 @@ const styles = stylex.create({
     height: 'fit-content',
     maxHeight: `calc(${HEIGHT_BUDGETS.hug} + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
-  hugKeyboard: (inset: number) => ({
-    marginBlockEnd: `calc(${inset}px - var(--_sheet-reserve, ${MIN_RESERVE}px))`,
-    maxHeight: `calc((100dvh - ${inset}px) * 0.92 + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
-  }),
 });
 
 export type BottomSheetPanelMotion =
@@ -981,9 +976,9 @@ export function BottomSheetPanel({
   }, [isPresented, sheetRef]);
   const keyboard = useMobileKeyboard(elementRef, {
     move: 'ride',
-    inset: height === 'hug' ? 'resize' : true,
-    offset: height === 'hug' ? FIELD_OFFSET : MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
-    isEnabled: (height === 'tall' || height === 'hug') && isPresented,
+    inset: true,
+    offset: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
+    isEnabled: height === 'tall' && isPresented,
     isExpanded: settledOffset === 0,
     isOpen: isInteractive,
     isPageScrollLocked,
@@ -1282,9 +1277,6 @@ export function BottomSheetPanel({
           styles.sheet,
           overlayPaddingReset.reset,
           height === 'hug' ? styles.hugHeight : styles.budget,
-          height === 'hug' &&
-            keyboardInset > 0 &&
-            styles.hugKeyboard(keyboardInset),
           isClosing && styles.sheetClosing,
           isClosing && isCrossFade && styles.sheetClosingCrossFade,
           isFading && styles.sheetFading,

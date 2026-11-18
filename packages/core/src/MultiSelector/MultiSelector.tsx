@@ -2049,9 +2049,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           label: t('@astryx.multiSelector.searchOptions'),
         })}
         {...themeProps('multi-selector-search')}
-        // When hasSearch is set, focus moves into this input on open, so it —
-        // not the trigger — must be the combobox reporting the highlighted
-        // option via aria-activedescendant (comboboxes-4).
+        // This input owns search focus, so it — not the trigger — must report
+        // the highlighted option via aria-activedescendant (comboboxes-4).
         role="combobox"
         aria-expanded={surface.isOpen}
         aria-controls={listboxId}

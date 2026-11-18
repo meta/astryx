@@ -1294,6 +1294,7 @@ export function Selector<T extends SelectorOptionType>(
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchRequested, setIsSearchRequested] = useState(false);
   // Mirrors searchQuery for the seed path, which runs before focus reaches the
   // input and so cannot read the rendered state.
   const searchQueryRef = useRef('');
@@ -1423,6 +1424,7 @@ export function Selector<T extends SelectorOptionType>(
   // Layer for dropdown positioning
   const handleLayerHide = useCallback(() => {
     cancelOpenFocus();
+    setIsSearchRequested(false);
     setSearchQuery('');
     searchQueryRef.current = '';
     resetTypeaheadRef.current();
@@ -1603,6 +1605,7 @@ export function Selector<T extends SelectorOptionType>(
   // setState callback.
   const appendSearchQuery = useCallback(
     (char: string) => {
+      setIsSearchRequested(true);
       const nextQuery = searchQueryRef.current + char;
       searchQueryRef.current = nextQuery;
       setSearchQuery(nextQuery);
@@ -1886,10 +1889,9 @@ export function Selector<T extends SelectorOptionType>(
           variant === 'input' &&
           styles.searchRowInput
         }
-        // When hasSearch is set, focus moves into this input on open, so it —
-        // not the trigger — must be the combobox that reports the highlighted
-        // option via aria-activedescendant (comboboxes-4). A bare searchbox
-        // left the highlight silent to screen readers.
+        // This input owns search focus, so it — not the trigger — must report
+        // the highlighted option via aria-activedescendant (comboboxes-4).
+        // A bare searchbox left the highlight silent to screen readers.
         role="combobox"
         aria-required={isEffectivelyRequired || undefined}
         aria-expanded={surface.isOpen}
@@ -2254,6 +2256,7 @@ export function Selector<T extends SelectorOptionType>(
           onOpenChange={surface.onSheetOpenChange}
           finalFocusRef={triggerRef}
           initialFocusRef={hasSearch ? searchRef : listboxRef}
+          isSearchRequested={isSearchRequested}
           label={label}>
           {panelContent}
         </SelectorBottomSheet>
