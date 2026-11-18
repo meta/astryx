@@ -153,9 +153,9 @@
  * was given, `folder` where the theme sat in it, `outputDir` and `files`
  * the copy in the app's local themes root, `installed` the Astryx package
  * specs installed for what the theme imports, `installRan` false when the
- * package manager was not run for them (an integration's install guidance,
- * or lockfiles that disagree, leave the step to the builder, named in
- * `installRetryCommand`; absent otherwise), `installCommand` the command
+ * package manager was not run for them because an integration's install
+ * guidance leaves the step to the builder, named in `installRetryCommand`
+ * (absent otherwise), `installCommand` the command
  * that installs the other packages it imports that the app lacks (never run
  * for the theme; null when there are none), `installGuidance` the line a
  * loaded integration gives for adding them, shown instead of

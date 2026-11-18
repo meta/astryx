@@ -2270,8 +2270,8 @@ function relFrom(cwd, file) {
  * base theme package), with the app's package manager, at the version of the
  * app's installed Core, as every Astryx package of one release shares it,
  * with install scripts off. In a project whose integration gives install
- * guidance, or whose lockfiles disagree, nothing is run: `installRan: false`,
- * and `installRetryCommand` names the step. A package from anywhere else is
+ * guidance, nothing is run: `installRan: false`, and `installRetryCommand`
+ * names the step. A package from anywhere else is
  * never installed for the theme: the result names the command (or the
  * guidance) that installs it.
  * @param {{missingAstryx: string[], missingPackages: string[], installCommand: string | null, installGuidance: string | null}} needs
@@ -2316,7 +2316,6 @@ function installSharedThemeNeeds(needs, projectDir) {
   if (base == null) {
     return {
       installed: [],
-      installRan: false,
       ...others,
       installError: `the app's lockfiles disagree on its package manager; install ${specs.join(' ')} with the one it uses`,
       installRetryCommand: `npm install ${specs.join(' ')} --ignore-scripts`,
