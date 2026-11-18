@@ -240,7 +240,7 @@ isPossible})`.
     the preview draws on the platform's own layer.
 - **FR10 — Live codes from the camera on iOS.**
   - `codeTypes`, `scanRegion`, and `onCodesScanned` are `CameraView`'s iOS
-    platform props (`spec:AST-082/FR3`, `spec:AST-082/FR5`). Android's
+    platform props (`spec:AST-082/FR3`, `spec:AST-112/FR5`). Android's
     `CameraView` type has none of them, so Android code that uses them fails
     at type check (DEC-6).
   - `codeTypes` turns detection on for any of `qr`, `ean13`, `ean8`, `upce`,
@@ -263,9 +263,11 @@ isPossible})`.
   viewfinder: the library's placeholder art as a moving scene scaled by the
   zoom, still under Reduce Motion. It reports a three-lens back camera
   (0.5× to 10×, flash, torch). `takePhoto` resolves a placeholder photo
-  (`uri: null`, `isSimulated: true`, the scene's `seed`). The simulated camera
-  finds `simulation.codes` in the scan region after a short delay, so a
-  scanner flow runs without a camera.
+  (`uri: null`, `isSimulated: true`, the scene's `seed`). On iOS,
+  `simulation.codes` is part of `CameraView`'s iOS platform contract: the
+  simulated camera finds those codes in the scan region after a short delay,
+  so a scanner flow runs without a camera. Android's `simulation` takes
+  `isEnabled` alone.
 - **FR12 — The library's components use the platform.**
   - `useAudioPlayer(source, options)` opens `source` on `AstryxAudio`,
     follows its state, and frees the player when the source changes or the
