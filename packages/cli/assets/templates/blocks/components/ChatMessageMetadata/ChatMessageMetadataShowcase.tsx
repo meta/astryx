@@ -19,8 +19,15 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
 } from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useClipboard} from '@astryxdesign/core/hooks';
+
+const MESSAGE =
+  'The canary at 11:42 AM caused a memory spike. Rolled back at 11:58 AM.';
 
 export default function ChatMessageMetadataShowcase() {
+  const showToast = useToast();
+  const {copy} = useClipboard();
   return (
     <VStack style={{maxWidth: 600}}>
       <ChatMessageList>
@@ -40,7 +47,11 @@ export default function ChatMessageMetadataShowcase() {
                       size="sm"
                       icon={<Icon icon={ArrowPathIcon} size="sm" />}
                       isIconOnly
-                      onClick={() => {}}
+                      onClick={() =>
+                        showToast({
+                          body: 'Demo: the answer would be generated again here',
+                        })
+                      }
                     />
                   </HStack>
                 }
@@ -79,7 +90,13 @@ export default function ChatMessageMetadataShowcase() {
                       size="sm"
                       icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
                       isIconOnly
-                      onClick={() => {}}
+                      onClick={() =>
+                        void copy(MESSAGE).then(copied =>
+                          showToast({
+                            body: copied ? 'Copied' : 'Could not copy',
+                          }),
+                        )
+                      }
                     />
                     <Button
                       label="Retry"
@@ -87,7 +104,11 @@ export default function ChatMessageMetadataShowcase() {
                       size="sm"
                       icon={<Icon icon={ArrowPathIcon} size="sm" />}
                       isIconOnly
-                      onClick={() => {}}
+                      onClick={() =>
+                        showToast({
+                          body: 'Demo: the answer would be generated again here',
+                        })
+                      }
                     />
                     <Button
                       label="Good response"
@@ -95,7 +116,11 @@ export default function ChatMessageMetadataShowcase() {
                       size="sm"
                       icon={<Icon icon={HandThumbUpIcon} size="sm" />}
                       isIconOnly
-                      onClick={() => {}}
+                      onClick={() =>
+                        showToast({
+                          body: 'Demo: your thumbs-up would be sent here',
+                        })
+                      }
                     />
                     <Button
                       label="Bad response"
@@ -103,7 +128,11 @@ export default function ChatMessageMetadataShowcase() {
                       size="sm"
                       icon={<Icon icon={HandThumbDownIcon} size="sm" />}
                       isIconOnly
-                      onClick={() => {}}
+                      onClick={() =>
+                        showToast({
+                          body: 'Demo: your thumbs-down would be sent here',
+                        })
+                      }
                     />
                     <Text type="supporting" color="secondary">
                       Claude Opus 4.6
@@ -112,8 +141,7 @@ export default function ChatMessageMetadataShowcase() {
                 }
               />
             }>
-            The canary at 11:42 AM caused a memory spike. Rolled back at 11:58
-            AM.
+            {MESSAGE}
           </ChatMessageBubble>
         </ChatMessage>
       </ChatMessageList>

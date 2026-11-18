@@ -86,6 +86,10 @@ export const meta = {
   description:
     'Renames all 21 removed component target aliases in static theme maps and CSS, and replaces target-qualified bare prop/state classes with reflected data attributes.',
   fileExtensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.css'],
+  // A source file changes only where a static key of a theme's components
+  // map names a removed target, so it writes that name. A stylesheet never
+  // parses as source, so it always runs (assets/codemods/run-codemod.mjs).
+  mentions: Object.keys(DEPRECATED_THEME_TARGETS),
 };
 
 const TODO_PREFIX = ' TODO(astryx upgrade): merge deprecated theme target ';

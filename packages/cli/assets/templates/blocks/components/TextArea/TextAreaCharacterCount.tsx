@@ -11,7 +11,7 @@ export default function TextAreaCharacterCount() {
   );
 
   return (
-    <div style={{width: 400}}>
+    <div style={{width: 400, maxWidth: '100%'}}>
       <TextArea
         label="Status update"
         value={value}

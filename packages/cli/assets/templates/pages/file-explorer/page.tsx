@@ -7,9 +7,12 @@ import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
@@ -17,6 +20,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -260,14 +264,9 @@ const FILESYSTEM: FileSystemItem[] = [
 ];
 
 const page: CSSProperties = {height: '100dvh'};
-const columnRow: CSSProperties = {overflowX: 'auto', overflowY: 'hidden'};
-const scrollable: CSSProperties = {overflowY: 'auto'};
-const fixedColumn: CSSProperties = {flexShrink: 0};
-const detailColumn: CSSProperties = {
-  flexGrow: 1,
-  flexShrink: 0,
-  flexBasis: 320,
-};
+// The detail column fills the rest of the row but never narrows below 320px;
+// past that, the row scrolls sideways.
+const detailFloor: CSSProperties = {flexShrink: 0, flexBasis: 320};
 
 function findItem(items: FileSystemItem[], id: string): FileSystemItem | null {
   for (const item of items) {
@@ -290,6 +289,7 @@ function getFileExtension(name: string): string {
 }
 
 export default function FileExplorerPage() {
+  const showToast = useToast();
   const [selectedPath, setSelectedPath] = useState<string[]>([
     'applications',
     'chrome-apps',
@@ -361,7 +361,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={() => {
                   if (selectedPath.length > 0) {
                     setSelectedPath(selectedPath.slice(0, -1));
@@ -373,7 +379,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronRightIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronRightIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 isDisabled
                 label="Go forward"
               />
@@ -383,7 +395,13 @@ export default function FileExplorerPage() {
           centerContent={
             <SegmentedControl
               value="column"
-              onChange={() => {}}
+              onChange={view =>
+                // Demo only: this page shows the column view; replace this toast with the view switch.
+                showToast({
+                  body: `Demo: the ${view} view would show here`,
+                  uniqueID: `view-${view}`,
+                })
+              }
               label="View mode">
               <SegmentedControlItem
                 value="grid"
@@ -418,117 +436,168 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
                 label="Group"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: grouping options would open here',
+                    uniqueID: 'group',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={ShareIcon} size="sm" />}
                 label="Share"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that shares the selection.
+                  showToast({
+                    body: 'Demo: sharing would start here',
+                    uniqueID: 'share',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={TagIcon} size="sm" />}
                 label="Tags"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: tags for the selection would open here',
+                    uniqueID: 'tags',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
                 label="More"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: more actions would open here',
+                    uniqueID: 'more',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
                 label="Search"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: search in this folder would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
             </>
           }
         />
       }
       content={
-        <LayoutContent padding={0} isScrollable={false}>
-          <HStack height="100%" style={columnRow}>
+        <LayoutContent role="main" padding={0} isScrollable={false}>
+          <VisuallyHidden as="h1">Files</VisuallyHidden>
+          <HStack height="100%" isScrollable>
             {columns.map((col, colIndex) => {
               const showDivider =
                 colIndex < columns.length - 1 || selectedFile != null;
               return (
-                <Section
+                <StackItem
                   key={colIndex}
-                  width={240}
-                  padding={2}
-                  variant="transparent"
-                  dividers={showDivider ? ['end'] : undefined}
-                  style={{...scrollable, ...fixedColumn}}>
-                  <List density="compact" hasDividers={false}>
-                    {col.items.map(item => {
-                      const isSelected = col.selectedId === item.id;
-                      const hasChildren =
-                        item.type === 'folder' &&
-                        item.children != null &&
-                        item.children.length > 0;
-                      return (
-                        <ListItem
-                          key={item.id}
-                          label={item.name}
-                          startContent={
-                            <Icon
-                              icon={
-                                item.type === 'folder'
-                                  ? FolderIcon
-                                  : DocumentIcon
-                              }
-                              color={
-                                item.type === 'folder' ? 'accent' : 'secondary'
-                              }
-                              size="sm"
-                            />
-                          }
-                          endContent={
-                            hasChildren ? (
+                  size="static"
+                  isScrollable
+                  aria-label={
+                    colIndex === 0
+                      ? 'Home'
+                      : findItem(FILESYSTEM, selectedPath[colIndex - 1])?.name
+                  }>
+                  <Section
+                    width={240}
+                    height="100%"
+                    padding={2}
+                    variant="transparent"
+                    dividers={showDivider ? ['end'] : undefined}>
+                    <List density="compact" hasDividers={false}>
+                      {col.items.map(item => {
+                        const isSelected = col.selectedId === item.id;
+                        const hasChildren =
+                          item.type === 'folder' &&
+                          item.children != null &&
+                          item.children.length > 0;
+                        return (
+                          <ListItem
+                            key={item.id}
+                            label={item.name}
+                            startContent={
                               <Icon
-                                icon={ChevronRightIcon}
-                                size="xsm"
-                                color="secondary"
+                                icon={
+                                  item.type === 'folder'
+                                    ? FolderIcon
+                                    : DocumentIcon
+                                }
+                                color={
+                                  item.type === 'folder'
+                                    ? 'accent'
+                                    : 'secondary'
+                                }
+                                size="sm"
                               />
-                            ) : undefined
-                          }
-                          onClick={() => handleSelect(colIndex, item.id)}
-                          isSelected={isSelected}
-                        />
-                      );
-                    })}
-                  </List>
-                </Section>
+                            }
+                            endContent={
+                              hasChildren ? (
+                                <Icon
+                                  icon={ChevronRightIcon}
+                                  size="xsm"
+                                  color="secondary"
+                                  xstyle={rtlStyles.mirror}
+                                />
+                              ) : undefined
+                            }
+                            onClick={() => handleSelect(colIndex, item.id)}
+                            isSelected={isSelected}
+                          />
+                        );
+                      })}
+                    </List>
+                  </Section>
+                </StackItem>
               );
             })}
             {selectedFile && (
-              <Section
-                padding={6}
-                variant="transparent"
-                style={{...scrollable, ...detailColumn}}>
-                <VStack gap={4} hAlign="center">
-                  <Avatar name={selectedFile.name} size={96} />
-                  <VStack gap={1} hAlign="center">
-                    <Text type="label">{selectedFile.name}</Text>
-                    <Text type="supporting">
-                      {getFileExtension(selectedFile.name)} Document
-                    </Text>
+              <StackItem
+                size="fill"
+                isScrollable
+                aria-label={selectedFile.name}
+                style={detailFloor}>
+                <Section padding={6} variant="transparent">
+                  <VStack gap={4} hAlign="center">
+                    <Avatar name={selectedFile.name} size={96} />
+                    <VStack gap={1} hAlign="center">
+                      <Text type="label">{selectedFile.name}</Text>
+                      <Text type="supporting">
+                        {getFileExtension(selectedFile.name)} Document
+                      </Text>
+                    </VStack>
+                    <MetadataList title="Information">
+                      <MetadataListItem label="Created">
+                        March 28, 2026 at 2:15 PM
+                      </MetadataListItem>
+                      <MetadataListItem label="Modified">
+                        Yesterday, 10:27 PM
+                      </MetadataListItem>
+                      <MetadataListItem label="Kind">
+                        {getFileExtension(selectedFile.name)} Document
+                      </MetadataListItem>
+                    </MetadataList>
                   </VStack>
-                  <MetadataList title="Information">
-                    <MetadataListItem label="Created">
-                      March 28, 2026 at 2:15 PM
-                    </MetadataListItem>
-                    <MetadataListItem label="Modified">
-                      Yesterday, 10:27 PM
-                    </MetadataListItem>
-                    <MetadataListItem label="Kind">
-                      {getFileExtension(selectedFile.name)} Document
-                    </MetadataListItem>
-                  </MetadataList>
-                </VStack>
-              </Section>
+                </Section>
+              </StackItem>
             )}
           </HStack>
         </LayoutContent>

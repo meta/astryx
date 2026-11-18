@@ -93,13 +93,25 @@ export function releaseVersions(root) {
   );
 }
 
+/** The names of the packages only the canary channel publishes. */
+export function canaryOnlyNames(root) {
+  return new Set(
+    publishedPackages(root)
+      .filter(({manifest}) => manifest.astryx?.canaryOnly)
+      .map(({manifest}) => manifest.name),
+  );
+}
+
 /**
  * The problems in one manifest: each `@astryxdesign` entry in its
  * dependencies, peers or optional dependencies that does not name the
- * release version of that package (`versions`, by name).
+ * release version of that package (`versions`, by name). A package that the
+ * stable channel publishes must not name one that only the canary channel
+ * publishes (`canaryOnly`), because no stable version of it exists.
  */
-export function alignmentProblems(manifest, versions) {
+export function alignmentProblems(manifest, versions, canaryOnly = new Set()) {
   const problems = [];
+  const stable = !manifest.astryx?.canaryOnly;
   for (const field of FIELDS) {
     for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
       if (!name.startsWith('@astryxdesign/')) continue;
@@ -107,6 +119,10 @@ export function alignmentProblems(manifest, versions) {
       if (version == null) {
         problems.push(
           `${manifest.name}: ${field} names ${name}, which npm does not receive in this release`,
+        );
+      } else if (stable && canaryOnly.has(name)) {
+        problems.push(
+          `${manifest.name}: ${field} names ${name}, which only the canary channel publishes`,
         );
       } else if (
         spec !== version &&
@@ -124,13 +140,14 @@ export function alignmentProblems(manifest, versions) {
 function main() {
   const root = process.cwd();
   const versions = releaseVersions(root);
+  const canaryOnly = canaryOnlyNames(root);
   const dirs = process.argv.slice(2);
   const manifests =
     dirs.length > 0
       ? dirs.map(readManifest).filter(isPublished)
       : publishedPackages(root).map(({manifest}) => manifest);
   const problems = manifests.flatMap(manifest =>
-    alignmentProblems(manifest, versions),
+    alignmentProblems(manifest, versions, canaryOnly),
   );
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) process.exit(1);

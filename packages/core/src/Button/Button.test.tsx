@@ -148,7 +148,8 @@ describe('Button', () => {
   it('keeps the dimmed treatment for explicitly disabled buttons', () => {
     render(<Button label="Submit" isDisabled />);
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button.className).toContain('styles.inactive');
     expect(button.className).toContain('styles.disabled');
   });
@@ -494,6 +495,48 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
   });
 
+  it('withholds name while disabled so FormData omits the submitter (spec:AST-085 FR3)', () => {
+    const {rerender} = render(
+      <form data-testid="form">
+        <Button label="Save" type="submit" name="intent" value="save" />
+      </form>,
+    );
+    const form = screen.getByTestId<HTMLFormElement>('form');
+    const enabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(enabledButton).toHaveAttribute('name', 'intent');
+    expect(new FormData(form, enabledButton).get('intent')).toBe('save');
+
+    rerender(
+      <form data-testid="form">
+        <Button
+          label="Save"
+          type="submit"
+          name="intent"
+          value="save"
+          isDisabled
+        />
+      </form>,
+    );
+    const disabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(disabledButton).not.toHaveAttribute('name');
+    expect(disabledButton).toHaveAttribute('aria-disabled', 'true');
+    expect(disabledButton).not.toHaveAttribute('disabled');
+    expect(new FormData(form, disabledButton).get('intent')).toBeNull();
+
+    rerender(
+      <form data-testid="form">
+        <ButtonGroup label="Actions" isDisabled>
+          <Button label="Save" type="submit" name="intent" value="save" />
+        </ButtonGroup>
+      </form>,
+    );
+    const groupDisabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(groupDisabledButton).not.toHaveAttribute('name');
+    expect(groupDisabledButton).toHaveAttribute('aria-disabled', 'true');
+    expect(groupDisabledButton).not.toHaveAttribute('disabled');
+    expect(new FormData(form, groupDisabledButton).get('intent')).toBeNull();
+  });
+
   describe('tooltip as description (FR12)', () => {
     it('describes the button by a tooltip that adds to its name', () => {
       render(<Button label="Save" tooltip="Save your changes" />);
@@ -722,21 +765,18 @@ describe('Button', () => {
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps native disabled (not aria-disabled) when isDisabled and not busy, even without a tooltip', () => {
+  it('uses aria-disabled (not native disabled) when isDisabled, even without a tooltip (AST-085)', () => {
     render(<Button label="Save" isDisabled />);
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('disabled');
-    expect(button).not.toHaveAttribute('aria-disabled');
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('keeps native disabled when isDisabled and isLoading are both true (isDisabled wins)', () => {
+  it('uses aria-disabled (not native disabled) when isDisabled and isLoading are both true', () => {
     render(<Button label="Save" isDisabled isLoading />);
     const button = screen.getByRole('button');
-    // "isDisabled behavior unchanged: that stays native disabled" — busy-only
-    // aria-disabled is only for the case where busy is the SOLE reason the
-    // button can't be clicked, not when it's also genuinely isDisabled.
-    expect(button).toHaveAttribute('disabled');
-    expect(button).not.toHaveAttribute('aria-disabled');
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('has a live region that announces loading state', () => {
@@ -775,6 +815,47 @@ describe('Button', () => {
     await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
+  it('puts no display: contents element between the Button and its label', () => {
+    // WebKit before macOS 15 drops an accessible name computed through a
+    // `display: contents` element, so VoiceOver read the Button as unnamed.
+    render(
+      <Button label="Save" icon={<span>+</span>} endContent={<span>3</span>} />,
+    );
+    const button = screen.getByRole('button');
+    for (
+      let el = screen.getByText('Save').parentElement;
+      el != null && el !== button;
+      el = el.parentElement
+    ) {
+      expect(getComputedStyle(el).display).not.toBe('contents');
+    }
+  });
+
+  describe('default size geometry (FR4)', () => {
+    const callerStyles = stylex.create({
+      short: {height: '20px', paddingBlock: 0},
+    });
+
+    // A caller's height decides a labelled button's height, as before the
+    // button grew with its label: no minimum holds it at the element size.
+    it("keeps a caller's height on a labelled button", () => {
+      render(<Button label="More" size="sm" xstyle={callerStyles.short} />);
+      const button = screen.getByRole('button', {name: 'More'});
+      const computed = getComputedStyle(button);
+      expect(computed.height).toBe('20px');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
+
+    it('pads a labelled button by its block padding, as before', () => {
+      render(<Button label="Save" size="sm" />);
+      const computed = getComputedStyle(
+        screen.getByRole('button', {name: 'Save'}),
+      );
+      expect(computed.paddingBlock).toBe('var(--spacing-2)');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
+  });
+
   describe('in a narrow row', () => {
     // jsdom has no layout, so these assert the computed declarations that
     // produce the behavior. The real-browser widths are in the PR evidence.
@@ -788,6 +869,16 @@ describe('Button', () => {
       );
       expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
       expect(getComputedStyle(label).overflow).toBe('hidden');
+    });
+
+    it('lets the content box shrink too, so the label inside it truncates', () => {
+      render(<Button label="A very long button label that should truncate" />);
+      const box = screen.getByText(
+        'A very long button label that should truncate',
+      ).parentElement!;
+      const style = getComputedStyle(box);
+      expect(style.minWidth).toBe('0');
+      expect(style.flexShrink).toBe('1');
     });
 
     it('keeps the default flex-shrink so a row can shrink the button', () => {
@@ -939,11 +1030,12 @@ describe('Button', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('falls back to <button disabled> for a truly disabled href Button', () => {
+  it('falls back to <button> with aria-disabled for a disabled href Button', () => {
     render(<Button label="Docs" href="https://example.com" isDisabled />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     const button = screen.getByRole('button', {name: 'Docs'});
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 });
 

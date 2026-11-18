@@ -111,7 +111,12 @@ for (const [dir, colorScheme] of [
     await heading.hover();
     const button = copyButton(page, HEADING);
     await expect(button).toBeVisible();
-    // The control trails the heading text on the inline-end side.
+    // The control trails the heading text on the heading's own inline-end
+    // side. The heading lays out in the direction of its own text, so an
+    // English heading keeps it on its right in a right-to-left page too.
+    const headingDirection = await heading.evaluate(
+      el => getComputedStyle(el).direction,
+    );
     const textBox = await heading.evaluate(el => {
       const range = document.createRange();
       range.selectNodeContents(el);
@@ -122,7 +127,7 @@ for (const [dir, colorScheme] of [
     if (buttonBox == null) {
       throw new Error('missing layout');
     }
-    if (dir === 'rtl') {
+    if (headingDirection === 'rtl') {
       expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(textBox.x + 1);
     } else {
       expect(buttonBox.x).toBeGreaterThanOrEqual(textBox.x + textBox.width - 1);

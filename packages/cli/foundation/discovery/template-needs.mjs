@@ -18,8 +18,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {
+  parseTemplateSource,
+  TEMPLATE_COMPONENTS_FILE,
+  walk,
+} from './template-source-tree.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
+import {CLI_ROOT, findPackageRoot, findWorkspaceRoot} from '../fs/paths.mjs';
+import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
+import {servingRootPackages} from '../runtime/package-root.mjs';
+import {runChoice} from '../release/run-context.mjs';
 import {
   decidePackageManagerIn,
   formatCliCommand,
@@ -36,31 +45,185 @@ const STYLEX_RUNTIME = '@stylexjs/stylex';
 const NODE_BUILTINS = new Set(module.builtinModules);
 
 /**
+ * A package name npm accepts, optionally scoped. Legacy names keep capitals
+ * (`JSONStream`). A name has no `~`, so `~/lib` is a path alias, as are
+ * `@/components` and `#internal`.
+ */
+const NPM_NAME = /^(?:@[\w.-]+\/[\w-][\w.-]*|[A-Za-z0-9][\w.-]*)$/;
+
+/**
  * Extract bare (non-relative) package names from ES import statements.
+ *
+ * Only real module specifiers count: `import … from`, a side-effect
+ * `import '…'`, `export … from`, a dynamic `import('…')` or `require('…')`
+ * with a string, and a type `import('…')`.
+ * Words in comments, strings and JSX text never count, and a specifier that
+ * is not an npm package name (`@/components`, `~/lib`, `#internal`, a word
+ * with spaces) is an alias or a typo, not a package to install.
  *
  * @param {string} source Template source code
  * @returns {Set<string>} Unique package names (scoped packages normalized to
  *   `@scope/name`, unscoped to the first path segment).
  */
 export function extractImportedPackages(source) {
-  // Matches `import … from '<specifier>'`, `import '<specifier>'`, and
-  // dynamic `import('<specifier>')`. Only bare specifiers (not starting with
-  // `.` or `/`).
-  const re = /(?:from\s+|import\s*\(?)['"]((?:@[^/'"]+\/)?[^./'"@][^'"]*)['"]/g;
   /** @type {Set<string>} */
   const pkgs = new Set();
-  let m;
-  while ((m = re.exec(source)) !== null) {
-    const spec = m[1];
+  for (const spec of moduleSpecifiers(source)) {
     // Skip Node builtins: `node:fs`, `fs`, `fs/promises`, etc.
     if (spec.startsWith('node:')) continue;
+    if (spec.startsWith('.') || spec.startsWith('/')) continue;
     const name = spec.startsWith('@')
       ? spec.split('/').slice(0, 2).join('/')
       : spec.split('/')[0];
-    if (NODE_BUILTINS.has(name)) continue;
+    if (NODE_BUILTINS.has(name) || !NPM_NAME.test(name)) continue;
     pkgs.add(name);
   }
   return pkgs;
+}
+
+/**
+ * The module specifiers a source imports or re-exports, read from its syntax
+ * tree. A source the parser cannot read is scanned line by line instead, with
+ * comments removed, so only statements that start a line count.
+ * @param {string} source
+ * @returns {string[]}
+ */
+function moduleSpecifiers(source) {
+  // A template Astryx ships answers from what parsing it returned at publish.
+  const stored = readStore(TEMPLATE_COMPONENTS_FILE).get(
+    `imports:${storedKey(source)}`,
+  );
+  if (Array.isArray(stored)) return [...stored];
+  return parsedSpecifiers(source);
+}
+
+/**
+ * The files a source names with `/// <reference path="…" />` before its
+ * first statement, the only place TypeScript reads one. They bring in types
+ * for the type check, not code a build runs, so they are not imports.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function referencedPaths(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return [];
+  }
+  const first = file.program.body[0]?.start ?? Infinity;
+  /** @type {string[]} */
+  const out = [];
+  for (const c of file.comments ?? []) {
+    if (c.type !== 'CommentLine' || c.start >= first) continue;
+    const ref = /^\/\s*<reference\s+path\s*=\s*(["'])(.+?)\1/.exec(c.value);
+    if (ref) out.push(ref[2]);
+  }
+  return out;
+}
+
+/**
+ * moduleSpecifiers, read from the source's syntax tree.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function parsedSpecifiers(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return scannedSpecifiers(source);
+  }
+  /** @type {string[]} */
+  const specs = [];
+  /** @param {any} literal */
+  const add = literal => {
+    const spec = writtenString(literal);
+    if (spec != null) specs.push(spec);
+  };
+  walk(file.program, (/** @type {any} */ node) => {
+    if (
+      node.type === 'ImportDeclaration' ||
+      node.type === 'ExportNamedDeclaration' ||
+      node.type === 'ExportAllDeclaration'
+    ) {
+      add(node.source);
+    } else if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Import'
+    ) {
+      add(node.arguments?.[0]);
+    } else if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      node.callee.name === 'require'
+    ) {
+      add(node.arguments?.[0]);
+    } else if (node.type === 'ImportExpression') {
+      add(node.source);
+    } else if (
+      node.type === 'TSImportEqualsDeclaration' &&
+      node.moduleReference?.type === 'TSExternalModuleReference'
+    ) {
+      // `import s = require('../shared')`
+      add(node.moduleReference.expression);
+    } else if (node.type === 'TSImportType') {
+      // `type O = import('chart-lib').Options`
+      add(
+        node.argument?.type === 'TSLiteralType'
+          ? node.argument.literal
+          : node.argument,
+      );
+    }
+  });
+  return specs;
+}
+
+/**
+ * A source with its comments removed. Strings and template literals are kept
+ * whole, so a `/*` or `//` inside one (`'images/*'`) does not start a comment.
+ * @param {string} source
+ * @returns {string}
+ */
+function withoutComments(source) {
+  let out = '';
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1;
+      out += '\n';
+    } else if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? source.length : end + 1;
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== ch) {
+        if (source[j] === '\\') j += 1;
+        else if (ch !== '`' && source[j] === '\n') break;
+        j += 1;
+      }
+      out += source.slice(i, j + 1);
+      i = j;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** @param {string} source @returns {string[]} */
+function scannedSpecifiers(source) {
+  const code = withoutComments(source);
+  // A statement starts a line: `import '…'`, or `import`/`export` with a
+  // clause, which may span lines, then `from '…'`.
+  const re =
+    /^\s*import\s*['"]([^'"\n]+)['"]|^\s*(?:import|export)\b[^'";]*?\bfrom\s*['"]([^'"\n]+)['"]|\bimport\(\s*['"]([^'"\n]+)['"]\s*\)/gm;
+  /** @type {string[]} */
+  const specs = [];
+  let m;
+  while ((m = re.exec(code)) !== null) specs.push(m[1] ?? m[2] ?? m[3]);
+  return specs;
 }
 
 /** @type {Record<string, string>} */
@@ -118,6 +281,58 @@ function cliPackageRanges() {
 }
 
 /**
+ * The command that installs `packages` in the project at `cwd`, in its package
+ * manager and with the CLI workspace's version ranges. Null, with the reason,
+ * when several lockfiles leave the package manager undetermined; null with no
+ * reason when there is nothing to install.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{installCommand: string | null, noCommandReason: string | null}}
+ */
+export function installCommandFor(packages, cwd) {
+  if (packages.length === 0) {
+    return {installCommand: null, noCommandReason: null};
+  }
+  const resolved = resolveInstallVerb(cwd);
+  const ranges = cliPackageRanges();
+  // A `*` range pins nothing, so the bare name says the same in fewer bytes.
+  const specs = packages.map(p =>
+    ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p,
+  );
+  if (resolved.verb !== null) {
+    return {
+      installCommand: `${resolved.verb} ${specs.join(' ')}`,
+      noCommandReason: null,
+    };
+  }
+  const where = path.relative(cwd, resolved.dir) || '.';
+  return {
+    installCommand: null,
+    noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+  };
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note naming the folder
+ * whose lockfiles disagree when the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const {installCommand} = installCommandFor(packages, cwd);
+  if (installCommand) return {line: installCommand, note: null};
+  const resolved = resolveInstallVerb(cwd);
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${packages.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
+  };
+}
+
+/**
  * Analyze what a template source needs that the target project lacks.
  *
  * Returns a `notes` array of human-readable setup notes, a structured
@@ -155,23 +370,20 @@ export function analyzeTemplateNeeds(source, cwd) {
     // No package.json or unreadable — treat everything as missing.
   }
 
-  const missing = external.filter(p => !(p in projectDeps));
+  // Outside a project, a page takes what the host's package set provides,
+  // so a package that set declares needs no install.
+  const provided = runChoice(cwd).inProject ? [] : servingRootPackages();
+  const missing = external.filter(
+    p => !(p in projectDeps) && !provided.includes(p),
+  );
 
-  // Build the install command with version ranges from the CLI workspace.
-  let installCommand = null;
-  /** @type {string | null} */
-  let noCommandReason = null;
-  if (missing.length > 0) {
-    const resolved = resolveInstallVerb(cwd);
-    const ranges = cliPackageRanges();
-    const specs = missing.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
-    if (resolved.verb !== null) {
-      installCommand = `${resolved.verb} ${specs.join(' ')}`;
-    } else {
-      const where = path.relative(cwd, resolved.dir) || '.';
-      noCommandReason = `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`;
-    }
-  }
+  // In a folder that no package.json holds, an install would make the folder
+  // a project, so the missing packages are named for the project that uses
+  // the page instead.
+  const unpackaged = findPackageRoot(cwd) == null;
+  const {installCommand, noCommandReason} = unpackaged
+    ? {installCommand: null, noCommandReason: null}
+    : installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);
@@ -183,9 +395,11 @@ export function analyzeTemplateNeeds(source, cwd) {
   const notes = [];
   if (missing.length > 0) {
     notes.push(
-      installCommand
-        ? `Install missing dependencies: ${installCommand}`
-        : (noCommandReason ?? ''),
+      unpackaged
+        ? `Missing dependencies: ${missing.join(', ')}. Install them in the project that uses this page.`
+        : installCommand
+          ? `Install missing dependencies: ${installCommand}`
+          : (noCommandReason ?? ''),
     );
   }
   if (stylexCompilerNeeded) {

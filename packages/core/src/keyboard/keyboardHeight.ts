@@ -7,21 +7,35 @@
  * @input The visual viewport, the window's input stream (focus, blur,
  *   resize, scroll and touch), and the layout viewport's height
  * @output The on-screen keyboard module: measureKeyboardHeight,
- *   isKeyboardMeasurable, subscribeKeyboardHeight, getKeyboardHeight,
- *   isTextEntryControl, findTextEntryControl, refuseFocusReveal and
- *   watchRevealPan
+ *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
+ *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
+ *   refuseFocusReveal, watchRevealPan and panVisualViewportTo
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
-import {subscribeInput} from '../utils/inputStream';
-import {isNode} from '../utils/nodeType';
+import {armClickGuard} from '../utils/clickGuard';
+import {matchesMediaQuery} from '../utils/coarsePointer';
+import {getTouches, subscribeInput} from '../utils/inputStream';
+import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {PRESS_SLOP_PX} from '../utils/pressGesture';
+import {caretAt} from '../utils/selectionLock';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
+// Android's Remove animations setting, which makes Chrome report a hide in
+// steps.
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+// How long a step of a hide waits for the next report. It is longer than
+// Gboard's whole hide (hideMs).
+const HIDE_STEP_WAIT_MS = 300;
+// How long a hide's steps wait in all, from the first. A toolbar's moves
+// while a lower keyboard stays up cannot hold the layout longer.
+const HIDE_STEP_LIMIT_MS = 1000;
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
   'checkbox',
@@ -87,6 +101,8 @@ export type KeyboardHeightEvent =
 
 interface KeyboardStore {
   height: number;
+  /** The input stream's touch starts at the last hide, or null before one. */
+  startsAtHide: number | null;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -94,13 +110,19 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-const stores = new WeakMap<Window, KeyboardStore>();
+// The store holds the hide's touch count. A copy of Core with another store
+// shape keeps its own store under another version.
+const stores = sharedWeakMap<Window, KeyboardStore>(
+  'keyboard/keyboard-height/stores',
+  2,
+);
 
 function storeOf(win: Window): KeyboardStore {
   let store = stores.get(win);
   if (store == null) {
     store = {
       height: 0,
+      startsAtHide: null,
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -111,19 +133,76 @@ function storeOf(win: Window): KeyboardStore {
   return store;
 }
 
+/**
+ * Whether `win` has the VirtualKeyboard API, as Chrome on Android does. The
+ * keyboard layout guide reads Chrome's profile there (keyboardProfileOf).
+ */
+export function hasVirtualKeyboard(win: Window): boolean {
+  return 'virtualKeyboard' in win.navigator;
+}
+
+// Whether a report of `height` is one step of a hide. Under Remove
+// animations, Chrome on Android reports a hide as several lower keyboards
+// that are still up, before the report of none.
+function isHideStep(win: Window, shown: number, height: number): boolean {
+  return (
+    height > KEYBOARD_EPSILON &&
+    height < shown - KEYBOARD_EPSILON &&
+    hasVirtualKeyboard(win) &&
+    matchesMediaQuery(win, REDUCED_MOTION_QUERY)
+  );
+}
+
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
   store.height = measureKeyboardHeight(win);
-  const onViewport = (event: Event) => {
-    store.height = measureKeyboardHeight(win);
-    const report: KeyboardHeightEvent = {
-      type: 'viewport',
-      height: store.height,
-      timeStamp: event.timeStamp,
-    };
+  // Set while a step of a hide waits. The store keeps the height it reported,
+  // so every reader lays out once, when the keyboard comes to rest.
+  let stepTimer: ReturnType<typeof setTimeout> | null = null;
+  let stepHeight = 0;
+  let stepLimit = 0;
+  const deliver = (height: number, timeStamp: number) => {
+    if (height <= KEYBOARD_EPSILON && store.height > KEYBOARD_EPSILON) {
+      store.startsAtHide = getTouches(win).starts;
+    }
+    store.height = height;
+    const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
+  };
+  const onViewport = (event: Event) => {
+    const height = measureKeyboardHeight(win);
+    if (isHideStep(win, store.height, height)) {
+      // A pan reports the same step again, and leaves the wait as it is.
+      if (
+        stepTimer != null &&
+        Math.abs(height - stepHeight) < KEYBOARD_EPSILON
+      ) {
+        return;
+      }
+      const now = win.performance.now();
+      if (stepTimer == null) {
+        stepLimit = now + HIDE_STEP_LIMIT_MS;
+      } else {
+        clearTimeout(stepTimer);
+      }
+      stepHeight = height;
+      // The report of none, a report back up, or a quiet spell ends the wait.
+      stepTimer = setTimeout(
+        () => {
+          stepTimer = null;
+          deliver(measureKeyboardHeight(win), win.performance.now());
+        },
+        Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
+      );
+      return;
+    }
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
+    deliver(height, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -135,6 +214,10 @@ function attach(win: Window, store: KeyboardStore): () => void {
     }
   });
   return () => {
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
     viewport?.removeEventListener('resize', onViewport);
     viewport?.removeEventListener('scroll', onViewport);
     stopResize();
@@ -212,6 +295,21 @@ export function subscribeKeyboardHeight(
 }
 
 /**
+ * Whether a finger is on `win`'s screen, from the input stream's count. A
+ * finger that was down at the keyboard's last hide counts no more until a
+ * touch starts. A touch whose target leaves the page ends at a node the
+ * window never hears.
+ */
+export function isFingerOnScreen(win: Window): boolean {
+  const startsAtHide = stores.get(win)?.startsAtHide;
+  const touches = getTouches(win);
+  return (
+    touches.fingers > 0 &&
+    (startsAtHide == null || touches.starts !== startsAtHide)
+  );
+}
+
+/**
  * `win`'s keyboard height. While the module listens, it is the height
  * measured at the last report. Every reader of a keyboard change, such as
  * each component's hook, shares that one layout read. Every change of the
@@ -231,28 +329,26 @@ export function getKeyboardHeight(win: Window): number {
 export function isTextEntryControl(
   element: Element | null,
 ): element is HTMLElement {
-  if (
-    element instanceof HTMLElement &&
-    element.getAttribute('inputmode') === 'none'
-  ) {
+  // Reads the kind by name, so an element of another window (a same-origin
+  // iframe, a Picture-in-Picture window) passes too.
+  if (!isHTMLElement(element) || element.getAttribute('inputmode') === 'none') {
     return false;
   }
-  if (element instanceof HTMLTextAreaElement) {
-    return !element.disabled && !element.readOnly;
+  if (element.localName === 'textarea') {
+    const textArea = element as HTMLTextAreaElement;
+    return !textArea.disabled && !textArea.readOnly;
   }
-  if (element instanceof HTMLInputElement) {
+  if (element.localName === 'input') {
+    const input = element as HTMLInputElement;
     return (
-      !element.disabled &&
-      !element.readOnly &&
+      !input.disabled &&
+      !input.readOnly &&
       !NON_TEXT_INPUT_TYPES.has(
-        (element.getAttribute('type') ?? 'text').toLowerCase(),
+        (input.getAttribute('type') ?? 'text').toLowerCase(),
       )
     );
   }
-  return (
-    element instanceof HTMLElement &&
-    element.matches('[contenteditable]:not([contenteditable="false"])')
-  );
+  return element.matches('[contenteditable]:not([contenteditable="false"])');
 }
 
 /** The text-entry control inside `container` that `target` is or labels. */
@@ -260,7 +356,7 @@ export function findTextEntryControl(
   target: EventTarget | null,
   container: HTMLElement,
 ): HTMLElement | null {
-  if (!(target instanceof Element)) {
+  if (!isElement(target)) {
     return null;
   }
 
@@ -272,7 +368,7 @@ export function findTextEntryControl(
   }
 
   const label = target.closest('label');
-  const control = label instanceof HTMLLabelElement ? label.control : null;
+  const control = isHTMLElement(label) ? label.control : null;
   return container.contains(control) && isTextEntryControl(control)
     ? control
     : null;
@@ -291,13 +387,13 @@ export interface RefuseFocusRevealOptions {
 // One shared `blur` subscription per document serves every caller of
 // refuseFocusReveal in it, so listeners do not grow with the number of
 // instances. The first caller adds it, and the last removes it.
-const focusTakeovers = new WeakMap<
+const focusTakeovers = sharedWeakMap<
   Document,
   {
     stop: () => void;
     callers: Set<(event: FocusEvent) => void>;
   }
->();
+>('keyboard/keyboard-height/focus-takeovers', 1);
 
 /**
  * Delivers the focus moves `claim` accepts with `preventScroll`, so the
@@ -393,6 +489,14 @@ export interface WatchRevealPanOptions {
   owns: (focused: HTMLElement) => boolean;
   /** Called on every touch start, which ends the watch for the report. */
   onTouch?: () => void;
+  /**
+   * Whether a document scroll can be part of the browser's reveal, which
+   * `putBack` then scrolls back too. Set it for a fixed field in Chrome on
+   * Android. Its reveal centres the field's document position, then pans as far
+   * as the keyboard's room allows. Only a match counts. Keep it false where
+   * Safari runs: it carries out an app's document scroll as an offset.
+   */
+  documentScrollIsReveal?: boolean;
 }
 
 /** A watch for the browser's own reveal pan (see watchRevealPan). */
@@ -405,6 +509,7 @@ export interface RevealPanWatch {
    * Pans the visual viewport back to where it sat at the report, without
    * scrolling the document. It scrolls `anchor` into view, an element fixed at
    * the layout viewport's top, or else a probe fixed where the viewport sat.
+   * With `documentScrollIsReveal`, it first scrolls the document back too.
    */
   putBack: (anchor?: Element | null) => void;
   /** Ends the watch; the shared touch subscription goes with the last watch. */
@@ -414,10 +519,10 @@ export interface RevealPanWatch {
 // One shared touch subscription per document serves every reveal-pan watch
 // in it, so no instance adds a listener. The first watch adds it, and the
 // last removes it.
-const touchStartWatches = new WeakMap<
+const touchStartWatches = sharedWeakMap<
   Document,
   {stop: () => void; watches: Set<() => void>}
->();
+>('keyboard/keyboard-height/touch-start-watches', 1);
 
 function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   let shared = touchStartWatches.get(doc);
@@ -427,12 +532,22 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
       return () => {};
     }
     const watches = new Set<() => void>();
-    const stop = subscribeInput(view, 'touchstart', () => {
+    const stopStarts = subscribeInput(view, 'touchstart', () => {
       for (const watch of [...watches]) {
         watch();
       }
     });
-    shared = {stop, watches};
+    // Heard so the stream counts the fingers on the screen (isFingerOnScreen).
+    const stopEnds = subscribeInput(view, 'touchend', () => {});
+    const stopCancels = subscribeInput(view, 'touchcancel', () => {});
+    shared = {
+      stop: () => {
+        stopStarts();
+        stopEnds();
+        stopCancels();
+      },
+      watches,
+    };
     touchStartWatches.set(doc, shared);
   }
   shared.watches.add(onTouchStart);
@@ -456,8 +571,9 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
  * 170 ms after it. The page gets no frame until that pan ends. Such a pan
  * moves the visual viewport down within the
  * layout viewport. Since the report there is no touch, document scroll or
- * zoom, and a text field the caller owns has focus. The watch reads the
- * behavior, never the user agent. The caller lands its field itself and
+ * zoom, and a text field the caller owns has focus. In Chrome, a reveal of a
+ * field in a fixed container also scrolls the document first. The watch reads
+ * the behavior, never the user agent. The caller lands its field itself and
  * puts the pan back. Every keyboard-aware surface can use it.
  *
  * @example
@@ -469,12 +585,15 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
  */
 export function watchRevealPan(
   win: Window,
-  {owns, onTouch}: WatchRevealPanOptions,
+  {owns, onTouch, documentScrollIsReveal = false}: WatchRevealPanOptions,
 ): RevealPanWatch {
   const doc = win.document;
   let atReport: {x: number; y: number; top: number; scale: number} | null =
     null;
   let touchedSinceReport = false;
+  // Whether a scroll is Chrome's reveal. It is decided once per report and
+  // after each put-back, so later scrolls read no layout.
+  let isChromeReveal: boolean | null = null;
   const stopTouchStarts = watchTouchStarts(doc, () => {
     touchedSinceReport = true;
     onTouch?.();
@@ -491,7 +610,10 @@ export function watchRevealPan(
               top: viewport.offsetTop,
               scale: viewport.scale,
             };
-      touchedSinceReport = false;
+      // A report while a finger is down, as when Firefox's toolbar hides in
+      // a drag, leaves that drag's pan to the person.
+      touchedSinceReport = isFingerOnScreen(win);
+      isChromeReveal = null;
     },
     isRevealPan: height => {
       const viewport = win.visualViewport;
@@ -503,37 +625,264 @@ export function watchRevealPan(
         height > 0 &&
         viewport.offsetTop > atReport.top &&
         viewport.scale === atReport.scale &&
-        win.scrollX === atReport.x &&
-        win.scrollY === atReport.y &&
         focused instanceof HTMLElement &&
         isTextEntryControl(focused) &&
-        owns(focused)
+        owns(focused) &&
+        ((win.scrollX === atReport.x && win.scrollY === atReport.y) ||
+          (documentScrollIsReveal &&
+            (isChromeReveal ??= isCentringReveal(
+              win,
+              viewport,
+              focused,
+              atReport,
+            ))))
       );
     },
     putBack: anchor => {
+      isChromeReveal = null;
       const options: ScrollIntoViewOptions = {
         block: 'start',
         inline: 'nearest',
         behavior: 'instant',
       };
+      if (
+        documentScrollIsReveal &&
+        atReport != null &&
+        (win.scrollX !== atReport.x || win.scrollY !== atReport.y)
+      ) {
+        win.scrollTo({
+          left: atReport.x,
+          top: atReport.y,
+          behavior: 'instant',
+        });
+      }
       if (anchor != null) {
         anchor.scrollIntoView(options);
         return;
       }
-      // A fixed element sits in the layout viewport, which the pan does not
-      // move: scrolling its top into view pans the visual viewport back.
-      const probe = doc.createElement('div');
-      probe.style.position = 'fixed';
-      probe.style.left = '0';
-      probe.style.top = `${atReport?.top ?? 0}px`;
-      probe.style.width = '1px';
-      probe.style.height = '1px';
-      probe.style.visibility = 'hidden';
-      probe.style.pointerEvents = 'none';
-      (doc.body ?? doc.documentElement).append(probe);
-      probe.scrollIntoView(options);
-      probe.remove();
+      panVisualViewportTo(win, atReport?.top ?? 0);
     },
     stop: stopTouchStarts,
   };
+}
+
+// How far a scroll or a pan may sit from Chrome's reveal: rounding.
+const CENTRING_SLACK_PX = 2;
+
+// Whether the scroll and the pan since the report match Chrome's reveal of a
+// fixed `field` (documentScrollIsReveal), not an app's scroll elsewhere.
+function isCentringReveal(
+  win: Window,
+  viewport: VisualViewport,
+  field: HTMLElement,
+  atReport: {x: number; y: number},
+): boolean {
+  const box = field.getBoundingClientRect();
+  const centring = (box.top + box.bottom) / 2 - viewport.height / 2;
+  const root = win.document.scrollingElement ?? win.document.documentElement;
+  const range = root.scrollHeight - root.clientHeight;
+  const room = layoutViewportHeight(win) - viewport.height;
+  const scroll = Math.min(range, Math.max(0, atReport.y + centring));
+  const pan = Math.min(room, Math.max(0, centring));
+  return (
+    win.scrollX === atReport.x &&
+    Math.abs(win.scrollY - scroll) <= CENTRING_SLACK_PX &&
+    Math.abs(viewport.offsetTop - pan) <= CENTRING_SLACK_PX
+  );
+}
+
+/**
+ * Pans the visual viewport so its top sits `top` CSS px down the layout
+ * viewport, without scrolling the document. A probe fixed there is scrolled
+ * into view. In Chrome for Android this pans the visual viewport. In Firefox
+ * for Android it pans nothing where the page has no scroll range. The pan
+ * reaches the room the keyboard takes, which a document scroll cannot.
+ *
+ * @example
+ * ```
+ * panVisualViewportTo(window, window.visualViewport.offsetTop + 120);
+ * ```
+ */
+export function panVisualViewportTo(win: Window, top: number): void {
+  const doc = win.document;
+  const probe = doc.createElement('div');
+  probe.style.position = 'fixed';
+  probe.style.left = '0';
+  probe.style.top = `${top}px`;
+  probe.style.width = '1px';
+  probe.style.height = '1px';
+  probe.style.visibility = 'hidden';
+  probe.style.pointerEvents = 'none';
+  (doc.body ?? doc.documentElement).append(probe);
+  probe.scrollIntoView({
+    block: 'start',
+    inline: 'nearest',
+    behavior: 'instant',
+  });
+  probe.remove();
+}
+
+/** The caller's rules for claimTapFocus. */
+export interface ClaimTapFocusOptions {
+  /** The control a touch on `target` would focus, when this caller claims it. */
+  claim: (target: EventTarget | null) => HTMLElement | null;
+  /**
+   * Focuses the claimed control for a tap that ended at (x, y) in the
+   * viewport. `touch` is the tap's finger: its screen point and identifier.
+   */
+  deliver: (
+    control: HTMLElement,
+    x: number,
+    y: number,
+    touch: {screenX: number; screenY: number; identifier: number},
+  ) => void;
+}
+
+/**
+ * The tap route. `deliver` focuses a one-finger tap on `region` that `claim`
+ * accepts, such as a field without focus, instead of the browser. The
+ * browser's own focus would reveal the field by scrolling the document. The
+ * route prevents the tap's default at its end. The shared click guard then
+ * takes the mouse events Safari may still send for the tap. The browser keeps a
+ * touch that moves past the scroll slop, and a second finger. Returns a
+ * cleanup.
+ *
+ * @example
+ * ```
+ * const stop = claimTapFocus(region, {
+ *   claim: target => editableWithoutFocus(target),
+ *   deliver: (field, x, y) => focusAtPoint(field, x, y),
+ * });
+ * ```
+ */
+export function claimTapFocus(
+  region: HTMLElement,
+  {claim, deliver}: ClaimTapFocusOptions,
+): () => void {
+  // The touch the route follows, and the listeners that follow it: on the
+  // region only, and only while that touch is down.
+  let start: {x: number; y: number; control: HTMLElement} | null = null;
+  // On the iOS simulator, a tap held about 250 ms still gets its mousedown and
+  // click. They come a few ms after its touchend, though the route cancelled
+  // that touchend. They go to whatever is under the finger by then, which can
+  // take the focus the tap delivered. The click guard takes them
+  // (utils/clickGuard.ts).
+  const stopFollowing = () => {
+    start = null;
+    region.removeEventListener('touchmove', onMove);
+    region.removeEventListener('touchend', onEnd);
+    region.removeEventListener('touchcancel', stopFollowing);
+  };
+  function onMove(event: TouchEvent) {
+    const touch = event.touches[0];
+    if (
+      start == null ||
+      event.touches.length !== 1 ||
+      touch == null ||
+      // Past the press slop, the touch is the browser's to scroll, not a tap
+      // on a field.
+      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) >
+        PRESS_SLOP_PX
+    ) {
+      stopFollowing();
+    }
+  }
+  function onEnd(event: TouchEvent) {
+    const touch = event.changedTouches[0];
+    const tap = start;
+    stopFollowing();
+    // Still the same field, still without focus.
+    if (
+      tap == null ||
+      touch == null ||
+      !event.cancelable ||
+      claim(tap.control) !== tap.control
+    ) {
+      return;
+    }
+    event.preventDefault();
+    deliver(tap.control, touch.clientX, touch.clientY, touch);
+    armClickGuard(region.ownerDocument, {takesLateMouse: true});
+  }
+  const onStart = (event: TouchEvent) => {
+    if (start != null) {
+      // Another finger joined the one the route follows: not a tap.
+      stopFollowing();
+      return;
+    }
+    const touch = event.touches[0];
+    const control =
+      event.touches.length === 1 && touch != null ? claim(event.target) : null;
+    if (control == null || touch == null) {
+      return;
+    }
+    start = {x: touch.clientX, y: touch.clientY, control};
+    region.addEventListener('touchmove', onMove, {passive: true});
+    // Not passive: only the end of the touch can still cancel the browser's
+    // focus and its reveal.
+    region.addEventListener('touchend', onEnd);
+    region.addEventListener('touchcancel', stopFollowing);
+  };
+  region.addEventListener('touchstart', onStart, {passive: true});
+  return () => {
+    stopFollowing();
+    region.removeEventListener('touchstart', onStart);
+  };
+}
+
+function isTextControl(
+  element: Element,
+): element is HTMLTextAreaElement | HTMLInputElement {
+  return (
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLInputElement
+  );
+}
+
+/**
+ * A text control's caret for a tap at (x, y). It is where the browser maps
+ * the point inside the control. Where the browser maps none, it is after the
+ * text, the convention for a focus without a point. A control with no text
+ * selection stays as it is.
+ */
+function placeTextControlCaret(
+  control: HTMLTextAreaElement | HTMLInputElement,
+  x: number,
+  y: number,
+) {
+  if (control.selectionStart == null) {
+    return;
+  }
+  const caret = caretAt(control.ownerDocument, x, y, []);
+  const offset =
+    caret != null && caret.node === control
+      ? caret.offset
+      : control.value.length;
+  control.setSelectionRange(offset, offset);
+}
+
+/**
+ * Focuses without Safari's reveal and puts the caret under the finger.
+ * Exported for its tests.
+ */
+export function focusAtPoint(editable: HTMLElement, x: number, y: number) {
+  editable.focus({preventScroll: true});
+  if (isTextControl(editable)) {
+    placeTextControlCaret(editable, x, y);
+    return;
+  }
+  const doc = editable.ownerDocument;
+  const caret = caretAt(doc, x, y, []);
+  if (
+    caret != null &&
+    editable.isContentEditable &&
+    editable.contains(caret.node)
+  ) {
+    const range = doc.createRange();
+    range.setStart(caret.node, caret.offset);
+    range.collapse(true);
+    const selection = doc.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
 }

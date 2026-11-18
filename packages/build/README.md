@@ -156,7 +156,7 @@ module.exports = {
 
 ### 3. next.config.mjs
 
-Or `withAstryx()` from `@astryxdesign/build/next`, which sets both of these for you.
+Or `withAstryx()` from `@astryxdesign/build/next`, which sets both of these for you. Use `withAstryx()` when the app has a swizzled copy with an `astryx-swizzle.json` marker: this manual config does not rebuild the copy when its marker appears or goes.
 Either way the work happens in the `webpack` hook, so the build has to run with
 `--webpack` — see the note at the top of this section.
 
@@ -252,6 +252,8 @@ Library patterns (configurable):
 - `packages/core/`
 - `packages/themes/`
 - `node_modules/@astryxdesign/`
+
+A swizzled copy is library code too. The Babel, PostCSS, and Vite integrations compile every module under a folder that holds an `astryx-swizzle.json` marker with the library prefix into `@layer astryx-base`, so a theme's component overrides reach the copy as they reach the package component. `astryx swizzle` writes the marker into an output folder it owns (one the copy creates, an empty one, or one it marked before), naming each package the folder's copies came from and its version, such as `{"packages": {"@astryxdesign/core": "0.7.10"}}`. To mark a folder that holds only swizzled copies by hand, add that file to it; the build reads only whether the file is there. Keep the product's own components out of a marked folder. Under webpack, use `withAstryx()` with a marked copy: it makes each app module depend on the marker paths above it, so a dev session or a cached build recompiles a copy when its marker appears or disappears. In another setup that caches transforms, restart the dev server and delete that cache after adding or removing a marker. Turbopack builds do not read the marker yet.
 
 ### PostCSS plugin (`@astryxdesign/build/postcss`)
 

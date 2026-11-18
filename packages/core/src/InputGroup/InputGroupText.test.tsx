@@ -22,6 +22,13 @@ const overrides = stylex.create({
   wrap: {whiteSpace: 'normal'},
 });
 
+/** The bordered cell around `text`; plain text sits in a span inside it. */
+function cellOf(text: string): HTMLElement {
+  return screen
+    .getByText(text)
+    .closest('.astryx-input-group-text') as HTMLElement;
+}
+
 describe('InputGroupText', () => {
   it('is plain text with no role and no tab stop (FR1, AR1)', async () => {
     const user = userEvent.setup();
@@ -32,7 +39,7 @@ describe('InputGroupText', () => {
       </InputGroup>,
     );
 
-    const cell = screen.getByText('https://');
+    const cell = cellOf('https://');
     expect(cell).not.toHaveAttribute('role');
     expect(cell).not.toHaveAttribute('tabindex');
 
@@ -72,7 +79,7 @@ describe('InputGroupText', () => {
       </InputGroup>,
     );
 
-    const style = getComputedStyle(screen.getByText('https://'));
+    const style = getComputedStyle(cellOf('https://'));
     expect(style.display).toBe('flex');
     expect(style.alignItems).toBe('center');
     expect(style.whiteSpace).toBe('nowrap');
@@ -87,8 +94,35 @@ describe('InputGroupText', () => {
       </InputGroup>,
     );
 
-    expect(getComputedStyle(screen.getByText('https://')).whiteSpace).toBe(
-      'normal',
+    expect(getComputedStyle(cellOf('https://')).whiteSpace).toBe('normal');
+  });
+
+  it('puts plain text direction on an inner span, not on the bordered cell (FR3)', () => {
+    render(
+      <InputGroup label="Website">
+        <InputGroupText data-testid="cell">https://</InputGroupText>
+        <TextInput label="URL" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
     );
+    const cell = screen.getByTestId('cell');
+    expect(cell).not.toHaveAttribute('dir');
+    expect(screen.getByText('https://')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('https://').parentElement).toBe(cell);
+  });
+
+  it('leaves right-to-left and rich text in the cell unwrapped', () => {
+    render(
+      <InputGroup label="Price">
+        <InputGroupText data-testid="rtl">
+          {'\u0631\u064a\u0627\u0644'}
+        </InputGroupText>
+        <InputGroupText data-testid="rich">
+          <span>$</span>
+        </InputGroupText>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(screen.getByTestId('rtl').querySelector('[dir]')).toBeNull();
+    expect(screen.getByTestId('rich').querySelector('[dir]')).toBeNull();
   });
 });

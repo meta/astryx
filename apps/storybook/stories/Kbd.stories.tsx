@@ -150,28 +150,28 @@ export const AllModifierSymbols: Story = {
           Cmd (mod):
         </Text>
         <Kbd keys="mod" />
-        <Text type="supporting">⌘</Text>
+        <Text type="supporting">⌘ on Apple platforms, Ctrl elsewhere</Text>
       </div>
       <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
         <Text type="label" style={{width: '120px'}}>
           Ctrl:
         </Text>
         <Kbd keys="ctrl" />
-        <Text type="supporting">⌃</Text>
+        <Text type="supporting">⌃ on Apple platforms, Ctrl elsewhere</Text>
       </div>
       <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
         <Text type="label" style={{width: '120px'}}>
           Alt/Option:
         </Text>
         <Kbd keys="alt" />
-        <Text type="supporting">⌥</Text>
+        <Text type="supporting">⌥ on Apple platforms, Alt elsewhere</Text>
       </div>
       <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
         <Text type="label" style={{width: '120px'}}>
           Shift:
         </Text>
         <Kbd keys="shift" />
-        <Text type="supporting">⇧</Text>
+        <Text type="supporting">⇧ on Apple platforms, Shift elsewhere</Text>
       </div>
     </div>
   ),

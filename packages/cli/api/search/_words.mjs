@@ -136,13 +136,33 @@ export function sameTermWord(t, w) {
  * @returns {string[]}
  */
 export function wordsOf(text) {
-  return String(text)
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
+  const key = String(text);
+  let words = splitWords.get(key);
+  if (words === undefined) {
+    // A long-running caller ranks many queries; start over rather than grow.
+    if (splitWords.size >= SPLIT_WORDS_LIMIT) splitWords.clear();
+    words = Object.freeze(
+      key
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean),
+    );
+    splitWords.set(key, words);
+  }
+  return /** @type {string[]} */ (words);
 }
+
+/**
+ * Each text's words, split once per process: a search splits the same names
+ * and keywords for every term of every query.
+ * @type {Map<string, readonly string[]>}
+ */
+const splitWords = new Map();
+
+/** How many texts' words are kept before the cache starts over. */
+const SPLIT_WORDS_LIMIT = 100_000;
 
 /**
  * Whether a term is found inside a name or keyword: it is one of its words, or
@@ -165,9 +185,18 @@ export function startsAWordOf(term, text) {
  */
 export function startsATermWordOf(t, text) {
   if (!coversHalf(t.term, text)) return false;
-  return wordsOf(text).some(
-    w => t.starts.some(f => w.startsWith(f)) || sameTermWord(t, w),
-  );
+  // This runs for each word of each entry a query is scored against. Index
+  // loops cost less here than `some` with a callback or `for...of`, in a
+  // short run that does not optimize them.
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    for (let j = 0; j < t.starts.length; j++) {
+      if (w.startsWith(t.starts[j])) return true;
+    }
+    if (sameTermWord(t, w)) return true;
+  }
+  return false;
 }
 
 /**

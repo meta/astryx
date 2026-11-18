@@ -16,7 +16,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {cliDoor, declaredCliCommand} from './cli-command.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, pnpDependsOn} from '../fs/paths.mjs';
 import {cliVersion, runChoice} from '../release/run-context.mjs';
 import {isGlobalCopy} from '../release/choose.mjs';
 import {isInReleaseCache} from '../release/cache.mjs';
@@ -328,6 +328,27 @@ export function getRunPrefix(targetDir) {
 /** The published CLI package name — used for one-off (uninstalled) invocations. */
 export const CLI_PACKAGE = '@astryxdesign/cli';
 
+/** The command that installs a project's dependencies, by package manager. */
+const INSTALL_DEPENDENCIES = /** @type {Record<string, string>} */ ({
+  npm: 'npm install',
+  pnpm: 'pnpm install',
+  yarn: 'yarn install',
+  bun: 'bun install',
+});
+
+/**
+ * The command that installs the dependencies of the project at `targetDir`,
+ * with its package manager; npm's when none is detected.
+ * @param {string} [targetDir=process.cwd()]
+ * @returns {string}
+ */
+export function installDependenciesCommand(targetDir = process.cwd()) {
+  return (
+    INSTALL_DEPENDENCIES[detectPackageManager(targetDir)] ??
+    INSTALL_DEPENDENCIES.npm
+  );
+}
+
 /** The CLI binary name — only resolves once the CLI is installed (or run via CLI_PACKAGE). */
 export const CLI_BIN = 'astryx';
 
@@ -460,8 +481,10 @@ const CLI_BIN_LINKS = [CLI_BIN, `${CLI_BIN}.cmd`, `${CLI_BIN}.ps1`];
  * `yarn astryx` fail. A global install, or a workspace install running in a
  * fresh package, is exactly that case.
  *
- * A false negative (a layout without `node_modules/.bin`, such as Yarn Plug'n'Play)
- * is safe: the caller suggests the scoped package, which always resolves.
+ * Yarn Plug'n'Play keeps no `node_modules/.bin`: there, `yarn astryx` runs the
+ * CLI when the workspace that holds `targetDir` depends on it. A run outside
+ * the project's runtime cannot ask, and the caller then suggests the scoped
+ * package, which always resolves.
  *
  * @param {string} [targetDir=process.cwd()]
  * @returns {boolean}
@@ -474,9 +497,10 @@ export function cliBinResolves(targetDir = process.cwd()) {
       return true;
     }
     const parent = path.dirname(dir);
-    if (parent === dir) return false;
+    if (parent === dir) break;
     dir = parent;
   }
+  return pnpDependsOn(targetDir, CLI_PACKAGE);
 }
 
 /**
@@ -509,21 +533,30 @@ export function cliBinResolves(targetDir = process.cwd()) {
  *
  * With `installed`, the line follows a step that installs the project's own
  * CLI (an update notice, the hint that matches a project's CLI to its Core),
- * so the guess is that CLI: `<run-prefix> astryx`. A declared `cliCommand`
- * and a host's door still come first.
+ * so the guess is that CLI: `<run-prefix> astryx`. With `release`, the line
+ * runs in another project's folder than the run's, so the guess names that
+ * project's release instead of the one that answered: its own CLI when it
+ * installs one and the bin resolves there, otherwise the package runner
+ * pinned to that release. A declared `cliCommand` and a host's door still
+ * come first.
  *
  * @param {string} [targetDir] the project the printed command runs in;
  *   defaults to the working directory
- * @param {{installed?: boolean}} [options]
+ * @param {{installed?: boolean, release?: {version: string, own: boolean} | null}} [options]
  * @returns {string}
  */
-export function getCliInvocation(targetDir, {installed = false} = {}) {
+export function getCliInvocation(
+  targetDir,
+  {installed = false, release = null} = {},
+) {
   const declared = declaredCliCommand(targetDir);
   if (declared.command) return declared.command;
   const guess = () =>
-    installed
+    installed || (release?.own && cliBinResolves(targetDir))
       ? `${getRunPrefix(targetDir)} ${CLI_BIN}`
-      : guessCliInvocation(targetDir);
+      : release
+        ? `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${release.version}`
+        : guessCliInvocation(targetDir);
   if (declared.conflict) return guess();
   return cliDoor() ?? guess();
 }

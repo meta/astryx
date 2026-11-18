@@ -25,7 +25,17 @@ affects_consumer_docs:
 {
   "scope": "global",
   "triggers": {
-    "navigation": ["FR2", "FR3", "FR4", "FR6", "FR7", "FR8", "DEC-1", "DEC-2"]
+    "navigation": [
+      "FR2",
+      "FR3",
+      "FR4",
+      "FR6",
+      "FR7",
+      "FR8",
+      "DEC-1",
+      "DEC-2",
+      "DEC-3"
+    ]
   }
 }
 ```
@@ -49,6 +59,8 @@ itself establish implementation or exact-head verification.
 - Defining content policy for image, media, downloaded files, CSS, fetch, or
   other embedded resource URLs. Those sinks have different capabilities and
   content-type risks; downloads from accepted link destinations stay supported.
+  Markdown image URLs are the exception: Markdown's parser decides them with
+  its link rule (DEC-3).
 - Sanitizing caller-owned JSX, custom Markdown plugin output, or arbitrary
   consumer callbacks after control has left Astryx.
 - Replacing Content Security Policy, router authorization, server validation, or
@@ -72,6 +84,9 @@ itself establish implementation or exact-head verification.
   destination beginning with `javascript:`, `vbscript:`, or `data:text/html`
   MUST NOT become executable navigation. The check applies before query, hash,
   target, modifier-key, or pointer-button differences can select another sink.
+  The parser owns Markdown link and image URL safety: it also blocks every
+  `data:` URL, of any media type, in links and images. The renderer keeps a
+  check only at a real bypass path, if one exists (DEC-3).
 - **FR4 — Ordinary destinations keep working.** Relative paths, same-document
   fragments, protocol-relative URLs, and ordinary schemes such as `http:`,
   `https:`, `mailto:`, `tel:`, and safe custom schemes MUST retain their existing
@@ -98,15 +113,17 @@ itself establish implementation or exact-head verification.
   scheme-bearing `href`, `pathname`, or `protocol` field and the destination
   those fields form. A separate protocol or an unchecked field MUST NOT provide
   a path around the rule. Accepted fields and object identity remain unchanged.
-- **FR8 — Parser and rendering checks agree for navigation.** Markdown parsing,
-  Markdown link rendering, and shared Core navigation plumbing MUST reject the
-  same blocked navigation schemes after the same normalization. Markdown MAY use
-  a stricter policy for embedded resource URLs without narrowing this navigation
-  contract.
+- **FR8 — Markdown's parser applies the shared rule and owns its URL
+  decision.** Markdown's parser MUST apply the shared navigation rule, with its
+  normalization, to every link and image destination, and MUST also reject
+  every `data:` URL (DEC-3). `<Markdown>` renders only the nodes it parsed and
+  keeps a check only at a real bypass path, if one exists. Shared Core
+  navigation plumbing outside Markdown rejects the shared blocked schemes only.
 - **IR1 — Shared exits use a shared owner.** Core components that delegate links
   or navigate imperatively MUST use one shared policy owner rather than maintain
-  component-local blocked-scheme lists. Parser-local implementations MAY remain
-  separate only while conformance tests pin the same navigation matrix.
+  component-local blocked-scheme lists. Markdown's parser calls the shared
+  policy owner and adds only its `data:` check (DEC-3); it keeps no copy of the
+  shared blocked-scheme list.
 - **IR2 — Every distinct sink has mutation-sensitive coverage.** Verification
   MUST fail when the guard is removed from native anchors, custom `href`, custom
   `to`, supported structured destinations (including `protocol`), new-tab,
@@ -146,7 +163,8 @@ Implementation and verification must cover:
    separate `protocol`, with inert rendering whenever either value is rejected;
 3. every imperative and delegated activation while preserving accepted
    destinations and consumer callbacks;
-4. conformant Markdown navigation with separate embedded-resource policy; and
+4. conformant Markdown navigation, with Markdown link and image URLs decided by
+   its parser (DEC-3); and
 5. exact-head evidence before recording completed family adoption.
 
 No component-local public prop is added. Exceptional behavior belongs in
@@ -157,13 +175,13 @@ the shared rule rather than reproduce a scheme list in every prop row.
 
 ## Verification
 
-| Contract           | Verification                                                 | Representative states                                                                                                                                       | Mutation or failure expectation                                                                                                                         |
-| ------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR2, FR3, FR4, FR8 | Shared predicate and Markdown parser/render suites           | mixed case; embedded controls; relative/hash; http(s); mailto/tel; safe custom schemes; downloads; blocked schemes                                          | Removing normalization or changing one blocked prefix makes the navigation matrices disagree                                                            |
-| FR5, FR6, FR7      | `useLinkComponent` integration tests and framework SSR tests | native anchor; provider; `as`; safe/rejected `href` and `to` in either combination; structured `pathname`/`href`/`protocol`; accepted object identity       | A rejected destination invokes the router, including with `undefined` or a safe fallback; accepted destinations lose identity or precedence; SSR throws |
-| FR1, FR3, FR5, FR6 | `useClickableContainer` integration tests                    | plain click; `_blank`; Cmd/Ctrl-click; middle-click; delegated interactive ref                                                                              | A blocked value reaches `window.open`/`window.location`, or an ordinary navigation path stops working                                                   |
-| FR1, IR1, IR3      | Family membership and source-usage audit                     | every current `useLinkComponent`, `useClickableContainer`, Markdown, and direct native-anchor destination owner                                             | A new caller-controlled navigation sink ships outside the family or duplicates a local rule                                                             |
-| Browser contract   | Real Chromium probe                                          | all blocked prefixes on native anchors; custom-router stand-in; imperative same-tab/new-tab; modified and middle click; accepted destinations and downloads | Script executes, blocked navigation occurs, a rejected destination gains link activation, or ordinary browser affordances regress                       |
+| Contract           | Verification                                                 | Representative states                                                                                                                                              | Mutation or failure expectation                                                                                                                         |
+| ------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR2, FR3, FR4, FR8 | Shared predicate and Markdown parser/render suites           | mixed case; embedded controls; relative/hash; http(s); mailto/tel; safe custom schemes; downloads; blocked schemes; every `data:` URL in Markdown links and images | Removing normalization or changing one blocked prefix makes the navigation matrices disagree                                                            |
+| FR5, FR6, FR7      | `useLinkComponent` integration tests and framework SSR tests | native anchor; provider; `as`; safe/rejected `href` and `to` in either combination; structured `pathname`/`href`/`protocol`; accepted object identity              | A rejected destination invokes the router, including with `undefined` or a safe fallback; accepted destinations lose identity or precedence; SSR throws |
+| FR1, FR3, FR5, FR6 | `useClickableContainer` integration tests                    | plain click; `_blank`; Cmd/Ctrl-click; middle-click; delegated interactive ref                                                                                     | A blocked value reaches `window.open`/`window.location`, or an ordinary navigation path stops working                                                   |
+| FR1, IR1, IR3      | Family membership and source-usage audit                     | every current `useLinkComponent`, `useClickableContainer`, Markdown, and direct native-anchor destination owner                                                    | A new caller-controlled navigation sink ships outside the family or duplicates a local rule                                                             |
+| Browser contract   | Real Chromium probe                                          | all blocked prefixes on native anchors; custom-router stand-in; imperative same-tab/new-tab; modified and middle click; accepted destinations and downloads        | Script executes, blocked navigation occurs, a rejected destination gains link activation, or ordinary browser affordances regress                       |
 
 ### Completion criteria
 
@@ -176,7 +194,8 @@ This spec moves from `accepted` to `shipped` only when:
 - a source/member audit finds no caller-controlled Core navigation exit outside
   the family; and
 - consumer docs describe the shared outcome without implying that embedded
-  resources or caller-owned renderers receive the same policy.
+  resources other than Markdown images, or caller-owned renderers, receive the
+  same policy.
 
 ## Decision log
 
@@ -210,6 +229,26 @@ Rejected: one undifferentiated “safe URL” boolean for every URL-shaped value
 That hides material differences between navigating a document and embedding or
 fetching a resource, and would accidentally broaden or narrow unrelated public
 behavior.
+
+For Markdown links and images, superseded in part by DEC-3.
+
+### DEC-3 — Markdown's parser owns its URL safety and blocks every data: URL
+
+**Reference:** `spec:AST-005/DEC-3`
+**Decider:** `cixzhang`, `2026-11-10`
+
+Markdown's parser owns Markdown's URL safety. It blocks every `data:` URL, of
+any media type, in a link or an image, in addition to the shared navigation
+rule, and `<Markdown>` renders only the nodes it parsed, with no second scheme
+check. The parser's public tree then carries no `data:` URL for a custom
+renderer. For Markdown links this is stricter than the shared navigation matrix
+that DEC-2 names; the shared rule for every other member is unchanged. A
+navigation URL that does not come from parsed source, such as a plugin's base
+URL, is checked where it enters.
+
+Rejected: blocking `data:` only in Markdown images, which leaves a `data:` link
+in the parser's public tree. Rejected: a second scheme check in the renderer,
+which repeats the parser's rule for nodes only the parser produces.
 
 ## Open questions
 

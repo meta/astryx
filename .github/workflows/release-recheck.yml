@@ -119,7 +119,8 @@ jobs:
 
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'ci.yml', ref: 'main',
-              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha, recheck: 'true'},
+              // Cut evidence: the run is named Release evidence of <sha>.
+              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha, recheck: 'true', evidence: 'true'},
             });
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'deploy.yml', ref: 'main',

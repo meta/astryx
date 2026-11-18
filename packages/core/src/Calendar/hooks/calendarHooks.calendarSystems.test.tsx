@@ -414,4 +414,23 @@ describe('the calendar hooks without Temporal', () => {
     });
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it('constrains a month past the end of the fallback year to its last month', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    withoutTemporal(() => {
+      const past = renderHook(() =>
+        useCalendarDays({year: 5784, month: 13, calendar: 'hebrew'}),
+      );
+      expect(past.result.current.days).toEqual(
+        releasedDays(5784, 12, 0, false),
+      );
+      const gregorian = renderHook(() =>
+        useCalendarDays({year: 2026, month: 13}),
+      );
+      expect(gregorian.result.current.days).toEqual(
+        releasedDays(2026, 12, 0, false),
+      );
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
 });

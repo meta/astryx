@@ -115,10 +115,10 @@ export const paging = {
     maxPagesFromStart: 1,
   },
   /**
-   * A finger that lands on a settling pager does not stop it at once. The
-   * settle runs on for about this long, then the content holds under the
-   * finger. Lifted without a move, the content settles again on the nearest
-   * page.
+   * A finger that lands on a pager settling after a swipe does not stop it at
+   * once. The settle runs on for about this long, then the content holds under
+   * the finger. Lifted without a move, the content settles again on the
+   * nearest page.
    * @source measured: UIKit lab, iOS 26.2 simulator, Oct 23 2026. After
    *   touch-downs 60 and 160 ms into a settle, the content moved on for 82.6
    *   and 87.5 ms (5 frames), then held.

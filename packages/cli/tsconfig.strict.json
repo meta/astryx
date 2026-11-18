@@ -36,5 +36,5 @@
     "test/authoring-types/**/*.mjs",
     "test/authoring-types/**/*.ts"
   ],
-  "exclude": ["**/*.test.mjs"]
+  "exclude": ["**/*.test.mjs", "assets/preview-app/**"]
 }

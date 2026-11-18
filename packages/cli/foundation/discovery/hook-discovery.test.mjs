@@ -19,6 +19,7 @@ import {
   findHookDoc,
   getAllHookNames,
 } from './hook-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,9 +47,7 @@ describe('discoverHooks (real core)', () => {
       expect(cats.length).toBeGreaterThan(1);
       if (cats.includes('Other')) expect(cats[cats.length - 1]).toBe('Other');
       const nonOther = cats.filter(c => c !== 'Other');
-      expect([...nonOther].sort((a, b) => a.localeCompare(b))).toEqual(
-        nonOther,
-      );
+      expect([...nonOther].sort((a, b) => compareText(a, b))).toEqual(nonOther);
       for (const members of Object.values(hooks)) {
         expect([...members].sort()).toEqual(members);
       }
@@ -86,6 +85,51 @@ describe('discoverHooks (real core)', () => {
       "export default {\n  category: 'interaction',\n};\n",
     );
     expect(discoverHooks(core)).toEqual({Interaction: ['useResizable']});
+  });
+
+  it('discovers a create*.doc.mjs factory documented as a hook, but no other file', () => {
+    const core = mkTmp('as-hd-factory-');
+    const dir = path.join(core, 'src', 'reorderable');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'createReorderable.doc.mjs'),
+      "export default {\n  category: 'interaction',\n};\n",
+    );
+    // Neither a component doc nor a lowercase `create` prefix is a hook.
+    fs.writeFileSync(path.join(dir, 'Creator.doc.mjs'), 'export default {};\n');
+    fs.writeFileSync(
+      path.join(dir, 'createdHelpers.doc.mjs'),
+      'export default {};\n',
+    );
+    expect(discoverHooks(core)).toEqual({Interaction: ['createReorderable']});
+    expect(findHookDoc(core, 'createReorderable')).toBe(
+      path.join(dir, 'createReorderable.doc.mjs'),
+    );
+  });
+
+  it('lists a create*.doc.mjs factory beside its own hook, not on its own, when its relatedHooks names that hook', () => {
+    const core = mkTmp('as-hd-beside-');
+    const dir = path.join(core, 'src', 'thing');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'useThing.doc.mjs'),
+      "export default {\n  category: 'interaction',\n};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'createThing.doc.mjs'),
+      "export default {\n  relatedHooks: ['useThing'],\n  category: 'interaction',\n};\n",
+    );
+    // A factory that names another hook still lists on its own.
+    fs.writeFileSync(
+      path.join(dir, 'createOther.doc.mjs'),
+      "export default {\n  relatedHooks: ['useThing'],\n  category: 'interaction',\n};\n",
+    );
+    expect(discoverHooks(core)).toEqual({
+      Interaction: ['createOther', 'useThing'],
+    });
+    expect(findHookDoc(core, 'createThing')).toBe(
+      path.join(dir, 'createThing.doc.mjs'),
+    );
   });
 
   it('returns {} when src/ is missing (guarded with existsSync)', () => {

@@ -10,6 +10,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock(
   '../../foundation/discovery/component-discovery.mjs',
@@ -41,7 +42,7 @@ const {validateIntegration} = await import('./validate-integration.mjs');
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-case-disk-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-case-disk-'));
 });
 
 afterEach(() => {
@@ -70,10 +71,16 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    // The component has no example template; that note is tested elsewhere.
+    // The component has no example template and the package no logo; those
+    // notes are tested elsewhere.
     expect(
       (data.notes ?? []).filter(
-        note => note.code !== 'component_without_example',
+        note =>
+          ![
+            'component_without_example',
+            'package_without_example',
+            'package_without_logo',
+          ].includes(note.code),
       ),
     ).toEqual([
       {
@@ -106,10 +113,16 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    // The component has no example template; that note is tested elsewhere.
+    // The component has no example template and the package no logo; those
+    // notes are tested elsewhere.
     expect(
       (data.notes ?? []).filter(
-        note => note.code !== 'component_without_example',
+        note =>
+          ![
+            'component_without_example',
+            'package_without_example',
+            'package_without_logo',
+          ].includes(note.code),
       ),
     ).toEqual([
       {

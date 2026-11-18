@@ -4,6 +4,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -13,7 +14,7 @@ function parseEnvelope(stdout) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-authoring-cli-'),
+    path.join(REPO_ROOT, '.astryx-integration-authoring-cli-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
@@ -191,6 +192,58 @@ describe('integration authoring CLI', () => {
     const text = (await runCli(['integration', 'verify'], tmpDir)).stdout;
     expect(text).toContain('file: docs/ghost.doc.zh.mjs:1');
     expect(text).toContain(`fix: ${orphans[0].fix}`);
+  });
+
+  it('notes a TypeScript manifest in text only, leaving the result and exit code alone', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        type: 'module',
+        files: ['astryx.integration.ts', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.ts'),
+      "const integration: {docs: string} = {docs: './docs'};\nexport default integration;\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    const json = await runCli(['integration', 'verify', '--json'], tmpDir);
+    const text = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.status).toBe(json.status);
+    expect(text.stdout).toContain('[info] astryx.integration.ts is TypeScript');
+    expect(text.stdout).toContain(
+      'authoring/ship/publishing keep-private-files-out',
+    );
+    expect(json.stdout).not.toContain('is TypeScript');
+  });
+
+  it('prints no note for a packable JavaScript manifest', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        files: ['astryx.integration.mjs', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    const text = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.stdout).toContain('packed files');
+    expect(text.stdout).not.toContain('is TypeScript');
   });
 
   it('keeps `integration pack --check` as a deprecated alias of `integration verify`', async () => {

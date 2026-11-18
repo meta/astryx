@@ -5,14 +5,15 @@
  * @input A component using useActionGroupTracking over two actions and a
  *   message, laid out with stubbed rects, and touch, pointer and click events
  *   dispatched on it with explicit timestamps
- * @output The group tracking contract: the action under the finger is
- *   painted in the touch-down event; the paint follows the finger and is cut,
- *   not faded, when it leaves; the lift runs only the action under the
- *   finger, once; a touch on the message or a cancel runs nothing; a disabled
- *   action is skipped; a second finger or the window losing focus cancels;
- *   inside a scroller a flick is left to the scroller; a mouse under a fine
- *   pointer is tracked like a finger; the shared tracker does the tracking;
- *   no render per move
+ * @output The group tracking contract. The action under the finger is
+ *   painted in the touch-down event. The paint follows the finger and is cut,
+ *   not faded, when it leaves. The lift runs only the action under the
+ *   finger, once. A touch on the message or a cancel runs nothing. A disabled
+ *   action is skipped. A second finger or the window losing focus cancels.
+ *   Inside a scroller, a flick is left to the scroller. A mouse under a fine
+ *   pointer is tracked like a finger. The shared tracker does the tracking. A
+ *   group that paints its own highlight can turn the paint off and hear each
+ *   press. No move causes a render.
  * @position jsdom tests of packages/core/src/hooks/useActionGroupTracking.ts
  */
 
@@ -311,6 +312,96 @@ describe('useActionGroupTracking', () => {
     touch('touchend', cancel, first, time);
     expect(onCancel).not.toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  describe('a group that draws its own highlight (Lab TabBar)', () => {
+    const nameOf = (element: Element | null) => element?.textContent ?? 'none';
+
+    it('paints nothing with paintsHighlight off, and still runs the action it lifts on', () => {
+      const {cancel, del, onCancel} = mount({
+        options: {paintsHighlight: false},
+      });
+      const f = finger();
+      f.down(cancel, centerOf(CANCEL));
+      expect(paintOf(cancel)).toBeNull();
+      f.move(cancel, centerOf(DELETE));
+      expect(paintOf(del)).toBeNull();
+      f.move(cancel, centerOf(CANCEL));
+      f.up(cancel, centerOf(CANCEL));
+      expect(paintOf(cancel)).toBeNull();
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports the press around the tracker: the action at the begin and after each move, then the lift before its action runs', () => {
+      const log: string[] = [];
+      const {cancel} = mount({
+        options: {
+          onPressBegin: (_x, _y, action) => log.push(`begin ${nameOf(action)}`),
+          onPressMove: (_x, _y, action) => log.push(`move ${nameOf(action)}`),
+          onPressEnd: action => log.push(`end ${nameOf(action)}`),
+          onPressCancel: () => log.push('cancel'),
+          onActivate: action => log.push(`activate ${nameOf(action)}`),
+        },
+      });
+      const f = finger();
+      f.down(cancel, centerOf(CANCEL));
+      f.move(cancel, {x: 104, y: 124});
+      f.move(cancel, centerOf(DELETE));
+      f.up(cancel, centerOf(DELETE));
+      expect(log).toEqual([
+        'begin Cancel',
+        'move none',
+        'move Delete',
+        'end Delete',
+        'activate Delete',
+      ]);
+    });
+
+    it('reports a press that a second finger ends as a cancel, and runs nothing (family:action-groups FR3)', () => {
+      const log: string[] = [];
+      const {cancel, del} = mount({
+        options: {
+          onPressBegin: (_x, _y, action) => log.push(`begin ${nameOf(action)}`),
+          onPressEnd: () => log.push('end'),
+          onPressCancel: () => log.push('cancel'),
+          onActivate: () => log.push('activate'),
+        },
+      });
+      const first = {id: nextTouchId++, ...centerOf(CANCEL)};
+      const second = {id: nextTouchId++, ...centerOf(DELETE)};
+      time += 1000;
+      touch('touchstart', cancel, first, time);
+      time += 30;
+      touch('touchstart', del, second, time, [first]);
+      time += 16;
+      touch('touchend', del, second, time, [first]);
+      time += 16;
+      touch('touchend', cancel, first, time);
+      expect(log).toEqual(['begin Cancel', 'cancel']);
+    });
+
+    it('reports a press that turning tracking off ends as a cancel, and runs nothing', () => {
+      const log: string[] = [];
+      const options: Partial<ActionGroupTrackingOptions> = {
+        paintsHighlight: false,
+        onPressBegin: (_x, _y, action) => log.push(`begin ${nameOf(action)}`),
+        onPressEnd: () => log.push('end'),
+        onPressCancel: () => log.push('cancel'),
+        onActivate: () => log.push('activate'),
+      };
+      const view = mount({options});
+      const f = finger();
+      f.down(view.cancel, centerOf(CANCEL));
+      view.rerender(
+        <Group
+          onCancel={view.onCancel}
+          onDelete={view.onDelete}
+          options={{...options, isEnabled: false}}
+        />,
+      );
+      f.up(view.cancel, centerOf(CANCEL));
+      expect(log).toEqual(['begin Cancel', 'cancel']);
+    });
   });
 
   it('ends the gesture with nothing acting when the window loses focus (family:action-groups FR3)', () => {

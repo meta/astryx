@@ -15,6 +15,7 @@
 import {routeKit} from '../../foundation/route/route.mjs';
 import {rank, signals} from './_features.mjs';
 import {entryTable} from './_entries.mjs';
+import {FIT_PLACES, withFitOrder, withLimit} from './_fit-order.mjs';
 import {orderMatches} from './_order.mjs';
 import {routeProbs} from './_query-words.mjs';
 import {namesWhole, rankLexical} from './_lexical.mjs';
@@ -70,6 +71,18 @@ function namesLoosely(candidate, loose) {
 }
 
 /**
+ * Each family member's `domain:name`, mapped to the family its doc lists it
+ * in (see rootsFirst in _order.mjs).
+ * @param {import('./_lexical.mjs').Candidate[]} all
+ * @returns {Map<string, string>}
+ */
+function familiesOf(all) {
+  return new Map(
+    all.flatMap(c => (c._family ? [[`${c.domain}:${c.name}`, c._family]] : [])),
+  );
+}
+
+/**
  * Ranks with one searcher's weights. Shared by the main searcher and every
  * topic searcher, which differ only in their weights.
  * @param {import('./tree.mjs').SearchRequest} request
@@ -94,13 +107,23 @@ export function rankWith(request, catalog, weights) {
   );
   const route = routeProbs(catalog.data.router, query);
   const rows = signals(table, query, lexical.data.results, route);
-  return orderMatches(
-    table,
-    rank(table, rows, weights),
-    lexical,
+  const limit = options.limit ?? 20;
+  // The fit pass reads the first FIT_PLACES results at every limit, so a
+  // smaller limit shows the top of that order.
+  const ordered = withFitOrder(
+    orderMatches(
+      table,
+      rank(table, rows, weights),
+      lexical,
+      query,
+      Math.max(limit, FIT_PLACES),
+      familiesOf(catalog.all),
+    ),
+    catalog.all,
     query,
-    options.limit ?? 20,
+    () => catalog.data.picker,
   );
+  return withLimit(ordered, limit);
 }
 
 /** @type {import('./tree.mjs').SearchKit} */

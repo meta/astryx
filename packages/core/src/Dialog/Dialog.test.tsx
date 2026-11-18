@@ -405,6 +405,35 @@ describe('Dialog', () => {
     );
   });
 
+  it('focuses the title of a header that mounts with the opening commit only after the dialog is modal', () => {
+    const order: string[] = [];
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      order.push(`showModal open=${this.open}`);
+      showModal.call(this);
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.tagName === 'H2') {
+          order.push(`title focus open=${this.closest('dialog')?.open}`);
+        }
+      });
+    function Harness({open}: {open: boolean}) {
+      return (
+        <Dialog isOpen={open} onOpenChange={() => {}}>
+          {open ? <DialogHeader title="Review" /> : null}
+        </Dialog>
+      );
+    }
+    const harness = render(<Harness open={false} />);
+    harness.rerender(<Harness open />);
+    focus.mockRestore();
+    expect(order).toEqual(['showModal open=false', 'title focus open=true']);
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
@@ -449,6 +478,65 @@ describe('Dialog', () => {
     // (now unmounted) title.
     harness.rerender(<Harness open={false} onOpenChange={setOpen} />);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('keeps the opener when StrictMode re-runs the capture on a dialog first mounted open', () => {
+    // StrictMode simulates an unmount/remount after the first commit, which
+    // re-runs the layout effect AFTER DialogHeader's own passive effect has
+    // already focused the title. Capturing on every run would take the title
+    // as the opener, and closing would return focus to a node about to unmount.
+    const opener = document.createElement('button');
+    opener.type = 'button';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const {rerender} = render(
+      <StrictMode>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader title="Review" />
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(screen.getByText('Review'));
+
+    rerender(
+      <StrictMode>
+        <Dialog isOpen={false} onOpenChange={() => {}}>
+          {null}
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('captures a fresh opener on each open, not only the first', () => {
+    const first = document.createElement('button');
+    const second = document.createElement('button');
+    for (const b of [first, second]) {
+      b.type = 'button';
+      document.body.appendChild(b);
+    }
+    // Content mounts only while open, as it does in the other opener test.
+    const dialog = (isOpen: boolean) => (
+      <Dialog isOpen={isOpen} onOpenChange={() => {}}>
+        {isOpen ? <DialogHeader title="Review" /> : null}
+      </Dialog>
+    );
+
+    first.focus();
+    const {rerender} = render(dialog(false));
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(first);
+
+    second.focus();
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(second);
+
+    first.remove();
+    second.remove();
   });
 
   it('renders when isOpen is true', () => {
@@ -2168,5 +2256,66 @@ describe('Dialog focus region (DEC-2)', () => {
     const only = screen.getByRole('button', {name: 'Only'});
     only.focus();
     expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('Dialog focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Dialog>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    expectRadioGroupStartsTheCycle();
   });
 });

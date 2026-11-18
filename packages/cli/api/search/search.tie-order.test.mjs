@@ -8,7 +8,11 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {search} from './search.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./search.mjs')} */
+const {search} = require('./search.mjs');
 
 describe('ties below the first result', () => {
   it('a part of the first result leads its tie', async () => {

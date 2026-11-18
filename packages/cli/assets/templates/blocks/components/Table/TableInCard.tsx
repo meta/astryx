@@ -36,10 +36,10 @@ const columns: TableColumn<User>[] = [
 export default function TableInCard() {
   return (
     <Card width={520}>
-      <VStack gap={3}>
+      <VStack paddingBlockEnd={3}>
         <Heading level={3}>Team Members</Heading>
-        <Table data={users} columns={columns} idKey="id" hasHover />
       </VStack>
+      <Table data={users} columns={columns} idKey="id" hasHover />
     </Card>
   );
 }

@@ -16,10 +16,12 @@ import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Icon} from '@astryxdesign/core/Icon';
 import type {IconType} from '@astryxdesign/core/Icon';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
+import {useToast} from '@astryxdesign/core/Toast';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import type {StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   SparklesIcon,
   PlusIcon,
@@ -128,6 +130,14 @@ function ConversationItem({
   const [isHovered, setIsHovered] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const showMenu = isHovered || isMenuOpen;
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
+  // Demo only: replace these toasts with the calls that act on the conversation.
+  const demoAction = (verb: string) =>
+    showToast({
+      body: `Demo: ${label} would be ${verb} here`,
+      uniqueID: `${verb}-${label}`,
+    });
 
   return (
     <Stack
@@ -144,10 +154,22 @@ function ConversationItem({
               label="Conversation options"
               onOpenChange={setIsMenuOpen}
               items={[
-                {label: 'Pin', onClick: () => {}},
-                {label: 'Rename', onClick: () => {}},
-                {label: 'Archive', onClick: () => {}},
-                {label: 'Delete', onClick: () => {}},
+                {label: 'Pin', onClick: () => demoAction('pinned')},
+                {label: 'Rename', onClick: () => demoAction('renamed')},
+                {label: 'Archive', onClick: () => demoAction('archived')},
+                {
+                  label: 'Delete',
+                  onClick: () =>
+                    confirm.show({
+                      title: `Delete ${label}?`,
+                      description: "This demo won't delete anything.",
+                      actionLabel: 'Delete',
+                      onAction: () => {
+                        confirm.hide();
+                        demoAction('deleted');
+                      },
+                    }),
+                },
               ]}
             />
           ) : (
@@ -155,6 +177,7 @@ function ConversationItem({
           )
         }
       />
+      {confirm.element}
     </Stack>
   );
 }

@@ -34,14 +34,15 @@ ownership for the upload affordance that FileInput paints through Icon.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
+- Released default preserved: `no`; in dropzone mode an unset
+  `statusVariant` resolves to `detached` (FR6, DEC-2)
 - Compatibility class: additive public theming target; no existing target,
-  runtime default, DOM, prop, interaction, or accessibility behavior changes
+  DOM, prop, interaction, or accessibility behavior changes
 - Controlled/uncontrolled behavior: unchanged; FileInput remains controlled
 - Migration decision: `component:FileInput/DEC-1`
-- Dropzone status placement (FR6): the docs mark `attached` unsupported in
-  dropzone mode, and the released `attached` rendering stays until the next
-  minor release
+- Dropzone status placement (FR6): a dropzone defaults to `detached`; an
+  explicit `statusVariant="attached"` keeps the released attached rendering
+  until the next minor release (DEC-2)
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -71,14 +72,14 @@ its `mode` and `status` axes.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                        | Basis                                                                     | Review state                                 |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------- |
-| FR1 | The visible selection surface carries `file-input` and reflects the existing `mode` and resolved status.                                                                                                                                                                                                                                                                                                   | Current source, public docs, and focused tests                            | Verified current behavior                    |
-| FR2 | When not loading, input mode renders an upload affordance at the small Icon size. Dropzone mode renders it at the medium Icon size only while no file is selected.                                                                                                                                                                                                                                         | Current source and focused tests                                          | Verified current behavior                    |
-| FR3 | Icon owns the rendered glyph's base size, color, and accessibility semantics; FileInput owns the affordance's mode-dependent placement and default size.                                                                                                                                                                                                                                                   | Current composition and component boundaries                              | Verified current composition                 |
-| FR4 | The rendered upload affordance MUST carry `file-input-icon` with the existing `mode` reflected, so a theme can restyle the glyph box without structural selectors or changing every Icon that uses the same artwork.                                                                                                                                                                                       | Owner-approved target contract                                            | Approved additive contract                   |
-| FR5 | Adding the target MUST NOT change the default artwork, computed layout, interaction, file-selection behavior, accessible name, or decorative Icon semantics.                                                                                                                                                                                                                                               | Compatibility policy and focused regression tests                         | Required compatibility behavior              |
-| FR6 | Dropzone mode does not offer `attached` status placement: its tall, custom surface cannot meet the attached conditions of `family:input-fields` FR8, so under AV6 it offers `detached` and `tooltip`. Dropzone resolves `attached` to `detached` and defaults to `detached` from the next minor release; until then the released `attached` rendering is kept. Input mode keeps `attached` as its default. | `family:input-fields` FR8, AV6, and its status placement conformance note | Approved; rendering change at the next minor |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                            | Basis                                                                                                 | Review state                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| FR1 | The visible selection surface carries `file-input` and reflects the existing `mode` and resolved status.                                                                                                                                                                                                                                                                                                                       | Current source, public docs, and focused tests                                                        | Verified current behavior                                                                                           |
+| FR2 | When not loading, input mode renders an upload affordance at the small Icon size. Dropzone mode renders it at the medium Icon size only while no file is selected.                                                                                                                                                                                                                                                             | Current source and focused tests                                                                      | Verified current behavior                                                                                           |
+| FR3 | Icon owns the rendered glyph's base size, color, and accessibility semantics; FileInput owns the affordance's mode-dependent placement and default size.                                                                                                                                                                                                                                                                       | Current composition and component boundaries                                                          | Verified current composition                                                                                        |
+| FR4 | The rendered upload affordance MUST carry `file-input-icon` with the existing `mode` reflected, so a theme can restyle the glyph box without structural selectors or changing every Icon that uses the same artwork.                                                                                                                                                                                                           | Owner-approved target contract                                                                        | Approved additive contract                                                                                          |
+| FR5 | Adding the target MUST NOT change the default artwork, computed layout, interaction, file-selection behavior, accessible name, or decorative Icon semantics.                                                                                                                                                                                                                                                                   | Compatibility policy and focused regression tests                                                     | Required compatibility behavior                                                                                     |
+| FR6 | Dropzone mode does not offer `attached` status placement: its tall, custom surface cannot meet the attached conditions of `family:input-fields` FR8, so under AV6 it offers `detached` and `tooltip`. Dropzone defaults to `detached`; an explicit `attached` keeps the released attached rendering until the next minor release, when dropzone resolves `attached` to `detached`. Input mode keeps `attached` as its default. | Owner direction 2026-11-10: the default changes in a patch; the attached cleanup waits for the minor. | Approved; the default ships in a patch, explicit `attached` resolves at the next minor (owner direction 2026-11-10) |
 
 ### Allowed variation
 
@@ -175,12 +176,12 @@ target owns only this stable upload position and its existing mode distinction.
 
 ## Verification map
 
-| Contract            | Verification                                                                      | Representative states                              | Mutation or failure expectation                                                                             | Audit section             |
-| ------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------- |
-| FR1, FR2            | `FileInput.test.tsx` rendering and target suites                                  | Input/dropzone; empty/selected/loading             | Moving the root target or changing when/at what size the affordance renders breaks focused assertions.      | `audit:FileInput/theming` |
-| FR3, FR4, FR5       | `FileInput.test.tsx`, `themingTargets.test.ts`, probe-theme check                 | Both modes and same-element Icon target            | Missing the target, reflecting the wrong mode, or moving it off the glyph fails source/docs/probe coverage. | `audit:FileInput/theming` |
-| FR6                 | `FileInput.doc.mjs` `statusVariant` entry and the prop's JSDoc in `FileInput.tsx` | Dropzone and input modes                           | A doc or JSDoc that offers `attached` in dropzone mode, or drops it from input mode, fails review.          | —                         |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                     | Nine anatomy entries and two locally owned targets | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                             | `audit:FileInput/anatomy` |
+| Contract            | Verification                                                                                                                                                                                                                 | Representative states                              | Mutation or failure expectation                                                                                                                                                                                       | Audit section             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| FR1, FR2            | `FileInput.test.tsx` rendering and target suites                                                                                                                                                                             | Input/dropzone; empty/selected/loading             | Moving the root target or changing when/at what size the affordance renders breaks focused assertions.                                                                                                                | `audit:FileInput/theming` |
+| FR3, FR4, FR5       | `FileInput.test.tsx`, `themingTargets.test.ts`, probe-theme check                                                                                                                                                            | Both modes and same-element Icon target            | Missing the target, reflecting the wrong mode, or moving it off the glyph fails source/docs/probe coverage.                                                                                                           | `audit:FileInput/theming` |
+| FR6                 | `FileInput.test.tsx` "defaults a dropzone status to detached" and "keeps an explicit attached on a dropzone until the next minor release"; `FileInput.doc.mjs` `statusVariant` entry and the prop's JSDoc in `FileInput.tsx` | Dropzone unset and explicit `attached`; input mode | A dropzone whose unset placement is not detached, a dropzone that drops an explicit `attached` before the minor, or a doc or JSDoc that offers `attached` as the dropzone default or drops it from input mode, fails. | —                         |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                | Nine anatomy entries and two locally owned targets | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                                                                                                                                       | `audit:FileInput/anatomy` |
 
 ## Decision log
 
@@ -193,6 +194,20 @@ The upload icon is a stable, consumer-recognizable FileInput affordance whose
 mode-dependent placement and default size belong to FileInput. It receives the
 `file-input-icon` target on the same Icon element that paints the glyph, while
 Icon retains its general target and base glyph semantics.
+
+### DEC-2 — The dropzone default changes in a patch; the attached cleanup waits for the minor
+
+**Reference:** `component:FileInput/DEC-2`
+**Decider:** cixzhang, 2026-11-10
+
+A dropzone defaults to `detached`. An explicit
+`attached` keeps its released rendering until the next minor release, which
+resolves it to `detached`. The owner asked: "9259 can we have a non breaking
+version that just updates thw default then saves the cleanup of the attached
+version for the minor".
+
+Rejected: one breaking change in the next minor for both the default and the
+explicit `attached`.
 
 ## Open questions
 

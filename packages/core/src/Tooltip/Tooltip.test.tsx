@@ -19,13 +19,14 @@ import {
   afterAll,
 } from 'vitest';
 import {
+  act,
   render,
   renderHook,
   screen,
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
+import {Suspense, startTransition, use, useRef} from 'react';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
@@ -120,7 +121,7 @@ describe('Tooltip', () => {
   });
 
   describe('content taller than the room above and below (spec:AST-059 FR4)', () => {
-    it('carries the anchor-clear fallback list, so it never settles over its trigger', async () => {
+    it('carries its one combined fallback list from the start, so it never settles over its trigger', async () => {
       render(
         <Tooltip content="Tall tooltip" isDefaultOpen placement="below">
           <button type="button">Trigger</button>
@@ -131,13 +132,8 @@ describe('Tooltip', () => {
         expect(el).not.toBeNull();
         return el;
       });
-      expect(tooltip.style.positionTryFallbacks).toMatch(
-        /^var\(--_astryx-layer-try-fallbacks, /,
-      );
-      expect(
-        tooltip.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
-      ).toBe(
-        '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-below, --astryx-layer-fit-above',
+      expect(tooltip.style.positionTryFallbacks).toBe(
+        'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-below, --astryx-layer-fit-above',
       );
     });
   });
@@ -358,6 +354,51 @@ describe('Tooltip', () => {
   });
 
   describe('controlled', () => {
+    /** Whether the tooltip's layer is open. */
+    const isShown = () =>
+      screen
+        .getByRole('tooltip', {hidden: true})
+        .closest<HTMLElement>('[popover]')
+        ?.matches(':popover-open') ?? false;
+
+    it('reports keyboard-focus intent once while held closed, and shows nothing', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Held"
+          isOpen={false}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Trigger'});
+      const realMatches = trigger.matches.bind(trigger);
+      vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(true));
+      await new Promise(r => setTimeout(r, 20));
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(isShown()).toBe(false);
+    });
+
+    it('reports Escape as onOpenChange(false) while held open, and stays shown', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Held" isOpen onOpenChange={onOpenChange} delay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      await waitFor(() => expect(isShown()).toBe(true));
+      onOpenChange.mockClear();
+      fireEvent.keyDown(document, {key: 'Escape'});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(isShown()).toBe(true);
+    });
+
     // Escape asks a controlled tooltip to close by calling this same handler,
     // so a consumer who complies sees the request and then this echo. Pinning
     // the echo here keeps the two straight.
@@ -418,6 +459,41 @@ describe('Tooltip', () => {
       fireEvent.click(element);
     };
 
+    it('opens on a tap after React discards a render that controls it', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const onOpenChange = vi.fn();
+      const tooltip = (isPending: boolean) => (
+        <Suspense fallback={null}>
+          <Tooltip
+            content="Tooltip text"
+            onOpenChange={onOpenChange}
+            delay={200}
+            isOpen={isPending ? false : undefined}>
+            Abbreviation
+          </Tooltip>
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      const {rerender} = render(tooltip(false));
+      await act(async () => {
+        startTransition(() => {
+          rerender(tooltip(true));
+        });
+      });
+
+      tap(screen.getByText('Abbreviation'));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
     it('opens on a tap when the trigger performs no action', async () => {
       const onOpenChange = vi.fn();
       render(
@@ -432,6 +508,36 @@ describe('Tooltip', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
+    });
+
+    it('a tap on a text-entry control inside the trigger focuses it and does not open or close the tooltip', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Tooltip text"
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <span>
+            Name <input aria-label="Name" />
+          </span>
+        </Tooltip>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Name'});
+      tap(field);
+      act(() => field.focus());
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(field).toHaveFocus();
+
+      tap(screen.getByText(/Name/, {selector: 'span'}));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      onOpenChange.mockClear();
+      tap(field);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
     });
 
     it('stays shut on a tap when the trigger performs an action', async () => {
@@ -817,6 +923,62 @@ describe('Tooltip', () => {
       fireEvent.focusIn(trigger);
 
       await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    describe('focus a dialog returns after a tap', () => {
+      /**
+       * Tap the trigger, type into a field elsewhere, then hand focus back to
+       * the trigger the way a closing dialog does. The returned focus matches
+       * `:focus-visible` after typing in a real browser; jsdom does not model
+       * that, so stand it up here.
+       */
+      const tapTypeAndReturn = async (keys: string[]) => {
+        const onOpenChange = vi.fn();
+        render(
+          <>
+            <Tooltip
+              content="Rename this file"
+              onOpenChange={onOpenChange}
+              delay={0}>
+              <button type="button">Rename</button>
+            </Tooltip>
+            <input type="text" aria-label="File name" />
+          </>,
+        );
+        const trigger = screen.getByRole('button', {name: 'Rename'});
+        const field = screen.getByLabelText('File name');
+        const realMatches = trigger.matches.bind(trigger);
+        vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+          selector === ':focus-visible' ? true : realMatches(selector),
+        );
+
+        tap(trigger);
+        tapOutside(field);
+        for (const key of keys) {
+          fireEvent.keyDown(field, {key});
+        }
+        fireEvent.focusIn(trigger);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return onOpenChange;
+      };
+
+      it.each([
+        ['typed characters', ['-', 'v', '2']],
+        ['an edit and the Go key', ['Backspace', 'Enter']],
+        ['keys an on-screen keyboard leaves unidentified', ['Unidentified']],
+      ])('stays shut after %s', async (_, keys) => {
+        const onOpenChange = await tapTypeAndReturn(keys);
+        expect(onOpenChange).not.toHaveBeenCalledWith(true);
+      });
+
+      it.each([
+        ['Escape', ['-', 'Escape']],
+        ['Tab', ['-', 'Tab']],
+        ['an arrow key', ['-', 'ArrowLeft']],
+      ])('opens after %s, which is keyboard navigation', async (_, keys) => {
+        const onOpenChange = await tapTypeAndReturn(keys);
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
     });

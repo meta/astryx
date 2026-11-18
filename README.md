@@ -146,6 +146,10 @@ If `corepack` is missing, install pnpm directly or install Corepack manually;
 see the troubleshooting notes in
 [CONTRIBUTING.md](CONTRIBUTING.md#troubleshooting).
 
+The Theme Showcase DOM tests use the root `ui` project for shared DOM and
+StyleX test setup. Run `pnpm exec vitest run --project ui apps/docsite/src/__tests__/theme-showcase/`
+from the repository root.
+
 ## License
 
 MIT

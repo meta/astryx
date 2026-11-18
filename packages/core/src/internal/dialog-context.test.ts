@@ -8,6 +8,11 @@
  */
 import {describe, expect, it} from 'vitest';
 
+// The public barrel loads Dialog's whole module graph, about 200 files. On a
+// loaded machine, that load takes most of a case's 30 s. The file loads it
+// before any test runs, so no case's or hook's time limit covers the load.
+const barrel: Record<string, unknown> = await import('../Dialog');
+
 describe('internal/dialog-context', () => {
   it('re-exports the one Dialog context hook, the same value Dialog reads', async () => {
     const entry: Record<string, unknown> = await import('./dialog-context');
@@ -17,9 +22,9 @@ describe('internal/dialog-context', () => {
     expect(Object.keys(entry).sort()).toEqual(['useDialogContext']);
   });
 
-  it('the public Dialog barrel exports no context surface', async () => {
-    const pub: Record<string, unknown> = await import('../Dialog');
-    expect(pub).not.toHaveProperty('DialogContext');
-    expect(pub).not.toHaveProperty('useDialogContext');
+  it('the public Dialog barrel exports no context surface', () => {
+    expect(barrel).toHaveProperty('Dialog');
+    expect(barrel).not.toHaveProperty('DialogContext');
+    expect(barrel).not.toHaveProperty('useDialogContext');
   });
 });

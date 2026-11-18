@@ -30,6 +30,7 @@ const ASTRYX_MODULE = /[\\/]node_modules[\\/]@astryxdesign[\\/]/;
 
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TURBOPACK_LOADER = require.resolve('./turbopack-loader.js');
+const SWIZZLE_MARKER_LOADER = require.resolve('./swizzle-marker-loader.js');
 
 /**
  * Match a wildcard alias key such as `@astryxdesign/*` against a request. The
@@ -370,6 +371,14 @@ function withAstryx(nextConfig = {}) {
         .map(name => findPackageDir(name, from))
         .filter(dir => dir != null)
         .map(dir => escapeRegExp(fs.realpathSync(dir) + path.sep));
+      // The app's own modules depend on the swizzle markers above them, so a
+      // cached build recompiles a copy when its marker appears or disappears.
+      config.module.rules.unshift({
+        test: /\.[cm]?[jt]sx?$/,
+        exclude: /[\\/]node_modules[\\/]/,
+        enforce: 'pre',
+        use: [{loader: SWIZZLE_MARKER_LOADER}],
+      });
       config.module.rules.unshift({
         test:
           realPackageDirs.length === 0

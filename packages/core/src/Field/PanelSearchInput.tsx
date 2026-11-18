@@ -279,6 +279,7 @@ export function PanelSearchInput({
           styles.field,
           isKeyboardFocus && styles.fieldKeyboardFocus,
           hasInputBox && inputWrapperStyles.base,
+          hasInputBox && inputWrapperStyles.textField,
           fieldXstyle,
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />

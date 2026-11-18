@@ -12,7 +12,9 @@ import * as path from 'node:path';
 import {
   extractImportedPackages,
   analyzeTemplateNeeds,
+  parsedSpecifiers,
 } from './template-needs.mjs';
+import {_resetHostedRun, activateHostedRun} from '../runtime/package-root.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
 
@@ -86,6 +88,114 @@ describe('extractImportedPackages', () => {
     `;
     const pkgs = extractImportedPackages(source);
     expect(pkgs).toEqual(new Set(['lodash', 'recharts']));
+  });
+});
+
+describe('extractImportedPackages reads only real module specifiers', () => {
+  it('ignores words in comments, strings, template literals and JSX text', () => {
+    const source = [
+      "import {Button} from '@astryxdesign/core';",
+      '/**',
+      ' * Next: the copy goes stale. Pressing Next moves on.',
+      " *   import { neutralTheme } from '@astryxdesign/theme-neutral';",
+      ' */',
+      "// import {Editor} from 'canvas-editor';",
+      "const code = `import {useState} from 'react';`;",
+      'const label = "from \'Distribution\'";',
+      'export function Page() {',
+      "  return <p>import x from 'left-pad'</p>;",
+      '}',
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['@astryxdesign/core']),
+    );
+  });
+
+  it('reads export-from and dynamic imports', () => {
+    const source = [
+      "export {format} from 'date-fns';",
+      "export * from 'recharts';",
+      "const lazy = () => import('canvas-confetti');",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['date-fns', 'recharts', 'canvas-confetti']),
+    );
+  });
+
+  it('drops path aliases and names npm does not accept, and keeps legacy capitals', () => {
+    const source = [
+      "import {Card} from '@/components/card';",
+      "import {cn} from '~/lib/utils';",
+      "import data from '#internal/data';",
+      "import x from 'not a package';",
+      "import JSONStream from 'JSONStream';",
+      "import a1 from '@scope/_private';",
+      "import a2 from '@_scope/pkg';",
+      "import a3 from '@-scope/pkg';",
+      "import a4 from '@.scope/pkg';",
+      "import a5 from '@scope/-dash';",
+      "import {a} from 'valid-pkg';",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set([
+        'JSONStream',
+        '@scope/_private',
+        '@_scope/pkg',
+        '@-scope/pkg',
+        '@.scope/pkg',
+        '@scope/-dash',
+        'valid-pkg',
+      ]),
+    );
+  });
+
+  it('reads a type-only import() reference and a require() call', () => {
+    const source = [
+      "type Options = import('chart-lib').Options;",
+      "const legacy = require('legacy-lib');",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['chart-lib', 'legacy-lib']),
+    );
+  });
+
+  it('still reads a source the parser cannot read, statement by statement', () => {
+    const source = [
+      "import {a} from 'kept-pkg';",
+      "// import {b} from 'commented-pkg';",
+      'import {',
+      '  LineChart,',
+      "} from 'recharts';",
+      "export const name = 'not-a-pkg';",
+      "export {c} from 'reexported-pkg';",
+      "const glob = 'images/*';",
+      "import {d} from 'after-glob-pkg';",
+      '/* a note */',
+      "const url = 'https://example.com'; // import {e} from 'comment-pkg';",
+      "import {f} from 'after-url-pkg';",
+      'const = ;',
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set([
+        'kept-pkg',
+        'recharts',
+        'reexported-pkg',
+        'after-glob-pkg',
+        'after-url-pkg',
+      ]),
+    );
+  });
+
+  it.each([
+    ['pages/form-wizard/page.tsx', 'Next'],
+    ['pages/form-wizard-vertical/page.tsx', 'Distribution'],
+    ['pages/table-tree/page.tsx', 'canvas-editor'],
+  ])('reads no package from the comments of the %s template', (file, word) => {
+    const source = fs.readFileSync(
+      path.join(import.meta.dirname, '../../assets/templates', file),
+      'utf-8',
+    );
+    expect(extractImportedPackages(source).has(word)).toBe(false);
   });
 });
 
@@ -302,5 +412,82 @@ describe('analyzeTemplateNeeds', () => {
     const result = analyzeTemplateNeeds(source, dir);
     expect(result.notes).toEqual([]);
     expect(result.missingPackages).toEqual([]);
+  });
+});
+
+describe('parsedSpecifiers', () => {
+  it('reads a template literal with nothing put in it as the string it holds', () => {
+    expect(
+      parsedSpecifiers(
+        'await import(`../shared.ts`);\nrequire(`./a.css`);\nawait import(`./${x}.ts`);',
+      ),
+    ).toEqual(['../shared.ts', './a.css']);
+  });
+});
+
+describe('analyzeTemplateNeeds in a hosted run', () => {
+  const dirs = [];
+  const temp = prefix => {
+    const made = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    dirs.push(made);
+    return made;
+  };
+  afterEach(() => {
+    _resetHostedRun();
+    for (const made of dirs.splice(0)) {
+      fs.rmSync(made, {recursive: true, force: true});
+    }
+  });
+  const source = `
+    import {Button} from '@astryxdesign/core';
+    import {ArrowIcon} from '@heroicons/react/24/outline';
+    import {LineChart} from 'recharts';
+  `;
+
+  it("counts a package the host's set declares as installed outside a project", () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const outside = temp('tmpl-needs-outside-');
+
+    // A folder no package.json holds gets no install step, which would make
+    // it a project.
+    expect(analyzeTemplateNeeds(source, outside)).toMatchObject({
+      missingPackages: ['@heroicons/react', 'recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: @heroicons/react, recharts. Install them in the project that uses this page.',
+      ],
+    });
+    activateHostedRun({startingRoot: set});
+    const result = analyzeTemplateNeeds(source, outside);
+    expect(result).toMatchObject({
+      missingPackages: ['recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: recharts. Install them in the project that uses this page.',
+      ],
+    });
+  });
+
+  it('still names it inside a project, which installs its own packages', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const app = temp('tmpl-needs-app-');
+    fs.writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.7.16'}}),
+    );
+    activateHostedRun({startingRoot: set, projectRoot: app});
+
+    expect(analyzeTemplateNeeds(source, app).missingPackages).toEqual([
+      '@heroicons/react',
+      'recharts',
+    ]);
   });
 });

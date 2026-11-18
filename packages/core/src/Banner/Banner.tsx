@@ -30,11 +30,10 @@
  *   default / controlled) lives on that one prop and is driven by the shared
  *   `useCollapsible` hook rather than local state.
  *
- * Status controls visual treatment only. The root carries no live-region role by
+ * Status controls visual treatment only. Banner carries no live-region role by
  * default: an async outcome is announced from its transition handler through
- * `useAnnounce`, while a caller that needs a persistent semantic mirror may
- * provide `role="status"` through BaseProps. `role="alert"` is explicit and
- * reserved for genuinely urgent content that should interrupt current speech.
+ * `useAnnounce`. A caller marks an urgent message with `role="alert"`, which
+ * lands on the message element (title and description), not on the frame.
  *
  * Title and description render as <div> (not <p>): they accept arbitrary
  * ReactNode content, and <p> cannot legally contain block-level children
@@ -484,8 +483,10 @@ const elevationStyles = stylex.create({
  * up state management for basic dismiss behavior.
  *
  * Status controls visual meaning only. The component adds no live-region role;
- * announce async outcomes from their transition handler with `useAnnounce`, or
- * pass an explicit role when a persistent semantic mirror is appropriate.
+ * announce async outcomes from their transition handler with `useAnnounce`.
+ * Pass `role="alert"` only for an urgent message: Banner places it on the
+ * title and description, so controls and supporting content are not read as
+ * part of the alert.
  *
  * @example
  * ```
@@ -539,6 +540,7 @@ export function Banner({
   ref,
   onFocusCapture,
   onPointerDownCapture,
+  role,
   ...rest
 }: BannerProps) {
   const t = useComponentTranslator();
@@ -638,6 +640,19 @@ export function Banner({
   // hook's open state.
   const showContent = hasChildren && (!isCollapsible || isExpanded);
   const isCard = container === 'card';
+  // An urgent alert covers the authored message only, so controls, their
+  // tooltips and the content area stay out of what is announced.
+  const isUrgentAlert = role === 'alert';
+  // The alert's name and other ARIA states belong to the alert element.
+  const alertAriaProps: Record<string, unknown> = {};
+  const frameProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rest)) {
+    if (isUrgentAlert && key.startsWith('aria-')) {
+      alertAriaProps[key] = value;
+    } else {
+      frameProps[key] = value;
+    }
+  }
 
   return (
     <div
@@ -658,7 +673,8 @@ export function Banner({
         className,
         style,
       )}
-      {...rest}>
+      role={isUrgentAlert ? undefined : role}
+      {...frameProps}>
       {/* Header: colored status background — primary theme target ('banner') */}
       <div
         {...mergeProps(
@@ -702,6 +718,8 @@ export function Banner({
           ) : null}
         </div>
         <div
+          role={isUrgentAlert ? 'alert' : undefined}
+          {...alertAriaProps}
           {...stylex.props(
             styles.headerContent,
             isRenderable(endContent) && styles.headerContentWithEndContent,
@@ -713,6 +731,10 @@ export function Banner({
             )}>
             {title}
           </div>
+          {/* A flex container renders no whitespace-only text, so this space
+              only separates the title and the description in the alert's
+              text. */}
+          {isUrgentAlert && isRenderable(description) && ' '}
           {isRenderable(description) && (
             <div
               {...mergeProps(

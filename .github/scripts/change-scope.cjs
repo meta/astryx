@@ -183,8 +183,16 @@ const SURFACES = Object.freeze({
   KNOWLEDGE: 'knowledge',
   DOCSITE: 'docsite',
   NODE_TOOLING: 'node-tooling',
+  NODE_TIMES: 'node-times',
   SHARED_OR_UNKNOWN: 'shared-or-unknown',
 });
+
+// The recorded Node test times. They decide only how the Node legs are
+// scheduled, never what a test checks, so a change to them alone runs the
+// Node leg plan's check and the tests that read the times (spec:AST-030
+// FR13). Beside any other change they count as test configuration and run the
+// full suite.
+const RECORDED_TIMES = /^scripts\/vitest-node-durations(?:\.[\w-]+)?\.json$/;
 
 const RUNTIME_PACKAGE_SURFACES = Object.freeze([
   ['packages/core/', 'runtime:core'],
@@ -231,6 +239,22 @@ const PACKAGE_INFRA_PATTERNS = [
   // A package's root scripts are build configuration (its Babel plugins).
   /^packages\/[^/]+\/[^/]+\.(?:c|m)?js$/,
 ];
+
+// Shared infrastructure only Vitest's module graph reaches: the interaction
+// harness and the repository's lint plugin, both ES modules. A change there
+// still runs every other owner as shared infrastructure (the interaction
+// proofs included), but the Vitest lanes run the tests that import it and the
+// guards that read sources (spec:AST-030 FR13). Scripts stay shared: package
+// scripts run generators whose output tests read, and Vitest's graph does not
+// follow `require`.
+const VITEST_GRAPH_INFRA_PATTERNS = [
+  /^internal\/interaction-harness\//,
+  /^internal\/eslint-plugin-astryx\//,
+];
+
+function isVitestGraphInfraPath(filePath) {
+  return VITEST_GRAPH_INFRA_PATTERNS.some(pattern => pattern.test(filePath));
+}
 
 // Surfaces a pull request's tests can be scoped to by the import graph (the
 // components and modules it changed, and what imports them). Anything else,
@@ -295,6 +319,7 @@ function isNodeToolingPath(filePath) {
 
 function surfacesForPath(filePath) {
   if (isSpecRecordPath(filePath)) return [SURFACES.KNOWLEDGE];
+  if (RECORDED_TIMES.test(filePath)) return [SURFACES.NODE_TIMES];
   if (filePath.startsWith('apps/docsite/')) return [SURFACES.DOCSITE];
   if (isNodeToolingPath(filePath)) return [SURFACES.NODE_TOOLING];
 
@@ -334,6 +359,7 @@ function classifyChanges(
     const complete = expectedCount == null || expectedCount === 0;
     return {
       specOnly: false,
+      timesOnly: false,
       toolingOnly: false,
       touchesKnowledgeRecords: !complete,
       touchesDesignAssets: false,
@@ -342,6 +368,7 @@ function classifyChanges(
       labOnly: false,
       // No paths to scope from runs everything (spec:AST-030 FR4).
       fullSuite: true,
+      vitestFullSuite: true,
       surfaces: complete ? [] : [SURFACES.SHARED_OR_UNKNOWN],
       complete,
       reason: complete ? 'no changed files' : 'changed-file list is incomplete',
@@ -386,7 +413,10 @@ function classifyChanges(
     !hasPackageReleaseChange;
   const exactSurface = surface =>
     complete && surfaces.length === 1 && surfaces[0] === surface;
-  const specOnly = exactSurface(SURFACES.KNOWLEDGE);
+  // A change only to the recorded Node test times takes the knowledge lane:
+  // the leg plan's check and the tests that read the times.
+  const timesOnly = exactSurface(SURFACES.NODE_TIMES);
+  const specOnly = exactSurface(SURFACES.KNOWLEDGE) || timesOnly;
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
   // Every changed path is in the Lab package, besides Changesets, which no
@@ -420,14 +450,20 @@ function classifyChanges(
     );
   // An incomplete list, or any shared infrastructure, runs everything. A Lab
   // entry file of a Lab-only change is not shared infrastructure for it.
-  const fullSuite =
-    !complete ||
-    allPaths.some(
-      filePath =>
-        isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
-    );
+  const sharedInfra = allPaths.filter(
+    filePath =>
+      isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
+  );
+  const fullSuite = !timesOnly && (!complete || sharedInfra.length > 0);
+  // The Vitest lanes run every test unless every shared path is one the
+  // module graph reaches.
+  const vitestFullSuite =
+    !timesOnly &&
+    (!complete ||
+      sharedInfra.some(filePath => !isVitestGraphInfraPath(filePath)));
   return {
     specOnly,
+    timesOnly,
     toolingOnly,
     touchesKnowledgeRecords,
     touchesDesignAssets,
@@ -435,6 +471,7 @@ function classifyChanges(
     docsiteOnly,
     labOnly,
     fullSuite,
+    vitestFullSuite,
     surfaces,
     complete,
     reason: !complete
@@ -529,7 +566,7 @@ if (require.main === module) {
         throw new Error('GITHUB_OUTPUT is required with --github-output.');
       fs.appendFileSync(
         outputPath,
-        `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
+        `spec_only=${result.specOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
       );
     } else {
       process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -549,6 +586,7 @@ module.exports = {
   isNodeToolingPath,
   isPackageReleasePath,
   isSharedInfraPath,
+  isVitestGraphInfraPath,
   isLabEntryChange,
   isSpecRecordPath,
   labRouteSlug,

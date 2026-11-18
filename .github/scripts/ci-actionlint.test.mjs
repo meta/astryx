@@ -48,6 +48,20 @@ describe('Lint: actionlint on workflow changes', () => {
     );
   });
 
+  it('retries a failed download, and checks the checksum before unpacking', () => {
+    expect(step.run).toContain(
+      'curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --max-time 60 -o "$archive"',
+    );
+    const lines = step.run.split('\n').map(line => line.trim());
+    const at = text => lines.findIndex(line => line.startsWith(text));
+    expect(
+      at('echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -'),
+    ).toBeGreaterThan(at('curl -fsSL'));
+    expect(at('tar -xzf "$archive"')).toBeGreaterThan(
+      at('echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -'),
+    );
+  });
+
   it('pins actionlint by version and checksum for the arm64 runner', () => {
     expect(job['runs-on']).toBe('ubuntu-24.04-arm');
     expect(step.env.ACTIONLINT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);

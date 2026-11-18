@@ -67,7 +67,7 @@ import {moveRegionsTab} from './menuRegionStops';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {
@@ -97,6 +97,7 @@ import {
   mergeProps,
   rtlStyles,
 } from '../utils';
+import {visibleText} from '../utils/accessibleName';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -107,8 +108,10 @@ import type {BaseProps} from '../BaseProps';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
+  keepDisabledRowUnfocused,
 } from './menuItemRoles';
 import {
   DropdownMenuContext,
@@ -208,6 +211,19 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -377,6 +393,17 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
    */
   presentation?: DropdownMenuSubMenuPresentation;
   /**
+   * How long a hovering pointer waits before the flyout opens, in
+   * milliseconds. Keyboard focus and touch never wait.
+   * @default 150
+   */
+  delay?: number;
+  /**
+   * How long the flyout stays open after the pointer leaves, in milliseconds.
+   * @default 200
+   */
+  hideDelay?: number;
+  /**
    * Content above the sub-menu's rows: a field that filters them, say. Like
    * the root menu's `header`, it sits beside the sub-menu's `role="menu"`
    * element, never inside it, and keeps its own keys and presses. With a
@@ -495,6 +522,8 @@ export function DropdownMenuSubMenu(
     menuWidth,
     onOpenChange,
     presentation = 'adaptive',
+    delay = 150,
+    hideDelay = 200,
     header,
     footer,
     children,
@@ -560,6 +589,15 @@ export function DropdownMenuSubMenu(
   const isOnStack = activeDrillIn?.viewStack.includes(viewId) === true;
   const isTopView = isOnStack && activeDrillIn?.viewStack.at(-1) === viewId;
   const stringLabel = typeof label === 'string' ? label : undefined;
+  // A node label renders in its own element, so a drilled-in view is named by
+  // the label alone, not by the whole row with its description. Its text,
+  // read when this level opens, names a nested view's Back row.
+  const labelId = useId();
+  const hasNodeLabel = stringLabel == null && isRenderable(label);
+  const rowLabel = hasNodeLabel ? <span id={labelId}>{label}</span> : label;
+  const viewLabelledBy =
+    stringLabel != null ? undefined : hasNodeLabel ? labelId : triggerId;
+  const [nodeLabelText, setNodeLabelText] = useState<string | undefined>();
   const parentLabel = menuCtx?.menuLabel;
   const backLabel =
     parentLabel != null
@@ -658,8 +696,9 @@ export function DropdownMenuSubMenu(
     focusItem,
     ownsEvent,
     getItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap.
     wrap: true,
@@ -708,6 +747,8 @@ export function DropdownMenuSubMenu(
       hide: hideLayer,
       isOpen: isFlyoutOpen,
       isEnabled: canOpen && !isDrillIn && isRootMenuOpen,
+      showDelay: delay,
+      hideDelay,
       // The safe triangle toward the flyout's near edge is built from the
       // flyout this component renders, not the hook's own list ref: the
       // frame, with a header or footer.
@@ -725,6 +766,13 @@ export function DropdownMenuSubMenu(
         return;
       }
       if (activeDrillIn != null) {
+        if (hasNodeLabel) {
+          const labelElement =
+            triggerRef.current?.ownerDocument.getElementById(labelId);
+          setNodeLabelText(
+            labelElement != null ? visibleText(labelElement) : undefined,
+          );
+        }
         pendingViewFocusRef.current = options?.focusFirst
           ? 'first'
           : 'container';
@@ -742,7 +790,17 @@ export function DropdownMenuSubMenu(
         }
       }
     },
-    [canOpen, activeDrillIn, viewId, onOpenChange, layer, focusFirst, menuRef],
+    [
+      canOpen,
+      activeDrillIn,
+      viewId,
+      onOpenChange,
+      layer,
+      focusFirst,
+      menuRef,
+      hasNodeLabel,
+      labelId,
+    ],
   );
 
   const close = useCallback(
@@ -775,8 +833,15 @@ export function DropdownMenuSubMenu(
     }
     pendingViewFocusRef.current = null;
     const items = getItems();
-    // Back is the first row; a keyboard open lands on the first row after it.
-    const target = mode === 'first' ? (items[1] ?? items[0]) : null;
+    // Back is the first row; a keyboard open lands on the first enabled row
+    // after it. The keys reach a disabled row, but an open never starts there.
+    const target =
+      mode === 'first'
+        ? (items.find(
+            (item, index) =>
+              index > 0 && item.getAttribute('aria-disabled') !== 'true',
+          ) ?? items[0])
+        : null;
     if (target != null) {
       target.focus({preventScroll: true});
     } else {
@@ -1028,9 +1093,9 @@ export function DropdownMenuSubMenu(
         menuCtx?.closeMenu();
       },
       drillIn,
-      menuLabel: stringLabel,
+      menuLabel: stringLabel ?? nodeLabelText,
     }),
-    [menuSize, close, menuCtx, drillIn, stringLabel],
+    [menuSize, close, menuCtx, drillIn, stringLabel, nodeLabelText],
   );
 
   // The press model for this flyout: the row under a release acts, the
@@ -1140,7 +1205,13 @@ export function DropdownMenuSubMenu(
           // on it; a drilled-in view sits inside the root's surface.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
-            stylex.props(regionStyles.frame, regionStyles.flyoutSurface),
+            stylex.props(
+              regionStyles.frame,
+              regionStyles.flyoutSurface,
+              // The entrance runs on the surface: an anchored layer lays out again on
+              // each frame its own style animates.
+              layerAnimations.end,
+            ),
           )
         : stylex.props(
             regionStyles.frame,
@@ -1196,10 +1267,14 @@ export function DropdownMenuSubMenu(
         // state and wiring are set after them, and its own handlers run
         // before the caller's.
         {...rest}
+        onMouseDown={composeEventHandlers(
+          rest.onMouseDown,
+          isDisabled ? keepDisabledRowUnfocused : undefined,
+        )}
         ref={triggerRowRef}
         id={triggerId}
         role="menuitem"
-        tabIndex={isDisabled ? undefined : -1}
+        tabIndex={-1}
         aria-haspopup={hasRegions ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
         aria-controls={isOpen ? (hasRegions ? frameId : contentId) : undefined}
@@ -1219,7 +1294,7 @@ export function DropdownMenuSubMenu(
             ? renderIconSlot(icon, {size: 'sm', color: 'secondary'})
             : undefined
         }
-        label={label}
+        label={rowLabel}
         description={description}
         endContent={endAffordance}
         onClick={handleRowClick}
@@ -1253,9 +1328,7 @@ export function DropdownMenuSubMenu(
                     role="menu"
                     tabIndex={0}
                     aria-label={stringLabel}
-                    aria-labelledby={
-                      stringLabel == null ? triggerId : undefined
-                    }
+                    aria-labelledby={viewLabelledBy}
                     onKeyDown={handleContentKeyDown}
                     onFocus={handleMenuFocus}
                     onBlur={handleMenuBlur}
@@ -1274,8 +1347,7 @@ export function DropdownMenuSubMenu(
                   </div>,
                   {
                     'aria-label': stringLabel,
-                    'aria-labelledby':
-                      stringLabel == null ? triggerId : undefined,
+                    'aria-labelledby': viewLabelledBy,
                     // A deeper view shows in its place; this one waits, hidden.
                     hidden: !isTopView,
                     inert: !isTopView,
@@ -1292,7 +1364,7 @@ export function DropdownMenuSubMenu(
                   tabIndex={-1}
                   // The drilled-in list is named by its row's label.
                   aria-label={stringLabel}
-                  aria-labelledby={stringLabel == null ? triggerId : undefined}
+                  aria-labelledby={viewLabelledBy}
                   // A deeper view shows in its place; this one waits, hidden.
                   hidden={!isTopView}
                   inert={!isTopView}
@@ -1365,6 +1437,7 @@ export function DropdownMenuSubMenu(
                         ? flyoutStyles.touchPanYPinchZoom
                         : flyoutStyles.touchPinchZoom,
                       hasOverflow && flyoutStyles.scrollable,
+                      layerAnimations.end,
                     ),
                   )}>
                   {nestedContent}
@@ -1374,11 +1447,7 @@ export function DropdownMenuSubMenu(
                 placement: 'end',
                 alignment: 'start',
                 offset: spacingVars['--spacing-1'],
-                xstyle: [
-                  flyoutStyles.popoverViewport,
-                  popoverXstyle,
-                  layerAnimations.end,
-                ],
+                xstyle: [flyoutStyles.popoverViewport, popoverXstyle],
               },
             ),
           )}
