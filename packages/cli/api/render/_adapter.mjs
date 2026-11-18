@@ -588,6 +588,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
+    ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
   };

@@ -97,6 +97,13 @@ const importedCss = [];
 const localFiles = [];
 /** The page's own files that load as modules, not as text (`?raw`) or data. @type {Set<string>} */
 const moduleFiles = new Set();
+/**
+ * Local files the page uses that the file cannot carry: a module or JSON
+ * file it reaches by a relative import from outside the folder it carries
+ * from, and a Sass or Less stylesheet, which a render does not compile.
+ * @type {string[]}
+ */
+const outsideFiles = [];
 /** Package stylesheets the page imports, by specifier and importing file. */
 /** @type {{spec: string, from: string}[]} */
 const packageCss = [];
@@ -757,7 +764,13 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.(scss|sass|less)$/i.test(bare)) {
           // Sass and Less need their compiler: say so rather than drop them.
-          if (!browser) skippedCss.push(bare);
+          if (!browser) {
+            skippedCss.push(bare);
+            if (bare.startsWith('.') || path.isAbsolute(bare)) {
+              const file = path.resolve(dir, bare);
+              if (!outsideFiles.includes(file)) outsideFiles.push(file);
+            }
+          }
           p.remove();
           return;
         }
@@ -1825,12 +1838,19 @@ try {
   // Node loads some local modules itself (jiti hands it a plain ES module,
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
-  // file carries each module the page reaches, as --reverse expects.
+  // file carries each module the page reaches, as --reverse expects. The
+  // modules outside the folder it carries from are followed too, so each
+  // file they import is named.
   /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
   const aliasImports = [];
-  for (let i = 0; i < localFiles.length; i++) {
-    const file = localFiles[i];
+  /** @type {Set<string>} */
+  const followed = new Set();
+  const nextToFollow = () =>
+    localFiles.find(f => !followed.has(f)) ?? outsideFiles.find(f => !followed.has(f));
+  for (let file = nextToFollow(); file !== undefined; file = nextToFollow()) {
+    followed.add(file);
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    const carriedModule = localFiles.includes(file);
     let source;
     try {
       source = fs.readFileSync(file, 'utf8');
@@ -1840,11 +1860,18 @@ try {
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
       const raw = spec.split('?')[0];
-      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
+      if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
         localFiles.push(target);
+      } else if (
+        target &&
+        !target.includes(NODE_MODULES) &&
+        !isLocal(target) &&
+        !outsideFiles.includes(target)
+      ) {
+        outsideFiles.push(target);
       }
     }
   }
@@ -1861,6 +1888,7 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    uncarried: outsideFiles,
     aliasImports,
     texts,
     fnTexts,
