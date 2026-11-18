@@ -93,8 +93,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The camera and its preview — owned by the camera view (`spec:AST-132` FR9).
 - The app cache's location — owned by the core package (`spec:AST-130` FR14).
   Deleting, listing, and sharing its files is outside the core package.
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app
-  (`spec:AST-141`) — specified in their own records.
 
 ## Public concepts
 
