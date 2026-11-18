@@ -127,9 +127,12 @@ no navigation host.
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
     scroll-edge and bar behaviour, and the insets they report.
   - The header and tab bar components decide their own rendering, system or
-    drawn, in their own component records. The hosts host either rendering:
-    the stack host carries a screen with the system bar or with a header the
-    component draws, and a drawn tab bar renders without the tabs host (FR12).
+    drawn, in their own component records, through the components' one
+    rendering axis, `render: 'auto' | 'system' | 'drawn'` (`auto` is the
+    component's platform default, which a theme may set). The hosts host either
+    rendering: the stack host carries a screen with the system bar or with a
+    header the component draws, and a drawn tab bar renders without the tabs
+    host (FR12).
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
@@ -201,6 +204,9 @@ no navigation host.
     style, which the system bars' material, buttons and search field follow;
     the router sends the theme's chrome appearance, and `unspecified` follows
     the system in the same frame.
+  - Navigation options that derive from the theme (the chrome appearance, tint,
+    bar and tab colours) resolve in the theme scope of the screen that uses
+    them. The router never derives them by comparing colour values.
   - `estimatedWidth` and `estimatedHeight` size a new screen's first layout
     until its container reports the real size.
 - **FR4 — Back gestures belong to the stack host and are gated before they
