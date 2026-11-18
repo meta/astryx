@@ -72,8 +72,9 @@ project away from the app's own identity and data.
 - Each native contract's behavior on iOS and Android. Its platform group
   record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states it; this record states
   only what a Preview project reaches of it (FR4).
-- The React Native commands outside the `astryx rn preview` group, and the
-  rules every React Native command follows (`spec:AST-112/FR13`).
+- The React Native commands outside the `astryx rn preview` group, except
+  the Preview scope of `astryx doctor` (FR11), and the rules every React
+  Native command follows (`spec:AST-112/FR13`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -122,7 +123,7 @@ project away from the app's own identity and data.
     project. Stored data, cache files, web view sessions and page storage,
     and players belong to the namespace that made them; a project never reads
     or acts on the app's or another project's. A runtime with no namespace
-    answers `no-namespace`.
+    answers `no-namespace` (`spec:AST-130/FR14`).
   - It never reaches the app's own identity, stored data, files, players,
     or the person's photo library, and it cannot change the app's
     appearance, bars, or lock-screen controls.
@@ -132,10 +133,9 @@ project away from the app's own identity and data.
     FR5's table names are the host's too, on the modules it names them for.
   - Removing a project from the app's list removes everything it stored, in
     every store of the package, its web view data included where the web
-    capability is linked. `AstryxStorage.clearProjectData(bundleUrl)` is that call, made by the
-    host in the app's runtime: it answers the cleared namespace and whether
-    the web data went. A project's own call, or the app's own bundle URL,
-    answers `not-allowed`; a value that is not a URL answers `invalid-url`.
+    capability is linked. Only the host removes a project's data; a project
+    cannot remove its own namespace's data that way, another project's, or
+    the app's.
   - Every host that runs a Preview project applies these namespaces and
     FR5's policy, Astryx Stage included (`spec:AST-139`), so a project meets
     the same limits on a phone and on a desktop.
@@ -146,7 +146,7 @@ project away from the app's own identity and data.
   | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
   | `AstryxAppearance` (`spec:AST-130/FR4`)                                                     | `getOverride()` answers `'system'`, `getRunOverride()` answers `null`, and `setOverride` answers `not-allowed`.                                                                                                                                                                                                                                                                                        |
   | `AstryxPlatformInfo`, launch info (`spec:AST-130/FR8`)                                      | No `launch` and an empty `installedAt`; the memory and bundle-size reads answer `not-allowed`.                                                                                                                                                                                                                                                                                                         |
-  | `AstryxStorage` (`spec:AST-130/FR14`)                                                       | Its own namespace (FR4); `clearProjectData` answers `not-allowed`.                                                                                                                                                                                                                                                                                                                                     |
+  | `AstryxStorage` (`spec:AST-130/FR14`)                                                       | Its own namespace (FR4).                                                                                                                                                                                                                                                                                                                                                                               |
   | `AstryxClipboard` (`spec:AST-130/FR7`)                                                      | Each read asks as the device does; a refused read or write answers `not-allowed`.                                                                                                                                                                                                                                                                                                                      |
   | `AstryxBack`, `AstryxLaunch` (`spec:AST-130/FR11`, `spec:AST-130/FR12`)                     | Change nothing.                                                                                                                                                                                                                                                                                                                                                                                        |
   | `AstryxAudio`, `AstryxVideoView` (`spec:AST-132/FR3`, `spec:AST-132/FR7`)                   | Players open beside the app's. A `playerId` another runtime holds answers `busy`; a runtime's `close` or teardown frees only its own players; a video view draws only its own runtime's player. The player that started last, in any runtime, owns the Now Playing card and remote commands, and one runtime's teardown never removes another's. A file outside its own folders answers `not-allowed`. |
@@ -236,14 +236,14 @@ project away from the app's own identity and data.
   - `preview --start`, `preview serve`, and `preview share` say in their
     summary that they keep running and follow the long-running rule of
     `spec:AST-112/FR13`.
-  - A file that `--qr-png` names by an absolute path is written there, never
-    replacing a file the command did not write
-    (`architecture:cli-surface` DEC-16).
+  - A file that `--qr-png` names is written inside the app, as the group's
+    other writes are (`architecture:cli-surface` INV10), and never replaces a
+    file the command did not write.
   - `astryx doctor --scope preview` reports the native-build items as `info`.
   - The group answers: how does a Preview host open this project?
     `template --cdn` writes a web page, and no command makes what a Preview
     host opens. Its function is `preview` in the package's `./commands`
-    entry, and its result is links, URLs, and host-check items.
+    entry (`spec:AST-112/FR5`), and its result is links, URLs, and host-check items.
   - Outcomes beyond the shared ones of `spec:AST-112/FR13`:
 
     | Outcome                                                                                                                                                    | Code                               |
@@ -281,29 +281,27 @@ project away from the app's own identity and data.
   installers (`spec:AST-112/FR5`) are what the prelude installs (FR6).
 - `spec:AST-139` runs a Preview project under this record's namespaces and
   policy (FR4, FR5).
-- `architecture:cli-surface` INV10 admits a file that `--qr-png` names by an
-  absolute path, as DEC-16 does for `experimental render --out`.
-  `spec:AST-114` FR5's table gains `doctor`'s `--scope`, which requires
+- `spec:AST-114` FR5's table gains `doctor`'s `--scope`, which requires
   `setup.checks`.
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states what a Preview project reaches of them (FR5).
 
 ## Verification
 
-| Contract | Verification                                                                                                                | Representative states                                                                                | Mutation or failure expectation                                                                                                                                    |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android                            | QR code; photo; link; typed address; dev server; hosted bundle                                       | A way in that does not open the project                                                                                                                            |
-| FR2      | Links and codes from outside the app; a link that claims a confirmation                                                     | local network; internet; typed; opened before                                                        | Any request or code that runs before the person confirms                                                                                                           |
-| FR3      | Reload, return, and opening another listed project while a project runs; a dev server that stops; removing a listed project | a running project; an unreachable address; an encrypted project                                      | A project that cannot be left, an encrypted project in the list, or stored data left after removal                                                                 |
-| FR4      | The app and two projects that read and write each store; a refused capability; a removed project; the same in Astryx Stage  | each store; each refused capability; `clearProjectData` from a project and with the app's bundle URL | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, or a Stage run with other limits                    |
-| FR5      | Device and Stage runs of a project that calls each module in the table                                                      | each row of FR5's table; a photo picked through the system picker                                    | A project that changes the app's appearance, reads its launch facts, takes the app's players, reads the photo library, or gets a picked item outside its own cache |
-| FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project       | a project; an app with two routers                                                                   | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                           |
-| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                | a missing native piece; an older host                                                                | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                |
-| FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                  | a valid link; each failed check; data written while open                                             | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes              |
-| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                          | the Astryx app's build; a plain project                                                              | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                       |
-| FR10     | Inspector picking over a project that counts its touches, on iOS and Android                                                | picking on; picking ended                                                                            | A touch that reaches the project while picking, a project that gets no touches after picking ends, or an inspector that names the wrong component                  |
-| FR11     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR11's table; a share without terms          | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                        | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                          |
-| FR12     | Review of each native change's evidence                                                                                     | a native behavior change                                                                             | A native claim backed only by a Preview run                                                                                                                        |
+| Contract | Verification                                                                                                                | Representative states                                                                        | Mutation or failure expectation                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android                            | QR code; photo; link; typed address; dev server; hosted bundle                               | A way in that does not open the project                                                                                                                                                      |
+| FR2      | Links and codes from outside the app; a link that claims a confirmation                                                     | local network; internet; typed; opened before                                                | Any request or code that runs before the person confirms                                                                                                                                     |
+| FR3      | Reload, return, and opening another listed project while a project runs; a dev server that stops; removing a listed project | a running project; an unreachable address; an encrypted project                              | A project that cannot be left, an encrypted project in the list, or stored data left after removal                                                                                           |
+| FR4      | The app and two projects that read and write each store; a refused capability; a removed project; the same in Astryx Stage  | each store; each refused capability; a project that tries to remove another namespace's data | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, a project that removes data it does not own, or a Stage run with other limits |
+| FR5      | Device and Stage runs of a project that calls each module in the table                                                      | each row of FR5's table; a photo picked through the system picker                            | A project that changes the app's appearance, reads its launch facts, takes the app's players, reads the photo library, or gets a picked item outside its own cache                           |
+| FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project       | a project; an app with two routers                                                           | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                     |
+| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                | a missing native piece; an older host                                                        | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                          |
+| FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                  | a valid link; each failed check; data written while open                                     | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                        |
+| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                          | the Astryx app's build; a plain project                                                      | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                                 |
+| FR10     | Inspector picking over a project that counts its touches, on iOS and Android                                                | picking on; picking ended                                                                    | A touch that reaches the project while picking, a project that gets no touches after picking ends, or an inspector that names the wrong component                                            |
+| FR11     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR11's table; a share without terms          | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                    |
+| FR12     | Review of each native change's evidence                                                                                     | a native behavior change                                                                     | A native claim backed only by a Preview run                                                                                                                                                  |
 
 ## Decision log
 
