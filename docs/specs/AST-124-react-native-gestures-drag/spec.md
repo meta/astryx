@@ -37,8 +37,7 @@ This record details the gesture and drag pieces of the platform layer that
 `spec:AST-112` defines: it applies the result vocabulary (`spec:AST-112/FR6`),
 the capability shape (`spec:AST-112/FR7`), additive evolution of native
 interfaces (`spec:AST-112/FR8`), and Astryx Stage as the contract developers
-build against (`spec:AST-112/FR12`) to eight native components. The
-touch shield is listed under "Who uses it" only (OQ1).
+build against (`spec:AST-112/FR12`) to eight native components.
 
 ## Why this exists
 
@@ -66,8 +65,13 @@ touch shield is listed under "Who uses it" only (OQ1).
 ## Non-goals
 
 - Web gestures and Core's public gesture hooks, which `spec:AST-107` owns.
-- Each component's gesture numbers (detents, thresholds, springs, durations);
-  the component's own record owns them and passes them as `metrics`.
+- The API and behaviour of the library components that use these views
+  (`BottomSheet`, `InlineSheet`, `Toast`, `Item`, `List`, `Draggable`,
+  `DropZone`, `ReorderableList`, `Lightbox`, and the others under "Who uses
+  it"), including their gesture numbers (detents, thresholds, springs,
+  durations); each component's own record owns them.
+- `AstryxTouchShieldView`: part of the platform package, specified in its own
+  record.
 - The native stack's back gesture itself, the menu hosts, and the presentation
   hosts, which the Navigation hosts and the Menus and presentation records own.
   This record owns only how a drag yields to them.
@@ -83,166 +87,181 @@ touch shield is listed under "Who uses it" only (OQ1).
 
 ## Requirements
 
-- **FR1 — Motion runs on the UI thread.** Drag, fling, snap, spring, rubber
-  band, pan, glide, zoom, and paging run inside the native view on the UI
-  thread, including interruption at touch-down (a touch on a settling view holds
-  it). JavaScript only sets targets (props and commands) and receives milestone
-  events, each a direct event with one object argument: a state change, a
-  threshold crossing (once per crossing, with hysteresis), a settle, a commit,
-  a dismiss, a camera at rest. No event reaches JavaScript once per frame unless
-  the caller adds its own listener to a driven value.
-- **FR2 — Frame events feed only Animated's native driver.** The frame events
-  `onDragFrame`, `onSwipeFrame`, `onCameraFrame`, and `onPagerFrame` drive the
-  `Animated.Value`s a caller passes (`x`, `y`, `progress`, `offset`, `strip`,
-  `zoomScale`, `values`, and so on) through the native driver.
-  - The wrapper attaches the mapping with `Animated.attachNativeEvent` on the
-    host view's native tag while the view and the values stay the same, and
-    detaches it on change and unmount. It never passes an `Animated.event` prop:
-    an animated component adds a JavaScript listener to each mapped value, which
-    makes the native driver send every frame to JavaScript. Components depend on
-    this route to keep JavaScript idle during a gesture.
-  - The view keeps one hidden consumer of each driven value for its whole life,
-    so the value's native node, and the event's target, stay the same whatever
-    the caller mounts and unmounts.
-  - On iOS the frame is posted on the event-dispatcher route that Animated's
-    native driver observes (a Fabric direct event when the C++ Animated backend
-    is on); on Android it is an ordinary event that the native animated module
-    maps before JavaScript.
-  - A driven value's JavaScript copy keeps the last value JavaScript gave it, or
-    a native animation's end value.
-  - `PanZoomView` sends `onCameraFrame` only while values are given
-    (`cameraFramesEnabled`), once per camera change, once with the current
-    camera when frames turn on, and never at rest.
-- **FR3 — Components declare the drags they own.** `GestureOwnerView` (on `.`,
-  probe `isGestureOwnerAvailable()`) is the touch frame of a component's drag.
-  `owns` names the physical directions (`left`, `right`, `up`, `down`) a drag
-  that starts on the frame belongs to the component. `releasesScroll` marks a
-  frame around a horizontal scroller: `owns` then names the directions it can
-  still scroll, and a horizontal drag the other way makes the scroller's pan
-  fail. `ownsEdge` makes the screen-edge back swipe yield as well.
-  `backGesture` (`always`, `atLeadingEdge`, `never`) says when the back gesture
-  may begin on a drag that starts in the frame; undeclared, the frame says
-  nothing.
-  - The innermost frame under the touch wins by hit-testing; nesting needs no
-    depth.
-  - iOS: the content-wide back swipe, every enclosing pan (a scroll view's,
-    UIKit's sheet drag, the drag-and-snap view, the swipe row, the zoom pager)
-    wait for the frame's recognizer, which begins only for an owned direction.
-    The screen-edge back swipe waits only for an `ownsEdge` frame. The stack's
-    per-screen back-swipe gate reads the nearest frame that declares
-    `backGesture`.
-  - Android: the drag-and-snap view, the swipe row, and the zoom pager leave the
-    drag to an owner of its direction, enclosing scroll views are stopped from
-    intercepting, and an `ownsEdge` frame that owns a horizontal direction
-    excludes its bounds from the system back gesture (at most 200 dp per edge,
-    the system's limit).
-  - The library's drag-owner hook feeds one answer to both the JavaScript
-    gesture-ownership protocol and the frame. `AstryxAppRoot` supplies the
-    native frame; without a provider the frame is a plain View.
-  - A drag-and-snap view sits inside any owner frame that claims the same axis,
-    never around it.
-  - The contract's `strategy` prop is accepted and ignored.
-- **FR4 — The app root keeps a menu's dismiss tap from pressing content.** On
-  iOS, `GestureRootView` (probe `isGestureRootAvailable()`) wraps the app as a
-  `flex: 1` view whose one recognizer never takes a touch. When a touch starts
-  while a system menu is on screen, it cancels React Native's handling of that
-  touch, so no press under the menu fires, as UIKit's own controls behave.
-  Elsewhere it renders its children unchanged. `AstryxAppRoot` places it
-  directly under the app's root view.
-- **FR5 — Drag and snap.** `DragSnapView` (`./controls`, probe
-  `isDragSnapViewAvailable()`; the library reads it through
-  `useNativeDragSnap()`) moves its children along one axis between `detents`.
-  - Props: `axis` (`vertical`, `horizontal`, or `either`, which locks to the
-    dominant axis at the claim), `detents`, `index`, `vertical` and
-    `horizontal` edges (free, held, or rubber-banded past the end detents, and a
-    dismiss line on each side), `canDismiss`, `isReduceMotion`, `isEnabled`,
-    `isRTL`, `isScrollHandoff` (scroll-to-expand with a nested vertical scroll
-    view), and `metrics` (claim, vertical intent, release projection, one stop
-    per fling, flick, rubber band, spring).
-  - Handle (`ref`): `snapTo({index, isAnimated})` and `placeAt({position,
-index})`. Events: `onDragStateChange` (`dragging`, `settling`, `idle`,
-    with the locked axis), `onSnap` (`index`, `isChosen`: a drag, not a command,
-    chose it), `onDismiss` (axis and direction; the view holds where it was let
-    go and the component runs its exit), `onDismissAttempt` (a dismissing
-    release with `canDismiss` false settles back), and `onThresholdCross` (the
-    release target changes during a drag: a detent or `'dismiss'`, 4 dp past
-    each boundary, never per frame, on settle, or for a command).
-  - A release is judged where it would coast, one stop per fling; past the ends
-    the view follows UIScrollView's rubber band.
-- **FR6 — Swipe row.** `SwipeRowView` (`./controls`, probe
-  `isSwipeRowViewAvailable()`; the library reads it through
-  `useNativeSwipeRow()`) runs a row's horizontal swipe over its panels.
-  - Props: `leadingWidth`, `trailingWidth`, `behavior` (`reveal` rests open,
-    `commit` only fires or closes), `isRTL`, `isReduceMotion`, `isEnabled`,
-    `leadingDrag` and `trailingDrag` (`panel` takes a drag toward a side with a
-    panel; `none` never takes it, so an enclosing gesture such as the iOS back
-    swipe has it; `hold` takes it and only rubber-bands), and `metrics` (axis
-    lock, commit point, rest fraction, overshoot resistance, fling, slide-out,
-    spring). An open or moving row takes either direction.
-  - A vertical drag stays the list's. Handle: `snapTo({index})` with
-    `SWIPE_ROW_SNAP` (`closed`, `leading`, `trailing`, `leadingOut`,
-    `trailingOut`). Events: `onBegin`, `onThreshold` (`isArmed`), `onSettle`,
-    `onCommit` (the component fires its outer entry).
-- **FR7 — Pan and zoom surface.** `PanZoomView` (`./controls`, probe
-  `isPanZoomViewAvailable()`) lays its children out at scale 1 in
-  `contentSize` and moves them through a camera: the content point at the
-  viewport's centre and the scale, clamped to the content's edges.
-  - One finger pans with the platform's deceleration (`decelerationRate`
-    `normal` or `fast`), two fingers zoom about the fingers (rubber-banded past
-    `minScale` and `maxScale`, eased back), a double-tap zooms in by
-    `doubleTapScale`, and a two-finger tap zooms out.
-  - Handle: `animateTo({x, y, scale, durationMs, easing})` runs natively and
-    resolves exactly once with `isFinished` (false when a touch, a newer
-    `animateTo`, or `setCamera` interrupts it); `setCamera(camera)` jumps;
-    `getCamera()` returns the last reported camera. `initialCamera` applies
-    once.
-  - Events: `onCameraChange` when the camera comes to rest (`isSettled`,
-    `reason`: `gesture`, `animation`, `set`), and while it moves only with
-    `cameraChangeInterval` > 0, at most once per that many ms. `onTap` is a
-    single tap no child took, sent after the double-tap window and never for a
-    pan, a pinch, a two-finger tap, or a touch that stopped a glide; a pressed
-    child keeps its press. `isEnabled` false turns gestures off; the handle
-    still works.
+- **FR1 — Motion runs on the UI thread.** Each view in this group tracks the
+  touch, decides what it means, and animates the result inside its native
+  implementation on the UI thread: drags, flings, rubber bands, springs,
+  glides, pinches, and page turns. A touch that lands on a moving view stops it
+  where it is. JavaScript controls a view only through its props and commands,
+  and hears back through direct events that carry one object and mark an
+  outcome: a change of state, a crossed threshold (reported once per crossing,
+  with a small dead band so a hovering finger does not repeat it), a resting
+  place, a commit, a dismissal, a camera that stopped. No view sends JavaScript
+  an event per frame.
+- **FR2 — Frame events feed only Animated's native driver.** `onDragFrame`,
+  `onSwipeFrame`, `onCameraFrame`, and `onPagerFrame` exist so that
+  `Animated.Value`s follow a gesture through React Native's native driver.
+  - The platform's wrapper binds a frame event to its values with
+    `Animated.attachNativeEvent` on the host view, for as long as the view and
+    the values stay the same, and unbinds it on change and unmount. It never
+    binds them through an `Animated.event` prop, because an animated
+    component's event prop puts a JavaScript listener on every mapped value and
+    so delivers every frame to JavaScript.
+  - For as long as the view lives, the wrapper keeps one hidden view that
+    consumes each bound value, so the value's native node stays the event's
+    target when the caller's own consumers mount and unmount.
+  - iOS delivers a frame on the route that Animated's native driver observes (a
+    Fabric direct event when React Native's C++ Animated backend is on);
+    Android delivers an ordinary event that the native animated module consumes
+    before JavaScript.
+  - The JavaScript side of a bound value holds whatever JavaScript last set, or
+    the end of a native animation; a caller that wants every frame adds its own
+    listener.
+  - `AstryxPanZoomView` sends `onCameraFrame` only while `cameraFramesEnabled`
+    is true: once when it turns on, then once for each camera change, and
+    nothing while the camera rests.
+- **FR3 — A frame declares the drags it owns.** `AstryxGestureOwnerView` marks
+  the area a drag starts in.
+  - `ownsLeft`, `ownsRight`, `ownsUp`, and `ownsDown` name the physical
+    directions whose drags belong to the frame. With `releasesScroll`, the
+    frame wraps a horizontal scroller, the `owns*` props name the directions it
+    can still scroll, and a horizontal drag in any other direction makes the
+    scroller let go. `ownsEdge` extends the claim to the screen-edge back
+    swipe. `backGesture` (`always`, `atLeadingEdge`, `never`; `auto` declares
+    nothing) states when a back gesture may start from a drag in the frame.
+    `strategy` is accepted and has no effect.
+  - When frames sit inside one another, the deepest frame under the finger decides; no nesting
+    level is passed.
+  - iOS: the frame's own recognizer begins only for an owned direction, and
+    the content-wide back swipe, enclosing scroll views, UIKit's sheet drag, and
+    the drag-and-snap, swipe-row, and zoom-pager views all wait for it to fail
+    first. The edge back swipe waits only for a frame with `ownsEdge`. The
+    stack host's back-swipe check for a screen reads `backGesture` from the
+    nearest frame that sets it.
+  - Android: the drag-and-snap, swipe-row, and zoom-pager views leave a drag to
+    a frame that owns its direction; enclosing scroll views do not intercept
+    it; and a frame with `ownsEdge` that owns a horizontal direction removes its
+    bounds from the system back gesture, within the system's limit of 200 dp
+    per edge.
+  - A drag-and-snap view placed inside a frame that owns the same axis never
+    begins its pan.
+- **FR4 — A menu's dismiss tap presses nothing below it.** On iOS,
+  `AstryxGestureRootView` wraps the app's root content and fills it. Its one
+  recognizer never begins. When a touch starts while a system menu is shown,
+  it cancels React Native's handling of that touch, so the press under the menu
+  does not fire, matching UIKit's own controls. It acts once per shown menu.
+- **FR5 — Drag and snap.** `AstryxDragSnap` moves its children along one axis
+  and lets them rest only at its `detents`.
+  - Detent order: `detents` lists the rest stops ascending by the extent of the
+    surface they show, so index 0 is the smallest stop (a sheet's lowest);
+    `restIndex`, `snapTo`, `onDragSnap`, and `onDragThreshold` use that index.
+    Each detent is a position in dp along the axis (+ down, + right).
+  - FR5 gap: `AstryxDragSnap` orders `detents` by position along the axis, so
+    a sheet's index 0 is its tallest stop (OQ1).
+  - `dragAxis` is `vertical`, `horizontal`, or `either`, which picks the
+    dominant axis once the drag is claimed (`claim`, `verticalIntent`). For
+    each axis, `*Before` and `*After` say whether travel past the outer
+    detents is free, held, or rubber-banded and how far, and `*DismissBefore`
+    and `*DismissAfter` place a dismiss line on each side (±1e9 or beyond: no
+    line). `canDismiss` false turns a dismissing release into a return.
+  - The release chooses a stop from where the surface would coast to
+    (`projectionFactor`, `projectionMinTravel`), at most one stop per throw
+    with `stepPerFling`, or a dismiss for a fast enough flick toward a line
+    (`flickVelocity`, `flickMinTravel`). Past the outer detents the surface
+    follows UIScrollView's rubber-band curve (`rubberDimension`,
+    `rubberCoefficient`), and it settles on a spring (`springStiffness`,
+    `springDamping`, `springMass`). With `scrollHandoff`, a vertical drag passes
+    between the view and a nested vertical scroll view.
+  - Commands: `snapTo(index, animated)` moves to a detent and then reports
+    `onDragSnap` with `chosen` false; `placeAt(position, index)` sets a
+    displaced starting point without an event.
+  - Events: `onDragStateChange` (`dragging`, `settling`, `idle`, and the
+    locked axis); `onDragSnap` (`index`, `chosen`: a drag, not a command, put
+    it there); `onDragDismiss` (axis and direction; the surface stays where it
+    was released); `onDragDismissAttempt` (a dismissing release while
+    `canDismiss` is false); `onDragThreshold` (during a drag, the stop a release
+    would choose changes, `target` -1 for a dismiss, after 4 dp of travel past
+    the boundary; never on settle or for a command).
+- **FR6 — Swipe row.** `AstryxSwipeRow` slides a row horizontally over the
+  panels behind it.
+  - `leadingWidth` and `trailingWidth` size the panels (0: no panel).
+    `swipeBehavior` `reveal` lets the row rest open; `commit` only fires or
+    closes. `leadingDrag` and `trailingDrag` decide what a closed row does with
+    a drag toward that side: `panel` takes it when the side has a panel, `none`
+    leaves it to an enclosing gesture such as the iOS back swipe (`snapTo` can
+    still open that side), and `hold` takes it and only stretches. A row that
+    is open or moving takes either direction.
+  - A drag that turns out vertical (`axisLock`) belongs to the list. The
+    release opens, closes, or commits from the travel and velocity
+    (`commitPastPanel`, `commitFraction`, `restFraction`,
+    `overshootResistance`, `flingVelocity`, `flingMin`); a commit slides the row
+    out (`slideOutOvershoot`, `slideOutMs`); other settles use the spring
+    props.
+  - Command: `snapTo(index)` with 0 closed, 1 leading open, 2 trailing open, 3
+    out past the inline end, 4 out past the inline start. Events:
+    `onSwipeBegin` (side), `onSwipeThreshold` (`armed`), `onSwipeSettle`
+    (index), `onSwipeCommit` (side).
+- **FR7 — Pan and zoom surface.** `AstryxPanZoomView` shows children laid out
+  at scale 1 in a `contentWidth` × `contentHeight` world through a camera: the
+  content point at the viewport's centre plus a scale, kept within the content.
+  - One finger pans and glides on with the platform's deceleration
+    (`decelerationRate` `normal` or `fast`). Two fingers zoom around the point
+    between them, stretch past `minScale` and `maxScale`, and ease back. A double
+    tap multiplies the scale by `doubleTapScale`; a two-finger tap divides it.
+    `initialX`, `initialY`, and `initialScale` apply once. `panZoomEnabled`
+    false stops gestures but not commands.
+  - Commands: `animateTo(animationId, x, y, scale, durationMs, easing)` runs on
+    the UI thread and ends with exactly one `onCameraAnimationEnd` (`id`,
+    `finished` false when a touch, a newer animation, or `setCamera` cuts it
+    short); `setCamera(x, y, scale)` jumps.
+  - Events: `onCameraChange` (`x`, `y`, `scale`, `settled`, `reason`
+    `gesture`, `animation`, or `set`) when the camera stops, and during motion
+    only when `cameraChangeInterval` > 0, no more often than that many ms;
+    `onTap` (content and view coordinates) for a one-finger tap that no child
+    handled, once the double-tap window has closed, and not for a pan, a pinch,
+    a two-finger tap, or a touch that stopped a glide.
   - FR7 gap: on Android a two-finger tap does not zoom out.
-- **FR8 — Zoomable pager.** `ZoomPagerView` (`./controls`, probe
-  `isZoomPagerViewAvailable()`; `useNativeZoomPager()`) runs a full-screen
-  media pager over its strip and pages: interruptible paging with a velocity
-  snap and a rubber band past the ends, pinch about the fingers, double-tap
-  zoom (`doubleTapCenters` centres the tapped point), a clamped, rubber-banded
-  pan while zoomed that glides on release (`decelerationRate`) and turns the
-  page well past an edge, drag-to-dismiss and swipe-up at 1×, and taps after the
-  double-tap window.
-  - Props: `count`, `index`, `viewport`, `contentSize`, `isRTL`,
-    `isReduceMotion`, `isEnabled`, `metrics`, `dismissDirections` (`down` or
-    `downOrRight`), and `panRequiresTwoFingers` (a single-image viewer: one
-    finger never pans or pages; a drag toward the trailing side is the iOS back
-    swipe where it can begin, else the close). Driven values: `strip`,
-    `zoomScale`, `zoomX`, `zoomY`, `dragX`, `dragY`, `dismissProgress`.
-  - Handle: `setIndex`, `resetZoom`, `toggleZoom(point)`, `zoomTo`. Events:
-    `onIndexChange`, `onZoom`, `onDismiss`, `onTap`, `onSwipeUp`.
-- **FR9 — System drag and drop.** `NativeDragItemView` and
-  `NativeDropZoneView` (on `.`, probes `isNativeDragItemViewAvailable()` and
-  `isNativeDropZoneViewAvailable()`; the library reads both through
-  `useNativeDragDrop()`) run a system drag session. They are present together
-  or not at all.
-  - A drag item lifts on a held press with the system preview (its snapshot
-    inside `previewCornerRadius`) and haptic, and travels as the session's local
-    item (`itemId`, `itemType`) and, with `itemText`, as plain text for other
-    apps (`crossApp`) and text fields. iOS arbitrates the lift with scroll views
-    and with a context menu on the same item (a still hold opens the menu;
-    moving after the lift drags) and drags with a pointer on iPad. Events:
-    `onLift`, `onStart`, and always one `onEnd` (`operation` `move`, `copy`, or
-    `cancel`; `dropped`) per lift, also for a lift released without a drag.
-  - A drop zone accepts items whose `itemType` is in `acceptTypes` (empty: any)
-    and, with `acceptsText`, plain text from other apps; the others are
-    refused. It reports `onEnter`, `onMove` (at most once per frame, only when
-    the location changes), `onLeave`, and `onPerform` (with `text`) in its own
-    coordinates (dp from its top-left); JavaScript decides what a location
-    means. `dropOperation` (`move`, `copy`) is the operation a drop performs.
-    With `autoScrollEdge` > 0, a drag within that band of the nearest enclosing
-    scroll view's visible edge scrolls it, faster nearer the edge. The innermost
-    accepting zone gets the events, never its ancestors. A drop from another app
-    has an empty `itemId`.
+- **FR8 — Zoomable pager.** `AstryxZoomPager` drives a full-screen media pager
+  over the strip and pages it contains.
+  - Paging can be interrupted, snaps with velocity (`pageShare`, `pageFling`,
+    `pageMs`), stretches past the first and last page (`rubber`), and runs
+    right to left with `rtl`. Pinch zooms around the fingers up to `zoomMax`
+    (`pinchSlack`); a double tap zooms to `doubleTapZoom` (`doubleTapCenters`
+    moves the tapped point to the centre). A zoomed page pans within its
+    edges, glides on release (`decelerationRate`), and turns the page when
+    pushed far past an edge (`panPageShare`).
+  - At 1×, a drag down past `dismissDistance` or faster than `dismissFling`
+    dismisses; `dismissRight` adds a drag toward the trailing side with its own
+    `dismissDistanceRight` and `dismissFlingRight`; an upward release past half
+    the viewport reports a swipe up. With `panRequiresTwoFingers`, one finger
+    never pans or pages, and a one-finger drag toward the trailing side is the
+    iOS back swipe where one can begin, otherwise the close.
+  - Commands: `setIndex(index, animated)`, `resetZoom(animated)`,
+    `toggleZoom(x, y)`, `zoomTo(scale, x, y, animated)`. Events:
+    `onPagerIndexChange`, `onPagerZoom`, `onPagerDismiss`, `onPagerTap` (after
+    the double-tap window), `onPagerSwipeUp`.
+- **FR9 — System drag and drop.** `AstryxDragItem` and `AstryxDropZone` run the
+  platform's drag session; a binary has both or neither.
+  - A drag item lifts after a long press, with the system's preview of the
+    view clipped to `previewCornerRadius` and the system's haptic. The session
+    carries `itemId` and `itemType` inside the app and, when `itemText` is set,
+    plain text that text fields and, with `crossApp`, other apps can take. On
+    iOS the system settles a lift against scroll views and against a context
+    menu on the same view (holding still opens the menu, moving drags) and
+    supports pointer drags on iPad. `dragEnabled` false makes it an ordinary
+    view. Every lift reports `onDragItemLift`, then `onDragItemStart` if it
+    moves, and exactly one `onDragItemEnd` (`operation` `move`, `copy`, or
+    `cancel`; `dropped`).
+  - A drop zone accepts sessions whose `itemType` appears in `acceptTypes`
+    (empty: every type) and, with `acceptsText`, plain text from anywhere;
+    other sessions are refused. While a session is over it, the zone reports
+    `onDropZoneEnter`, `onDropZoneMove` (only when the point moved, no more than
+    once a frame), `onDropZoneLeave`, and `onDropZonePerform` (with `text`), in
+    dp from the zone's top-left corner; JavaScript decides what a point means.
+    `dropOperation` is `move` or `copy`. With `autoScrollEdge` > 0, hovering
+    within that band of the nearest enclosing scroll view's visible edge scrolls
+    it, faster closer to the edge. When zones sit inside one another, only the deepest one that
+    accepts the session hears it. A drop from another app carries an empty
+    `itemId`. `dropEnabled` false lets sessions pass to an enclosing zone.
 - **FR10 — Native contracts.** The group's contracts are native components
   (Fabric Native Components) generated from codegen specs:
 
@@ -260,52 +279,44 @@ index})`. Events: `onDragStateChange` (`dragging`, `settling`, `idle`,
   Positions and widths are dp, velocities dp/ms, durations ms. A dismiss line
   at ±1e9 or beyond is none.
 
-- **FR11 — An absent view degrades without dropping content.** Where a native
-  view is absent (the web, the test host, a binary without it), its probe
-  answers false and the wrapper renders the children in a plain View with the
-  same layout, test id, and accessibility props, with no gesture
-  (`spec:AST-112/FR7`). A command on an absent view does nothing and throws
-  nothing.
-  - `BottomSheet`, `InlineSheet`, and `Toast` without the drag-and-snap view
-    run their drawn drag only under the test host. On a device they rest at
-    their stop, take no drag, keep their accessibility actions, and warn once in
-    development: drag motion never runs frame by frame in JavaScript.
-  - `Item` without the swipe row, and `Draggable`, `DropZone`, and
-    `ReorderableList` without the drag-and-drop views, draw their gesture in
-    JavaScript (OQ2).
-- **FR12 — Every gesture has a non-gesture alternative.**
-  - Drag and snap: the view itself stays neutral; the component makes its
-    focused element (a sheet's grabber) adjustable through the library's
-    drag-snap accessibility helper. Its value is the stop's name; increment
-    moves one stop toward the first detent and decrement one stop away
-    (VoiceOver's swipe up and down, TalkBack's adjust actions); a dismissible
-    view adds a labelled dismiss action and wires the iOS escape gesture to it.
-    On iOS a still hold on a row inside the view shows the large content viewer
-    at accessibility text sizes, and a hold that then moves begins the drag.
-  - Swipe row: every enabled swipe entry is an accessibility action on the row;
-    the panels are hidden from assistive technology.
-  - Pan and zoom: by default a container whose children stay reachable; with
-    `accessible`, one adjustable element whose increment and decrement zoom by
-    `doubleTapScale` through `animateTo` and whose value is the zoom as a locale
-    percent. The caller's own actions are merged, and its increment or
-    decrement replaces the view's.
-  - Zoomable pager: one adjustable element by default. The caller passes next
-    and previous (increment, decrement), zoom, and escape actions; a pager with
-    none warns once in development that paging and zoom are gesture-only.
-  - Drag and drop: on iOS a drag item exposes VoiceOver's Drag action and a drop
-    zone its drop points; on both platforms `Draggable`'s move actions and
-    `ReorderableList`'s Move up, Move down, Move to top, and Move to bottom
-    actions run what the drag runs.
-  - The views draw no text of their own, so Dynamic Type and font scale apply
-    to the children as elsewhere.
-- **FR13 — Reduce Motion and right-to-left.** Under Reduce Motion every settle,
-  page turn, zoom change, and camera animation jumps to its end and still sends
-  its events (`animateTo` resolves finished). The library passes the system
-  setting as `isReduceMotion`; `PanZoomView` also reads the system setting
-  itself (iOS Reduce Motion, Android's animator duration scale 0). Under
-  `isRTL` a horizontal drag-and-snap axis mirrors its ends, a swipe row's
-  leading side is on the right, and the zoom pager pages right to left. The back
-  direction is the trailing direction (right, left under right-to-left).
+- **FR11 — An absent view keeps its content.** Where a view's native component
+  is not registered (the web, the test host, a binary without it), its probe
+  (`isGestureOwnerAvailable()`, `isGestureRootAvailable()`,
+  `isDragSnapViewAvailable()`, `isSwipeRowViewAvailable()`,
+  `isPanZoomViewAvailable()`, `isZoomPagerViewAvailable()`,
+  `isNativeDragItemViewAvailable()`, `isNativeDropZoneViewAvailable()`)
+  answers false, and the wrapper renders the children in a plain View with the
+  same style, test id, and accessibility props and no gesture
+  (`spec:AST-112/FR7`). A command sent to an absent view does nothing and
+  throws nothing. What a component draws instead is the component's own
+  contract (OQ2).
+- **FR12 — Accessibility passes through.** Every view forwards the
+  accessibility props it is given, custom actions and escape included, so the
+  component that uses it offers actions that do what the gesture does; the
+  drag-and-snap and swipe-row views add no accessibility element of their own.
+  - `AstryxZoomPager`'s wrapper is one adjustable element unless its props say
+    otherwise, and warns once in development when it is given no actions.
+  - `AstryxPanZoomView`'s wrapper is a container whose children stay reachable;
+    marked `accessible`, it is one adjustable element whose increment and
+    decrement zoom by `doubleTapScale` and whose value is the zoom as a percent
+    in the device's locale. Actions the caller passes are merged, and its own
+    increment or decrement wins.
+  - On iOS, `AstryxDragItem` offers VoiceOver's drag action and
+    `AstryxDropZone` its drop points; on Android the item's accessibility
+    actions come from its props.
+  - On iOS, at accessibility text sizes, holding still on a row inside a
+    drag-and-snap view shows the large content viewer, and moving after the
+    hold starts the drag instead.
+  - The views draw no text, so Dynamic Type and font scale reach their children
+    unchanged.
+- **FR13 — Reduce Motion and right-to-left.** With `reduceMotion`, each view
+  jumps to the end of a settle, page turn, zoom change, or camera animation
+  and still sends the events it would have sent; `animateTo` ends finished.
+  `AstryxPanZoomView` also follows the system setting by itself (iOS Reduce
+  Motion; Android's animator duration scale 0). With `rtl`, a horizontal
+  drag-and-snap axis swaps its ends, a swipe row's leading side is on the
+  right, and the pager runs right to left. The back direction is the trailing
+  one.
 - **FR14 — Contract baseline.** Every contract in this group is at revision 1,
   and FR3 to FR10 describe revision 1. A behaviour added after revision 1 is a
   named feature (`<Contract>.<feature>`) that the binary lists and the
@@ -365,21 +376,21 @@ index})`. Events: `onDragStateChange` (`dragging`, `settling`, `idle`,
 
 ## Verification
 
-| Contract | Verification                                                                                                                     | Representative states                                                                                                          | Mutation or failure expectation                                                                                               |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | UI-thread frame checks on the Simulator, the emulator, and Astryx Stage: JavaScript wakes counted during a drag and its settle   | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                               | Any JavaScript wake per frame during a gesture or its settle                                                                  |
-| FR2      | Unit tests of each wrapper through the `./testing` doubles; frame checks on device builds                                        | values given and not; values changed; a consumer remounted; frames turned on                                                   | An `Animated.event` prop, a frame listener added in JavaScript, a value that stops following after a remount, a frame at rest |
-| FR3      | Astryx Stage contract suites and Simulator and emulator checks of back swipes against owner frames                               | a slider at the screen edge; a carousel at its leading edge; a toast dragged toward its edge; `backGesture` values             | A back swipe takes an owned drag, an edge swipe ignores `ownsEdge`, or an owned frame blocks an unowned drag                  |
-| FR4      | Simulator and Astryx Stage checks with a system menu open                                                                        | the dismiss tap over a pressable row; the root absent                                                                          | The row's press fires on the dismiss tap                                                                                      |
-| FR5–FR8  | Unit tests of the shared rules and wrappers through `./testing` doubles; Astryx Stage suites; Simulator and emulator checks      | fling, slow drag, interrupt, dismiss, threshold; reveal and commit; pan, pinch, tap, glide; paging, zoom, dismiss, two fingers | A release settles on another stop than the rules choose, an event fires per frame, or a command sends a milestone it must not |
-| FR9      | Astryx Stage suites and Simulator and emulator checks with two apps                                                              | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag    | No `onEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                                      |
-| FR10     | The platform's spec rules check over the codegen specs and the contract list                                                     | each contract's props, commands, events, platforms                                                                             | A contract differs from the table                                                                                             |
-| FR11     | Unit tests with each view absent through the `./testing` doubles                                                                 | absent view; command on an absent view; a device build without the drag-and-snap view                                          | Children dropped, a throw, or a JavaScript-driven drag on a device                                                            |
-| FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of the accessibility props                 | sheet stops; swipe entries; zoom; drag item and drop zone; a shielded control                                                  | A gesture with no accessibility action, or an action that does something other than the gesture                               |
-| FR13     | Unit tests and Astryx Stage suites with Reduce Motion and right-to-left                                                          | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                   | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                  |
-| FR14     | Unit tests of `hasContractFeature` through the `./testing` doubles (absent, older, and current shapes); Astryx Stage floor check | a binary without a named feature; a Stage below the floor                                                                      | A silent weaker path, or an older Stage that runs the project                                                                 |
-| FR15     | A built app without any capability opted in: binary symbols and registered components                                            | the four gesture views                                                                                                         | A gesture view missing from a default build                                                                                   |
-| FR16     | Source review of the iOS and Android views; an iOS build with the private class name absent                                      | each view; the gesture root with no menu container found                                                                       | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
+| Contract | Verification                                                                                                                     | Representative states                                                                                                                                                 | Mutation or failure expectation                                                                                               |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | UI-thread frame checks on the Simulator, the emulator, and Astryx Stage: JavaScript wakes counted during a drag and its settle   | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                                                                      | Any JavaScript wake per frame during a gesture or its settle                                                                  |
+| FR2      | Unit tests of each wrapper through the `./testing` doubles; frame checks on device builds                                        | values given and not; values changed; a consumer remounted; frames turned on                                                                                          | An `Animated.event` prop, a frame listener added in JavaScript, a value that stops following after a remount, a frame at rest |
+| FR3      | Astryx Stage contract suites and Simulator and emulator checks of back swipes against owner frames                               | a slider at the screen edge; a carousel at its leading edge; a toast dragged toward its edge; `backGesture` values                                                    | A back swipe takes an owned drag, an edge swipe ignores `ownsEdge`, or an owned frame blocks an unowned drag                  |
+| FR4      | Simulator and Astryx Stage checks with a system menu open                                                                        | the dismiss tap over a pressable row; the root absent                                                                                                                 | The row's press fires on the dismiss tap                                                                                      |
+| FR5–FR8  | Unit tests of the shared rules and wrappers through `./testing` doubles; Astryx Stage suites; Simulator and emulator checks      | detent order; fling, slow drag, interrupt, dismiss, threshold; reveal and commit; pan, pinch, tap, glide; paging, zoom, dismiss, two fingers                          | A release settles on another stop than the rules choose, an event fires per frame, or a command sends a milestone it must not |
+| FR9      | Astryx Stage suites and Simulator and emulator checks with two apps                                                              | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag                                           | No `onEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                                      |
+| FR10     | The platform's spec rules check over the codegen specs and the contract list                                                     | each contract's props, commands, events, platforms                                                                                                                    | A contract differs from the table                                                                                             |
+| FR11     | Unit tests with each view absent through the `./testing` doubles                                                                 | each absent view; a command sent to an absent view                                                                                                                    | Children dropped, a probe that answers true, or a throw                                                                       |
+| FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of forwarded accessibility props           | actions passed to each view; the pager and the pan-zoom surface as adjustable elements; drag item and drop zone; the large content viewer inside a drag-and-snap view | An accessibility prop not forwarded, or an adjustable that does something other than its gesture                              |
+| FR13     | Unit tests and Astryx Stage suites with Reduce Motion and right-to-left                                                          | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                                                          | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                  |
+| FR14     | Unit tests of `hasContractFeature` through the `./testing` doubles (absent, older, and current shapes); Astryx Stage floor check | a binary without a named feature; a Stage below the floor                                                                                                             | A silent weaker path, or an older Stage that runs the project                                                                 |
+| FR15     | A built app without any capability opted in: binary symbols and registered components                                            | the four gesture views                                                                                                                                                | A gesture view missing from a default build                                                                                   |
+| FR16     | Source review of the iOS and Android views; an iOS build with the private class name absent                                      | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
 
 ## Decision log
 
@@ -390,11 +401,11 @@ index})`. Events: `onDragStateChange` (`dragging`, `settling`, `idle`,
 
 A drag that waits for JavaScript drops frames whenever JavaScript is busy, so
 every Astryx gesture runs in a native view and JavaScript sees only its
-milestones. A sheet or a toast without its native view on a device takes no
-drag rather than moving frame by frame in JavaScript.
+outcomes. The platform offers no variant of these gestures that JavaScript
+drives frame by frame.
 
-Rejected: a JavaScript responder fallback on devices, because it ships the
-dropped frames this record exists to avoid.
+Rejected: a JavaScript-driven mode in the platform's views, because it ships
+the dropped frames this record exists to avoid.
 
 ### DEC-2 — Frame events reach Animated through native attachment
 
@@ -441,15 +452,26 @@ cannot. JavaScript keeps the meaning of a location and of a drop.
 
 ## Open questions
 
-- **OQ1 — Does `AstryxTouchShieldView` stay in the platform's core while only
-  the Astryx app's component inspector uses it?** (`human-design`) Options:
-  keep it in the core as app API, specified in this record; or move it out of
-  the package's public surface into the Astryx app.
+- **OQ1 — How does the library converge on one detent order?** (`checkable`)
+  The library counts detents both ways: the sheet indexes (`BottomSheet`'s
+  selected stop, the drag-and-snap view's `restIndex`, the presentation host's
+  selected index) count from the tallest stop, while the stops' accessibility
+  value counts from the smallest. FR5 fixes the native order as ascending by
+  shown extent, index 0 the smallest. Options: the library maps between orders
+  in one shared place; or every sheet API adopts the native order.
 - **OQ2 — Do `Item` and the drag-and-drop components keep a JavaScript-drawn
-  gesture on devices once their native views link by default?**
-  (`human-design`) Options: keep the drawn gesture for binaries without the
-  views; or follow the drag-and-snap rule (rest, keep the accessibility actions,
-  warn in development).
+  gesture on devices where the native view is absent?** (`human-design`)
+  Options: keep the drawn gesture for binaries without the views; or take no
+  drag there and keep only the accessibility actions, with a development
+  warning.
 - **OQ3 — What does `backGesture` do on Android?** (`human-design`) Options:
   `never` becomes a system-gesture exclusion over the frame (at most 200 dp per
   edge); or Android keeps ignoring it and only `ownsEdge` excludes.
+- **OQ4 — Is `Lightbox` the public face of `AstryxZoomPager`?**
+  (`human-design`) No library component uses the zoom pager; `Lightbox` zooms
+  with React Native's ScrollView. Options: `Lightbox` renders its pages in the
+  zoom pager on iOS and Android; or the zoom pager stays app API on
+  `./controls` only.
+- **OQ5 — Does `AstryxPanZoomView` stay in the default link set while no
+  Astryx component uses it?** (`human-design`) Options: keep it linked by
+  default as app API on `./controls`; or link it only when an app opts in.
