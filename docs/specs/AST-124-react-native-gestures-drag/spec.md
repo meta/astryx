@@ -292,6 +292,9 @@ handles of `spec:AST-112/FR18`.
   | ---------------------- | ----------------------------------- | -------------------- | ------------ |
   | `AstryxGestureHandles` | native module (Turbo Native Module) | `relate`, `unrelate` | iOS, Android |
 
+  The `AstryxPinchScaleView` row is the named feature
+  `AstryxPinchScaleView.pinch` (FR14).
+
   Positions and widths are dp, velocities dp/ms (the pinch's velocity is
   scale per second), durations ms. A dismiss line at ±1e9 or beyond is none.
 
@@ -305,7 +308,8 @@ handles of `spec:AST-112/FR18`.
   same style, test id, and accessibility props and no gesture
   (`spec:AST-140/FR2`). An absent view leaves the caller's ref empty, and the
   probe tells the caller. What a component draws instead is the component's
-  own contract (OQ1). The pinch view's absence follows FR17.
+  own contract (OQ1). The pinch view is detected through its named feature
+  (FR14, FR17).
 - **FR12 — Accessibility passes through.** Every view forwards the
   accessibility props it is given, custom actions and escape included, so the
   component that uses it offers actions that do what the gesture does; the
@@ -335,9 +339,10 @@ handles of `spec:AST-112/FR18`.
   one.
 - **FR14 — Contracts grow by named features.** The group's contracts grow by
   named features (`spec:AST-140/FR5`). FR3 to FR10 and FR16 describe each
-  contract's baseline, and the group's named feature is
-  `AstryxPinchScaleView.pinch` (FR17). JavaScript checks a named feature
-  before it uses it.
+  contract's baseline. The pinch view is the group's named feature,
+  `AstryxPinchScaleView.pinch` (FR17): JavaScript reads it through
+  `contractFeatures('AstryxPinchScaleView')` before it renders the view, and
+  checks every named feature before it uses it.
 - **FR15 — Native code uses public platform API only.** The views use public
   UIKit and Android framework API, and React Native's own touch handler and
   event routes. One exception: the iOS gesture root (FR4) recognizes an open
@@ -357,8 +362,9 @@ handles of `spec:AST-112/FR18`.
   - A handle is a plain, serialisable value, `{viewTag, recognizer}`: the
     view's React Native tag and the recognizer's name in the view's contract.
     The names are `pan` for the gesture owner, drag-and-snap, and swipe-row
-    views; `pan` and `pinch` for the pan-and-zoom surface and the zoom pager;
-    and `pinch` for the pinch view. A handle stays valid while its view is
+    views; `pan`, `pinch`, `doubleTap`, and `twoFingerTap` for the pan-and-zoom
+    surface; `pan`, `pinch`, and `doubleTap` for the zoom pager; and `pinch`
+    for the pinch view. A handle stays valid while its view is
     mounted.
   - An app gets a handle from the ref of the component that renders the view:
     the ref's `getGestureHandle(recognizer)` answers the handle, or `null`
@@ -370,17 +376,20 @@ handles of `spec:AST-112/FR18`.
     (`recognizeSimultaneouslyWith`, `requireToFail`). From JavaScript,
     `relateGesture(handle, other, relation)` declares one between a handle and
     `other`, the React Native tag of the view a non-Astryx recognizer is
-    attached to, with the handle's recognizer as the waiter for
-    `requireToFail`, and returns a function that removes it; a relationship
-    also ends when either view unmounts. Native code resolves a handle through
+    attached to (every non-Astryx recognizer on that view takes part), with
+    the handle's recognizer as the waiter for `requireToFail`, and returns a
+    function that removes it; a relationship also ends when either view
+    unmounts. Where the gesture module is absent (the web, the test host),
+    `relateGesture` returns a function that removes nothing. Native code resolves a handle through
     the gesture module to its platform recognizer, so a custom native
     recognizer or another gesture library declares the relationship with it
     directly, in either direction.
   - iOS applies `simultaneous` through the recognizer delegate's
     simultaneous-recognition answer and `requireToFail` through the
     recognizer's failure requirement. Android applies both through touch
-    interception: a `simultaneous` peer keeps receiving the touch, and a
-    `requireToFail` waiter receives it once Astryx's recognizer has failed.
+    interception, in either direction: with `simultaneous`, both recognizers
+    keep receiving the touch; with `requireToFail`, the waiting recognizer,
+    Astryx's or the peer's, receives the touch once the other one has failed.
 - **FR17 — Pinch around a scroller.** `AstryxPinchScaleView` is a native
   two-finger pinch around a scroller: a `List` (data mode included), a
   `ScrollView`, or a `FlatList`. It wraps the scroller and has no scroll view
@@ -413,8 +422,8 @@ handles of `spec:AST-112/FR18`.
     (`isCancelled` false), or when the system cancels the touch, the view
     leaves the window, or `isEnabled` turns off (`isCancelled` true).
     `isEnabled` (default true) turns the pinch on.
-  - The pinch is the named feature `AstryxPinchScaleView.pinch` (FR14). A
-    binary without it renders the children in a plain View with the same
+  - The pinch is the named feature `AstryxPinchScaleView.pinch`, read through
+    `contractFeatures('AstryxPinchScaleView')` (FR14). A binary without it renders the children in a plain View with the same
     style, test id, and accessibility props, and a caller that passed `values`
     or `onPinchEnd` hears one development warning.
   - The wrapper forwards accessibility props, so a grid offers its larger and
