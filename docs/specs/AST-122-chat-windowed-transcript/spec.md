@@ -256,7 +256,9 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
 - Browser evidence: DOM and scroll-position assertions over a scripted
   layout that clamps the position as a browser does, for FR1–FR14 and
   AR1–AR3; real-browser checks in Chromium at phone and desktop widths for
-  FR5, FR7, FR10 and FR11.
+  FR5, FR7, FR10 and FR11; and in Playwright's WebKit at the phone width for
+  FR5, FR7, FR9 and FR10. Playwright's WebKit does not prove Safari
+  behavior (`spec:AST-013` FR10).
 
 ## Current-state impact
 
@@ -306,10 +308,13 @@ listRef.current?.scrollToItem(messageId, {align: 'center'});
 | AR1–AR3   | Log-semantics, busy and focus tests; screen-reader checks for AR2's outcome (an evidence gap)                               | item mode at rest; the window moving over history; a new message; a focused row scrolled away, then removed                                                                                     | A lost log attribute, history unmarked, an append marked busy, a focused row unmounted, or focus off the log, fails.                                                                                 |
 | PR1–PR3   | Review; a page-scroll test that counts reads; a first-load size comparison with and without the capability                  | a parent render with the same rows; ten window resizes of a page-scrolling layout; a page without the capability                                                                                | A pass that reads layout for an unchanged commit, a pass the window's own resize causes before it settles, or more than the wiring allowance where unused, fails.                                    |
 
-Evidence gap: neither the scripted layout nor the Chromium checks show a
-painted frame. Frame traces in Chromium and in Safari on iOS, with a finger's
-momentum for FR12, check FR5, FR7 and FR12 for a frame that paints rows away
-from their anchor.
+Evidence gap: neither the scripted layout nor the Chromium and WebKit checks
+show a painted frame. Frame traces in Chromium and in Safari on iOS, with a
+finger's momentum for FR12, check FR5, FR7 and FR12 for a frame that paints
+rows away from their anchor. Safari on macOS and on iOS checks FR9's WebKit
+move: while a reply streams, a control outside the conversation changes in
+the frame in which the window unmounts rows above the position, and the
+follow goes on.
 
 ## Decision log
 
