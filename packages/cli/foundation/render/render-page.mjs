@@ -43,7 +43,7 @@ import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
-import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
+import {aliasOnly, assetRefsOf, fileNamed} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -1785,12 +1785,12 @@ export async function renderPage(entry, options = {}) {
       } else {
         // The file the module names beside it, which a restore lays out
         // where the module's own folder finds it.
-        const beside = path.resolve(path.dirname(file), ref);
+        const beside = path.resolve(path.dirname(file), fileNamed(ref));
         if (local(beside)) carryAsset(beside, how);
         // A stylesheet's url() is its own folder's file, which its inlined
         // rules already carry; only a module's string reaches the script.
         if (/\.css$/i.test(file)) continue;
-        shown = path.resolve(dir, ref);
+        shown = path.resolve(dir, fileNamed(ref));
         if (!local(shown)) shown = null;
       }
       if (!shown) continue;

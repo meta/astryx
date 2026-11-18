@@ -302,6 +302,19 @@ export function resolutionCandidates(spec) {
 }
 
 /**
+ * The file name a reference written as URL text names: its percent-escapes
+ * decoded. A `%` that starts no escape is the character itself.
+ * @param {string} ref
+ */
+export function fileNamed(ref) {
+  try {
+    return decodeURIComponent(ref);
+  } catch {
+    return ref;
+  }
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
@@ -443,7 +456,10 @@ export function reachableFiles(files, {aliases = [], recorded, publicDir, reused
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
           assets: assetRefsOf(source, current),
         };
-    for (const ref of scanned.assets) {
+    for (const written of scanned.assets) {
+      // A reference is URL text: it names the file its percent-escapes
+      // decode to (`a%20b.png` is "a b.png"), as the render read it.
+      const ref = fileNamed(written);
       const joined = ref.startsWith('/')
         ? publicPath(ref)
         : path.posix.normalize(
