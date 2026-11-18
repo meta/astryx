@@ -10475,10 +10475,16 @@ export function draftAnswer(ctx, env, question) {
         )
         .flatMap(([name, info]) => [name, info.subComponentOf ?? name]),
     );
+    // (Nor a keyword that is the run-together name of a part the census
+    // has: "the side nav" names side-nav outright, never AppShell, whose
+    // docs list "sidenav" among its words.)
+    const namesPart = (/** @type {string} */ k) =>
+      [...TARGET.keys()].some(t => t.replace(/-/g, '') === k && C.MAP[t]);
     const also = comps
       .filter(
         ([name, info]) =>
-          !owners.has(name) && (info.keywords ?? []).some(k => said.has(k)),
+          !owners.has(name) &&
+          (info.keywords ?? []).some(k => said.has(k) && !namesPart(k)),
       )
       .map(([, info]) => info)
       .map(info =>
