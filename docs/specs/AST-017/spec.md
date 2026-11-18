@@ -499,7 +499,11 @@ one removal merged ahead of the decision to allow it.
   `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
   `experimental export`, labeled experimental, and never runs it, because
   people and agents who type those words mean that command; the exception
-  ends when the command graduates or is removed.
+  ends when the command graduates or is removed. The same exception covers
+  the command that turns such a file back into its page: the answer to an
+  unknown top-level word that asks for it (`import`, `back`, `restore`,
+  `unrender`, `reverse`) MAY suggest `experimental import`, labeled
+  experimental, and never runs it; it ends when the export exception ends.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

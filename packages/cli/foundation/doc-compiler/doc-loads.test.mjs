@@ -204,6 +204,13 @@ const RUNNERS = {
       'import ../experimental-export.doc.mjs',
     ],
   },
+  'clients/cli/commands/experimental/import.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-import.doc.mjs',
+    ],
+  },
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
     sites: ['import ./manifest.doc.mjs'],

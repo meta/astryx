@@ -57,7 +57,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'The result is ONE file with nothing beside it: the markup, the CSS rules the page can use (from Core and from any stylesheet it imports, such as a theme), the page\u2019s own StyleX styles, local images as data: URIs, and the page\u2019s own script (see The page\u2019s script). For `--reverse`, it also carries every image, font or media file (up to 8 MB each) that a carried module or stylesheet names by a relative path inside the folder that holds the carried files, also when the page does not show it. It loads nothing from the network, so it opens from disk, attaches to a message, and displays inside a sandboxed frame that blocks the network; a frame that also blocks scripts shows the rendered markup. Colors follow the viewer\u2019s light or dark setting, and a `data-theme` of `light` or `dark` on the root element picks one. The file also carries the source of the page and of every local module, stylesheet, JSON file and image it imports, so whoever you share it with can read that code; keep secrets out of what the page imports.',
+          text: 'The result is ONE file with nothing beside it: the markup, the CSS rules the page can use (from Core and from any stylesheet it imports, such as a theme), the page\u2019s own StyleX styles, local images as data: URIs, and the page\u2019s own script (see The page\u2019s script). For `experimental import`, it also carries every image, font or media file (up to 8 MB each) that a carried module or stylesheet names by a relative path inside the folder that holds the carried files, also when the page does not show it. It loads nothing from the network, so it opens from disk, attaches to a message, and displays inside a sandboxed frame that blocks the network; a frame that also blocks scripts shows the rendered markup. Colors follow the viewer\u2019s light or dark setting, and a `data-theme` of `light` or `dark` on the root element picks one. The file also carries the source of the page and of every local module, stylesheet, JSON file and image it imports, so whoever you share it with can read that code; keep secrets out of what the page imports.',
         },
         {
           type: 'prose',
@@ -96,7 +96,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental export --reverse page.html --out page.tsx',
+          code: 'astryx experimental import page.html --out page.tsx',
         },
         {
           type: 'prose',
@@ -128,7 +128,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The embedded source also keeps checksums of the markup and the styles, the text of the markup and the title, as rendered. When someone edits the HTML after the render, `--reverse` still writes the page as rendered, and the result says `edited: true` and lists each run of text that changed, the title first: what it was, what it is now, and the restored file and line that hold the old text when it appears there once. `stylesEdited: true` says the styles changed. Make the same changes in the restored files, then render again. A change to attributes, elements or formatting alone shows as `edited: true` with no text changes.',
+          text: 'The embedded source also keeps checksums of the markup and the styles, the text of the markup and the title, as rendered. When someone edits the HTML after the render, `experimental import` still writes the page as rendered, and the result says `edited: true` and lists each run of text that changed, the title first: what it was, what it is now, and the restored file and line that hold the old text when it appears there once. `stylesEdited: true` says the styles changed. Make the same changes in the restored files, then render again. A change to attributes, elements or formatting alone shows as `edited: true` with no text changes.',
         },
       ],
     },
@@ -138,7 +138,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file that carries a kind of file an older CLI does not take (an `.mts`, `.cts` or `.cjs` module, or a module or JSON file named like configuration, such as `config.ts` or `data/config.json`) says format 2; every other file says format 1. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `--reverse` reports that version as `renderedBy`.',
+          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file that carries a kind of file an older CLI does not take (an `.mts`, `.cts` or `.cjs` module, or a module or JSON file named like configuration, such as `config.ts` or `data/config.json`) says format 2; every other file says format 1. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `experimental import` reports that version as `renderedBy`.',
         },
         {
           type: 'prose',

@@ -46,13 +46,13 @@
  * @property {string} data.input - The page module, relative to cwd when inside it.
  * @property {string} data.output - The HTML file written.
  * @property {number} data.bytes - Size of the HTML file.
- * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so --reverse can give it back.
+ * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so an import can give it back.
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
- * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
+ * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
@@ -68,7 +68,7 @@
  */
 
 /**
- * `astryx --json experimental export --reverse <file.html>`.
+ * `astryx --json experimental import <file.html>` (or `experimental export --reverse`).
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderReverseResponse
  * @property {'render.reverse'} type

@@ -112,7 +112,7 @@ describe('a rendered file describes itself', () => {
     expect(note).toContain('Page: src/report.tsx');
     expect(note).toContain('Carried files (2): report.tsx, sections/Kpi.tsx');
     expect(note).toMatch(/Rendered with: @astryxdesign\/core \d+\.\d+\.\d+\S*, react \d/);
-    expect(note).toContain(`${run} experimental export --reverse report.html`);
+    expect(note).toContain(`${run} experimental import report.html`);
     expect(note).toContain('This writes report-restored/report.tsx and the files it imports');
     expect(note).toContain(`${run} experimental export report-restored/report.tsx --out report.html`);
     expect(note).toMatch(/npx @astryxdesign\/cli upgrade --from \S+ --path report-restored --apply/);
@@ -153,7 +153,7 @@ describe('a rendered file describes itself', () => {
     const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
     const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
     expect(after.startsWith(
-      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental export --reverse report.html -->\n<script>`,
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script>`,
     )).toBe(true);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });
@@ -318,7 +318,7 @@ describe('render --reverse says what changed after the render', () => {
     const error = await errorOf(() => render('future.html', {cwd: dir, reverse: true}));
     expect(error?.code).toBe('ERR_RENDER_NEWER_FORMAT');
     expect(error?.message).toContain(`render format ${NEWER}, written by @astryxdesign/cli 9.1.0`);
-    expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental export --reverse future.html');
+    expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental import future.html');
     expect(fs.existsSync(path.join(dir, 'future-restored'))).toBe(false);
   });
 
@@ -339,7 +339,7 @@ describe('render --reverse says what changed after the render', () => {
     put('unnamed.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: NEWER, entry: 'report.tsx'})}</script>`));
     const unnamed = await errorOf(() => render('unnamed.html', {cwd: dir, reverse: true}));
     expect(unnamed?.code).toBe('ERR_RENDER_NEWER_FORMAT');
-    expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental export --reverse unnamed.html');
+    expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental import unnamed.html');
     put('crafted-gen.html', html.replace(`content="Astryx ${cliVersion()}"`, 'content="Astryx 1.0.0; touch pwned"').replace(/"cli":"[^"]*",/, ''));
     const result = /** @type {any} */ (await render('crafted-gen.html', {cwd: dir, reverse: true, out: 'crafted-gen-back/report.tsx'}));
     expect(result.data).not.toHaveProperty('renderedBy');
