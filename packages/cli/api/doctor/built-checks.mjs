@@ -26,11 +26,15 @@
  *   it.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   BUILT_FILE_LIMIT,
   BUILT_FILE_MAX_MB,
   readBuiltPath,
+  readThemeState,
   resolveBuiltPath,
+  themeModuleStylesheets,
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
@@ -149,6 +153,48 @@ export function linksCoreStylesheet(html) {
     if (href && CORE_STYLESHEET_HREF.test(href)) return true;
   }
   return false;
+}
+
+/**
+ * The stylesheets the app's registered themes load, read from the theme
+ * module the CLI writes for them: an import of one is theme wiring, never
+ * page styling. A package stylesheet matches by its name; a local one by
+ * the file it names.
+ * @param {string} target the scanned folder or file
+ * @returns {{has: (spec: string, rel: string) => boolean}}
+ */
+function themeWiring(target) {
+  const none = {has: () => false};
+  let base;
+  try {
+    base = fs.statSync(target).isDirectory() ? target : path.dirname(target);
+  } catch {
+    return none;
+  }
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {Set<string>} */
+  const files = new Set();
+  try {
+    const state = readThemeState(base);
+    const moduleFile = state.module?.file;
+    if (!state.configured || !moduleFile) return none;
+    for (const spec of themeModuleStylesheets(
+      fs.readFileSync(moduleFile, 'utf8'),
+    )) {
+      if (spec.startsWith('.'))
+        files.add(path.resolve(path.dirname(moduleFile), spec));
+      else names.add(spec);
+    }
+  } catch {
+    return none;
+  }
+  return {
+    has: (spec, rel) =>
+      names.has(spec) ||
+      (spec.startsWith('.') &&
+        files.has(path.resolve(base, path.dirname(rel), spec))),
+  };
 }
 
 /**
@@ -634,6 +680,7 @@ function jsxFindings(text, rel, iconNames) {
  */
 export function scanBuilt(target, packages, {fileLimit} = {}) {
   const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
+  const wiring = themeWiring(target);
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -729,7 +776,10 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
         for (const name of names) astryxNames.add(name);
       } else if (isIconSpecifier(spec)) {
         for (const name of names) iconNames.add(name);
-      } else if (/\.(?:css|scss|sass|less)$/.test(spec)) {
+      } else if (
+        /\.(?:css|scss|sass|less)$/.test(spec) &&
+        !wiring.has(spec, rel)
+      ) {
         scan.findings.push({
           category: 'Styling',
           file: rel,

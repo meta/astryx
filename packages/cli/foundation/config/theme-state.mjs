@@ -495,6 +495,34 @@ const MODE_ENTRY_RE = new RegExp(
 );
 
 /**
+ * The stylesheets a generated theme module imports for the themes its record
+ * carries (each theme's stylesheet, then its font stylesheet), as written in
+ * the module; none when the source is not a generated module.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function themeModuleStylesheets(source) {
+  try {
+    parseThemeModuleRecord(source);
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const out = [];
+  let afterTheme = false;
+  for (const line of source.split('\n')) {
+    if (NAMED_IMPORT_RE.test(line)) {
+      afterTheme = true;
+      continue;
+    }
+    const bare = BARE_IMPORT_RE.exec(line);
+    if (bare && afterTheme) out.push(JSON.parse(bare[1]));
+    else if (line.trim()) afterTheme = afterTheme && Boolean(bare);
+  }
+  return out;
+}
+
+/**
  * Is `source` exactly the module `renderThemeModule` writes for the record it
  * carries? Only then may a command delete the module: it holds nothing a
  * person wrote. The imports come from the module itself, so the check works

@@ -9,6 +9,7 @@ import {checkBuilt, scanBuilt} from './built-checks.mjs';
 import {builtIntegrationPackages} from './_adapter.mjs';
 import {runChecks} from './doctor.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {renderThemeModule} from '../../foundation/config/theme-state.mjs';
 
 /** @type {string} */
 let dir;
@@ -342,6 +343,36 @@ describe('what a --built path counts', () => {
     expect(scan.findings.map(f => f.message)).toContain(
       'imports the stylesheet `./page.css`: use component props and tokens',
     );
+  });
+
+  it('reads the stylesheets a registered theme loads as theme wiring, and still flags a stray one', () => {
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': renderThemeModule(
+        [
+          {
+            slug: 'brand',
+            owner: 'local',
+            exportName: 'brandTheme',
+            module: './themes/brand/brand.js',
+            stylesheet: './themes/brand/brand.css',
+            fontStylesheet: './themes/brand/brand.fonts.css',
+          },
+        ],
+        'brand',
+        true,
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+      'src/themes/brand/brand.fonts.css': '\n',
+      'src/main.tsx':
+        "import './themes/brand/brand.css';\nimport './extra.css';\nexport const x = 1;\n",
+    });
+    const styling = scanBuilt(dir, [])
+      .findings.filter(f => f.category === 'Styling')
+      .map(f => `${f.file}:${f.message}`);
+    expect(styling).toEqual([
+      'src/main.tsx:imports the stylesheet `./extra.css`: use component props and tokens',
+    ]);
   });
 
   it('names the integrations by the declared dependencies that ship a manifest, running nothing', () => {

@@ -93,6 +93,7 @@ export {
   planThemeAppWrite,
   readThemeState,
   resolveThemeModule,
+  themeModuleStylesheets,
 } from '../../foundation/config/theme-state.mjs';
 export {
   fileMark,
