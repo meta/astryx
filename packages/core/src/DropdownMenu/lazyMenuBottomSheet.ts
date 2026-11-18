@@ -6,8 +6,9 @@
  * @file lazyMenuBottomSheet.ts
  * @input Uses React lazy and Suspense, useIsHydrating, MenuBottomSheet, and
  *   MenuBottomSheetActionList
- * @output Exports MenuBottomSheet and MenuBottomSheetActionList wrappers that
- *   load the touch sheet on first render
+ * @output Exports MenuBottomSheet (for a menu that shows the action list),
+ *   MenuBottomSheetWithoutActionList (for caller content) and
+ *   MenuBottomSheetActionList wrappers that load the touch sheet on first render
  * @position Internal to DropdownMenu and ContextMenu
  *
  * The touch sheet (BottomSheet, its gestures, and the touch action list) only
@@ -62,7 +63,6 @@ export type ActionListPreload =
  * fails there reaches the menu through lazy().
  */
 export async function preloadMenuBottomSheetActionList(): Promise<ActionListPreload> {
-  isActionListWanted = true;
   try {
     await loadActionList();
     return {isLoaded: true};
@@ -71,24 +71,24 @@ export async function preloadMenuBottomSheetActionList(): Promise<ActionListPrel
   }
 }
 
-// Whether a menu on the page renders the action list: its preload is the
-// signal. A compound sheet (ContextMenu `menuContent`) never preloads, so it
-// never loads or waits for the rows.
-let isActionListWanted = false;
+const loadSheet = async () => import('./MenuBottomSheet');
 
-// A sheet whose menu renders the action list reveals only once the rows'
-// module has loaded too. A menu opened before the at-rest preload finishes (a
-// press right after mount) then shows the sheet with its actions in one
-// commit, never an empty sheet first. The preload runs after the first render,
-// so the check comes once the sheet's own module has loaded. A failed row load
-// does not hold the sheet: the rows then fail through lazy().
+// A sheet that shows the action list waits for the rows' module too. A press
+// right after mount then shows the sheet and its actions together. A failed
+// row load does not hold the sheet; the rows then fail through lazy().
 const LazyMenuBottomSheet = lazy(async () => {
-  const module = await import('./MenuBottomSheet');
-  if (isActionListWanted) {
-    await loadActionList().catch(() => undefined);
-  }
+  const [module] = await Promise.all([
+    loadSheet(),
+    loadActionList().catch(() => undefined),
+  ]);
   return {default: module.MenuBottomSheet};
 });
+
+// A sheet with caller content (ContextMenu `menuContent`) shows no action
+// list, so it never loads or waits for the rows.
+const LazyMenuBottomSheetWithoutActionList = lazy(async () =>
+  loadSheet().then(module => ({default: module.MenuBottomSheet})),
+);
 
 const LazyMenuBottomSheetActionList = lazy(async () =>
   loadActionList().then(module => ({
@@ -106,6 +106,20 @@ export function MenuBottomSheet(
     Suspense,
     {fallback: null},
     createElement(LazyMenuBottomSheet, props),
+  );
+}
+
+/** The touch sheet for caller content: it does not load the action list. */
+export function MenuBottomSheetWithoutActionList(
+  props: ComponentProps<typeof EagerMenuBottomSheet>,
+): ReactElement | null {
+  if (useIsHydrating()) {
+    return null;
+  }
+  return createElement(
+    Suspense,
+    {fallback: null},
+    createElement(LazyMenuBottomSheetWithoutActionList, props),
   );
 }
 
