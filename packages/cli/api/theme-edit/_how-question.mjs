@@ -21341,150 +21341,149 @@ export function draftAnswer(ctx, env, question) {
             };
           if (named && named.corners.length && !c.dir) {
             const others = ALL.filter(k => !named.corners.includes(k));
-            // (Rounded, no size: the corners named keep the radius they
-            // have now; when that is none, the radius the part reads.)
             const rounded = !sidePx;
             const tok = C.partReads(
               one(/** @type {string} */ (on)),
               'corners',
             )?.[0]?.token;
-            // (What the theme sets there, else the token the part reads,
-            // kept as that token so the corners dial still moves it.)
-            const ownNow = rounded
-              ? nowIn(/** @type {string} */ (on), 'border-radius')
-              : null;
-            const nowRadius = rounded
-              ? (ownNow ?? (tok ? current(tok) : null))
-              : null;
-            const roundNow =
-              nowRadius != null &&
-              String(nowRadius)
-                .trim()
-                .split(/\s+/)
-                .some(x => parseFloat(x) > 0);
-            // (Square now and reading no corner token: the round rung.)
-            const roundRung = CORNERS.find(([n]) => n === 'round')?.[1];
-            // ("Only" said of a size, "4px corners on top only", leaves the
-            // others as they are; said of rounding, "round only the bottom
-            // corners", or an except, the others are not rounded.)
-            const roundWord = /\bround(?:ed|ing)?\b/.test(c.text);
-            const squareRest =
-              !square && (rounded || named.except || (named.only && roundWord));
-            // (Every corner settled, one radius of four: top-left first,
-            // clockwise, as CSS gives them.)
-            const nowOne =
-              rounded && roundNow
-                ? ownNow == null
-                  ? tok
-                    ? `var(${tok})`
-                    : null
-                  : !/\s/.test(String(ownNow).trim())
-                    ? String(ownNow).trim()
-                    : null
-                : null;
             // (A token that resolves to 0 rounds nothing: the round rung.)
             const tokRounds =
               tok != null && parseFloat(String(current(tok))) > 0;
-            // (Rounded over a radius of several corners, "4px 8px 0 0": only
-            // the corners the ask names change, each square one taking the
-            // part's own rounded corner, else the token, else the round rung;
-            // the corners it does not name stay as the theme has them, so it
-            // writes their longhands, never a radius of four.)
-            const ownCorners =
-              rounded &&
-              ownNow != null &&
-              splitTop(String(ownNow), '/').length === 1
-                ? splitTop(String(ownNow).trim(), ' ').map(x => x.trim())
-                : null;
-            if (
-              ownCorners &&
-              ownCorners.length >= 2 &&
-              ownCorners.length <= 4
-            ) {
-              const [a, b = a, cc = a, dd = b] = ownCorners;
-              /** @type {Record<string, string>} */
-              const nowAt = {
-                'start-start': a,
-                'start-end': b,
-                'end-end': cc,
-                'end-start': dd,
+            const roundRung = CORNERS.find(([n]) => n === 'round')?.[1];
+            // Only the corners the ask names are written; the others stay as
+            // the theme has them. Only "only" said of rounding ("round only
+            // the bottom corners") or an except squares them. ("Only" said of
+            // a size, "4px corners on top only", leaves them.)
+            const roundWord = /\bround(?:ed|ing)?\b/.test(c.text);
+            const squareRest =
+              !square && (named.except || (named.only && roundWord));
+            // What each corner has now: the theme's own radius on the part,
+            // else the token the part reads (kept as that token, so the
+            // corners dial still moves it). An elliptical radius gives a
+            // corner its two radii.
+            const ownNow = nowIn(/** @type {string} */ (on), 'border-radius');
+            const fourOf = (/** @type {string} */ v) => {
+              const halves = splitTop(v, '/').map(x => x.trim());
+              if (halves.length > 2) return null;
+              /** @param {string} half */
+              const four = half => {
+                const w = splitTop(half, ' ').map(x => x.trim());
+                if (!w.length || w.length > 4) return null;
+                const [x0, x1 = x0, x2 = x0, x3 = x1] = w;
+                return [x0, x1, x2, x3];
               };
-              const isZero = (/** @type {string} */ x) => parseFloat(x) === 0;
-              const fill =
-                ALL.map(k => nowAt[k]).find(x => !isZero(x)) ??
-                (tokRounds
-                  ? `var(${tok})`
-                  : roundRung != null
-                    ? `${roundRung}px`
-                    : null);
-              const square0 = [
-                'start-start',
-                'start-end',
-                'end-start',
-                'end-end',
-              ].filter(k => named.corners.includes(k) && isZero(nowAt[k]));
-              if (fill != null)
-                return {
-                  text: square0.length
-                    ? `${sideWords(named.corners)} on ${on}: rounded (${fill}, the part's own rounded corner; now ${String(ownNow).trim()}), the other corners as they are`
-                    : `${sideWords(named.corners)} on ${on}: already rounded (now ${String(ownNow).trim()}), nothing to change`,
-                  options: square0.length
-                    ? [
-                        square0.map(k =>
-                          set(`border-${k}-radius`, fill, {...f, ...modeOf(c)}),
-                        ),
-                      ]
-                    : [],
-                  ...(square0.length > 1 ? {sequence: true} : {}),
-                };
-            }
-            const each = rounded
-              ? (nowOne ??
-                (roundNow
-                  ? null
-                  : tokRounds
-                    ? `var(${tok})`
-                    : roundRung != null
-                      ? `${roundRung}px`
-                      : null))
-              : sidePx;
-            /** @type {Step[]} */
-            const steps =
-              squareRest && each
-                ? [
-                    set(
-                      'border-radius',
-                      ALL.map(k =>
-                        named.corners.includes(k) ? each : '0',
-                      ).join(' '),
-                      {...f, ...modeOf(c)},
-                    ),
-                  ]
-                : [
-                    ...(rounded
-                      ? []
-                      : named.corners.map(k =>
-                          set(
-                            `border-${k}-radius`,
-                            /** @type {string} */ (sidePx),
-                            {
-                              ...f,
-                              ...modeOf(c),
-                            },
-                          ),
-                        )),
-                    ...(squareRest
-                      ? others.map(k =>
-                          set(`border-${k}-radius`, '0', {...f, ...modeOf(c)}),
-                        )
-                      : []),
-                  ];
-            if (steps.length)
+              const h = four(halves[0] ?? '');
+              const vv = halves[1] != null ? four(halves[1]) : h;
+              if (!h || !vv) return null;
+              const at = (/** @type {number} */ i) =>
+                h[i] === vv[i] ? h[i] : `${h[i]} ${vv[i]}`;
+              return /** @type {Record<string, string>} */ ({
+                'start-start': at(0),
+                'start-end': at(1),
+                'end-end': at(2),
+                'end-start': at(3),
+              });
+            };
+            const nowAt =
+              ownNow != null
+                ? fourOf(String(ownNow).trim())
+                : tok
+                  ? fourOf(`var(${tok})`)
+                  : null;
+            const resolvedAt =
+              ownNow != null
+                ? nowAt
+                : tok
+                  ? fourOf(String(current(tok)).trim())
+                  : null;
+            const isZero = (/** @type {string | undefined} */ x) =>
+              parseFloat(String(x)) === 0;
+            const roundedAt = (/** @type {string} */ k) =>
+              resolvedAt != null && !isZero(resolvedAt[k]);
+            // (A named corner that is square now takes the part's own
+            // rounded corner, else its token, else the round rung.)
+            const fill =
+              (nowAt && ALL.filter(roundedAt).map(k => nowAt[k])[0]) ??
+              (tokRounds
+                ? `var(${tok})`
+                : roundRung != null
+                  ? `${roundRung}px`
+                  : null);
+            /** @type {Record<string, string | null>} */
+            const target = Object.fromEntries(
+              ALL.map(k => [
+                k,
+                named.corners.includes(k)
+                  ? rounded
+                    ? roundedAt(k)
+                      ? /** @type {Record<string, string>} */ (nowAt)[k]
+                      : fill
+                    : String(sidePx)
+                  : squareRest
+                    ? '0'
+                    : null,
+              ]),
+            );
+            // (A rounded corner that is rounded now, or a corner squared by
+            // "only" that is square now, needs no write.)
+            const changes = (/** @type {string} */ k) =>
+              target[k] != null &&
+              !(
+                (rounded && named.corners.includes(k) && roundedAt(k)) ||
+                (!named.corners.includes(k) &&
+                  resolvedAt != null &&
+                  isZero(resolvedAt[k]))
+              );
+            const changing = [
+              'start-start',
+              'start-end',
+              'end-start',
+              'end-end',
+            ].filter(changes);
+            const nowSaid =
+              ownNow != null
+                ? String(ownNow).trim()
+                : tok
+                  ? `${tok}, ${String(current(tok)).trim()}`
+                  : 'square';
+            if (!changing.length)
               return {
-                text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tokRounds ? tok : `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
-                options: [steps],
-                sequence: steps.length > 1,
+                text: `${sideWords(named.corners)} on ${on}: already ${rounded ? 'rounded' : sidePx === '0' ? 'square' : sidePx} (now ${nowSaid}), nothing to change`,
+                options: [],
               };
+            // (Every corner written: one radius of four, top-left first,
+            // clockwise, as CSS gives them, elliptical where a corner has
+            // two radii. Else the longhands of the corners that change.)
+            const radiusOf = (/** @type {string[]} */ corners) => {
+              const pairs = corners.map(x => {
+                const w = splitTop(String(x), ' ').map(y => y.trim());
+                return [w[0], w[1] ?? w[0]];
+              });
+              const hs = pairs.map(x => x[0]).join(' ');
+              const vs = pairs.map(x => x[1]).join(' ');
+              return hs === vs ? hs : `${hs} / ${vs}`;
+            };
+            const every = ALL.every(k => target[k] != null);
+            /** @type {Step[]} */
+            const steps = every
+              ? [
+                  set(
+                    'border-radius',
+                    radiusOf(ALL.map(k => String(target[k]))),
+                    {...f, ...modeOf(c)},
+                  ),
+                ]
+              : changing.map(k =>
+                  set(`border-${k}-radius`, String(target[k]), {
+                    ...f,
+                    ...modeOf(c),
+                  }),
+                );
+            return {
+              text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}, ${squareRest && others.length ? `${sideWords(others)} square` : 'the other corners as they are'}`,
+              options: [steps],
+              ...(steps.length > 1 ? {sequence: true} : {}),
+            };
           }
         }
         const tall = tallIn(c.text);
