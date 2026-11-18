@@ -587,6 +587,18 @@ describe('a word matches whole words (FR6)', () => {
     ]);
   });
 
+  it('reads a query that no whole word answers as typed without `with` and `and`', () => {
+    const set = setOf([
+      {id: 'person-walking'},
+      {id: 'person-walking-with-cane'},
+      {id: 'user'},
+      {id: 'user-plus'},
+      {id: 'plus'},
+    ]);
+    expect(answer(set, 'user with plus')).toEqual(['user-plus']);
+    expect(answer(set, 'person walking with')).toEqual(['person-walking']);
+  });
+
   it('reads a word written as an export name as the words it runs together', () => {
     const set = setOf([
       {id: 'search'},
