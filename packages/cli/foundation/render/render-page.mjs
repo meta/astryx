@@ -1666,18 +1666,22 @@ export async function renderPage(entry, options = {}) {
   // the page wrote it: the file's script gives the carried data where the
   // browser takes an image's address (imageSinks), so a link, a text or the
   // URL API still reads the page's own address.
+  // A remote address is one the render fetches: https, or one with no
+  // scheme (`//cdn.example.com/a.png`).
+  const remoteAddress = (/** @type {string} */ url) => /^(https?:)?\/\//i.test(url.trim());
   /** @type {Map<string, string>} */
   const localRewrites = new Map();
   for (const [was, now] of ctx.rewrites) {
-    if (!/https:\/\//i.test(was)) localRewrites.set(was, now);
-    else if (/\s/.test(was)) {
-      // A `srcset` that mixes both keeps its https candidates as written.
-      const written = parseSrcset(was);
-      const carried = parseSrcset(now);
-      if (written.length !== carried.length) continue;
-      const mixed = written.map((candidate, i) => (/^https:\/\//i.test(candidate.url) ? candidate : carried[i]));
-      if (mixed.some((candidate, i) => candidate !== written[i])) localRewrites.set(was, formatSrcset(mixed));
+    if (!/\s/.test(was.trim())) {
+      if (!remoteAddress(was)) localRewrites.set(was, now);
+      continue;
     }
+    // A `srcset` keeps its remote candidates as written.
+    const written = parseSrcset(was);
+    const carried = parseSrcset(now);
+    if (written.length !== carried.length) continue;
+    const mixed = written.map((candidate, i) => (remoteAddress(candidate.url) ? candidate : carried[i]));
+    if (mixed.some((candidate, i) => candidate !== written[i])) localRewrites.set(was, formatSrcset(mixed));
   }
   /** @type {[string, string][]} */
   const sinks = [];

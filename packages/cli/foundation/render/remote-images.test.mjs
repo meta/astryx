@@ -418,7 +418,8 @@ describe('imageSinks', () => {
     );
     // A style takes the carried data before the browser next draws: set on
     // an element in the page, or on one the script then adds.
-    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    const settle = () =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 0));
     const box = doc.createElement('div');
     doc.body.append(box);
     box.style.backgroundImage = 'url("https://x.example/a.png")';
@@ -430,7 +431,8 @@ describe('imageSinks', () => {
     box.setAttribute('style', 'background: url(https://x.example/a.png)');
     expect(box.getAttribute('style')).toContain(data);
     const later = doc.createElement('section');
-    later.innerHTML = '<p style="background-image: url(https://x.example/a.png)">Later</p>';
+    later.innerHTML =
+      '<p style="background-image: url(https://x.example/a.png)">Later</p>';
     doc.body.append(later);
     await settle();
     expect(later.querySelector('p')?.getAttribute('style')).toContain(data);
@@ -999,6 +1001,54 @@ describe('a render with images from the web', () => {
       expect(
         [...doc.querySelectorAll(`#${ROOT_ID} p`)].map(p => p.textContent),
       ).toEqual(['https://cdn.example.com/h.png', 'cdn.example.com']);
+      close();
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
+  it('keeps an address with no scheme as written in the script, and draws its image from the carried data', async () => {
+    const dir = makeLinkedFixture('astryx-render-no-scheme-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        [
+          "import {useState} from 'react';",
+          "const hero = '//cdn.example.com/h.png';",
+          'export default function Page() {',
+          '  const [open, setOpen] = useState(false);',
+          '  return (',
+          '    <main>',
+          '      <img src={hero} alt="Hero" />',
+          '      <button onClick={() => setOpen(true)}>Show</button>',
+          '      {open && <section><a href={hero}>Full size</a><p>{hero}</p><img src={`${hero}?w=640`} alt="Wide" /></section>}',
+          '    </main>',
+          '  );',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const {fetch} = fetchFrom({'https://cdn.example.com/h.png': png()});
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      const data = `data:image/png;base64,${PNG.toString('base64')}`;
+      expect(renderedMarkupOf(page.html)).toContain(`src="${data}"`);
+      const {doc, click, close} = await opened(page.html);
+      await click('button');
+      const src = (/** @type {string} */ alt) =>
+        doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src');
+      expect(src('Hero')).toBe(data);
+      // A link, a text and another query read the page's own address.
+      expect(doc.querySelector(`#${ROOT_ID} a`)?.getAttribute('href')).toBe(
+        '//cdn.example.com/h.png',
+      );
+      expect(doc.querySelector(`#${ROOT_ID} p`)?.textContent).toBe(
+        '//cdn.example.com/h.png',
+      );
+      expect(src('Wide')).toBe('//cdn.example.com/h.png?w=640');
       close();
     } finally {
       removeLinkedFixture(dir);

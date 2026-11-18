@@ -561,7 +561,23 @@ describe.runIf(BROWSER_STEP)(
         expect(seen.text).toBe('https://images.example.com/hero.png');
         // Another query can name another image: it keeps the page's address.
         expect(seen.alexSrc).toBe('https://images.example.com/40?u=alex');
-        // No carried address reaches the network.
+        // Opened with no viewer policy, every image the page asks for
+        // reaches the network layer: an address with another query does,
+        // and no carried address does.
+        const bare = await context.newPage();
+        asked.length = 0;
+        await bare.setContent(page.html);
+        await expect
+          .poll(
+            async () => {
+              await bare.getByRole('button', {name: 'Show'}).click();
+              return bare.getByRole('img', {name: 'Hero'}).count();
+            },
+            {timeout: 20_000},
+          )
+          .toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(asked).toContain('https://images.example.com/40?u=alex');
         for (const url of [
           'https://images.example.com/stripe.png',
           'https://images.example.com/hero.png',
