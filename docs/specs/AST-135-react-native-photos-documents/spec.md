@@ -90,8 +90,8 @@ Scope notes: these pieces are specified elsewhere.
 
 ## Non-goals
 
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - `FileInput`'s photo picker beyond how it uses `AstryxPhotoLibrary` and
   `AstryxPhotoThumbnailView`; its own component record owns it.
 - A library component over the PDF or markup pieces: a document viewer with
