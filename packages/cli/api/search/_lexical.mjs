@@ -56,9 +56,10 @@ import {spellIdentifiers, joined} from './_words.mjs';
 import {tokenizeQuery, phraseWords, pluralOf} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
+import {heldTitle} from './_titles.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
-import {toResult, searchedComponentsOf} from './_result.mjs';
+import {toResult, searchedComponentsOf, namedLeadsOf} from './_result.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
 
@@ -222,6 +223,17 @@ export function rankLexical(query, options, catalog) {
   // IconButton), or one identifier typed as such. A name inside a longer named
   // run does not count (`icon` there is part of IconButton).
   const queryWords = phraseWords(spelled);
+  // Which word of the query as typed (split at spaces) each query word comes
+  // from: `TableSortableTable` and `tokens-color` are each one typed word.
+  /** @type {number[]} */
+  const typedWords = String(query)
+    .trim()
+    .split(/\s+/)
+    .flatMap((typed, n) => phraseWords(spellIdentifiers(typed)).map(() => n));
+  const typedAs =
+    typedWords.length === queryWords.length
+      ? typedWords
+      : queryWords.map((_, n) => n);
   const typedIdentifiers = new Set(
     (String(query).match(/[A-Za-z0-9]+/g) ?? [])
       .filter(w => /[A-Z]/.test(w))
@@ -238,32 +250,73 @@ export function rankLexical(query, options, catalog) {
       if (!spans.has(run)) spans.set(run, [a, a + len]);
     }
   }
+  // In search's reading, a word typed as one is a run, however many words it
+  // spells (`AppShellTopNavWithSideNav`).
+  for (let a = 0; catalog.ownEvidence && a < typedAs.length;) {
+    let b = a;
+    while (b < typedAs.length && typedAs[b] === typedAs[a]) b++;
+    const run = queryWords.slice(a, b).join('');
+    if (b - a > MAX_RUN_WORDS && !spans.has(run)) spans.set(run, [a, b]);
+    a = b;
+  }
+  /**
+   * The names a candidate goes by, or null when it goes by none. In search's
+   * reading (`ownEvidence`), a doc page goes by its route and the route's last
+   * part (`tokens/tokens-color`, `tokens-color`); a doc's section answers as
+   * its page, so it goes by none, and so does a doc in the gathered reading.
+   * @param {Candidate} candidate
+   * @returns {string[] | null}
+   */
+  const namesOf = candidate => {
+    if (candidate.domain !== 'doc') {
+      return [candidate.name, ...(candidate.aliases ?? [])];
+    }
+    if (
+      !catalog.ownEvidence ||
+      (candidate._topic != null && candidate._topic !== candidate.name)
+    )
+      return null;
+    const route = String(candidate.name);
+    return [route, route.slice(route.lastIndexOf('/') + 1)];
+  };
   /**
    * Where a query word is the candidate's whole name, or null: such an entry
-   * keeps the rank its name earns, whatever else it matched.
+   * keeps the rank its name earns, whatever else it matched. A doc is named
+   * this way only by a name of two or more words (`tokenscolor`): one word
+   * names a doc no more than any other entry.
    * @param {Candidate} candidate
    * @returns {[number, number] | null}
    */
   const wordNamed = candidate => {
-    if (candidate.domain === 'doc') return null;
-    for (const name of [candidate.name, ...(candidate.aliases ?? [])]) {
+    const doc = candidate.domain === 'doc';
+    for (const name of namesOf(candidate) ?? []) {
+      if (doc && phraseWords(spellIdentifiers(name)).length < 2) continue;
       const n = joined(name);
       const at = queryWords.findIndex(w => w === n || w === `${n}s`);
       if (at >= 0) return [at, at + 1];
     }
     return null;
   };
-  /** @param {Candidate} candidate @returns {[number, number] | null} */
+  /**
+   * Where adjacent query words joined are the candidate's whole name, or
+   * null. A doc is named this way only by a run of two or more words
+   * (`tokens color` names `tokens/tokens-color`).
+   * @param {Candidate} candidate
+   * @returns {[number, number] | null}
+   */
   const namedSpan = candidate => {
-    if (candidate.domain === 'doc') return null;
+    const doc = candidate.domain === 'doc';
+    const names = namesOf(candidate);
+    if (!names) return null;
     /** @type {[number, number] | null} */
     let best = null;
-    for (const name of [candidate.name, ...(candidate.aliases ?? [])]) {
+    for (const name of names) {
       const n = joined(name);
       const span =
         spans.get(n) ??
         spans.get(`${n}s`) ??
         (/(?:s|x|z|ch|sh)$/.test(n) ? spans.get(`${n}es`) : undefined);
+      if (doc && span && span[1] - span[0] < 2) continue;
       if (span && (!best || span[1] - span[0] > best[1] - best[0])) {
         best = span;
       }
@@ -460,6 +513,76 @@ export function rankLexical(query, options, catalog) {
     );
     scored.sort((a, b) => Number(ahead.has(b)) - Number(ahead.has(a)));
   }
+  // In search's reading (`ownEvidence`), an entry whose name of two or more
+  // words the query writes as one word (`TableSortableTable`,
+  // `table-sortable-table`, `tokens-color` for `tokens/tokens-color`), leads
+  // the answer, alone or inside a longer ask. Words written apart are plain
+  // language (`multiline text input` asks for no TextInput), and a one-word
+  // name (`card`, `table`) names too much: both keep their lexical place. A
+  // name inside a longer named run does not lead (`FileInputBasic` names no
+  // FileInput); several named entries lead in their lexical order. Each
+  // result keeps its score and reason.
+  //
+  // Where the query writes the entry's name of two or more words as one
+  // whole word: the words one typed word spells (`TableSortableTable`,
+  // `tokens-color`), or one query word that is the whole name joined
+  // (`chatmessagebubble`).
+  /** @param {(typeof ranked)[number]} r @returns {[number, number] | null} */
+  const typedSpan = r => {
+    const span =
+      r.span && r.span[1] - r.span[0] >= 2
+        ? r.span
+        : r.word &&
+            phraseWords(spellIdentifiers(String(r.candidate.name))).length >= 2
+          ? r.word
+          : null;
+    // The whole typed word, no more and no less: `DropdownMenuItm` is no
+    // DropdownMenu.
+    return span &&
+      typedAs[span[0]] === typedAs[span[1] - 1] &&
+      typedAs[span[0] - 1] !== typedAs[span[0]] &&
+      typedAs[span[1]] !== typedAs[span[1] - 1]
+      ? span
+      : null;
+  };
+  const typed = (catalog.ownEvidence ? ranked : []).flatMap(r => {
+    const span = typedSpan(r);
+    return span ? [{r, span}] : [];
+  });
+  // A name inside a longer named run, written as one word or not, names
+  // less of the query than that run (`sidenav heading` names SideNavHeading).
+  const runs = ranked.flatMap(r => (r.span ? [r.span] : []));
+  const typedNamed = typed.filter(
+    ({span}) => !runs.some(run => inside(span, run)),
+  );
+  // A longer name of another entry the query holds, a block's display name or
+  // a doc's title or heading (`ChatComposerInput — Controlled`), names that
+  // entry more fully, so the name inside it does not lead. It is held as the
+  // title tier holds a title (heldTitle), with the query's identifiers spelled
+  // out on both sides.
+  /** @type {[number, number][]} */
+  const labels = [];
+  if (typedNamed.length) {
+    const spelledWords = (/** @type {string} */ text) =>
+      phraseWords(spellIdentifiers(text));
+    for (const candidate of all) {
+      for (const label of [
+        candidate._displayName,
+        ...(candidate.titles ?? []),
+      ]) {
+        const held = heldTitle(queryWords, [label], spelledWords);
+        if (held) labels.push(held.at);
+      }
+    }
+  }
+  const leads = new Set(
+    typedNamed
+      .filter(({span}) => !labels.some(label => inside(span, label)))
+      .map(({r}) => r.result),
+  );
+  if (leads.size) {
+    scored.sort((a, b) => Number(leads.has(b)) - Number(leads.has(a)));
+  }
 
   // `results` is bounded by `limit` so a caller (and the recorded run that
   // quotes it) never carries an unbounded payload. `matchCount` is the number
@@ -488,6 +611,7 @@ export function rankLexical(query, options, catalog) {
       },
     };
   }
+  if (leads.size) namedLeadsOf.set(response, leads);
   if (catalog.searchedComponents) {
     searchedComponentsOf.set(
       response,
