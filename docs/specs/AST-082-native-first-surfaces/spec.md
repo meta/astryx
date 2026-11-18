@@ -436,11 +436,12 @@ depends only on runtimes it can maintain.
 
 ## Current-state impact
 
-- **DEC-7 gap:** FR5, FR6, FR9, FR10, FR15, FR16 and FR19 assign their roles to
+- **DEC-7 gap:** FR5, FR6, FR9, FR10, FR15, FR16 and FR19, and `spec:AST-093`
+  FR1 and FR6, assign their roles and native implementations to
   `@astryxdesign/native`, which DEC-7 deprecates, and the canary still
   publishes.
 - **FR3 gap:** the contracts live in `packages/native` (`@astryxdesign/native`);
-  Core's and React Native's published types do not build them in.
+  Core's published types do not build them in.
 - `architecture:public-component-api` gains the shared base props, the web base
   as a platform contract, base-prop targeting, and core-owned concepts (FR7)
   when a native platform ships.
@@ -597,7 +598,9 @@ definition, which every surface's contract builds in. A consumer installs
 nothing extra for it, web pages gain 0 bytes, and no published package depends
 on where it lives. `@astryxdesign/native` is deprecated. Its remaining roles in
 FR5, FR6, FR9, FR10, FR15, FR16 and FR19 (the native contracts' bindings,
-`defineNativeTheme`, the wire) move to successors that their own changes name.
+`defineNativeTheme`, the wire) and the native implementations that
+`spec:AST-093` FR1 and FR6 place in it move to successors that their own
+changes name.
 Core never imports or depends on `@astryxdesign/native` (FR14).
 
 Rejected: native types and implementations inside `@astryxdesign/core`, because
