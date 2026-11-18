@@ -38,7 +38,9 @@ The controls are part of the platform layer of `spec:AST-112`. They follow its
 result vocabulary (`spec:AST-112/FR6`), capability shape (`spec:AST-112/FR7`),
 additive evolution (`spec:AST-112/FR8`), its rule that the platform speaks
 Astryx's design language for native controls (`spec:AST-112/FR9`), and Astryx
-Stage as the contract developers build against (`spec:AST-112/FR12`).
+Stage as the contract developers build against (`spec:AST-112/FR12`). They
+serve the native-first rule of `spec:AST-082/FR11`, and their native-only
+visuals are theme configuration, not component props (`spec:AST-082/DEC-2`).
 
 ## Why this exists
 
@@ -72,15 +74,15 @@ control:
 
 ## Who uses it
 
-| Native piece                | Kind                                       | Astryx components that use it                                                                                                                                                | What a person sees                                                                                                   |
-| --------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `AstryxNativeButton`        | native component (Fabric Native Component) | `Button` under native presentation (outside a connected group such as `ButtonGroup` or `InputGroup`, not a toggle, not a glass surface); apps through the `./controls` entry | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
-| `AstryxNativeSlider`        | native component (Fabric Native Component) | `Slider` under native presentation; `MediaScrubber`, which asks for it through `Slider`; apps through `./controls`                                                           | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
-| `AstryxNativeTextField`     | native component (Fabric Native Component) | `TextInput` under native presentation, outside an `InputGroup`; apps through `./controls`                                                                                    | The system text box inside Astryx's label, description and status                                                    |
-| `AstryxSegmentedControl`    | native component (Fabric Native Component) | `SegmentedControl` under native presentation; apps through `./controls`                                                                                                      | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
-| `AstryxDatePicker` (view)   | native component (Fabric Native Component) | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on iOS when their surface resolves to native; apps through `./controls`                                          | UIDatePicker's compact pill in the field, or the inline calendar or wheels in the library's sheet                    |
-| `AstryxDatePicker` (module) | native module (Turbo Native Module)        | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on Android when their surface resolves to native; apps through `./controls`                                      | The Astryx field, which opens Material 3's date, date range or time dialog                                           |
-| `AstryxPasteControl`        | native component (Fabric Native Component) | `PasteButton` on iOS 16 and later, in an app's own runtime; apps through `./controls`                                                                                        | The system paste control, which pastes with no permission prompt; elsewhere the library Button with the word "Paste" |
+| Native piece                | Kind                                       | Astryx components that use it                                                                                                                                                                    | What a person sees                                                                                                   |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `AstryxNativeButton`        | native component (Fabric Native Component) | `Button` under native presentation (outside a connected group such as `ButtonGroup` or `InputGroup`, not a toggle, not a glass surface, no icon on Android); apps through the `./controls` entry | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
+| `AstryxNativeSlider`        | native component (Fabric Native Component) | `Slider` under native presentation; `MediaScrubber`, which asks for it through `Slider`; apps through `./controls`                                                                               | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
+| `AstryxNativeTextField`     | native component (Fabric Native Component) | `TextInput` under native presentation, outside an `InputGroup`, no start icon on Android; apps through `./controls`                                                                              | The system text box inside Astryx's label, description and status                                                    |
+| `AstryxSegmentedControl`    | native component (Fabric Native Component) | `SegmentedControl` under native presentation; apps through `./controls`                                                                                                                          | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
+| `AstryxDatePicker` (view)   | native component (Fabric Native Component) | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on iOS when their surface resolves to native; apps through `./controls`                                                              | UIDatePicker's compact pill in the field, or the inline calendar or wheels in the library's sheet                    |
+| `AstryxDatePicker` (module) | native module (Turbo Native Module)        | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on Android when their surface resolves to native; apps through `./controls`                                                          | The Astryx field, which opens Material 3's date, date range or time dialog                                           |
+| `AstryxPasteControl`        | native component (Fabric Native Component) | `PasteButton` on iOS 16 and later, in an app's own runtime; apps through `./controls`                                                                                                            | The system paste control, which pastes with no permission prompt; elsewhere the library Button with the word "Paste" |
 
 `SearchField`, `TextArea`, `NumberInput` and the other text-entry components
 edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
@@ -92,8 +94,9 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   owns it; this record owns its native presentation.
 - `Stepper`. The presentation seam knows it, but it has no native piece and no
   platform contract here.
-- The native-driver gesture views that ship beside the controls (swipe row,
-  drag snap, zoom pager, pan and zoom). The gestures record owns them.
+- The contracts of the native-driver gesture views that ship in the same
+  `./controls` entry (swipe row, drag snap, zoom pager, pan and zoom). The
+  Gestures and drag record (AST-124) owns them; FR1's default link covers them.
 - The date family's own surfaces (popover, bottom sheet, typed field) and their
   eligibility rules. `spec:AST-043` and the date components' records own them.
 - Equivalent internal implementations remain valid when they satisfy this
@@ -109,9 +112,10 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 
 - **FR1 — The controls link with the platform by default.** The native controls
   are the native half of Astryx's own components, so an app's native build links
-  them with the platform's core, with no opt-in. A minimal opt-out may exist; an
-  app that opts out gets every probe below answering false and every component
-  drawing its Astryx control. The `./controls` entry exports, for apps and the
+  them with the platform's core, with no opt-in. The gesture views in the same
+  entry link by default too. A minimal opt-out may exist; where an app uses
+  one, every probe below answers false and every component draws its Astryx
+  control. The `./controls` entry exports, for apps and the
   library alike:
   - `NativeButton`, `NativeSlider`, `NativeTextField`,
     `NativeSegmentedControl`, `NativePasteControl`, each with its
@@ -148,11 +152,14 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     wherever one exists (FR8).
   - A component also draws its own control for a shape the system control
     cannot show, whatever the presentation: Button as a toggle, with a glass
-    surface, or inside a connected group; TextInput inside an `InputGroup`;
+    surface, inside a connected group, or with an icon on Android; TextInput
+    inside an `InputGroup`, or with a start icon on Android;
     Slider vertical, with marks, or with a disabled reason, and with the tooltip
     value on iOS unless the theme prefers platform controls; SegmentedControl
-    with a disabled reason, at large text sizes (AX1 and up), or once the
-    control's fitting width exceeds its room (DEC-2).
+    with a disabled reason, with a segment that shows both an icon and a label,
+    at large text sizes (AX1 and up), or once the control's fitting width
+    exceeds its room (DEC-2). An icon never disappears because a control
+    presents natively.
   - Switching presentation keeps the value. A text field that is focused when
     its presentation switches loses focus, and `onBlur` runs.
   - FR2 gap: `Switch` has no native contract. Its system presentation is React
@@ -175,9 +182,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     `onPress` once.
 - **FR4 — Native slider.** `NativeSlider` takes `value`, `min`, `max`, `step`
   (0: continuous), `onChange`, `onChangeEnd`, `onSlidingChange`,
-  `changeInterval` (default 100 ms), `isDisabled`, `isRTL`,
-  `showsValueIndicator`, the appearance props of FR11 and the accessibility
-  props of FR12.
+  `changeInterval` (default 100 ms), `isDisabled`, `isRTL`, the appearance
+  props of FR11 and the accessibility props of FR12.
   - The thumb belongs to the UI thread (FR13). `onChange` hears the value at
     most once per `changeInterval` while the thumb moves, and the last value of
     a move before the commit. `onChangeEnd` hears the value when the finger
@@ -188,8 +194,6 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     thumb; a new `value` from the caller takes effect when the drag ends.
   - `isRTL` mirrors the slider: the minimum is at the right edge and the track
     fills from the right.
-  - `showsValueIndicator` asks for a floating value label; iOS has none and
-    draws none.
 - **FR5 — Native text field.** `NativeTextField` takes `value`,
   `onChangeText`, `placeholder`, `size`, `secureTextEntry`, `keyboardType`,
   `textContentType`, `returnKey`, `autoCapitalize`, `autoCorrect`,
@@ -387,7 +391,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 | Contract                 | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                       | Commands               | Events                                                                 | Platforms    |
 | ------------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- | ------------ |
 | `AstryxNativeButton`     | native component (Fabric Native Component) | `title`, `variant`, `size`, `buttonStyle`, `systemImage`, `loading`, `enabled`, `appearance`, `tint`, `tintForeground`, `destructiveTint`, `dark`, `pressSlop`, `axLabel`, `axHint`, `axLink`, `axBusy`, `axAccessible`, `axSelected`, `axValue`, `axLanguage`                                                                                                                                              | none                   | `onNativePress`, `onIntrinsicSize`                                     | iOS, Android |
-| `AstryxNativeSlider`     | native component (Fabric Native Component) | `value`, `minimumValue`, `maximumValue`, `step`, `changeInterval`, `enabled`, `showsValueIndicator`, `layoutDirection`, `appearance`, `minimumTrackTint`, `maximumTrackTint`, `thumbTint`, `axLabel`, `axHint`, `axValueText`, `axStep`                                                                                                                                                                     | `restoreValue`         | `onValueChange`, `onValueCommit`, `onSlidingChange`, `onIntrinsicSize` | iOS          |
+| `AstryxNativeSlider`     | native component (Fabric Native Component) | `value`, `minimumValue`, `maximumValue`, `step`, `changeInterval`, `enabled`, `layoutDirection`, `appearance`, `minimumTrackTint`, `maximumTrackTint`, `thumbTint`, `axLabel`, `axHint`, `axValueText`, `axStep`                                                                                                                                                                                            | `restoreValue`         | `onValueChange`, `onValueCommit`, `onSlidingChange`, `onIntrinsicSize` | iOS          |
 | `AstryxNativeTextField`  | native component (Fabric Native Component) | `text`, `mostRecentEventCount`, `placeholder`, `size`, `secure`, `keyboard`, `contentType`, `returnKey`, `capitalize`, `autoCorrect`, `spellCheck`, `clearButton`, `startSystemImage`, `loading`, `editable`, `enabled`, `status`, `autoFocus`, `appearance`, `tint`, `statusTint`, `fieldStyle`, `fill`, `cornerRadius`, `insetX`, `dark`, `axLabel`, `axHint`, `axAccessible`, `axSelected`, `axLanguage` | `focus`, `blur`        | `onTextChange`, `onFocusChange`, `onReturn`, `onIntrinsicSize`         | iOS, Android |
 | `AstryxSegmentedControl` | native component (Fabric Native Component) | `segments`, `selectedIndex`, `layout`, `size`, `enabled`, `appearance`, `selectedTint`, `selectedForeground`, `axGroupLabel`                                                                                                                                                                                                                                                                                | `restoreSelectedIndex` | `onNativeChange`, `onIntrinsicSize`                                    | iOS          |
 | `AstryxDatePicker`       | native component (Fabric Native Component) | `mode`, `pickerStyle`, `value`, `minimumValue`, `maximumValue`, `localeIdentifier`, `firstWeekday`, `minuteInterval`, `hourCycle`, `pillTitle`, `pillIsPlaceholder`, `pickerEnabled`, `appearance`, `pickerTint`, `colorScheme`, `pickerAccessibilityLabel`, `pickerAccessibilityHint`                                                                                                                      | none                   | `onValueChange`, `onPillPress`, `onEditingChange`, `onPickerSize`      | iOS          |
@@ -399,8 +403,11 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 
 The module's requests carry ISO strings, the dialog's words (`''`: Material's
 own), the first day of the week (out of range: the locale's) and an optional
-`rootTag`; its result is `{action: 'set' | 'dismissed' | 'unavailable', value,
-end}`, which the wrapper maps to FR7's results.
+`rootTag`. Each method resolves one result object under `spec:AST-112/FR8`:
+`status` `ok` with `value` (a range's start) and `end` (a range's end),
+`cancelled` when the person dismisses the dialog, or `error` with a `reason`
+(`unavailable` when no dialog can show) and a `message`. The wrapper maps it to
+FR7's results.
 
 ### Platform support
 
@@ -440,28 +447,33 @@ end}`, which the wrapper maps to FR7's results.
   Astryx sheet unless a theme or provider asks for native, and an explicit
   `native` that the picker cannot express draws the Astryx surface with a
   development warning. OQ3 asks which rule governs.
+- Two places depart from `spec:AST-082/FR11`'s native-first rule: under a
+  theme that does not prefer platform controls, a component draws its Astryx
+  control unless the app asks for native (DEC-1); and on Android, Slider and
+  SegmentedControl draw their Astryx controls although Material has a slider
+  and a segmented button (OQ2). OQ7 asks whether the first stands.
 - No other record changes.
 
 ## Verification
 
-| Contract | Verification                                                                                                               | Representative states                                                                                                             | Mutation or failure expectation                                                                                       |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built app without any opt-in: binary symbols and the probes; unit tests of the entry through the `./testing` doubles       | default link; opted out; each probe                                                                                               | A default build lacks a control, or an opted-out build answers a probe true                                           |
-| FR2      | Unit tests of the presentation resolution and of each component's shape rules                                              | prop, provider map, `'all'`, `'none'`, theme default; each ineligible shape; platform off; a focused field switching presentation | A wrong surface, a missing or repeated development warning, a native control for an ineligible shape, or a lost value |
-| FR3      | Simulator and emulator checks of each variant, size and style; Astryx Stage contract suite                                 | each variant; glass on iOS 26 and earlier; loading; disabled; a drag past the press slop                                          | A wrong system style, a press after the slop, or a press without `onPress`                                            |
-| FR4      | Astryx Stage contract suite on the virtual clock; Simulator drag and VoiceOver checks; UI-thread frame check               | a drag; step snapping; a value during a drag; an accessibility step; right to left                                                | More than one value per interval, a missing commit, a held value applied before release, or JavaScript run per frame  |
-| FR5      | Simulator and emulator checks of each style and status; unit tests of the handle                                           | bordered and filled; each status; secure entry; focus and blur                                                                    | A wrong border or caret colour, a filled box on Android, or a handle that misses focus                                |
-| FR6      | Astryx Stage contract suite; Simulator checks at the default text size and at AX1                                          | `hug` and `fill`; an image segment; disabled segments; a title that does not fit                                                  | A cut title, a native control at AX1, or a wrong fitting size                                                         |
-| FR7      | Unit tests of the module's results through the `./testing` doubles (absent, older, current); Simulator and emulator checks | each mode; a range; a dismissed step; no activity; a second dialog; a date across time zones                                      | A rejection, a shifted day, a silent `cancelled` for `unavailable`, two dialogs, or a haptic after the wheels         |
-| FR8      | Astryx Stage contract suite; Simulator checks of each type and display mode; unit tests of the preview boundary            | text, URL and image pastes; `label` mode; a styled size below the fitting size; a preview project                                 | A paste prompt, a pasteboard read, an invalid control from a small layout, or the system control in a preview project |
-| FR9      | Unit tests of each controlled control with a caller that keeps its value; Astryx Stage restore scripts                     | a kept slider value; a kept segment; fast typing with a late value                                                                | The control keeps the person's value, or a late value overwrites a keystroke                                          |
-| FR10     | Unit tests of the sizing; Simulator checks of the first frame at default and large text sizes                              | before the first report; a remount; `fill`; a paste control styled small                                                          | A jump after the first report, or a paste control laid out below its fitting size                                     |
-| FR11     | Unit tests that each control forwards exactly the listed tokens; Simulator and emulator checks in light and dark           | each theme value per platform; a system button shape; an override a control cannot take                                           | A token sent where the table says it does not reach, a missing one, or no development notice for an override          |
-| FR12     | VoiceOver and TalkBack checks of each control; unit tests of the forwarded props; Dynamic Type and font scale checks       | each element prop; busy; an image segment; large text sizes                                                                       | A host view read instead of the control, a lost label or state, or text that does not scale                           |
-| FR13     | UI-thread frame checks during drags, typing and picker scrolls                                                             | a slider drag; a segmented tap; typing; the wheels                                                                                | JavaScript runs per frame                                                                                             |
-| FR14     | Unit tests through the `./testing` doubles in their absent, older and current shapes                                       | each view absent; the module absent; an older binary                                                                              | A throw, a rejection, a repeated `onError`, or a component that draws nothing                                         |
-| FR15     | The platform's spec rules check; Astryx Stage contract suites and its version floor                                        | every contract at revision 1; a missing named feature; an older Stage                                                             | A revision other than 1, a feature used without its check, or an older Stage that runs the project                    |
-| FR16     | Source review and symbol check of the controls' native code against the public SDKs                                        | each control's iOS and Android code                                                                                               | A private selector, a private field read, or a restricted API                                                         |
+| Contract | Verification                                                                                                               | Representative states                                                                                                                                                                      | Mutation or failure expectation                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built app without any opt-in: binary symbols and the probes; unit tests of the entry through the `./testing` doubles       | default link, gesture views included; opted out where an opt-out exists; each probe                                                                                                        | A default build lacks a control, or an opted-out build answers a probe true                                           |
+| FR2      | Unit tests of the presentation resolution and of each component's shape rules                                              | prop, provider map, `'all'`, `'none'`, theme default; each ineligible shape, icons on Android and an icon-and-label segment included; platform off; a focused field switching presentation | A wrong surface, a missing or repeated development warning, a native control for an ineligible shape, or a lost value |
+| FR3      | Simulator and emulator checks of each variant, size and style; Astryx Stage contract suite                                 | each variant; glass on iOS 26 and earlier; loading; disabled; a drag past the press slop                                                                                                   | A wrong system style, a press after the slop, or a press without `onPress`                                            |
+| FR4      | Astryx Stage contract suite on the virtual clock; Simulator drag and VoiceOver checks; UI-thread frame check               | a drag; step snapping; a value during a drag; an accessibility step; right to left                                                                                                         | More than one value per interval, a missing commit, a held value applied before release, or JavaScript run per frame  |
+| FR5      | Simulator and emulator checks of each style and status; unit tests of the handle                                           | bordered and filled; each status; secure entry; focus and blur                                                                                                                             | A wrong border or caret colour, a filled box on Android, or a handle that misses focus                                |
+| FR6      | Astryx Stage contract suite; Simulator checks at the default text size and at AX1                                          | `hug` and `fill`; an image segment; disabled segments; a title that does not fit                                                                                                           | A cut title, a native control at AX1, or a wrong fitting size                                                         |
+| FR7      | Unit tests of the module's results through the `./testing` doubles (absent, older, current); Simulator and emulator checks | each mode; a range; a dismissed step; no activity; a second dialog; a date across time zones                                                                                               | A rejection, a shifted day, a silent `cancelled` for `unavailable`, two dialogs, or a haptic after the wheels         |
+| FR8      | Astryx Stage contract suite; Simulator checks of each type and display mode; unit tests of the preview boundary            | text, URL and image pastes; `label` mode; a styled size below the fitting size; a preview project                                                                                          | A paste prompt, a pasteboard read, an invalid control from a small layout, or the system control in a preview project |
+| FR9      | Unit tests of each controlled control with a caller that keeps its value; Astryx Stage restore scripts                     | a kept slider value; a kept segment; fast typing with a late value                                                                                                                         | The control keeps the person's value, or a late value overwrites a keystroke                                          |
+| FR10     | Unit tests of the sizing; Simulator checks of the first frame at default and large text sizes                              | before the first report; a remount; `fill`; a paste control styled small                                                                                                                   | A jump after the first report, or a paste control laid out below its fitting size                                     |
+| FR11     | Unit tests that each control forwards exactly the listed tokens; Simulator and emulator checks in light and dark           | each theme value per platform; a system button shape; an override a control cannot take                                                                                                    | A token sent where the table says it does not reach, a missing one, or no development notice for an override          |
+| FR12     | VoiceOver and TalkBack checks of each control; unit tests of the forwarded props; Dynamic Type and font scale checks       | each element prop; busy; an image segment; large text sizes                                                                                                                                | A host view read instead of the control, a lost label or state, or text that does not scale                           |
+| FR13     | UI-thread frame checks during drags, typing and picker scrolls                                                             | a slider drag; a segmented tap; typing; the wheels                                                                                                                                         | JavaScript runs per frame                                                                                             |
+| FR14     | Unit tests through the `./testing` doubles in their absent, older and current shapes                                       | each view absent; the module absent; an older binary                                                                                                                                       | A throw, a rejection, a repeated `onError`, or a component that draws nothing                                         |
+| FR15     | The platform's spec rules check; Astryx Stage contract suites and its version floor                                        | every contract at revision 1; a missing named feature; an older Stage                                                                                                                      | A revision other than 1, a feature used without its check, or an older Stage that runs the project                    |
+| FR16     | Source review and symbol check of the controls' native code against the public SDKs                                        | each control's iOS and Android code                                                                                                                                                        | A private selector, a private field read, or a restricted API                                                         |
 
 ## Decision log
 
@@ -557,3 +569,7 @@ read call, and no code reads the pasteboard before the tap.
   Astryx switch contract over UISwitch and Material 3's switch, with this
   group's appearance mapping, named features and Stage suites; or React
   Native's own `Switch`, tinted by the library, as its system presentation.
+- **OQ7 — Is the system control the default on React Native?** (`human-design`)
+  Options: the system control wherever a host exists, as `spec:AST-082/FR11`
+  states; or the Astryx control unless a theme or the app asks for native, as
+  DEC-1 states.
