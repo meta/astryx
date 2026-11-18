@@ -220,7 +220,7 @@ export function setupNudge(
   const run = before
     ? `\`${before}\`, then \`${invocation} init\``
     : `\`${invocation} init\``;
-  return `\nAstryx is not set up in this project yet. Next step: run ${run} now, before you write Astryx code. It asks no questions, prints the setup steps this app still needs, and saves the Astryx guide to AGENTS.md.\n\n`;
+  return `\nAstryx is not set up in this project yet. Next step: run ${run} now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.\n\n`;
 }
 
 /** The nudge with the fallback invocation. */

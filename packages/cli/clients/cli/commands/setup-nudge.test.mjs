@@ -36,7 +36,7 @@ function insideRepository(dir) {
 }
 
 const MARKER = '<!-- ASTRYX:START -->';
-const NUDGE = /prints the setup steps this app still needs, and saves the Astryx guide to AGENTS\.md/;
+const NUDGE = /prints the getting-started steps, and saves the Astryx guide to AGENTS\.md/;
 
 let tmp;
 /** The per-user folder that records when the reminder last printed. */
@@ -168,7 +168,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     write('package-lock.json', '{}');
     const r = await runCli(['docs', 'tokens'], tmp);
     expect(r.stderr).toContain(
-      'Astryx is not set up in this project yet. Next step: run `npm install -E @astryxdesign/cli@0.0.1`, then `npx astryx init` now, before you write Astryx code. It asks no questions, prints the setup steps this app still needs, and saves the Astryx guide to AGENTS.md.',
+      'Astryx is not set up in this project yet. Next step: run `npm install -E @astryxdesign/cli@0.0.1`, then `npx astryx init` now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.',
     );
   });
 
@@ -305,7 +305,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     // command is the scoped package at the project's release, never the bare
     // `astryx` name a package runner would fetch from the registry.
     expect(r.stderr.trim()).toBe(
-      `Astryx is not set up in this project yet. Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.0 init\` now, before you write Astryx code. It asks no questions, prints the setup steps this app still needs, and saves the Astryx guide to AGENTS.md.`,
+      `Astryx is not set up in this project yet. Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.0 init\` now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.`,
     );
   });
 
@@ -320,7 +320,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     write('tools/codegen/node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.4'}));
     const r = await runCli(['docs', 'tokens'], path.join(tmp, 'tools', 'codegen'));
     expect(r.stderr.trim()).toBe(
-      `Astryx is not set up in this project yet. Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.3 init\` now, before you write Astryx code. It asks no questions, prints the setup steps this app still needs, and saves the Astryx guide to AGENTS.md.`,
+      `Astryx is not set up in this project yet. Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.3 init\` now, before you write Astryx code. It asks no questions, prints the getting-started steps, and saves the Astryx guide to AGENTS.md.`,
     );
   });
 
