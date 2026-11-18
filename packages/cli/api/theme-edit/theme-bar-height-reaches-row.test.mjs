@@ -128,6 +128,42 @@ describe("a bar's height", () => {
   );
 
   it(
+    'with --only stays on the bar',
+    async () => {
+      const r = /** @type {any} */ (
+        await themeEditSet('b', 'height', '48px', {
+          cwd,
+          on: 'app-shell-header',
+          only: true,
+        })
+      ).data;
+      expect(said(r)).not.toMatch(/saved without it/);
+      expect(said(r)).not.toMatch(/reaches top-nav/);
+      expect(built('top-nav')).not.toMatch(/calc\(48px/);
+      await themeEditUndo('b', {cwd});
+    },
+    T,
+  );
+
+  it(
+    'never reaches the items of a list: a menu or a side nav is no bar',
+    async () => {
+      for (const [prop, value, on] of [
+        ['padding', '12px', 'dropdown-menu'],
+        ['height', '600px', 'side-nav'],
+      ]) {
+        const r = /** @type {any} */ (
+          await themeEditSet('b', prop, value, {cwd, on})
+        ).data;
+        expect(said(r)).not.toMatch(/the row inside it/);
+        expect(said(r)).not.toMatch(/hangs out of the bar/);
+        await themeEditUndo('b', {cwd});
+      }
+    },
+    T,
+  );
+
+  it(
     'goes back with the height',
     async () => {
       // (The two item settings left, then the height.)
@@ -149,7 +185,7 @@ describe("the part map's bar facts", () => {
     });
   const row = {display: 'flex', 'align-items': 'center', width: '100%'};
 
-  it('finds a row through a frame, never through a part with a size of its own, and names every row a holder has', () => {
+  it('finds a row through a frame, never through a part with a size of its own or one that repeats, and names every row a holder has', () => {
     const map = {
       bar: rec({height: '40px'}, ['frame', 'nav', 'item', 'card', 'inner']),
       frame: rec({'border-bottom-width': '1px'}, ['nav', 'item']),
@@ -158,8 +194,10 @@ describe("the part map's bar facts", () => {
       card: rec({padding: '12px'}, ['inner']),
       inner: rec(row),
       two: rec({}, ['nav', 'inner']),
+      menu: {...rec({padding: '4px'}, ['nav']), listed: ['nav']},
     };
     expect(barRows(map, 'bar')).toEqual(['nav']);
+    expect(barRows(map, 'menu')).toEqual([]);
     expect(barRows(map, 'two')).toEqual(['nav', 'inner']);
   });
 
