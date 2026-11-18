@@ -78,6 +78,7 @@ import {
   isSystemFamily,
   fontStack,
   STATE_SYNONYMS,
+  pageColorNote,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -5808,16 +5809,42 @@ function checkOne(
         innerToks.length &&
         !props.some(x => rec.own?.[x]) &&
         !(rec.line ?? []).some((/** @type {string} */ x) => props.includes(x))
-      )
+      ) {
+        // (The app shell's frame that holds the main panel painted with the
+        // page color: a fill on it means the page, so the page is named
+        // first. Read from the part data.)
+        const readsPage = (/** @type {string} */ p) =>
+          (ctx.C.partReads(p, 'background') ?? []).some(
+            (/** @type {any} */ r) =>
+              r.token === '--color-background-body' && r.when.includes(''),
+          );
+        const pageFrame =
+          prop !== 'color' &&
+          (ctx.C.MAP['app-shell']?.contains ?? []).includes(s.on) &&
+          (rec.contains ?? []).some(readsPage);
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${s.on} draws no ${prop} of its own: an element inside it paints it from ${innerToks.join(', ')}, which paints over a ${prop} set on ${s.on}, so it would never show.`,
+          `${s.on} draws no ${prop} of its own: an element inside it paints it from ${innerToks.join(', ')}, which paints over a ${prop} set on ${s.on}, so it would never show.${pageFrame ? ` ${s.on} is the app shell's frame around the page's main panel: for the page itself, set --color-background-body (the first line). ${pageColorNote(data.mode)}` : ''}`,
           {
-            run: innerToks
-              .slice(0, 2)
-              .map(t => setLine(slug, t, v, {...s, only: undefined}, unset)),
+            run: [
+              ...(pageFrame
+                ? [
+                    setLine(
+                      slug,
+                      '--color-background-body',
+                      v,
+                      {...s, on: undefined, only: undefined},
+                      unset,
+                    ),
+                  ]
+                : []),
+              ...innerToks
+                .slice(0, 2)
+                .map(t => setLine(slug, t, v, {...s, only: undefined}, unset)),
+            ],
           },
         );
+      }
     }
   }
   // A part drawn under an invisible native input (a checkbox's box, a

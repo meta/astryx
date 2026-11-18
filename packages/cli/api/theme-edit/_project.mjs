@@ -12,6 +12,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {listProjectSourceFiles} from '../../foundation/fs/project-source-files.mjs';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
@@ -561,6 +562,34 @@ function builtModule(pkg, name) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether the app in `dir` is embedded in a page it does not own (the guest
+ * setup): it has source of its own, and none of it, its stylesheets or its
+ * pages loads Core's reset, which an app that owns its page loads. A folder
+ * with no app source is not one.
+ * @param {string} dir
+ */
+export function embeddedInHostPage(dir) {
+  const files = listProjectSourceFiles(path.resolve(dir), '', {
+    stylesheets: true,
+    pages: true,
+  }).filter(
+    // (The editor's theme folders are the theme, not the app.)
+    file => !/(?:^|[\\/])themes[\\/]/.test(path.relative(dir, file)),
+  );
+  if (!files.length) return false;
+  return !files.some(file => {
+    try {
+      return fs
+        .readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->/g, ' ')
+        .includes('@astryxdesign/core/reset.css');
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

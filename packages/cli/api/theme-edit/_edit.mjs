@@ -244,6 +244,7 @@ import {
   installLine,
   openProject,
   themeCacheRoot,
+  embeddedInHostPage,
 } from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {borderFrames, missedSteps} from './_missed.mjs';
@@ -6366,6 +6367,20 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // (A theme made one-mode draws its page in that mode only: the
+          // page note, once, when the theme has said no page color yet,
+          // since that note would have come with it.)
+          ...(s.thing === 'mode' &&
+          (data.mode === 'light-only' || data.mode === 'dark-only') &&
+          before !== data.mode &&
+          before !== 'light-only' &&
+          before !== 'dark-only' &&
+          !data.settings.some(
+            x => x.thing === '--color-background-body' && !x.on,
+          ) &&
+          !embeddedInHostPage(cwd)
+            ? [pageColorNote(data.mode)]
+            : []),
           // A theme the app lists takes its mode from the app's theme
           // module: `theme add` writes it again.
           ...(s.thing === 'mode' && before !== data.mode
@@ -7154,8 +7169,23 @@ async function changeOnce(
     ...(sub === 'set' &&
     !s.on &&
     s.thing === '--color-background-body' &&
-    !hadPageColor
+    !hadPageColor &&
+    !embeddedInHostPage(cwd)
       ? [pageColorNote(data.mode)]
+      : []),
+    // (A background on the main panel or the layout frame covers that
+    // panel, not the page: the page is --color-background-body, which the
+    // app shell paints. Read from the part data: the parts that paint the
+    // page color at rest, and the shell's frame that holds them.)
+    ...(sub === 'set' &&
+    s.on &&
+    !s.when &&
+    !s.state &&
+    /^background(-color|-image)?$/.test(String(s.thing)) &&
+    pageFrameParts(ctx).includes(s.on)
+      ? [
+          `${s.on} is the main panel the app shell draws over the page, so this fill covers that panel only, not the page; for the page itself: ${P} set ${slug} --color-background-body ${quoteCommandArgument(String(s.value))}${s.mode ? ` --mode ${s.mode}` : ''}. ${pageColorNote(data.mode)}`,
+        ]
       : []),
     // A scale step far outside reading sizes is named.
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
@@ -9446,6 +9476,30 @@ export function drawnContrastNotes(drawn, checked) {
     const files = [...new Set(list.map(y => y.file))];
     return `the pictures draw text in ${x.part} (${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}) at ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode} (${x.fg} on ${x.bg}, in ${files.join(', ')}), which no check above measures; text needs 4.5:1; what draws it: ${P} how ${x.part}`;
   });
+}
+
+/**
+ * The parts drawn over the page as its main panel: a part that paints the
+ * page color (--color-background-body) at rest in every look, and a part
+ * of the app shell that holds one, read from the part data.
+ * @param {any} ctx
+ * @returns {string[]}
+ */
+function pageFrameParts(ctx) {
+  const C = ctx.C;
+  /** @param {string} p */
+  const readsPage = p =>
+    (C.partReads(p, 'background') ?? []).some(
+      (/** @type {any} */ r) =>
+        r.token === '--color-background-body' && r.when.includes(''),
+    );
+  const shell = new Set(C.MAP['app-shell']?.contains ?? []);
+  return Object.keys(C.MAP).filter(
+    p =>
+      p !== 'app-shell' &&
+      (readsPage(p) ||
+        (shell.has(p) && (C.MAP[p]?.contains ?? []).some(readsPage))),
+  );
 }
 
 /**
