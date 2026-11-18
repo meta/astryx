@@ -107,12 +107,6 @@ depends only on runtimes it can maintain.
     prop. Moving a released prop from the core to the web contract changes no
     web caller's types, because the web types are the core contract plus the web
     contract; native contracts stop offering it.
-  - Every public prop is defined in the private contracts package, which each
-    package builds in; `@astryxdesign/core` still exposes the core contracts (FR5). Astryx manages each prop there for every surface at
-    once. A new prop is a permanent part of every contract that carries it, so
-    admitting one is a high bar (`spec:AST-002/DEC-1`): when a better default
-    behavior meets the need, the component changes its default and adds no
-    prop.
   - The web contract holds the web base props: styling inputs, DOM events, refs,
     element choice, and HTML attributes.
   - A component may exist on some platforms only; using it elsewhere fails at
@@ -715,19 +709,6 @@ it once as durable intent rather than repeating it in each platform's entry.
 
 Rejected: iOS platform-entry terms only, because every other native platform
 would need the same words again.
-
-### DEC-17 — Props live in the contracts package, and a new prop is a high bar
-
-**Reference:** `spec:AST-082/DEC-17`
-**Decider:** `cixzhang`, `2026-11-18 13:35 PT`
-
-The owner said: "we should be wary of adding new props in general since they
-become permanent additions to our contract. Once we put contract into a
-separate lib, we should move all props there and they will be centrally
-managed and considered across all surfaces". One home for every prop lets a
-new prop be judged against every surface before it ships.
-
-Rejected: props defined in each package and reconciled later.
 
 ## Open questions
 
