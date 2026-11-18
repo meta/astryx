@@ -3,8 +3,8 @@
 /**
  * @file syntaxThemeChoices.ts
  * @input The value of a syntax-theme prop and whether the prop is required
- * @output The preset choices the playground offers, the selected choice, and
- *   the value a choice sends
+ * @output The preset choices the playground offers, the selected choice, the
+ *   value a choice sends, and the identifier that names a preset in code
  * @position Logic of the playground's syntax-theme control
  *   (PlaygroundPropsTable)
  */
@@ -53,6 +53,20 @@ export function selectedSyntaxTheme(
     return match.value;
   }
   return isRequired ? presets[0].value : NO_SYNTAX_THEME;
+}
+
+/**
+ * The identifier a preset is exported as, such as `oneDarkPro` for
+ * "one-dark-pro"; null when `value` is not a preset.
+ */
+export function syntaxPresetIdentifier(value: unknown): string | null {
+  const match = presets.find(option => option.theme === value);
+  if (!match) {
+    return null;
+  }
+  return match.value.replace(/-([a-z0-9])/g, (_, next: string) =>
+    next.toUpperCase(),
+  );
 }
 
 /** The value a choice sends: a preset, or nothing for the unset choice. */
