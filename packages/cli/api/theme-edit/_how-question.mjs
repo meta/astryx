@@ -22367,9 +22367,15 @@ export function draftAnswer(ctx, env, question) {
               (named.corners.length === 2 &&
                 (named.corners.every(k => k.startsWith('start-')) ||
                   named.corners.every(k => k.startsWith('end-'))));
+            // (A corner longhand the theme set on the part wins over its
+            // radius, and setting that radius again keeps its place before
+            // the longhand: then only the longhands of the corners that
+            // change are written.)
             /** @param {Record<string, string | null>} at @param {string[]} keys */
             const writeAll = (at, keys) =>
-              ALL.every(k => at[k] != null) && sameEitherWay
+              ALL.every(k => at[k] != null) &&
+              sameEitherWay &&
+              !ordered.some(st => st.thing !== 'border-radius')
                 ? [
                     set(
                       'border-radius',
@@ -22533,7 +22539,10 @@ export function draftAnswer(ctx, env, question) {
             /** @type {Step[]} */
             const steps = writeAll(
               target,
-              ALL.every(k => target[k] != null) ? ALL : changing,
+              ALL.every(k => target[k] != null) &&
+                !ordered.some(st => st.thing !== 'border-radius')
+                ? ALL
+                : changing,
             );
             return {
               text: `${sideWords(named.corners)} on ${on}: ${rounded ? `rounded (${fill === nowAt?.[ALL.filter(roundedAt)[0] ?? ''] ? `the part's own rounded corner, ${fill}` : tokRounds && fill === `var(${tok})` ? tok : `the round corners, ${fill}`}; now ${nowSaid})` : sidePx === '0' ? 'square' : sidePx}${!others.length ? '' : squareRest ? `, ${sideWords(others)} square` : ', the other corners as they are'}`,

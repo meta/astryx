@@ -416,6 +416,19 @@ describe('the corners an ask names', () => {
         c.replace(/^.*? editor set l /, ''),
       ),
     ).toEqual(['border-end-end-radius 0 --on tab']);
+    // (Rounded only on top: the later 8px bottom-right longhand is in
+    // effect, so the ask is not already so; that corner's longhand is
+    // squared, the radius before it left as it is.)
+    const only = await themeEditHow('tabs rounded only on top', {
+      cwd,
+      theme: 'l',
+    });
+    expect(only.data.hint ?? '').not.toMatch(/already so/);
+    expect(
+      (only.data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set l /, ''),
+      ),
+    ).toEqual(['border-end-end-radius 0 --on tab']);
   }, 240_000);
 
   it('set takes each answer, a menu included', async ctx => {
