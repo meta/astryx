@@ -92,7 +92,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   picker (`spec:AST-130` FR12).
 - The camera and its preview — owned by the camera view (`spec:AST-132` FR9).
 - The app cache's location — owned by the core package (`spec:AST-130` FR14).
-  Deleting, listing, and sharing its files is outside the core package.
 
 ## Public concepts
 
