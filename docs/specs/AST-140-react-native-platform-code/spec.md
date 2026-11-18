@@ -50,6 +50,19 @@ specific rules: the binding to React Native, the shape of every message across
 it, threads, tests, and the native seam. Every platform group record follows
 the same rules, so they live once, here.
 
+## Related records
+
+- Each native piece's methods, props, events, and reasons: its group record
+  (below).
+- The JavaScript API an app calls, its entries, and its capability shape:
+  `spec:AST-112/FR5` and `spec:AST-112/FR7`.
+- Which capabilities link by default and which an app opts in, and how
+  linking relates to the app's build settings: `spec:AST-112/FR3`.
+- Packages outside the core that carry native code, their roles, the host
+  interface, and the version pin: `spec:AST-112/FR4`.
+- How a host that runs other projects checks what a project requires:
+  `spec:AST-139/FR7` and `spec:AST-141/FR7`.
+
 ## Platform group records
 
 Each group record specifies its own native pieces and follows this record for
@@ -72,22 +85,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 
 ## Non-goals
 
-- The methods, props, events, and reasons of each native piece: its group
-  record.
-- The JavaScript API an app calls, its entries, and its capability shape:
-  `spec:AST-112/FR5` and `spec:AST-112/FR7`.
-- Which capabilities link by default and which an app opts in, and how
-  linking relates to the app's build settings: `spec:AST-112/FR3`.
-- Packages outside the core that carry native code, their roles, the host
-  interface, and the version pin: `spec:AST-112/FR4`.
-- How a host that runs other projects checks what a project requires:
-  `spec:AST-139/FR7` and `spec:AST-141/FR7`.
-- Astryx Stage's behavior. Astryx Stage conforms to these contracts
-  (`spec:AST-139`).
-- How another engine supplies React Native's own host components is outside
-  this record.
-- Equivalent internal implementations remain valid when they satisfy this
-  contract.
+None.
 
 ## Requirements
 
