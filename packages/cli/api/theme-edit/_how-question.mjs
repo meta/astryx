@@ -12000,6 +12000,10 @@ export function draftAnswer(ctx, env, question) {
             continue;
           }
           if (!members || !k.when) continue;
+          // A shadow kept in a state (a status's focus ring): the step it is
+          // kept from writes that state on every member, so every member
+          // keeps it, whether or not it draws a look of its own there.
+          if (k.thing === 'box-shadow' && k.state) continue;
           // Any other property: a member with no look of its own under the
           // condition (a date input's error look, which its field draws)
           // keeps by inheriting, so it takes no pin.
@@ -15229,6 +15233,28 @@ export function draftAnswer(ctx, env, question) {
         if (seen.length && !seen.includes(st.thing)) return UNTOUCHED;
         const tokenNow = resolvedValue(st.thing) || current(st.thing);
         if (tokenNow) return set(st.thing, tokenNow, {...flags, on: p.on});
+      }
+      // A shadow asked in a state ("the focus ring on inputs, but keep the
+      // invalid ones"): the kept part's shadow in that state, under its
+      // kept status or variant, from what Core draws for it there; the
+      // part's plain shadow in that state when the status draws none of
+      // its own.
+      if (st.thing === 'box-shadow' && st.state && !p.state) {
+        const inState = Object.entries(
+          C.MAP[one(p.on)]?.at?.['box-shadow'] ?? {},
+        ).filter(([k]) =>
+          new RegExp(`(?:^|\\s):${st.state}(?![\\w-])`).test(k),
+        );
+        const [axisName, axisValue] = String(p.when ?? '').split(':');
+        const scoped = p.when
+          ? inState.find(([k]) =>
+              new RegExp(`\\b${axisName}=${axisValue}\\b`).test(k),
+            )
+          : undefined;
+        const plain = inState.find(([k]) => !/\bstatus=/.test(k));
+        const value = (scoped ?? plain)?.[1];
+        if (value != null)
+          return set('box-shadow', String(value), {...flags, state: st.state});
       }
       // The shadow it has now, written out (the tokens it reads may be set
       // to none in the same answer).
