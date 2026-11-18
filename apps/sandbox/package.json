@@ -30,6 +30,7 @@
     "@astryxdesign/theme-neutral": "*",
     "@astryxdesign/theme-stone": "*",
     "@astryxdesign/theme-y2k": "*",
+    "@astryxdesign/template-icons": "*",
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "react": "^19.3.1",

@@ -11,6 +11,7 @@
   "dependencies": {
     "@astryxdesign/core": "*",
     "@astryxdesign/theme-neutral": "*",
+    "@astryxdesign/template-icons": "*",
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "lucide-react": "^1.66.0",
