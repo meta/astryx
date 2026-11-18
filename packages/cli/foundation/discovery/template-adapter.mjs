@@ -37,6 +37,7 @@ import {
   parseTemplateSource,
   programPath,
   traverseTemplateSource,
+  walk,
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
@@ -2165,6 +2166,91 @@ export function componentsInSource(src) {
   const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
   if (known) return [...known];
   return parsedComponents(src);
+}
+
+/**
+ * The components a template source renders that `astryx component` answers
+ * in the project, in the order the source first renders them, each once.
+ * `ownersOf` names the packages whose doc `astryx component <name>` reads
+ * for a name, and none for a name it does not answer. A tag counts only when
+ * a named import binds it to an Astryx package or to one of those packages;
+ * a tag no import binds (a helper the file declares), one from another module
+ * (a chart library's `Tooltip`), and text in a comment do not count. A part
+ * no package answers counts as its family root when it is imported from that
+ * root's own module, so a `TableHeader` from `@astryxdesign/core/Table` that
+ * has no doc of its own names `Table`.
+ * @param {string} src
+ * @param {(name: string) => readonly string[]} ownersOf
+ * @returns {string[]}
+ */
+export function answeredComponentsInSource(src, ownersOf) {
+  let program;
+  try {
+    program = parseTemplateSource(src, {errorRecovery: true}).program;
+  } catch {
+    return [];
+  }
+  /** @type {Map<string, {module: string, imported: string}>} */
+  const imports = new Map();
+  for (const statement of program.body) {
+    if (statement.type !== 'ImportDeclaration') continue;
+    for (const specifier of statement.specifiers) {
+      if (specifier.type !== 'ImportSpecifier') continue;
+      const {imported} = specifier;
+      imports.set(specifier.local.name, {
+        module: statement.source.value,
+        imported:
+          imported.type === 'Identifier' ? imported.name : imported.value,
+      });
+    }
+  }
+  /** @type {Array<{name: string, start: number}>} */
+  const tags = [];
+  walk(program, node => {
+    if (
+      node.type === 'JSXOpeningElement' &&
+      node.name.type === 'JSXIdentifier'
+    ) {
+      tags.push({name: node.name.name, start: node.start});
+    }
+  });
+  tags.sort((a, b) => a.start - b.start);
+  /** @type {string[]} */
+  const found = [];
+  for (const tag of tags) {
+    const binding = imports.get(tag.name);
+    if (!binding) continue;
+    const name = answeredName(binding, ownersOf);
+    if (name !== null && !found.includes(name)) found.push(name);
+  }
+  return found;
+}
+
+/**
+ * The name `astryx component` answers for an imported tag, or null: the
+ * imported name itself, else its family root (the last folder of the module
+ * it comes from, when the name starts with it). The module must be an Astryx
+ * package or one of the packages that answer the name.
+ * @param {{module: string, imported: string}} binding
+ * @param {(name: string) => readonly string[]} ownersOf
+ * @returns {string | null}
+ */
+function answeredName({module, imported}, ownersOf) {
+  const root = module.split('/').at(-1) ?? '';
+  for (const name of [imported, root]) {
+    if (!imported.startsWith(name)) continue;
+    const owners = ownersOf(name);
+    if (
+      owners.length > 0 &&
+      (module.startsWith(ASTRYX_PACKAGE_SCOPE) ||
+        owners.some(
+          owner => module === owner || module.startsWith(`${owner}/`),
+        ))
+    ) {
+      return name;
+    }
+  }
+  return null;
 }
 
 export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
