@@ -44,19 +44,19 @@ records.
 
 ## Why this exists
 
-| Piece              | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAudio`      | expo-audio, expo-video and react-native-video play sound and video well. Astryx owns one player model for sound and video (DEC-1), players keyed by their runtime with one shared Now Playing card (DEC-2), peak levels with no limit of their own (DEC-3), closed results, no Expo runtime library (`spec:AST-112/FR11`), and Astryx Stage parity.                                          |
-| `AstryxVideoView`  | expo-video and react-native-video draw video with picture in picture and native controls. Astryx owns a view that draws a player it does not own, so full screen keeps the same player and the library's media controls drive sound and video alike (DEC-1), with picture in picture that shows only the video on Android, one dependency set (`spec:AST-112/FR2`), and Astryx Stage parity. |
-| `AstryxCameraView` | react-native-vision-camera and expo-camera are capable camera libraries. The gap is narrow: a view that never prompts and a simulated camera where there is none (DEC-4), closed results, and no Expo runtime library. No library component uses it; it stays in the platform because an app's alternative needs native code of its own (DEC-5).                                             |
+| Piece              | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAudio`      | expo-audio, expo-video and react-native-video play sound and video well. Astryx owns one player model for sound and video (DEC-1), players keyed by their runtime with one shared Now Playing card (DEC-2), peak levels with no limit of their own (DEC-3), closed results, no Expo runtime library (`spec:AST-112/FR11`), and Astryx Stage parity.                                      |
+| `AstryxVideoView`  | expo-video and react-native-video draw video with picture in picture and native controls. Astryx owns a view that draws a player it does not own, so full screen keeps the same player and the app's media controls drive sound and video alike (DEC-1), with picture in picture that shows only the video on Android, one dependency set (`spec:AST-112/FR2`), and Astryx Stage parity. |
+| `AstryxCameraView` | react-native-vision-camera and expo-camera are capable camera libraries. The gap is narrow: a view that never prompts and a simulated camera where there is none (DEC-4), closed results, and no Expo runtime library. No library component uses it; it stays in the platform because an app's alternative needs native code of its own (DEC-5).                                         |
 
 ## Who uses it
 
-| Native piece       | Kind                                       | Astryx components that use it                                                                                                                                                                 | What a person sees                                                                                                                  |
-| ------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAudio`      | native module (Turbo Native Module)        | The library's `useAudioPlayer` and `useVideoPlayer` hooks (the controllers an app wires to `MediaScrubber`, `PlaybackRateMenu`, and the media icon buttons); apps through the `./media` entry | Sound that keeps playing on the lock screen, the system's Now Playing card and remote controls, and a waveform of a recording       |
-| `AstryxVideoView`  | native component (Fabric Native Component) | `VideoView` (inline and in full screen, for a `useVideoPlayer` controller); apps through the `./media` entry's `NativeVideoView`                                                              | A video inside the screen, the same video in full screen, and a floating picture-in-picture window                                  |
-| `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (DEC-5)                                                                    | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
+| Native piece       | Kind                                       | Astryx components that use it                                                                                                                        | What a person sees                                                                                                                  |
+| ------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAudio`      | native module (Turbo Native Module)        | The library's `useAudioPlayer` and `useVideoPlayer` hooks (the controllers an app wires to its own media controls); apps through the `./media` entry | Sound that keeps playing on the lock screen, the system's Now Playing card and remote controls, and a waveform of a recording       |
+| `AstryxVideoView`  | native component (Fabric Native Component) | `VideoView` (inline and in full screen, for a `useVideoPlayer` controller); apps through the `./media` entry's `NativeVideoView`                     | A video inside the screen, the same video in full screen, and a floating picture-in-picture window                                  |
+| `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (DEC-5)                           | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
 
 Scope notes: these pieces are part of the platform package and are specified
 elsewhere, in their own records.
@@ -72,9 +72,10 @@ elsewhere, in their own records.
 
 ## Non-goals
 
-- The contracts of the library's `VideoView`, `MediaScrubber`, and
-  `PlaybackRateMenu` beyond how they use the platform (FR12). Each component's
-  own record and `spec:AST-082/FR3` own them.
+- The contract of the library's `VideoView` beyond how it uses the platform
+  (FR12); its own record and `spec:AST-082/FR3` own it. The media controls an
+  app draws, such as the template kit's `MediaScrubber` and
+  `PlaybackRateMenu` (`spec:AST-138/FR7`), are the app's own.
 - Streaming formats beyond what the platform's players open from a URL, DRM,
   captions and subtitle tracks, advertising, playlists, and offline downloads.
 - Video recording, live photos, depth, RAW, HDR control, frame processors, and
@@ -104,10 +105,12 @@ elsewhere, in their own records.
   - `camera` links capture on iOS (AVFoundation) and CameraX with a
     pure-Java code decoder on Android, and declares the camera permission and
     the optional camera hardware feature. It holds the camera view, still-image
-    code decoding (`AstryxBarcode`, specified in its own record), and camera
-    capture, the file picker's camera source included (`spec:AST-130/FR13`).
-    The `./camera` entry exports `CameraView`, `isCameraViewAvailable()`,
-    `CODE_TYPES`, and `createCodeDetector`.
+    code decoding (`AstryxBarcode`, `spec:AST-136`), and camera capture:
+    `CameraView`'s `takePhoto` (FR9) is the capture this record specifies,
+    and the file picker's camera source belongs to `camera` as well
+    (`spec:AST-130/FR13`). The `./camera` entry exports `CameraView`,
+    `isCameraViewAvailable()`, `CODE_TYPES`, `createCodeDetector`, and
+    `AstryxBarcode`.
   - The library reaches each capability only through
     `AstryxPlatform.capability('media' | 'camera')` (`spec:AST-112/FR2`).
 - **FR2 — The native contract.**
@@ -149,7 +152,7 @@ elsewhere, in their own records.
     of it. A muted player plays silently and keeps its volume for unmuting. A
     looping player plays the item again from the start and never reports
     `ended`. A rate change keeps voices at their pitch.
-  - `supports('background')` answers whether the host declares what
+  - `isBackgroundAvailable()` answers whether the host declares what
     background playback needs (FR5).
 - **FR4 — Players belong to the runtime that opened them.** The app and each
   previewed project open players side by side in one app. A
@@ -293,8 +296,8 @@ isPossible})`.
     follows its state, and frees the player when the source changes or the
     component unmounts. It returns stable callbacks (`play`, `pause`,
     `seekTo`, `setRate`, `setVolume`, `setMuted`, `toggleMuted`,
-    `setLooping`) that an app wires to `MediaScrubber`, `PlaybackRateMenu`,
-    and the media icon buttons, and it applies a changed option live.
+    `setLooping`) that an app wires to its own media controls, and it applies
+    a changed option live.
   - `useVideoPlayer(source, options)` is the same controller with
     `hasVideo`, with `allowsBackground` and `showsNowPlaying` false unless
     the caller sets them. It adds full screen (`isFullscreen`,
@@ -332,10 +335,9 @@ isPossible})`.
     element that names the video is the caller's (`VideoView`'s own record
     owns its name and role). With `controls: 'system'` the system's controls
     are read as the system reads them.
-  - The app's controls over the picture are library components
-    (`MediaScrubber`, `PlaybackRateMenu`, and icon buttons) and are announced
-    as those are. The Now Playing card, the remote commands, and the
-    picture-in-picture window are the system's own.
+  - The controls an app draws over the picture are its own and are announced
+    as the components they are built from. The Now Playing card, the remote
+    commands, and the picture-in-picture window are the system's own.
   - `CameraView` is one element named by its `label`, and it announces its
     status changes (`ready`, `permission-required`, `denied`, `error`). Codes
     found and photos taken reach the person through the app's own UI.
@@ -347,11 +349,11 @@ isPossible})`.
 
 ### Platform support
 
-| Contract           | iOS                                                                                                                                                                                                                                                            | Android                                                                                                                                                                                                                   | Astryx Stage                                                                                                                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAudio`      | `AVPlayer` per player with the time-domain pitch algorithm; `AVAudioSession` playback category; `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`; background playback with the app's `audio` background mode; levels through an asset reader to float PCM. | Media3 `ExoPlayer` per player on the main thread with its audio focus; a `MediaSessionService` (foreground service of type `mediaPlayback`) and its media notification; levels through `MediaExtractor` and `MediaCodec`. | Players with the device's states, seeking, rate, volume, mute, and loop; sound plays in a window on macOS, and a headless run reports state without sound; `supports('background')` is true. |
-| `AstryxVideoView`  | `AVPlayerLayer` over the module's player; `AVPictureInPictureController`; `AVPlayerViewController` for `controls: 'system'`.                                                                                                                                   | Media3 `PlayerView` over the module's player, with its controller for `controls: 'system'`; picture in picture in the platform's own activity; no automatic start and no programmatic stop.                               | On macOS the video's frame at the player's position with `contain` and `cover`; elsewhere a surface at the video's ratio. Picture in picture reports `isSupported: false`.                   |
-| `AstryxCameraView` | `AVCaptureSession` with a preview layer, a photo output, and a metadata output for codes on the same session; the region of interest from `scanRegion`; orientation from the rotation coordinator.                                                             | CameraX: a `PreviewView`, an `ImageCapture`, and an `ImageAnalysis` decoded with ZXing (no native library and no Google Play services); the region mapped into the analysis buffer.                                       | Absent by design, as on a device with no camera: `isCameraViewAvailable()` is false and `CameraView` draws the simulated camera.                                                             |
+| Contract           | iOS                                                                                                                                                                                                                                                            | Android                                                                                                                                                                                                                   | Astryx Stage                                                                                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAudio`      | `AVPlayer` per player with the time-domain pitch algorithm; `AVAudioSession` playback category; `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`; background playback with the app's `audio` background mode; levels through an asset reader to float PCM. | Media3 `ExoPlayer` per player on the main thread with its audio focus; a `MediaSessionService` (foreground service of type `mediaPlayback`) and its media notification; levels through `MediaExtractor` and `MediaCodec`. | Players with the device's states, seeking, rate, volume, mute, and loop; sound plays in a window on macOS, and a headless run reports state without sound; `isBackgroundAvailable()` is true. |
+| `AstryxVideoView`  | `AVPlayerLayer` over the module's player; `AVPictureInPictureController`; `AVPlayerViewController` for `controls: 'system'`.                                                                                                                                   | Media3 `PlayerView` over the module's player, with its controller for `controls: 'system'`; picture in picture in the platform's own activity; no automatic start and no programmatic stop.                               | On macOS the video's frame at the player's position with `contain` and `cover`; elsewhere a surface at the video's ratio. Picture in picture reports `isSupported: false`.                    |
+| `AstryxCameraView` | `AVCaptureSession` with a preview layer, a photo output, and a metadata output for codes on the same session; the region of interest from `scanRegion`; orientation from the rotation coordinator.                                                             | CameraX: a `PreviewView`, an `ImageCapture`, and an `ImageAnalysis` decoded with ZXing (no native library and no Google Play services); the region mapped into the analysis buffer.                                       | Absent by design, as on a device with no camera: `isCameraViewAvailable()` is false and `CameraView` draws the simulated camera.                                                              |
 
 - FR5 gap: Astryx Stage shows no Now Playing card and has no remote commands,
   interruptions, route changes, or background pausing.
@@ -365,9 +367,8 @@ isPossible})`.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, Android API level 24, the New Architecture only).
   Automatic picture in picture needs iOS 14.2 or later.
-- Unsupported behavior: a feature the binary lacks answers false from
-  `supports(feature)`, and a call that needs it answers `unsupported`
-  (FR3, FR13); a view the binary lacks reports itself unavailable and the
+- Unsupported behavior: a call the binary lacks answers `unsupported`
+  (FR13); a view the binary lacks reports itself unavailable and the
   library draws its fallback (FR13).
 - Browser evidence: none. Native claims are proven on the iOS Simulator, the
   Android emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
@@ -411,8 +412,8 @@ isPossible})`.
 **Decider:** imdreamrunner, 2026-11-17
 
 A video is an `AstryxAudio` player opened with `hasVideo`, and
-`AstryxVideoView` draws it by id. The same controller drives the library's
-media controls for sound and video, and a second view shows the player without
+`AstryxVideoView` draws it by id. The same controller drives an app's media
+controls for sound and video, and a second view shows the player without
 restarting it.
 
 Rejected: a player owned by its view, because full screen and picture in
@@ -452,16 +453,15 @@ Simulator, and in Astryx Stage.
 Rejected: a view that asks for permission when it mounts, because the app
 then cannot explain the request first.
 
-### DEC-5 — A native piece stays in the platform package when the alternative needs native code
+### DEC-5 — The camera view and the scope-note pieces ship in the platform package
 
 **Reference:** `spec:AST-132/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
 
-A native piece is part of the platform package whenever an app's alternative
-would be an open-source library that needs native code of its own, even when no
-library component uses it. `AstryxCameraView` stays in the `camera` capability
-on this rule, as do the pieces in the scope notes. An app adds no second
-native dependency set for them (`spec:AST-112/FR2`).
+`spec:AST-112/DEC-16` applies to this group: `AstryxCameraView`, a view that no
+library component uses, stays in the `camera` capability, because an app's
+alternative is a camera library with native code of its own. The pieces in
+the scope notes stay in the platform package on the same rule.
 
 ## Open questions
 
