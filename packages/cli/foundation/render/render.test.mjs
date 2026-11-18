@@ -11,7 +11,7 @@ import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage} from './render-page.mjs';
+import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -223,10 +223,35 @@ export default function Page() {
 }
 `,
       );
-      await renderPage(file, {openLayers: true, timeoutMs: 60_000});
+      // The page reads Node's fs, which no script in a browser can, so only
+      // its markup is drawn.
+      await renderPage(file, {openLayers: true, markupOnly: true, timeoutMs: 60_000});
       expect(fs.readFileSync(heard, 'utf8')).toBe('');
     } finally {
       removeLinkedFixture(dir);
     }
   }, 120_000);
 });
+
+describe('withCarriedPaths', () => {
+  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    expect(
+      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
+    ).toBe(
+      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    );
+  });
+});
+
+describe('withUncarriedImages', () => {
+  it('writes in the data: URI of an image the embedded source does not carry', () => {
+    const kept = 'a'.repeat(64);
+    const left = 'b'.repeat(64);
+    const script = `x=c("${kept}","data:image/png;base64");y=c('${left}','data:image/png;base64')`;
+    expect(
+      withUncarriedImages(script, new Set([kept]), (sha, prefix) => (sha === left ? `${prefix},QUJD` : null)),
+    ).toBe(`x=c("${kept}","data:image/png;base64");y="data:image/png;base64,QUJD"`);
+  });
+});
+

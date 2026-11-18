@@ -24,9 +24,11 @@ import {
   walk,
 } from './template-source-tree.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {CLI_ROOT, findPackageRoot, findWorkspaceRoot} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
+import {servingRootPackages} from '../runtime/package-root.mjs';
+import {runChoice} from '../release/run-context.mjs';
 import {
   decidePackageManagerIn,
   formatCliCommand,
@@ -96,6 +98,31 @@ function moduleSpecifiers(source) {
 }
 
 /**
+ * The files a source names with `/// <reference path="…" />` before its
+ * first statement, the only place TypeScript reads one. They bring in types
+ * for the type check, not code a build runs, so they are not imports.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function referencedPaths(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return [];
+  }
+  const first = file.program.body[0]?.start ?? Infinity;
+  /** @type {string[]} */
+  const out = [];
+  for (const c of file.comments ?? []) {
+    if (c.type !== 'CommentLine' || c.start >= first) continue;
+    const ref = /^\/\s*<reference\s+path\s*=\s*(["'])(.+?)\1/.exec(c.value);
+    if (ref) out.push(ref[2]);
+  }
+  return out;
+}
+
+/**
  * moduleSpecifiers, read from the source's syntax tree.
  * @param {string} source
  * @returns {string[]}
@@ -134,6 +161,12 @@ export function parsedSpecifiers(source) {
       add(node.arguments?.[0]);
     } else if (node.type === 'ImportExpression') {
       add(node.source);
+    } else if (
+      node.type === 'TSImportEqualsDeclaration' &&
+      node.moduleReference?.type === 'TSExternalModuleReference'
+    ) {
+      // `import s = require('../shared')`
+      add(node.moduleReference.expression);
     } else if (node.type === 'TSImportType') {
       // `type O = import('chart-lib').Options`
       add(
@@ -262,7 +295,10 @@ export function installCommandFor(packages, cwd) {
   }
   const resolved = resolveInstallVerb(cwd);
   const ranges = cliPackageRanges();
-  const specs = packages.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
+  // A `*` range pins nothing, so the bare name says the same in fewer bytes.
+  const specs = packages.map(p =>
+    ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p,
+  );
   if (resolved.verb !== null) {
     return {
       installCommand: `${resolved.verb} ${specs.join(' ')}`,
@@ -273,6 +309,26 @@ export function installCommandFor(packages, cwd) {
   return {
     installCommand: null,
     noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+  };
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note naming the folder
+ * whose lockfiles disagree when the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const {installCommand} = installCommandFor(packages, cwd);
+  if (installCommand) return {line: installCommand, note: null};
+  const resolved = resolveInstallVerb(cwd);
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${packages.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
   };
 }
 
@@ -314,9 +370,20 @@ export function analyzeTemplateNeeds(source, cwd) {
     // No package.json or unreadable — treat everything as missing.
   }
 
-  const missing = external.filter(p => !(p in projectDeps));
+  // Outside a project, a page takes what the host's package set provides,
+  // so a package that set declares needs no install.
+  const provided = runChoice(cwd).inProject ? [] : servingRootPackages();
+  const missing = external.filter(
+    p => !(p in projectDeps) && !provided.includes(p),
+  );
 
-  const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
+  // In a folder that no package.json holds, an install would make the folder
+  // a project, so the missing packages are named for the project that uses
+  // the page instead.
+  const unpackaged = findPackageRoot(cwd) == null;
+  const {installCommand, noCommandReason} = unpackaged
+    ? {installCommand: null, noCommandReason: null}
+    : installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);
@@ -328,9 +395,11 @@ export function analyzeTemplateNeeds(source, cwd) {
   const notes = [];
   if (missing.length > 0) {
     notes.push(
-      installCommand
-        ? `Install missing dependencies: ${installCommand}`
-        : (noCommandReason ?? ''),
+      unpackaged
+        ? `Missing dependencies: ${missing.join(', ')}. Install them in the project that uses this page.`
+        : installCommand
+          ? `Install missing dependencies: ${installCommand}`
+          : (noCommandReason ?? ''),
     );
   }
   if (stylexCompilerNeeded) {

@@ -355,7 +355,7 @@ export function placeholderFixes(definitions, main, backups = [], variant) {
  * @param {DiscoveredIconSet[]} sets
  * @returns {Map<string, SourceIcon>}
  */
-function indexSets(sets) {
+export function indexSets(sets) {
   /** @type {Map<string, SourceIcon>} */
   const index = new Map();
   const astryx = astryxDefinitionsByName();
@@ -479,7 +479,7 @@ function hasLook(icon, set, variant) {
  *   exports by the library export they re-export, read once per mapping
  * @returns {IconSetIcon | undefined}
  */
-function wrappedIcon(set, module, imported, read) {
+export function wrappedIcon(set, module, imported, read) {
   let byOrigin = read.get(set);
   if (!byOrigin) {
     byOrigin = new Map();
@@ -507,7 +507,7 @@ function wrappedIcon(set, module, imported, read) {
  * its subpaths, and every other `@astryxdesign/` package).
  * @param {string} module
  */
-function isAstryxModule(module) {
+export function isAstryxModule(module) {
   return module.startsWith('@astryxdesign/');
 }
 
@@ -517,7 +517,7 @@ function isAstryxModule(module) {
  * @param {DiscoveredIconSet} set
  * @param {string} module
  */
-function wrapsModule(set, module) {
+export function wrapsModule(set, module) {
   const library = set.data.source?.package;
   return (
     library != null && (module === library || module.startsWith(`${library}/`))
@@ -529,7 +529,7 @@ function wrapsModule(set, module) {
  * default import, `*` for a namespace import.
  * @param {any} specifier
  */
-function importedName(specifier) {
+export function importedName(specifier) {
   if (specifier.type === 'ImportDefaultSpecifier') return 'default';
   if (specifier.type === 'ImportNamespaceSpecifier') return '*';
   return specifier.imported.name ?? specifier.imported.value;
@@ -640,7 +640,7 @@ export function sharedTemplateMeanings(declared) {
  * a Node built-in.
  * @param {string} module
  */
-function isPackageModule(module) {
+export function isPackageModule(module) {
   return !/^(?:\.|\/|node:)/u.test(module);
 }
 
@@ -848,8 +848,8 @@ export const NO_ICON_SETS = Object.freeze({
  *   icon definition each imported icon draws, by its imported name
  * @returns {{source: string, icons: TemplateIconsReport | undefined}} `icons`
  *   is undefined, and the source unchanged, when no set is given and none is
- *   configured, as for every project without the opt-in, whose state carries
- *   no sets: icon sets are experimental (spec:AST-017 FR27), so a
+ *   configured, as for every project where icon features are off, whose
+ *   state carries no sets: icon sets are experimental (spec:AST-017 FR27), so a
  *   project that does not use them gets exactly the output it always has.
  */
 export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
@@ -1244,13 +1244,19 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       const wrapper = wrapped.get(specifier);
       if (!wrapper) continue;
       accounted.add(declaredKey(specifier));
+      // A set wraps a library package, not one subpath of it.
+      const library = wrapper.data.source?.package;
+      const from =
+        library && node.source.value !== library
+          ? `${node.source.value}, part of ${library}`
+          : node.source.value;
       icons.kept.push({
         module: node.source.value,
         export: importedName(specifier),
         reason:
           wrapper === target
-            ? `it already comes from ${node.source.value}, which ${icons.set} wraps`
-            : `no set in your list maps its icon definition, and it already comes from ${node.source.value}, which ${wrapper.package}/${wrapper.name} wraps`,
+            ? `it already comes from ${from}, which ${icons.set} wraps`
+            : `no set in your list maps its icon definition, and it already comes from ${from}, which ${wrapper.package}/${wrapper.name} wraps`,
       });
     }
   }

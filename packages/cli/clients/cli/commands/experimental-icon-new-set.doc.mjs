@@ -89,7 +89,10 @@ export const doc = {
   ],
   outsideProject: 'refuse',
   exitCodes: [
-    {code: 0, when: 'the set is written or the dry run succeeds'},
+    {
+      code: 0,
+      when: 'the set is written or the dry run succeeds, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
+    },
     {
       code: 1,
       when: 'the name, options, package, or target files are invalid or conflict',

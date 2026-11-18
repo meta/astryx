@@ -774,7 +774,7 @@ export default function FormWizardVerticalPage() {
         )
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <Center axis="horizontal">
             <VStack
               gap={6}

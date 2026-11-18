@@ -154,8 +154,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   copy fields of the `theme.add` response as the `theme.eject` response, with
   the descriptor in its file list, followed by `missingPackages`, the packages
   the copy imports that the app does not declare, and `installCommand`, the
-  command that installs them, which is null when none are missing or the
-  package manager is not known. From any folder of the project (the nearest
+  command that installs them, which is null when none are missing, when the
+  package manager is not known, or when no package.json holds the folder
+  (`spec:AST-048` FR17). From any folder of the project (the nearest
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.

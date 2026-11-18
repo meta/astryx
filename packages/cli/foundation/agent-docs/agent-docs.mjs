@@ -95,6 +95,15 @@ export {
 } from './agent-docs-target.mjs';
 
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/**
+ * The block's last line: how an agent removes the block. `--remove-agents`
+ * clears the project root and the working folder (cli-surface INV31); a copy
+ * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
+ */
+export const REMOVE_LINE =
+  'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -384,6 +393,9 @@ export function parseBlockVersion(content) {
  * @param {string} [installedVersion] Defaults to the installed core version.
  * @param {string} [expectedBlock] Fully rendered block for this project. When
  *   present, byte differences are stale even if the Core version is unchanged.
+ * @param {{paths?: string[]}} [options] `paths`: the files to read, relative to
+ *   `targetDir`, in place of the agent docs found there; a named file without
+ *   the block makes the status `stale` (or `missing` when none has one).
  * @returns {{
  *   installedVersion: string,
  *   status: 'missing' | 'stale' | 'current',
@@ -392,22 +404,34 @@ export function parseBlockVersion(content) {
  *   blockVersions: string[],
  * }}
  */
-export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
+export function inspectAgentDocs(
+  targetDir,
+  installedVersion,
+  expectedBlock,
+  {paths} = {},
+) {
   const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
+  // Named files (init's --agent-docs-path) are the docs: one without the
+  // block keeps the set from being current.
+  let namedWithoutBlock = 0;
 
-  for (const rel of discoverAgentDocs(targetDir)) {
+  for (const rel of paths ?? discoverAgentDocs(targetDir)) {
     /** @type {string} */
     let content;
     try {
       content = fs.readFileSync(path.join(targetDir, rel), 'utf-8');
     } catch {
+      if (paths) namedWithoutBlock++;
       continue; // Unreadable — treat as absent.
     }
     const hasNew = content.includes(MARKER_START);
     const hasLegacy = content.includes(LEGACY_MARKER_START);
-    if (!hasNew && !hasLegacy) continue; // Not a block we manage.
+    if (!hasNew && !hasLegacy) {
+      if (paths) namedWithoutBlock++;
+      continue; // Not a block we manage.
+    }
     // An import of AGENTS.md names no version and never needs a refresh.
     if (isAgentsImportBlock(rel, content)) continue;
 
@@ -441,7 +465,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
   /** @type {'missing' | 'stale' | 'current'} */
   let status;
   if (files.length === 0) status = 'missing';
-  else if (staleFiles.length > 0) status = 'stale';
+  else if (staleFiles.length > 0 || namedWithoutBlock > 0) status = 'stale';
   else status = 'current';
 
   return {installedVersion: version, status, files, staleFiles, blockVersions};
@@ -730,6 +754,10 @@ export function generateCompressedIndex(
       }
     }
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes whole agent files or cuts one copy by hand
+  // and leaves the others.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');
