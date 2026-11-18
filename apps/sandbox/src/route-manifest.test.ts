@@ -118,6 +118,10 @@ describe('Sandbox static export contract', () => {
       canHydrate('/pages/alert-dialog-cases/', '?case=alert-over-a-toast'),
     ).toBe(false);
     expect(canHydrate('/pages/alert-dialog-cases/', '')).toBe(true);
+    expect(canHydrate('/pages/toast-swipe-cases/', '?case=turn-back')).toBe(
+      false,
+    );
+    expect(canHydrate('/pages/toast-swipe-cases/', '')).toBe(true);
     expect(canHydrate('/pages/list-reorder-cases/', '?case=list')).toBe(false);
     expect(canHydrate('/pages/list-reorder-cases/', '')).toBe(true);
     expect(canHydrate('/pages/scroll-edge-taps/', '?case=refresh')).toBe(false);

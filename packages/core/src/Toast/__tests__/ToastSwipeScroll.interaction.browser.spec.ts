@@ -148,8 +148,27 @@ async function swipe(
   );
 }
 
-/** Shows a new toast if the last swipe dismissed it. */
+/**
+ * Shows a new toast if the last swipe dismissed it. Under a finger a
+ * dismissed card first slides past its edge, and only then leaves the page.
+ * So this waits until the card rests on the screen or is gone.
+ */
 async function restoreToast(page: Page, card: Locator): Promise<Locator> {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const element = document.querySelector('.astryx-toast');
+        if (element == null) {
+          return 'gone';
+        }
+        const box = element.getBoundingClientRect();
+        const isOnScreen = box.bottom > 0 && box.top < window.innerHeight;
+        return isOnScreen && element.getAnimations().length === 0
+          ? 'rests'
+          : 'moves';
+      }),
+    )
+    .not.toBe('moves');
   if ((await page.locator('.astryx-toast').count()) === 0) {
     return showToast(page);
   }

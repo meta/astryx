@@ -398,3 +398,18 @@ every animator and `CAAnimation` logged.
 | M-SA03 | the confirmed row's lead over the finger | drag past the confirmation point and back at 100 pt/s, 402 pt wide                                                                    | the row's offset against the finger's, per frame, in and out of confirm; `-[UISwipeOccurrence _extraOffsetForOffset:withDirection:]` over a sweep | C, D   |
 | M-SA04 | `swipeActions.slideOutOvershoot`         | full swipe released past the confirmation point, `.normal` and `.destructive`                                                         | the row's position per frame until the action runs and the row returns or is removed; when the handler runs                                       | A, C   |
 | M-SA05 | `swipeActions.releaseVelocity`           | releases at 0.7 × the open width coming back at 20, 25, 30, 35, 40 and 45 pt/s                                                        | open or closed per release: the slowest closing speed that closes the row                                                                         | C      |
+
+## Toast (system notification banner)
+
+SpringBoard draws the banner out of process, so the lab app's animation dump
+cannot see it: a lab app posts the notifications (foreground presentation
+`.banner`) and drives HID touches, and a 60 fps recording is tracked per frame
+(method B). Run on an iPhone 17 Pro simulator, iOS 26.2. Three runs (Oct 23 2026) measured the follow distance and ratio, the release rule
+(`toast.dismissOffset`, `toast.flickVelocity`) and the settle spring
+(`springs.settle`); what remains is below. Each run had 8 to 22 releases.
+Seven recorded settles, from 6.7 to 31 pt out, fit a critically damped spring
+with a 0.5 s response within 0.3 pt: `springs.settle`.
+
+| ID   | What                  | App and gesture                                                                                                  | Extract                                                        | Method | Feeds             |
+| ---- | --------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------ | ----------------- |
+| M-T2 | Banner drag direction | A banner at rest; slow drags from its middle at 15°, 30°, 45° and 60° from vertical, toward the edge, 60 pt long | which drags move the banner and which leave it (the axis rule) | B      | `toast.axisRatio` |
