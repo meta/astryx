@@ -4,7 +4,7 @@
 
 [experimental] `astryx experimental theme editor set` and `new`:
 
-- A new part setting that only repeats what Core already draws there, such as `corners pill --on badge` on a badge that is already round, is no longer written. The result names what the part already draws and says to set another value to change it.
-- The "missed" line that `new` and `set` print near the top now says what it means: these are not problems, each part still shows the base theme's look in a state or variant, nothing is broken, and running show's line for one brings it in line.
+- A new part setting that writes the same token reference Core already uses there at rest, such as `border-radius var(--radius-full) --on badge`, is no longer written, and the result says "[no change]". A setting whose value only matches what the part draws today, such as `corners pill --on badge` on a round badge, is written as the person's own choice, and the result says it matches and holds if that token changes.
+- The "missed" line that `new` and `set` print near the top now says what it means: each part it names still shows the base theme's own look where your changes did not reach. Keep each one, or bring it in line with the line `show` lists for it.
 
 @josephfarina

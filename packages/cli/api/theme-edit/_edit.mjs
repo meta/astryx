@@ -6351,21 +6351,32 @@ async function changeOnce(
         )
       : [];
   /**
-   * What Core draws for a part's property at rest, in both modes the same,
-   * read from the part data with the base theme's tokens; null when the
-   * modes differ or nothing is read.
-   * @param {string} part @param {string} prop
+   * What Core writes for a part's property at rest, in every look the part
+   * renders with no state, when they all agree: as written (a token
+   * reference, `var(--radius-full)`), or, with `resolve`, as drawn now, the
+   * theme's own token values first, then the base theme's and Core's.
+   * @param {string} part @param {string} prop @param {boolean} [resolve]
+   * @returns {string | null}
    */
-  const drawnAtRest = (part, prop) => {
+  const coreAtRest = (part, prop, resolve = false) => {
     const at = /** @type {Record<string, string>} */ (
       ctx.C?.MAP?.[part]?.at?.[prop] ?? {}
     );
-    // (At rest: every look the part renders, with no state, the plain
-    // rule reaching each of them; one value only when they all agree.)
     const rests = Object.entries(at)
       .filter(([k]) => !/[:\s]|state|open|pressed|checked/.test(k))
       .map(([, v]) => v);
     if (!rests.length) return null;
+    const own = /** @type {Record<string, unknown>} */ (
+      compiledBefore?.tokens ?? {}
+    );
+    /** @param {'light' | 'dark'} m @param {string} t */
+    const ownValue = (m, t) => {
+      const v = own[t];
+      if (v == null) return undefined;
+      if (Array.isArray(v)) return String(v[m === 'dark' ? 1 : 0] ?? v[0]);
+      const pair = /^light-dark\(\s*([^,]+?)\s*,\s*(.+?)\s*\)$/.exec(String(v));
+      return pair ? pair[m === 'dark' ? 2 : 1] : String(v);
+    };
     /** @param {'light' | 'dark'} m @param {string} rest */
     const resolveOne = (m, rest) => {
       let v = String(rest);
@@ -6374,18 +6385,32 @@ async function changeOnce(
           /var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi,
           (_m, t, fb) =>
             String(
-              base?.[m]?.[t] ?? ctx.project.core.tokenDefaults?.[t] ?? fb ?? '',
+              ownValue(m, t) ??
+                base?.[m]?.[t] ??
+                ctx.project.core.tokenDefaults?.[t] ??
+                fb ??
+                '',
             ),
         );
       return v.trim();
     };
     const all = new Set(
-      rests.flatMap(rest => [
-        resolveOne('light', rest),
-        resolveOne('dark', rest),
-      ]),
+      resolve
+        ? rests.flatMap(rest => [
+            resolveOne('light', rest),
+            resolveOne('dark', rest),
+          ])
+        : rests.map(rest => String(rest).trim()),
     );
     return all.size === 1 ? [...all][0] || null : null;
+  };
+  // (Only a write of the same reference Core uses repeats it: a value that
+  // matches what is drawn today is the person's own choice, which holds
+  // when a token changes later.)
+  /** @param {string} part @param {string} prop */
+  const drawnAtRest = (part, prop) => {
+    const ref = coreAtRest(part, prop);
+    return ref && /var\(/.test(ref) ? ref : null;
   };
   // A new plain part setting that only writes what Core already draws
   // there at rest (pill corners on a badge that is round already) changes
@@ -6875,6 +6900,21 @@ async function changeOnce(
             ? `no change: ${s.on} already draws ${drawnAlready.map(x => x.replace(/^[^:]*:\s*/, '')).join(', ')} at rest, so ${describe(s)} was not written; to change it, set another value`
             : `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
         ]
+      : []),
+    // (A plain part rule whose value matches what the part draws today
+    // from a token: written as the person's own, said so.)
+    ...(sub === 'set' && s.on && !s.when && !s.state && !r.unchanged
+      ? styled.flatMap(line => {
+          const m = /^([a-z0-9-]+): ([a-z-]+) (.+)$/.exec(line);
+          if (!m) return [];
+          const ref = coreAtRest(m[1], m[2]);
+          const now = coreAtRest(m[1], m[2], true);
+          return ref && now === m[3] && ref !== m[3] && /var\(/.test(ref)
+            ? [
+                `${m[1]} already draws ${m[2]} ${now} at rest (from ${ref}): this writes ${now} as its own, so it holds if that token changes`,
+              ]
+            : [];
+        })
       : []),
     ...r.notes,
   ];
@@ -8629,7 +8669,7 @@ async function sayNextStepClears(ctx, slug, s, r) {
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} res
  *   the theme's tokens as the change built them (a change that changed
  *   nothing comes back with none: they are read again)
- * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[]}>}
+ * @returns {Promise<{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}>}
  */
 async function missedSummary(ctx, slug, data, res) {
   if (!data.settings.length) return {};
@@ -8644,8 +8684,17 @@ async function missedSummary(ctx, slug, data, res) {
     {count: true},
   ).catch(() => []);
   const on = [...new Set(list.map(m => m.part))];
+  // (Where each part keeps the base look: the state named, or at rest.)
+  const where = [
+    ...new Set(list.map(m => `${m.part} ${m.state ? m.state : 'at rest'}`)),
+  ];
   return list.length
-    ? {missed: list.length, missedParts: on.length, missedOn: on}
+    ? {
+        missed: list.length,
+        missedParts: on.length,
+        missedOn: on,
+        missedWhere: where,
+      }
     : {};
 }
 

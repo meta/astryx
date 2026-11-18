@@ -351,9 +351,7 @@ describe.sequential('the editor commands succeed from the command line', () => {
   it('set on one component exits 0 with a JSON envelope', async ({skip}) => {
     needsTheme(skip);
     expect(
-      // (A value the card does not draw already: one it draws is not
-      // written, and then has no undo.)
-      (await ok(['set', 'cli', 'corners', '13px', '--on', 'card'])).type,
+      (await ok(['set', 'cli', 'corners', '12px', '--on', 'card'])).type,
     ).toBe('themeEdit.set');
   });
 

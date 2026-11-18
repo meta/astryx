@@ -178,8 +178,7 @@ describe('dials (final 4)', () => {
 
   it('5: a corners dial under an exact border-radius is shown as not shown, and steps from it', async () => {
     await themeEditNew('ex', {cwd});
-    // (A rung the card does not draw already: one it draws is not written.)
-    await themeEditSet('ex', 'corners', 'square', {cwd, on: 'card'});
+    await themeEditSet('ex', 'corners', 'small', {cwd, on: 'card'});
     await themeEditSet('ex', 'border-radius', '20px', {cwd, on: 'card'});
     const shown = await themeEditShow('ex', {cwd});
     expect(shown.data.partValues.join(' ')).toMatch(/not shown: border-radius/);

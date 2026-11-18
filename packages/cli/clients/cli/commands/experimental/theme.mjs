@@ -638,14 +638,15 @@ function changeBlocks(r) {
  * named, near the top of a change or a new theme, so a head of the
  * output keeps it; show names the first ones with their lines, and show
  * --json lists each.
- * @param {{missed?: number, missedParts?: number, missedOn?: string[]}} d
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}} d
  */
 function missedLine(d) {
-  const {missed = 0, missedParts = missed, missedOn = []} = d;
+  const {missed = 0, missedParts = missed, missedOn = [], missedWhere = []} = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
   if (!missed) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}. These are not problems (problems are listed apart): each part still shows the base theme's look in a state or variant. Nothing is broken; to bring one in line with your changes, run its line from show (show --json lists each)`,
+      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists each miss with its line (show --json has every one)`,
     }),
   ];
 }
