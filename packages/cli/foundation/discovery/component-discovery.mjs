@@ -16,6 +16,7 @@ import {
   withListingCache,
 } from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
@@ -264,27 +265,23 @@ function hasOwnFolder(srcDir, name) {
 
 /**
  * Member names read in this process, by doc path, reused while the file keeps
- * its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, members: string[]}>}
+ * its stamp (`fileStamp`).
+ * @type {Map<string, {stamp: string, members: string[]}>}
  */
 const memberReads = new Map();
 
 /**
- * The names a doc lists as `components` members (see docMemberNames).
+ * The names a doc lists as `components` members (see docMemberNames). Kept
+ * names still count as a read of the doc, so a kept catalog sees an edit.
  * @param {string} docPath
  * @returns {string[]}
  */
 function readDocMembers(docPath) {
-  let stat;
-  try {
-    stat = fs.statSync(docPath);
-  } catch {
-    return [];
-  }
+  recordContentRead(docPath);
+  const stamp = fileStamp(docPath);
+  if (stamp === '-') return [];
   const cached = memberReads.get(docPath);
-  if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-    return cached.members;
-  }
+  if (cached?.stamp === stamp) return cached.members;
   /** @type {string[]} */
   let members;
   try {
@@ -292,7 +289,7 @@ function readDocMembers(docPath) {
   } catch {
     members = [];
   }
-  memberReads.set(docPath, {size: stat.size, mtimeMs: stat.mtimeMs, members});
+  memberReads.set(docPath, {stamp, members});
   return members;
 }
 
@@ -371,10 +368,11 @@ export function familyMember(docs, name) {
  *
  * Keys are sorted alphabetically (groups and ungrouped components interleaved).
  * Components within each group are also sorted alphabetically.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  if (coreDir == null) return {};
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
   // The Core the CLI was published with, unchanged, has its list stored.
@@ -601,11 +599,12 @@ function foldersHolding(srcDir, entries, names) {
  * Find the .doc.mjs file for a component.
  * For sub-components (e.g. StackItem), returns the parent's .doc.mjs
  * if the sub-component is documented there.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentReadme(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const exactDoc = `${name}.doc.mjs`;
   const xdsDoc = `XDS${name}.doc.mjs`;
@@ -664,11 +663,12 @@ export function findComponentReadme(coreDir, name) {
  * `useResizable.ts`), so `.ts` candidates are searched alongside `.tsx`. Without
  * this, deriving the import path for a `.ts`-authored function falls back to the
  * bare `@astryxdesign/core` root instead of its tree-shakeable subpath.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentSource(coreDir, name) {
+  if (coreDir == null) return null;
   const found = ownSourceFile(coreDir, name);
   if (found == null) return null;
   // A component's exact name in another case (`tokenizer` for Tokenizer) is
@@ -810,11 +810,13 @@ function caseSpelledComponentSource(srcDir, name) {
 /**
  * Compute the Levenshtein (edit) distance between two strings.
  * Used for fuzzy-matching component names. Dependency-free.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: every
+ *   name then imports from the package root
  * @param {string} componentName
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  if (coreDir == null) return '@astryxdesign/core';
   const stored = checkedComponentList(coreDir)?.imports;
   if (stored && Object.hasOwn(stored, componentName)) {
     return stored[componentName];
@@ -1101,20 +1103,6 @@ export function findExternalComponentDoc(docsDir, name) {
 /** @type {Map<string, {stamp: string, value: Record<string, any> | null}>} doc reads, reused while the doc file is unchanged */
 const docReads = new Map();
 
-/**
- * A file's identity for a cache: ctime and inode change on a rewrite even when
- * npm stamps the same size and mtime.
- * @param {string} file
- */
-function fileStamp(file) {
-  try {
-    const {size, mtimeMs, ctimeMs, ino} = fs.statSync(file);
-    return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
-  } catch {
-    return 'missing';
-  }
-}
-
 /** UTF-16 code-unit order, the same in every locale. @param {string} a @param {string} b */
 function byCodeUnit(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -1126,11 +1114,15 @@ function byCodeUnit(a, b) {
  * @returns {Record<string, any> | null}
  */
 function docObject(docPath) {
+  // A kept value still counts as a read of the doc (see readDocMembers).
+  recordContentRead(docPath);
   const stamp = fileStamp(docPath);
   const cached = docReads.get(docPath);
   if (cached?.stamp === stamp) return cached.value;
   const value = staticExportObject(docPath, DOC_EXPORTS.components);
-  docReads.set(docPath, {stamp, value});
+  // A file that appeared after its stamp is not kept: the entry would
+  // outlive its removal.
+  if (stamp !== '-') docReads.set(docPath, {stamp, value});
   return value;
 }
 

@@ -186,7 +186,8 @@ describe('refusals', () => {
       themeEditSet('t', 'background', '#fff', {
         cwd,
         on: 'button',
-        state: 'pressed',
+        // (A button's pressed is a state now: Core paints aria-pressed.)
+        state: 'checked',
       }),
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_STATE');

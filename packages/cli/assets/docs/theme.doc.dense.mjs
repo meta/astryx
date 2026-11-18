@@ -4,7 +4,7 @@
 
 export const docsDense = {
   description:
-    'how themes work: wrap app in a theme; create/change one (also denser/roomier, one kind of part): astryx experimental theme editor new <name> --like neutral (rest = first sections).',
+    'how themes work: wrap app in a theme; create/change one (also denser/roomier, one kind of part): astryx experimental theme editor new <name> --like neutral; steps follow, then publish a theme for other teams.',
   sections: [
     {
       section: 'Make or change a theme',
@@ -53,6 +53,16 @@ export const docsDense = {
         {
           type: 'prose',
           text: 'experimental theme preview app <dir> = starter app showing the theme. use + create themes: see use-a-theme and author-a-theme.',
+        },
+      ],
+    },
+    {
+      section: 'Share a theme with other teams',
+      title: 'Share a theme with other teams',
+      content: [
+        {
+          type: 'prose',
+          text: 'publish a theme for other teams: ship it in a package (theme in its themes folder, built with {@command theme build}, published like any package); another team installs it, runs {@command theme add <name> --package <package>}. {@link generic:add-a-theme}.',
         },
       ],
     },

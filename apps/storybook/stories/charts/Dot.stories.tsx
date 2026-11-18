@@ -5,7 +5,7 @@ import {Chart, dot, ChartGrid, ChartAxis} from '@astryxdesign/charts';
 import {scatterData, stripData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/Dot',
+  title: 'Charts/Marks/Dot',
   component: Chart,
 };
 export default meta;

@@ -23,6 +23,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   FolderIcon,
   DocumentTextIcon,
@@ -239,7 +240,8 @@ export default function ResizableWorkspacePage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
+          <VisuallyHidden as="h1">Code editor</VisuallyHidden>
           <Layout
             height="fill"
             start={
@@ -405,7 +407,10 @@ export default function ResizableWorkspacePage() {
                                   gap={3}
                                   style={styles.propertiesContent}>
                                   <Stack direction="vertical" gap={1}>
-                                    <Heading level={3} maxLines={1}>
+                                    <Heading
+                                      level={3}
+                                      accessibilityLevel={2}
+                                      maxLines={1}>
                                       {activeFile}
                                     </Heading>
                                     <Text
@@ -435,7 +440,7 @@ export default function ResizableWorkspacePage() {
                                       onClick={() =>
                                         // Demo only: replace this toast with the call that performs the action.
                                         showToast({
-                                          body: `${activeFile} formatted`,
+                                          body: `Demo: ${activeFile} would be formatted here`,
                                           uniqueID: 'format',
                                         })
                                       }
@@ -444,11 +449,25 @@ export default function ResizableWorkspacePage() {
                                       label="Go to Definition"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the definition would open here',
+                                          uniqueID: 'go-to-definition',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Find References"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: references would be listed here',
+                                          uniqueID: 'find-references',
+                                        })
+                                      }
                                     />
                                   </Stack>
                                 </Stack>

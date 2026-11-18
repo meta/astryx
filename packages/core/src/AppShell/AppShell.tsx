@@ -45,6 +45,7 @@ import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import {LayoutDividerContext} from '../Layout/LayoutDividerContext';
 import {
   DEFAULT_LAYOUT_SLOTS,
@@ -1344,56 +1345,58 @@ export function AppShell({
         <LayoutAreaContext value={null}>
           <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
             <LayoutDividerContext value={null}>
-              {/* Skip-to-content link */}
-              <a
-                href={`#${mainContentId}`}
-                onClick={handleSkipLinkClick}
-                {...focusOutlineProps.focusVisible(styles.skipLink)}
-                data-testid="skip-to-content">
-                {t('@astryx.appShell.skipToContent')}
-              </a>
+              <LayoutContainerContext value={null}>
+                {/* Skip-to-content link */}
+                <a
+                  href={`#${mainContentId}`}
+                  onClick={handleSkipLinkClick}
+                  {...focusOutlineProps.focusVisible(styles.skipLink)}
+                  data-testid="skip-to-content">
+                  {t('@astryx.appShell.skipToContent')}
+                </a>
 
-              <Layout
-                height={height}
-                padding={0}
-                header={
-                  <>
-                    {headerContent}
-                    {autoMobileTopBar}
-                  </>
-                }
-                start={sideNavContent}
-                content={mainContent}
-              />
+                <Layout
+                  height={height}
+                  padding={0}
+                  header={
+                    <>
+                      {headerContent}
+                      {autoMobileTopBar}
+                    </>
+                  }
+                  start={sideNavContent}
+                  content={mainContent}
+                />
 
-              {/* Mobile nav — always mounted below breakpoint via Activity so DOM
+                {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
-              {shouldRenderMobileNavReactNode && mobileNavReactNode}
-              {shouldRenderConfigContent && mobileNavConfigContent}
-              {isBelowBreakpoint &&
-                !mobileNavDisabled &&
-                mobileNavReactNode == null &&
-                !mobileNavConfigContent && (
-                  <ActivityWrapper
-                    mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                    {/* SideNav drawer — always mounted so presence detection works.
+                {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                {shouldRenderConfigContent && mobileNavConfigContent}
+                {isBelowBreakpoint &&
+                  !mobileNavDisabled &&
+                  mobileNavReactNode == null &&
+                  !mobileNavConfigContent && (
+                    <ActivityWrapper
+                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
+                      {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                    {hasSideNav && !hasTopNav && (
-                      <SideNavRenderContext value="drawer">
-                        {sideNav}
-                      </SideNavRenderContext>
-                    )}
-                    {hasTopNav && (
-                      <TopNavMobileContentContext
-                        value={drawerMobileContentValue}>
-                        <TopNavRenderContext value="drawer">
-                          {topNav}
-                        </TopNavRenderContext>
-                      </TopNavMobileContentContext>
-                    )}
-                  </ActivityWrapper>
-                )}
+                      {hasSideNav && !hasTopNav && (
+                        <SideNavRenderContext value="drawer">
+                          {sideNav}
+                        </SideNavRenderContext>
+                      )}
+                      {hasTopNav && (
+                        <TopNavMobileContentContext
+                          value={drawerMobileContentValue}>
+                          <TopNavRenderContext value="drawer">
+                            {topNav}
+                          </TopNavRenderContext>
+                        </TopNavMobileContentContext>
+                      )}
+                    </ActivityWrapper>
+                  )}
+              </LayoutContainerContext>
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>

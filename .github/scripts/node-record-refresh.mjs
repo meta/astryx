@@ -16,13 +16,13 @@
  * the one pull request on BRANCH that carries it.
  *
  * @input `regenerate --log <run log>`: a Main run's log and the record.
- *   `check --log <run log> --reasons <file>`: a Main run's log
- *   (`gh run view --log`), the record and the Node project's tracked test
+ *   `check --log <run log> --reasons <file>`: a Main run's Node leg
+ *   logs, each line led by its leg's name (the workflow's read step), the record and the Node project's tracked test
  *   files. `pr --run-url <url> --reasons <file>`: the regenerated record, the
  *   check's reasons, and `gh`.
  * @output `regenerate` rewrites the record's new and far-off entries.
  *   `check` writes the reasons and prints them; with `--github-output`
- *   it also writes `refresh`. `pr` opens the pull request, or edits the one
+ *   it also writes `refresh`. It fails when a leg's log misses test files. `pr` opens the pull request, or edits the one
  *   that is open.
  * @position .github/scripts — run by node-record-refresh.yml
  */
@@ -34,7 +34,9 @@ import {pathToFileURL} from 'node:url';
 import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
 import {nodeLegFiles, readDurations} from '../../scripts/vitest-node-legs.mjs';
 import {
+  countedTestFiles,
   durationsFile,
+  nodeLegLogs,
   recordDurations,
 } from '../../scripts/vitest-shard-sequencer.mjs';
 import {MARGIN_S, RATIO, drifted, legFactor} from './node-time-drift.mjs';
@@ -59,24 +61,6 @@ export const TITLE = 'ci: refresh the recorded Node test times';
 export const RETIME_MIN_S = 5;
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-
-/** A Main run's Node leg, as its log names each line's job. */
-const NODE_LEG_JOB = /^test-node \(\d+\)$/;
-
-/**
- * A Main run's log lines per Node leg.
- * @param {string} log
- * @returns {string[]} each leg's lines, joined
- */
-function nodeLegLogs(log) {
-  /** @type {Map<string, string[]>} */
-  const legs = new Map();
-  for (const line of log.split('\n')) {
-    const job = line.split('\t')[0];
-    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
-  }
-  return [...legs.values()].map(lines => lines.join('\n'));
-}
 
 /**
  * How much of the Node project the record times.
@@ -107,9 +91,9 @@ export function coverage(nodeFiles, recorded) {
  * @returns {{file: string, recorded: number, measured: number}[]}
  */
 export function driftedEntries(log, recorded) {
-  return nodeLegLogs(log)
-    .flatMap(leg =>
-      drifted(recordDurations(leg), recorded, [], {
+  return [...nodeLegLogs(log).values()]
+    .flatMap(text =>
+      drifted(recordDurations(text), recorded, [], {
         all: true,
         margin: DRIFT_MARGIN_S,
       }),
@@ -137,7 +121,7 @@ export function driftedEntries(log, recorded) {
 export function normalizedTimes(log, recorded) {
   /** @type {Record<string, number>} */
   const seconds = {};
-  const legs = nodeLegLogs(log).map(leg => {
+  const legs = [...nodeLegLogs(log).values()].map(leg => {
     const measured = recordDurations(leg);
     const {factor} = legFactor(measured, recorded, new Set());
     for (const [file, raw] of Object.entries(measured)) {
@@ -152,6 +136,25 @@ export function normalizedTimes(log, recorded) {
     return {files: Object.keys(measured).length, factor};
   });
   return {seconds, legs};
+}
+
+/**
+ * The Node legs whose log does not time every test file Vitest counted:
+ * fewer files than its `Test Files` summary, or no summary (a leg that
+ * crashed). A log that stops early (a reader that drops a long line and all
+ * that follows) would keep older times for the rest of the leg.
+ * @param {string} log a Main run's log
+ * @returns {{job: string, read: number, counted: number | null}[]}
+ */
+export function incompleteLegs(log) {
+  return [...nodeLegLogs(log)]
+    .map(([job, text]) => ({
+      job,
+      read: Object.keys(recordDurations(text)).length,
+      counted: countedTestFiles(text),
+    }))
+    .filter(({read, counted}) => counted == null || read < counted)
+    .sort((a, b) => a.job.localeCompare(b.job, 'en', {numeric: true}));
 }
 
 /**
@@ -274,10 +277,27 @@ function main(args) {
     args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
   const reasonsFile = option('--reasons');
   if (command === 'check' && option('--log') && reasonsFile) {
+    const log = fs.readFileSync(
+      /** @type {string} */ (option('--log')),
+      'utf8',
+    );
+    if (nodeLegLogs(log).size === 0) {
+      console.error(
+        '::error title=No Node leg logs::The run log has no Node leg lines, so no record is written.',
+      );
+      return 1;
+    }
+    const short = incompleteLegs(log);
+    if (short.length > 0) {
+      console.error(
+        `::error title=Incomplete Node leg logs::These legs' logs miss test files their Vitest summary counts, so no record is written:\n${short.map(({job, read, counted}) => `  ${job}: ${read} files read, ${counted == null ? 'no Test Files summary' : `${counted} counted`}`).join('\n')}`,
+      );
+      return 1;
+    }
     const reasons = refreshReasons({
       nodeFiles: nodeLegFiles(),
       recorded: readDurations(),
-      log: fs.readFileSync(/** @type {string} */ (option('--log')), 'utf8'),
+      log,
     });
     fs.writeFileSync(reasonsFile, `${JSON.stringify(reasons, null, 2)}\n`);
     const {recorded, total, share} = reasons.coverage;

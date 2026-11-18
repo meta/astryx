@@ -3,7 +3,14 @@
 import {describe, expect, it} from 'vitest';
 
 import {isWeightsFile} from '../_adapter.mjs';
-import {SHELL, blendOrder, stem, weighStart, weightWords} from './weights.mjs';
+import {
+  SHELL,
+  blendOrder,
+  blendSummary,
+  stem,
+  weighStart,
+  weightWords,
+} from './weights.mjs';
 
 // A made-up table for tests only: three page templates and the app shell.
 const CANDIDATES = [SHELL, 'board', 'charts', 'grid'];
@@ -107,6 +114,40 @@ describe('the pick model', () => {
         weights: {...WEIGHTS, pick: PICK},
       }),
     ).toBe('grid');
+  });
+
+  it("reads the call model's tables when it carries none of its own", () => {
+    // The call model reads the pick table with a blend that still ranks
+    // "charts" first; a pick block that carries only its blend must read the
+    // call model's table and choose "grid", as the pick table does.
+    const shared = {
+      ...WEIGHTS,
+      tables: PICK.tables,
+      blend: [0, 0, 0, 1, 0, 0, 0],
+    };
+    const idea = 'charts and cards';
+    expect(
+      weighStart(idea, RANKED, RANKED[0], CATALOG, {
+        weights: {...shared, pick: {blend: PICK.blend}},
+      }),
+    ).toBe('grid');
+    expect(
+      blendOrder(idea, RANKED, RANKED[0], CATALOG, {
+        ...shared,
+        pick: {blend: PICK.blend},
+      }),
+    ).toEqual(
+      blendOrder(idea, RANKED, RANKED[0], CATALOG, {...shared, pick: PICK}),
+    );
+  });
+
+  it('ignores a null pick block', () => {
+    const nullPick = {...WEIGHTS, pick: /** @type {any} */ (null)};
+    expect(
+      blendSummary('charts and cards', RANKED, RANKED[0], CATALOG, nullPick),
+    ).toEqual(
+      blendSummary('charts and cards', RANKED, RANKED[0], CATALOG, WEIGHTS),
+    );
   });
 
   it('never turns the app shell into a page', () => {

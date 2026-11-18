@@ -8,7 +8,7 @@ import {Stepper, Step} from '@astryxdesign/core/Stepper';
 export default function StepperOnTrackHorizontal() {
   const [active, setActive] = useState(2);
   return (
-    <div style={{width: 560}}>
+    <div style={{width: 560, maxWidth: '100%'}}>
       <Stepper
         activeStep={active}
         orientation="horizontal"

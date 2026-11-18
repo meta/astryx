@@ -14,12 +14,11 @@ import * as path from 'node:path';
 import {findPackageRoot} from '../fs/paths.mjs';
 import {findPresentFiles} from '../fs/present-files.mjs';
 
-/** Conventional config basenames, in load-precedence order. */
-export const CONFIG_BASENAMES = [
-  'astryx.config.ts',
-  'astryx.config.mjs',
-  'astryx.config.js',
-];
+// The config names, in load-precedence order, live in the dependency-free
+// setup check, which Core copies.
+import {CONFIG_BASENAMES} from '../agent-docs/agent-doc-state.mjs';
+
+export {CONFIG_BASENAMES};
 
 /**
  * Find astryx.config.{ts,mjs,js} as a sibling of the nearest package.json.

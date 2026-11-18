@@ -108,6 +108,22 @@ export function astryxIconDefinitions() {
 }
 
 /**
+ * How many of Astryx's own definitions a set's `map` covers, of how many.
+ * `experimental icon --list` reports it as `coverage.astryx`, and discover
+ * prints it on an icon set's page.
+ * @param {Iterable<string>} mapped the definitions the set's map covers
+ * @returns {{mapped: number, total: number}}
+ */
+export function astryxDefinitionCoverage(mapped) {
+  const covered = new Set(mapped);
+  const {definitions} = astryxIconDefinitions();
+  return {
+    mapped: definitions.filter(each => covered.has(each.doc.name)).length,
+    total: definitions.length,
+  };
+}
+
+/**
  * Astryx's definitions by name.
  * @returns {Map<string, IconDefinitionDoc>}
  */

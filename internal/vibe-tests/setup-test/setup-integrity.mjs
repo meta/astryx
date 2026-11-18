@@ -305,13 +305,12 @@ function isHostSource(relativePath) {
  *
  * `astryx theme build` emits, for any theme with `light-dark()` values:
  *
- *   :root { color-scheme: light dark; }
  *   html[data-theme="light"] { color-scheme: light; }
  *   html[data-theme="dark"] { color-scheme: dark; }
  *
- * Those three rules *implement* mode support — they are what lets a mode
+ * Those two rules *implement* mode support — they are what lets a mode
  * attribute resolve `light-dark()` — but a lexical `color-scheme: light` scan
- * reads the second one as disabling dark mode. Established hosts write the same
+ * reads the first one as disabling dark mode. Established hosts write the same
  * shape by hand (the `enterprise-scoped-synthetic` fixture pairs
  * `.fixture-shell[data-mode='light']` with its dark twin), so this is not a
  * generated-file problem and is not fixed by ignoring generated files.

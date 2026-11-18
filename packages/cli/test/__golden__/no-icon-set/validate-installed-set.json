@@ -5,10 +5,147 @@
     "validated": true,
     "name": "@acme/glyphs",
     "version": "1.0.0",
-    "issues": [],
+    "issues": [
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      },
+      {
+        "code": "icon_builtin_definition_missing",
+        "severity": "error",
+        "message": "<text>"
+      }
+    ],
     "docTypes": {
       "status": "checked",
-      "docs": 0,
+      "typescript": "<text>",
+      "docs": 1,
       "findings": [],
       "unchecked": []
     },
@@ -22,6 +159,2088 @@
       "findings": [],
       "unchecked": []
     },
+    "iconSets": [
+      {
+        "set": "<text>",
+        "unmappedDefinitions": [
+          {
+            "name": "activity",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "add",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "adjustments",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignBottom",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignCenter",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignEnd",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignJustify",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignMiddle",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignStart",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "alignTop",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "angle",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "announcement",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "apps",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "archive",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "arrowLeft",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "arrowRight",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "attach",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "audio",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bank",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bold",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bolt",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "book",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bookmark",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bookmarkAdd",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "bug",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "building",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "cart",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "chart",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "chevronUp",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "click",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "clipboard",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "cloud",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "code",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "collapse",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "collection",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "compose",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "contrast",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "conversation",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "cornerRadius",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "cpu",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "creditCard",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "cut",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "database",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "delete",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "desktop",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "discount",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "document",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "documentSearch",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "download",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "drag",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "edit",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "emoji",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "expand",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "experiment",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "eye",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "file",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "fingerprint",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "fire",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "flag",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "flipHorizontal",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "flipVertical",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "folder",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "folderAdd",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "frame",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "gift",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "gitBranch",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "gitFork",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "globe",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "gridView",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "group",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "heart",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "home",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "image",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "inbox",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "integration",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "italic",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "key",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "keyboard",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "language",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "lightbulb",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "link",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "list",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "location",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "lock",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "lowercase",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "mail",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "mention",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "message",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "mobile",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "money",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "moon",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "notification",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "notificationActive",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "notificationOff",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "package",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "paddingHorizontal",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "paddingPerSide",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "paddingVertical",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "paintBrush",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "panelBottom",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "panelLeft",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "panelRight",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "pause",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "photoEffect",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "pin",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "play",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "radiusPerCorner",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "raiseHand",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "redo",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "refresh",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "remove",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "rocket",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "rotate",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "rotateCounterclockwise",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "save",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "scale",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "send",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "server",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "settings",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "share",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "shield",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "shipping",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "shoppingBag",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "sparkles",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "star",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "strikethrough",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "sun",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "swatch",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "table",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "tablet",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "tag",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "text",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "textCase",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "textRegular",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "thumbsDown",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "thumbsUp",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "transfer",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "trendDown",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "trendUp",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "underline",
+            "description": "<text>",
+            "words": [
+              "<text>"
+            ]
+          },
+          {
+            "name": "undo",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "unlock",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "uppercase",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "user",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "userAdd",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "userCircle",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "userRemove",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "users",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "video",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "wallet",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "work",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "definition": "<text>",
+            "icon": "<text>"
+          },
+          {
+            "definition": "<text>",
+            "icon": "<text>"
+          },
+          {
+            "definition": "<text>",
+            "icon": "<text>"
+          }
+        ],
+        "unchecked": [],
+        "templateMeanings": {
+          "unmapped": [
+            {
+              "definition": "<text>",
+              "templates": 17
+            },
+            {
+              "definition": "<text>",
+              "templates": 17
+            },
+            {
+              "definition": "<text>",
+              "templates": 16
+            },
+            {
+              "definition": "<text>",
+              "templates": 14
+            },
+            {
+              "definition": "<text>",
+              "templates": 13
+            },
+            {
+              "definition": "<text>",
+              "templates": 13
+            },
+            {
+              "definition": "<text>",
+              "templates": 12
+            },
+            {
+              "definition": "<text>",
+              "templates": 12
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 10
+            },
+            {
+              "definition": "<text>",
+              "templates": 10
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
+            },
+            {
+              "definition": "<text>",
+              "templates": 8
+            },
+            {
+              "definition": "<text>",
+              "templates": 8
+            },
+            {
+              "definition": "<text>",
+              "templates": 8
+            },
+            {
+              "definition": "<text>",
+              "templates": 8
+            },
+            {
+              "definition": "<text>",
+              "templates": 8
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 7
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 6
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 5
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 3
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            }
+          ]
+        }
+      }
+    ],
     "publicImports": {
       "status": "checked",
       "findings": [],

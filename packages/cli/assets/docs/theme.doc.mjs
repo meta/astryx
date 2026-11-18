@@ -22,7 +22,7 @@ export const docs = {
     'accent color',
   ],
   description:
-    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral` (the first sections of this topic give the rest).',
+    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral`. The steps follow, then how to publish a theme so other teams can use it.',
 
   sections: [
     {
@@ -72,6 +72,16 @@ export const docs = {
         {
           type: 'prose',
           text: '`astryx experimental theme preview app <dir>` makes a starter app that shows the theme. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+        },
+      ],
+    },
+    {
+      id: 'share-with-other-teams',
+      title: 'Share a theme with other teams',
+      content: [
+        {
+          type: 'prose',
+          text: 'To publish a theme so other teams can use it, ship it in a package: the package holds the theme in its themes folder, builds it with `{@command theme build}`, and is published like any package. Another team installs the package and runs `{@command theme add <name> --package <package>}`. See {@link generic:add-a-theme}.',
         },
       ],
     },

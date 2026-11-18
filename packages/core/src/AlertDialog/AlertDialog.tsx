@@ -4,7 +4,7 @@
 
 /**
  * @file AlertDialog.tsx
- * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, the
+ * @input Uses React, StyleX, Dialog, Layout, Text's type styles, Button, the
  *   action-group tracking (hooks/useActionGroupTracking), the press-group
  *   context (hooks/pressGroupContext), the group pointers
  *   (hooks/useGroupPressTracking) and the touch motion (useAlertMotion)
@@ -28,8 +28,13 @@ import {Layout} from '../Layout/Layout';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutFooter} from '../Layout/LayoutFooter';
 import {Stack} from '../Stack/Stack';
-import {Heading} from '../Heading/Heading';
-import {Text} from '../Text/Text';
+import {
+  colorStyles,
+  defaultWeightByTypeStyles,
+  displayStyles,
+  sizeByLevelStyles,
+  sizeByTypeStyles,
+} from '../Text/text.stylex';
 import {Button} from '../Button/Button';
 import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
@@ -299,12 +304,34 @@ export function AlertDialog({
       <Layout
         content={
           <LayoutContent>
-            <Heading level={2} id={titleId}>
+            {/* The title and description draw as a level-2 heading and
+                secondary body text, but carry only their own targets: a
+                theme rule on a heading or text state never outranks them. */}
+            <h2
+              id={titleId}
+              {...mergeProps(
+                themeProps('alert-dialog-title'),
+                stylex.props(
+                  colorStyles.primary,
+                  sizeByLevelStyles[2],
+                  displayStyles.block,
+                ),
+              )}>
               {title}
-            </Heading>
-            <Text type="body" color="secondary" id={descriptionId}>
+            </h2>
+            <span
+              id={descriptionId}
+              {...mergeProps(
+                themeProps('alert-dialog-description'),
+                stylex.props(
+                  colorStyles.secondary,
+                  sizeByTypeStyles.body,
+                  defaultWeightByTypeStyles.body,
+                  displayStyles.inline,
+                ),
+              )}>
               {description}
-            </Text>
+            </span>
           </LayoutContent>
         }
         footer={

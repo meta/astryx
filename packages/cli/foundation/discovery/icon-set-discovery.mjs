@@ -41,6 +41,9 @@ import {compareText} from '../text/compare-text.mjs';
 
 const SET_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
+/** The name every icon export has (the icon export contract): `<Name>Icon`. */
+export const ICON_EXPORT_NAME_RE = /^[A-Z][A-Za-z0-9]*Icon$/u;
+
 /** A license or notice file a set ships beside its data (FR15). */
 export const NOTICE_FILE_RE = /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/iu;
 
@@ -144,26 +147,42 @@ export function discoverIconSetDirectory(root, owner) {
   const sets = [];
   /** @type {Array<{name: string, message: string}>} */
   const errors = [];
-  let entries;
-  try {
-    entries = fs.readdirSync(root, {withFileTypes: true});
-  } catch {
-    return {sets, errors};
-  }
-  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
-    if (isIgnoredThemeEntry(entry.name) || !entry.isDirectory()) continue;
-    // Only a lower-kebab directory is a set (FR1).
-    if (!SET_NAME_RE.test(entry.name)) continue;
+  for (const name of iconSetDirectoryNames(root)) {
     try {
-      sets.push(readIconSet(root, entry.name, owner));
+      sets.push(readIconSet(root, name, owner));
     } catch (error) {
       errors.push({
-        name: entry.name,
+        name,
         message: error instanceof Error ? error.message : String(error),
       });
     }
   }
   return {sets, errors};
+}
+
+/**
+ * The names of the set directories under one `iconSets` root, in order,
+ * without reading any set.
+ * @param {string} root absolute `iconSets` root
+ * @returns {string[]}
+ */
+export function iconSetDirectoryNames(root) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  return entries
+    .sort((a, b) => compareText(a.name, b.name))
+    .filter(
+      entry =>
+        !isIgnoredThemeEntry(entry.name) &&
+        entry.isDirectory() &&
+        // Only a lower-kebab directory is a set (FR1).
+        SET_NAME_RE.test(entry.name),
+    )
+    .map(entry => entry.name);
 }
 
 /**
@@ -506,6 +525,45 @@ export function iconSetLook(set, variant) {
 }
 
 /**
+ * The export that draws an icon in a look: the icon's variant of that name
+ * when it has one, else its own export, which draws the set's default look.
+ * Template mapping and `experimental icon <words>` both use it.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{module: string, export: string}}
+ */
+export function iconLookExport(icon, set, variant) {
+  const module = icon.module ?? set.data.module;
+  if (variant && variant !== set.data.default?.variant) {
+    const entry = (icon.variants ?? []).find(each => each.variant === variant);
+    if (entry) {
+      return {module: entry.module ?? module, export: entry.export};
+    }
+  }
+  return {module, export: icon.export};
+}
+
+/**
+ * What an icon draws when it does not have the look asked for: that look,
+ * and the set's default look it draws instead (null for a set with one
+ * look). Undefined when the icon has the look, or when none is asked for.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+export function missingIconLook(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
+}
+
+/**
  * Installed sets the project's list leaves out: the problem, and the fix that
  * adds them as backups after the list's own, keeping the project's look.
  * Doctor and `experimental icon use` print the same words. Every set is
@@ -522,10 +580,7 @@ export function iconSetLook(set, variant) {
  */
 export function unlistedIconSets(installed, main, backups, unlisted, variant) {
   /** @param {{package: string, name: string}} set */
-  const named = set =>
-    installed.filter(each => each.name === set.name).length > 1
-      ? iconSetKey(set)
-      : set.name;
+  const named = set => iconSetName(set, installed);
   const left = unlisted.map(named);
   const them = left.length === 1 ? 'it' : 'them';
   const command = iconUseCommand(
@@ -606,6 +661,19 @@ export function chooseProjectIconSet(
     status: 'ambiguous',
     reason: `${sets.length} icon sets are installed (${sets.map(iconSetKey).join(', ')}) and astryx.config sets no experimental.iconSet, so none is your main set.`,
   };
+}
+
+/**
+ * How a command names a set: by its name when no other installed set has
+ * that name, else as `<package>/<set>`, which a name two packages ship needs
+ * (FR7).
+ * @param {{package: string, name: string}} set
+ * @param {ReadonlyArray<{name: string}>} installed every installed set
+ */
+export function iconSetName(set, installed) {
+  return installed.filter(each => each.name === set.name).length > 1
+    ? iconSetKey(set)
+    : set.name;
 }
 
 /**
