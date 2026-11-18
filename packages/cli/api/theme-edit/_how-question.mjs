@@ -40,7 +40,7 @@ import {
   LIKE,
   wordTable,
 } from './_tables.mjs';
-import {baseInstalled, installLine} from './_project.mjs';
+import {baseInstalled, installLine, packageInstalled} from './_project.mjs';
 import {
   PALETTE_DIALS,
   familyRamp,
@@ -70,6 +70,7 @@ import {
   MOMENT_STATES,
   groupsOf,
   GROUP_ROLES,
+  fontsourceSuggestion,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -82,6 +83,7 @@ import {
   stateSynonym,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
+import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
 import {NUMBER_WORDS, commaNumbers, modeNear, pluralOf} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
@@ -162,13 +164,10 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
  * one-word target names Core's catalog gives (partLexicon): design words,
  * and the words the part overrides read.
  */
-/**
- * Words said in capitals at the start of an ask that are the ask's own
- * grammar or a look, never a font family's name ("Make headings …",
- * "Bold headings", "Serif headings").
- */
-const NOT_FAMILY_WORDS =
-  /^(?:make|use|set|give|let|try|put|keep|turn|change|apply|switch|want|need|please|all|every|the|our|my|your|bold|bolder|big|bigger|small|smaller|large|tiny|light|dark|thin|heavy|serif|sans|mono|monospace|system|uppercase|lowercase|italic|tight|wide|loose|no|only|also|then|and|with)$/;
+/** Every family Fontsource publishes, by its name in lowercase. */
+const FONTSOURCE_NAMES = new Set(
+  FONTSOURCE_FAMILIES.map(name => name.toLowerCase().replace(/\s+/g, ' ')),
+);
 
 const DESIGN_WORDS = [
   'leading',
@@ -4406,57 +4405,135 @@ export function draftAnswer(ctx, env, question) {
       return parts.length > 1 ? parts.slice(1).join(' ') : parts.join(' ');
     });
   }
-  // ("Fraunces headings", "use Playfair Display for headings", "headings
-  // in Lora"): a name said in capitals, that no reader knows as a word,
-  // beside the text it is for, is a font family, as "font Lora" is: set
-  // takes any family, so how names it too.
+  // A name said in capitals beside the text it is for is a font family
+  // only on proof that it names one: a family the font catalog knows (a
+  // system font, a family Fontsource publishes, or one whose package the
+  // project has installed), or a family cue ("headings in Lora", "use Lora
+  // for headings"). Any other capitalized word ("Softer text", "Navbar text
+  // white") is left to the other readers. A catalog name said without a cue
+  // that is also a word the editor reads ("Basic", a family and a plain
+  // word) keeps the editor's reading; the family is offered as its line.
+  /** @type {Array<{name: string, on: string}>} */
+  const familyOffers = [];
   {
-    // (A known part, place or role is never a family: "Navbar text white",
-    // "Page titles 32px", "Primary text darker". Parts and places come
-    // from the part lexicon, the looks a part renders in (variant=primary)
-    // from the census, the theme's color roles from their words.)
+    const generic =
+      /^(?:serif|sans-serif|sans|monospace|mono|system-ui|system|cursive|fantasy|math|emoji)$/i;
+    /** @param {string} run */
+    const inCatalog = run => {
+      const name = run.trim();
+      if (!name || generic.test(name)) return false;
+      if (isSystemFamily(name)) return true;
+      if (FONTSOURCE_NAMES.has(name.toLowerCase().replace(/\s+/g, ' ')))
+        return true;
+      const s = fontsourceSuggestion(name);
+      if (s?.known) return true;
+      return Boolean(
+        s && ctx.project?.cwd && packageInstalled(ctx.project.cwd, s.pkg),
+      );
+    };
+    // (After a cue, a value another property takes is that value, not a
+    // family: "headings in Italic", "text in Blue". The CSS grammar and
+    // the color table say which.)
+    const typeKeywords = new Set(
+      ['font-style', 'font-weight', 'font-stretch', 'text-transform'].flatMap(
+        prop => keywordsOf(prop),
+      ),
+    );
+    /** @param {string} run */
+    const cued = run => {
+      const name = run.trim();
+      return (
+        name.length > 0 &&
+        !generic.test(name) &&
+        colorsIn(name.toLowerCase()).length === 0 &&
+        !name
+          .toLowerCase()
+          .split(/\s+/)
+          .some(w => typeKeywords.has(w))
+      );
+    };
+    // (The words the editor reads: its dials, their rungs and feel words
+    // (the font dial's own rungs are families), the aspects, design words,
+    // colors and roles, the part names, the looks the census renders, and
+    // the CSS keywords of the type properties.)
     const parts = partLexicon(ctx).parts;
     /** @type {Set<string>} */
-    const lookWords = new Set();
+    const vocabulary = new Set(typeKeywords);
+    // (The font dial's own rungs are font presets: family words.)
+    const fontRungs = new Set(
+      String(/** @type {any} */ (DIALS.font)?.values ?? '')
+        .toLowerCase()
+        .split(/[|<>\s]+/),
+    );
+    for (const [dial, d] of Object.entries(DIALS)) {
+      vocabulary.add(dial);
+      if (dial === 'font') continue;
+      const words = /** @type {any} */ (d);
+      for (const w of String(words.values ?? '')
+        .toLowerCase()
+        .split(/[|<>\s]+/))
+        if (/^[a-z-]+$/.test(w)) vocabulary.add(w);
+      const feel = /Feel:([^]*?)(?:$|\. [A-Z])/.exec(words.help ?? '')?.[1];
+      for (const w of String(feel ?? '')
+        .toLowerCase()
+        .match(/[a-z]+/g) ?? [])
+        vocabulary.add(w);
+    }
     for (const part of Object.values(ctx.C?.MAP ?? {}))
       for (const byLook of Object.values(/** @type {any} */ (part)?.at ?? {}))
         for (const look of Object.keys(byLook ?? {}))
           for (const m of look.matchAll(/[a-z-]+[=:]([a-z-]+)/g))
-            lookWords.add(m[1]);
-    const asWord = (/** @type {string} */ w) => {
-      const x = w.toLowerCase();
-      return (
-        aspectsOf(x).length > 0 ||
-        Object.hasOwn(DIALS, x) ||
-        colorsIn(x).length > 0 ||
-        DESIGN_WORDS.includes(x) ||
-        NOT_FAMILY_WORDS.test(x) ||
-        lookWords.has(x) ||
-        ROLE_WORDS.test(x) ||
-        parts.some(([re]) => re.test(` ${x} `) || re.test(` ${x}s `))
-      );
-    };
-    const fam = String.raw`((?:[A-Z][a-z]+(?:\s+|$)){1,3})`;
-    const textNoun = String.raw`(?:headings?|titles?|body(?:\s+text)?|text|copy)\b`;
+            vocabulary.add(m[1]);
+    // (Every word of the name: "Fira Sans" is a family, "Basic" a word.)
     /** @param {string} run */
-    const isFamily = run => {
-      const words = run.trim().split(/\s+/);
-      return words.length > 0 && words.every(w => !asWord(w));
-    };
+    const editorReads = run =>
+      run
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .every(
+          w =>
+            // (A font the editor's own tables name, or a generic family
+            // word, is a family word, not another reading.)
+            !FONTS[w] &&
+            !fontRungs.has(w) &&
+            !fontsourceSuggestion(w)?.known &&
+            !generic.test(w) &&
+            (vocabulary.has(w) ||
+              aspectsOf(w).length > 0 ||
+              DESIGN_WORDS.includes(w) ||
+              colorsIn(w).length > 0 ||
+              ROLE_WORDS.test(w) ||
+              parts.some(([re]) => re.test(` ${w} `) || re.test(` ${w}s `))),
+        );
+    const fam = String.raw`((?:[A-Z][\w'-]*(?:\s+|$)){1,3})`;
+    const textNoun = String.raw`(?:headings?|titles?|body(?:\s+text)?|text|copy)\b`;
     question = String(question)
       .replace(
         new RegExp(
-          String.raw`(^|[,;:]\s*|\buse\s+)${fam}(?=(?:for\s+(?:the\s+)?)?${textNoun})`,
+          String.raw`(^|[,;:]\s*|\buse\s+)${fam}(?=(?:for\s+(?:the\s+)?)?(${textNoun}))`,
           'g',
         ),
-        (m, lead, run) => (isFamily(run) ? `${lead}font ${run}` : m),
+        (m, lead, run, noun) => {
+          const cue = /\buse\s+$/.test(lead);
+          if (cue && cued(run)) return `${lead}font ${run}`;
+          if (!inCatalog(run)) return m;
+          if (editorReads(run)) {
+            familyOffers.push({
+              name: run.trim(),
+              on: /^(?:headings?|titles?)$/i.test(noun) ? 'heading' : 'body',
+            });
+            return m;
+          }
+          return `${lead}font ${run}`;
+        },
       )
       .replace(
         new RegExp(
           String.raw`(\b${textNoun}\s+in\s+(?:the\s+)?)${fam}(?!\s*font)`,
           'g',
         ),
-        (m, lead, run) => (isFamily(run) ? `${lead}font ${run}` : m),
+        (m, lead, run) => (cued(run) ? `${lead}font ${run}` : m),
       );
   }
   question = String(question)
@@ -27820,6 +27897,14 @@ export function draftAnswer(ctx, env, question) {
       }
     }
   result.push(...keptLines);
+  // A catalog family that is also a word the editor reads, said without a
+  // cue: the editor's reading is the answer, the family its offered line.
+  for (const {name, on} of familyOffers)
+    result.push({
+      text: `"${name}" is also a font family; to use it on the ${on === 'heading' ? 'headings' : 'body text'}, say "font ${name}"`,
+      options: [[set('font', name, {on})]],
+      offer: true,
+    });
   // A fill given to every variant of a part ("navy buttons"): a variant
   // whose own text would barely show on it (a secondary button's dark
   // label on navy, under 3:1) keeps its fill; the others take it, each by
