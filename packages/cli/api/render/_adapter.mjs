@@ -871,7 +871,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases, publicDir: source.publicDir});
       // A file the render could not carry is missing too, also when no
       // import here names it (an alias this reverse cannot resolve). An
       // import already in missing names one recorded file, the one it

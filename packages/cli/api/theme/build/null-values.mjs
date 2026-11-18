@@ -15,6 +15,7 @@
  */
 
 import {sourcePlugins} from './source-syntax.mjs';
+import {sameFileBases} from './theme-object.mjs';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 
 const WRAPPERS = new Set([
@@ -160,12 +161,17 @@ export function keyPathLine(source, keyPath, file) {
  * A value given through a call's argument (`withFill({...})`), a const of
  * the module or a spread keeps the key it sits under. With `fromRoot`, the
  * key path is matched from the outermost object (the theme), never as the
- * end of a longer path (`onDark.components…` for `components…`).
+ * end of a longer path (`onDark.components…` for `components…`), and never
+ * in an object the built export extends inside the file (a base theme the
+ * same file defines), while any other (a helper's own object, a const)
+ * still counts; with `bases` as well, only in those base objects.
  * @param {string} source
  * @param {string} [file]
- * @returns {(keyPath: string[], options?: {fromRoot?: boolean}) => number | null}
+ * @param {{exportName?: string}} [options] - `exportName`: the export built
+ *   (`default` when omitted)
+ * @returns {(keyPath: string[], options?: {fromRoot?: boolean, bases?: boolean}) => number | null}
  */
-export function keyPathIndex(source, file) {
+export function keyPathIndex(source, file, {exportName} = {}) {
   /** @type {any} */
   let ast;
   try {
@@ -187,8 +193,13 @@ export function keyPathIndex(source, file) {
           : null;
   // Every literal property, in source order, by its own key: its keys from
   // the outermost object, and its line.
-  /** @type {Map<string, Array<{stack: string[], line: number | null}>>} */
+  /** @type {Map<string, Array<{stack: string[], line: number | null, root: number}>>} */
   const byKey = new Map();
+  // Each outermost object of the source is a root; a theme the built
+  // export extends in this file is a base's, never the theme's.
+  /** @type {Map<any, number>} */
+  const nodeRoots = new Map();
+  let roots = 0;
   // The module's own consts, whose value a key can name.
   /** @type {Map<string, any>} */
   const consts = new Map();
@@ -205,33 +216,37 @@ export function keyPathIndex(source, file) {
   const following = new Set();
   // A value under a key: an object or array keeps the key, and so does one
   // given through a call's argument, a const of the module or a spread.
-  /** @param {any} node @param {string[]} stack */
-  const value = (node, stack) => {
+  /** @param {any} node @param {string[]} stack @param {number} root */
+  const value = (node, stack, root) => {
     if (!node || typeof node !== 'object') return;
-    if (WRAPPERS.has(node.type)) return value(node.expression, stack);
+    if (WRAPPERS.has(node.type)) return value(node.expression, stack, root);
     if (node.type === 'Identifier') {
       const init = consts.get(node.name);
       if (init && !following.has(node.name)) {
         following.add(node.name);
-        value(init, stack);
+        value(init, stack, root);
         following.delete(node.name);
       }
       return;
     }
     if (node.type === 'CallExpression') {
-      visit(node.callee, []);
-      for (const a of node.arguments) value(a, stack);
+      visit(node.callee, [], root);
+      for (const a of node.arguments) value(a, stack, root);
       return;
     }
-    visit(node, stack);
+    visit(node, stack, root);
   };
-  /** @param {any} node @param {string[]} stack */
-  const visit = (node, stack) => {
+  /** @param {any} node @param {string[]} stack @param {number} root */
+  const visit = (node, stack, root) => {
     if (!node || typeof node !== 'object') return;
     if (node.type === 'ObjectExpression') {
+      // An object at no key starts a root of its own; one spread or given
+      // at the top of another keeps that one's.
+      const own = stack.length === 0 && root === 0 ? ++roots : root;
+      if (own !== root) nodeRoots.set(node, own);
       for (const p of node.properties) {
         if (p.type === 'SpreadElement') {
-          value(p.argument, stack);
+          value(p.argument, stack, own);
           continue;
         }
         if (p.type !== 'ObjectProperty') continue;
@@ -239,31 +254,42 @@ export function keyPathIndex(source, file) {
         if (k == null) continue;
         const next = [...stack, k];
         const list = byKey.get(k) ?? [];
-        list.push({stack: next, line: p.loc?.start?.line ?? null});
+        list.push({stack: next, line: p.loc?.start?.line ?? null, root: own});
         byKey.set(k, list);
-        value(p.value, next);
+        value(p.value, next, own);
       }
       return;
     }
     if (node.type === 'ArrayExpression') {
       node.elements.forEach((/** @type {any} */ e, /** @type {number} */ i) =>
-        visit(e, [...stack, String(i)]),
+        visit(e, [...stack, String(i)], root),
       );
       return;
     }
-    // A type assertion or parentheses keep the key the value sits under.
+    // A type assertion or parentheses keep the key the value sits under;
+    // anything else starts again outside every root.
     const inner = WRAPPERS.has(node.type) ? stack : [];
+    const innerRoot = WRAPPERS.has(node.type) ? root : 0;
     for (const [k, v] of Object.entries(node)) {
       if (k === 'loc' || k === 'start' || k === 'end') continue;
-      if (Array.isArray(v)) v.forEach(c => visit(c, inner));
-      else if (v && typeof v === 'object' && v.type) visit(v, inner);
+      if (Array.isArray(v)) v.forEach(c => visit(c, inner, innerRoot));
+      else if (v && typeof v === 'object' && v.type) visit(v, inner, innerRoot);
     }
   };
-  visit(ast.program, []);
-  return (keyPath, {fromRoot = false} = {}) => {
+  visit(ast.program, [], 0);
+  // The roots of the themes the built export extends in this file.
+  /** @type {Set<number>} */
+  const bases = new Set();
+  for (const object of sameFileBases(ast, exportName)) {
+    const root = nodeRoots.get(object);
+    if (root !== undefined) bases.add(root);
+  }
+  return (keyPath, {fromRoot = false, bases: inBases = false} = {}) => {
     if (!keyPath.length) return null;
-    for (const {stack, line} of byKey.get(keyPath[keyPath.length - 1]) ?? [])
+    for (const {stack, line, root} of byKey.get(keyPath[keyPath.length - 1]) ??
+      [])
       if (
+        (!fromRoot || bases.has(root) === inBases) &&
         (fromRoot
           ? stack.length === keyPath.length
           : stack.length >= keyPath.length) &&

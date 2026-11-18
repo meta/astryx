@@ -428,6 +428,179 @@ describe('where the fix and the line point', () => {
     );
   });
 
+  it('reads a base theme the same file defines as the theme it extends, not the theme', async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const baseTheme = defineTheme({name: 'base', components: {button: {'variant:primary': {backgroundColor: '#0000ff'}}}});",
+        'export default defineTheme({',
+        "  name: 't',",
+        '  extends: baseTheme,',
+        "  components: {button: {base: {backgroundColor: '#ff0000'}}},",
+        '});',
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({
+        kind: 'loses',
+        line: 6,
+        by: expect.objectContaining({from: 'extended', key: 'variant:primary'}),
+      }),
+    ]);
+  });
+
+  it("reads a helper's own object as the theme's, never as a theme it extends", async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const withParts = (t: any) => ({...t, components: {...t.components, tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}, button: {...t.components.button, 'variant:primary': {backgroundColor: '#0000ff'}}}});",
+        'export default defineTheme(',
+        "  withParts({name: 't', components: {button: {base: {backgroundColor: '#ff0000'}}}}),",
+        ');',
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({kind: 'hidden', part: 'tab', line: 2}),
+    ]);
+  });
+
+  it('names a setting of a local theme it extends from another file at that file and line', async () => {
+    write(
+      'themes/base/base.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        'export const baseTheme = defineTheme({',
+        "  name: 'base',",
+        "  components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}},",
+        '});',
+        '',
+      ].join('\n'),
+    );
+    const issues = await issuesOf(
+      "{button: {base: {color: '#111111'}}}",
+      "import {baseTheme} from '../base/base.theme';\n",
+      'extends: baseTheme,\n  ',
+    );
+    expect(issues).toEqual([
+      expect.objectContaining({
+        kind: 'hidden',
+        line: 4,
+        file: 'themes/base/base.theme.ts',
+      }),
+    ]);
+  });
+
+  it("checks a same-file base theme's own settings, at its line", async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const baseTheme = defineTheme({name: 'base', components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}}});",
+        "export default defineTheme({name: 't', extends: baseTheme});",
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({kind: 'hidden', line: 2}),
+    ]);
+  });
+
+  it('reads a theme that spreads a base before its own name as the theme, as the last name wins', async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const baseTheme = {name: 'base', components: {}};",
+        'export default defineTheme({',
+        '  ...baseTheme,',
+        "  name: 't',",
+        "  components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}},",
+        '});',
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({kind: 'hidden', line: 6}),
+    ]);
+  });
+
+  it('finds a same-file base through extends, so a helper that computes the name keeps the theme its own', async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const baseTheme = defineTheme({name: 'base', components: {button: {'variant:primary': {backgroundColor: '#0000ff'}}}});",
+        'const dark = (t: any) => ({...t, name: `${t.name}-dark`});',
+        'export default defineTheme(',
+        "  dark({name: 't', extends: baseTheme, components: {button: {base: {backgroundColor: '#ff0000'}}}}),",
+        ');',
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({
+        kind: 'loses',
+        line: 5,
+        by: expect.objectContaining({from: 'extended', key: 'variant:primary'}),
+      }),
+    ]);
+  });
+
+  it('reads a base an extended file defines and extends, at its line in that file', async () => {
+    write(
+      'themes/base/base.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const coreBase = defineTheme({name: 'core', components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}}});",
+        "export const baseTheme = defineTheme({name: 'base', extends: coreBase});",
+        '',
+      ].join('\n'),
+    );
+    expect(
+      await issuesOf(
+        "{button: {base: {color: '#111111'}}}",
+        "import {baseTheme} from '../base/base.theme';\n",
+        'extends: baseTheme,\n  ',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'hidden',
+        line: 2,
+        file: 'themes/base/base.theme.ts',
+      }),
+    ]);
+  });
+
+  it('never reads the built theme as a base because another theme of the file extends it', async () => {
+    write(
+      'themes/t/t.theme.ts',
+      [
+        "import {defineTheme} from '@astryxdesign/core/theme';",
+        "const light = defineTheme({name: 't', components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}}});",
+        "export const dark = defineTheme({name: 't-dark', extends: light, components: {tab: {selected: {color: '#eeeeee'}}}});",
+        'export default light;',
+        '',
+      ].join('\n'),
+    );
+    const {result} = await build('themes/t/t.theme.ts');
+    expect(result.data.settingIssues).toEqual([
+      expect.objectContaining({
+        kind: 'hidden',
+        line: 2,
+        by: expect.objectContaining({from: 'theme'}),
+      }),
+    ]);
+  });
+
   it('keeps the color mode of a one-mode setting in its fix', async () => {
     const [issue] = await issuesOf(
       "{tab: {selected: {'@light': {borderTopColor: '#dddddd'}}, 'selected:selected': {border: '1px solid transparent'}}}",
