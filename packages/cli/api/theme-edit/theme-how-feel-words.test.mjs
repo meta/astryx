@@ -102,6 +102,18 @@ describe('a feel word said for the whole theme', () => {
   it('"feels too playful" moves away from the feel, never toward it', async ctx => {
     if (unbuilt) return ctx.skip();
     expect((await answer('it feels too playful now')).sets).toEqual([]);
+    // (A feel said to stay clear of is never a move toward it.)
+    for (const ask of [
+      "I don't want it busy",
+      'avoid anything busy',
+      'bold headings without being loud',
+    ]) {
+      const sets = (await answer(ask)).sets;
+      expect(sets.join(' '), ask).not.toMatch(/spacing compact|type display/);
+    }
+    expect((await answer('bold headings without being loud')).sets).toContain(
+      'headings bold',
+    );
   }, 240_000);
 
   it("said of a part or of one thing, it is that one's", async ctx => {

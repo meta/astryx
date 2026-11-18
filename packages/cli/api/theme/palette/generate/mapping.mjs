@@ -135,7 +135,7 @@ import {
  * @property {Record<string, Partial<Record<PaletteMode, string>>>} exact Main tokens set exactly, per mode: the color's fill gives way to them.
  * @property {Record<string, string>} unread Main tokens set exactly to a value that is not one readable color in some mode, as written.
  * @property {Record<string, Partial<Record<PaletteMode, StopRef>>> | null} lift Lifted secondary text per background token of LIFT_PARTS, per mode; null without one.
- * @property {Array<{ a: string; b: string; vision: 'red-weak' | 'green-weak'; mode: PaletteMode; colors: [string, string]; }>} cvd Status fills someone red-weak or green-weak may not tell apart.
+ * @property {Array<{ a: string; b: string; vision: 'red-weak' | 'green-weak'; mode: PaletteMode; colors: [string, string]; page?: string; }>} cvd Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} code The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {{token: string; mode: PaletteMode; pair: BasePair; ratio: number}[]} kept The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{ roles: Record<string, 'derived' | 'unreadable' | 'alike'>; why: string[]; }} statuses The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
@@ -2353,9 +2353,20 @@ export function mapPalette(candidate, dials, fills, context) {
          * @returns {boolean}
          */
         w => `--color-${w}` in tokens || exactOf(`--color-${w}`, m) != null;
+      const pageOf = parseColor(
+        String(
+          tokens['--color-background-body']?.[m]?.color ??
+            t.colorIn(
+              String(base?.[m]?.['--color-background-body'] ?? ''),
+              m,
+            ) ??
+            (m === 'light' ? '#ffffff' : '#000000'),
+        ),
+      );
+      const page = pageOf ? hex(pageOf) : m === 'light' ? '#ffffff' : '#000000';
       for (const c of cvdClashes(fills)) {
         if (changed(c.a) || changed(c.b)) {
-          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]]});
+          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]], page});
         }
       }
     }

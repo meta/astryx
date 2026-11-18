@@ -86,7 +86,11 @@ export function setOwnTokenReader(read) {
   ownSourceTokenValues = read;
 }
 import {alphaOf, hex, isClipped, parseColor} from './_color.mjs';
-import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
+import {
+  contrastRatio,
+  hexToOklch,
+  oklchClampedHex,
+} from '../theme/palette/generate/color.mjs';
 import {splitTop} from './_css.mjs';
 import {P} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -323,7 +327,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
- * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string]}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
+ * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string], page?: string}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {Array<{token: string, mode: Mode, pair: import('../theme/palette/generate/mapping.mjs').BasePair, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
@@ -2129,14 +2133,35 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
           .map(x => `${x.vision} (${x.mode})`),
       ),
     ];
-    // The one to move: the second of the pair, toward lighter where it is
-    // already the lighter one, else darker.
-    const [x, y] = c.colors.map(v => hexToOklch(v));
-    const L = Math.max(0.15, Math.min(0.95, y.L + (y.L >= x.L ? 0.15 : -0.15)));
-    const apart = oklchClampedHex(L, y.C, y.H);
-    const dial = c.b === 'error' ? 'danger' : c.b;
+    // The one to move and its way: the second of the pair first, away
+    // from the first in lightness, then the other way, then the first of
+    // the pair; the first move that keeps the moved fill standing out from
+    // the page (3:1, in each mode the pair clashes in) is the line. None
+    // that does: the note names no line.
+    const pages = (pal.cvd ?? [])
+      .filter(z => z.a === c.a && z.b === c.b && z.page)
+      .map(z => /** @type {string} */ (z.page));
+    const tries = /** @type {Array<[number, number]>} */ ([
+      [1, 1],
+      [1, -1],
+      [0, 1],
+      [0, -1],
+    ]);
+    const [p0, p1] = c.colors.map(v => hexToOklch(v));
+    const move = tries
+      .map(([who, way]) => {
+        const [me, other] = who === 1 ? [p1, p0] : [p0, p1];
+        const sign = (me.L >= other.L ? 1 : -1) * way;
+        const L = me.L + sign * 0.15;
+        if (L < 0.15 || L > 0.95) return null;
+        const to = oklchClampedHex(L, me.C, me.H);
+        if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT)) return null;
+        return {role: who === 1 ? c.b : c.a, to, lighter: sign > 0};
+      })
+      .find(Boolean);
+    const dial = move ? (move.role === 'error' ? 'danger' : move.role) : '';
     out.push(
-      `for color-blind readers, the ${c.a} and ${c.b} fills may look alike (${visions.join(', ')}: ${c.colors.join(' and ')}); status icons and words still tell them apart, and a ${y.L >= x.L ? 'lighter' : 'darker'} ${dial} keeps the colors apart too: ${P} set ${slug} ${dial} ${quoteCommandArgument(apart)}`,
+      `for color-blind readers, the ${c.a} and ${c.b} fills may look alike (${visions.join(', ')}: ${c.colors.join(' and ')}); ${move ? `a ${move.lighter ? 'lighter' : 'darker'} ${dial} keeps the colors apart: ${P} set ${slug} ${dial} ${quoteCommandArgument(move.to)}` : 'no lighter or darker shade of either keeps both standing out from the page; pick a status color of another hue'}`,
     );
   }
   if (pal.code?.length)
