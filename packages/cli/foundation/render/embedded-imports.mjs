@@ -90,7 +90,7 @@ export function cssReferences(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-export const RESOLVE_EXTENSIONS = [
+const RESOLVE_EXTENSIONS = [
   '.tsx',
   '.ts',
   '.jsx',
@@ -280,6 +280,21 @@ export function receivingAliases(file) {
  */
 
 /**
+ * The tree paths a relative import may name, in the order a reverse resolves
+ * it: the path as written, then with each extension an extensionless import
+ * stands for, then as its folder's index file with each.
+ * @param {string} spec a tree path, `/`-separated
+ * @returns {string[]}
+ */
+export function resolutionCandidates(spec) {
+  return [
+    spec,
+    ...RESOLVE_EXTENSIONS.map(ext => spec + ext),
+    ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`),
+  ];
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
@@ -297,15 +312,8 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
   /** @type {Set<string>} */
   const missing = new Set();
   /** @param {string} candidate tree path, `/`-separated */
-  const resolveIn = candidate => {
-    if (byPath.has(candidate)) return candidate;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(candidate + ext)) return candidate + ext;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(`${candidate}/index${ext}`))
-        return `${candidate}/index${ext}`;
-    return null;
-  };
+  const resolveIn = candidate =>
+    resolutionCandidates(candidate).find(p => byPath.has(p)) ?? null;
   /**
    * The one tree file an alias import names: the file whose path ends with
    * the import's rest (`@/components/Header` -> `.../components/Header.tsx`).

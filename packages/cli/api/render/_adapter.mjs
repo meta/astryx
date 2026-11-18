@@ -41,7 +41,7 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
-import {RESOLVE_EXTENSIONS, reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {reachableFiles, receivingAliases, resolutionCandidates} from '../../foundation/render/embedded-imports.mjs';
 import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
@@ -882,15 +882,14 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         (/** @type {unknown} */ file) => typeof file === 'string' && file !== '',
       );
       const recordedSet = new Set(recordedOut);
-      /** @param {string} spec */
-      const recordedFileOf = spec =>
-        [spec, ...RESOLVE_EXTENSIONS.map(ext => spec + ext), ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`)].find(
-          candidate => recordedSet.has(candidate),
-        );
-      const covered = new Set(unreached.map(recordedFileOf).filter(Boolean));
+      const covered = new Set(
+        unreached.map(spec => resolutionCandidates(spec).find(candidate => recordedSet.has(candidate))).filter(Boolean),
+      );
       const missing = [...unreached];
+      const listed = new Set(missing);
       for (const file of recordedOut) {
-        if (covered.has(file) || missing.includes(file)) continue;
+        if (covered.has(file) || listed.has(file)) continue;
+        listed.add(file);
         missing.push(file);
       }
       // A carried image, font or media file needs no import to be part of the
