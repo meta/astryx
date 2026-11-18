@@ -1,0 +1,398 @@
+---
+schema_version: 3
+template_version: 7
+kind: component
+id: component:react-native/TopNav
+platform_of: component:TopNav
+authority: draft
+archive_reason: null
+superseded_by: null
+approved_by: null
+approved_at: null
+owners: [imdreamrunner]
+review_triggers:
+  [
+    public-api,
+    behavior,
+    navigation,
+    scrolling,
+    motion,
+    theming,
+    accessibility,
+    platform,
+  ]
+verified_by: []
+modules: []
+families: []
+design_specs: []
+architecture: [architecture:public-component-api]
+contributing: []
+system_specs: [spec:AST-082, spec:AST-093, spec:AST-112]
+---
+
+# TopNav (React Native) component contract
+
+## Contract at a glance
+
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | React Native exports TopNav as `Header`, the screen header (DEC-1). It keeps TopNav's `heading`, `startContent` (alias `children`) and `endContent` with web's meaning, and adds the `back`, `search` and `toolbar` slots and `render` (`system` or `drawn`). Composed parts fill the slots: `HeaderTitle`, `HeaderLargeTitle`, `HeaderBack`, `HeaderSearch`, and the bar items `BarButton`, `BarMenu`, `BarSpacer` and `BarStatus`. Each part writes the screen's header options, a plain record that both renderings read and that a screen can also set directly (DEC-2). |
+| Behavior                | The header of a stack screen in Astryx's router: the title, a large title that collapses into the bar as the screen scrolls, the back control and its menu, bar buttons and menus, a title menu, header search and a bottom toolbar. By default iOS shows the system navigation bar and Android shows the header Astryx draws; an app picks either rendering per navigator or per screen (DEC-3). On Android, header search is the drawn search row (DEC-4).                                                                                                                 |
+| End-user impact         | A person gets the platform's own header: on iOS the navigation bar with its large title, back swipe, back menu and search field; on Android a Material 3 top app bar layout with system back. Titles are headings that scale with the text size, and the back control is named by the screen it returns to.                                                                                                                                                                                                                                                                  |
+| Builder impact          | An app declares its header once per screen with the parts, or with the option keys it already knows from React Navigation. The same code renders on both platforms, in both renderings. An app that uses another router keeps Astryx's components inside its screens, but not this header.                                                                                                                                                                                                                                                                                   |
+| Compatibility/readiness | Not yet released; additive. Draft. Gaps in the drawn rendering are listed under Current-state impact.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Review checks           | Reject a header default chosen by the navigation library rather than this component, a part that renders in the screen's content, a key that two sources set at once without ORD1, a large title or search row that moves with JavaScript per frame, a back control named by anything but FR10's rule, a style option the drawn header drops without a development warning, or a third-party native dependency.                                                                                                                                                              |
+| Governing rules         | `component:TopNav` FR1–FR3 and ORD1; `component:react-native/NavigationStack` FR6, FR7 and FR17; `spec:AST-125` FR1, FR3, FR5, FR6, FR10, FR11 and FR13; `spec:AST-127` FR4, FR7 and FR9; `spec:AST-123` FR1, FR3, FR5, FR7 and FR8; `spec:AST-082` FR11; `spec:AST-093` FR2–FR4; DEC-1–DEC-5 below.                                                                                                                                                                                                                                                                         |
+
+This table is a review projection; the body below is authoritative.
+
+## Intent
+
+On a phone, the bar at the top belongs to each screen of a stack: it names the
+screen, leads back to the screen below, and holds the screen's actions and its
+search. TopNav on React Native is that bar. It keeps TopNav's slot vocabulary,
+so a builder who knows the web header knows where a title and actions go, and
+it renders with the platform's own navigation bar or with a header Astryx
+draws, so it looks and moves like the platform around it. This record states
+only what React Native adds to `component:TopNav` or does differently.
+
+## Compatibility and migration
+
+- Released default preserved: `not yet released`
+- Compatibility class: additive
+- Controlled/uncontrolled behavior: `HeaderSearch` is controlled through
+  `value` and `onChange`, or a starter through `onPress`; nothing else holds
+  state
+- Migration decision: none
+
+Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+The system rendering honours every option this record lists for it. The drawn
+rendering has these gaps; each warns once in development when a screen sets
+the option, and the drawn header shows its theme's look in its place.
+
+- FR11 gap: under the drawn rendering, a custom view in `heading`,
+  `startContent` or `endContent` (a screen's view `headerTitle`, `headerLeft`
+  or `headerRight`) is not drawn.
+- FR11 gap: under the drawn rendering, a bar item with an image icon and no
+  glyph draws its label instead of the image.
+- FR12 gap: under the drawn rendering, a submenu inside a title menu or a bar
+  menu is drawn as a titled section of the same menu, not as a submenu.
+- FR13 gap: under the drawn rendering, `HeaderLargeTitle`'s `subtitle`
+  (`headerLargeSubtitle`) is not drawn.
+- FR10 gap: under the drawn rendering, the back control is always the chevron
+  alone, named by the screen below's title: `HeaderBack`'s `title`, the
+  `default` and `generic` display modes, and its menu of earlier screens are
+  not drawn.
+- FR14 gap: under the drawn rendering, no toolbar is drawn (`toolbar`,
+  `toolbarShown`, `toolbarHidesOnScroll`), a `BarStatus` item leaves its place
+  empty, and `hidesTabBarWhenPushed` keeps the tab bar.
+- FR15 gap: under the drawn rendering, `scrollEdgeEffects` is ignored; the
+  drawn header's own scroll edge applies.
+- FR16 gap: under the drawn rendering, an app's own `headerTitleStyle`,
+  `headerLargeTitleStyle`, `headerStyle` (its scrolled colours included) and
+  `headerTransparent` are ignored; the theme's values apply.
+- FR6 gap: under the drawn rendering, `backPreview` is ignored on Android; the
+  pop keeps the shared-axis transition.
+
+## Ownership boundary
+
+**Owns**
+
+- The React Native public name `Header`, its slots and its parts (FR1, FR2).
+- The header options record and how the parts write it (FR3).
+- The header's default rendering on each platform and the per-screen choice
+  (FR4), and what each rendering draws (FR5, FR6, the option table).
+- The large title, its collapse on scroll, header search, the back control's
+  look and name, bar items, the title menu and the toolbar (FR7–FR14).
+- The header's look: glass, material, scroll edge and colours (FR15, FR16).
+
+**Does not own / non-goals**
+
+- The meaning of `heading`, `startContent`, `endContent` and the `children`
+  alias — owned by `component:TopNav`.
+- Pushes, pops, back gestures, transitions, focus after a push or pop, and the
+  screen's scroll target — owned by `component:react-native/NavigationStack`.
+- The native stack, its bars and the native props the options map onto —
+  owned by `spec:AST-125`.
+- Icon resolution and drawn glyphs — owned by `spec:AST-127`; glass and
+  material views and paint selection — owned by `spec:AST-123`.
+- The bottom tab bar and its accessory — the tab bar component's.
+- Navigation and chrome of another router, such as Expo Router (FR17).
+- Web's AppShell render modes (`default`, `mobile-bar`, `drawer`) and the
+  drawer: a stack screen's header has none of them.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record and never define it.
+
+## Public concepts
+
+| Concept       | Closed values or states                                          | Meaning                                                                                                              | Availability by variant/orientation/state               | Default                             | Owner                           | Stability    | Invalid-value behavior                            |
+| ------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------- | ------------------------------- | ------------ | ------------------------------------------------- |
+| rendering     | `system`; `drawn`                                                | the platform's own bar, or the header Astryx draws over the stack screen                                             | per navigator and per screen (`render`)                 | `system` on iOS; `drawn` on Android | `component:react-native/TopNav` | experimental | an unknown value is a type error                  |
+| title display | inline (`HeaderTitle`); large (`HeaderLargeTitle`); large in row | a bar title, a large title above the content that collapses into the bar, or a large title that stays in the bar row | always                                                  | inline                              | `component:react-native/TopNav` | experimental | none                                              |
+| search place  | under the title (`search`); in the bar (`endContent`)            | where `HeaderSearch` rests                                                                                           | always                                                  | none                                | `component:react-native/TopNav` | experimental | a second `HeaderSearch` warns once in development |
+| back display  | `default`; `generic`; `minimal`                                  | `HeaderBack`'s `displayMode`: the back title, a generic "Back", or the chevron alone                                 | below the stack's root                                  | `default`                           | `component:react-native/TopNav` | experimental | an unknown value is a type error                  |
+| collapse      | resting; collapsing; collapsed                                   | how far the large title and the search row have travelled with the screen's scroll target                            | with a large title or a search row that hides on scroll | resting                             | `component:react-native/TopNav` | experimental | none                                              |
+
+## Behavioral and layout contract
+
+Draft requirements identify their basis so observed code is not mistaken for an
+intentional decision. A `current` contract contains no unresolved rows.
+
+| ID   | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Basis                                                                           | Draft review state |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ------------------ |
+| FR1  | `Header` MUST take TopNav's `heading`, `startContent` and `endContent` with web's names and meaning, and `children` as start content when `startContent` is absent (`component:TopNav` FR2, ORD1). `heading` holds the title part; `startContent` holds items after the back control, in reading direction; `endContent` holds items at the bar's end. TopNav's `centerContent`, `label`, `top-nav` target and render modes are not offered: a phone bar centres or starts its title as the platform does, and has no navigation landmark or drawer. Web base props follow `spec:AST-082` FR7.                                                                                                                                                                                                                                                                                                                                 | `component:TopNav` FR1–FR3, ORD1; `spec:AST-082` FR3, FR7; DEC-1                | verify             |
+| FR2  | React Native MUST export the component as `Header`, with these composed parts: `HeaderTitle` (`title`, `subtitle`, a title menu), `HeaderLargeTitle` (`title`, `subtitle`, `isInRow`, a title menu), `HeaderBack` (`title`, `displayMode`, `hasMenu`), `HeaderSearch`, and the bar items `BarButton`, `BarMenu`, `BarSpacer` and `BarStatus`. Its added slots are `back` (a `HeaderBack`), `search` (a `HeaderSearch` under the title) and `toolbar` (bar items in the bottom toolbar).                                                                                                                                                                                                                                                                                                                                                                                                                                        | DEC-1, DEC-2                                                                    | verify             |
+| FR3  | `Header` MUST render nothing in the screen's content. Each part, when it renders inside a stack screen, writes the screen's header options: the plain, serialisable record both renderings read, whose keys keep the names React Navigation and react-native-screens give them (`spec:AST-125` FR5). A part works inside wrappers, conditionals and fragments. While a part is rendered, the keys it writes override the same keys a screen sets in its `options`; when the part goes, the screen's own value shows again. A screen MAY set the options directly with no parts.                                                                                                                                                                                                                                                                                                                                                | DEC-2; `spec:AST-125` FR5                                                       | verify             |
+| FR4  | The header's rendering MUST default to `system` on iOS and `drawn` on Android. The default is this component's: it holds over any library-wide default for drawn chrome, and the navigation library sets none of its own. A navigator's `render` sets the rendering for its screens; a screen's `render` (on `Header` or in its options) sets it for that screen alone. Both renderings take the same parts and options and mean the same thing by each.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | DEC-3                                                                           | settled            |
+| FR5  | Under `system`, the header MUST be the platform's own bar on the stack screen (`spec:AST-125` FR5): `UINavigationBar` on iOS, a Material 3 top app bar on Android. Parts and options map onto the screen's native props; a custom view in `heading`, `startContent` or `endContent` is placed by the system bar as a header slot, sized by its content, with its touches and layout in the bar's coordinates. What Android's bar does not have (a back title and its menu, a large subtitle, a toolbar, scroll-edge effects) is not drawn there.                                                                                                                                                                                                                                                                                                                                                                               | `spec:AST-125` FR1, FR5; `spec:AST-093` FR2                                     | verify             |
+| FR6  | Under `drawn`, Astryx MUST draw the header over the stack screen with its own parts, and the screen's native bar is hidden. On iOS the drawn header follows the system bar's layout: a centred title, leading and trailing item groups on the theme's surface, and the large title under the bar. On Android it follows the Material 3 top app bar: a start-aligned title, the back arrow first, actions at the end, and a large title in Material's medium collapsing bar. Transitions and back stay the stack host's (`spec:AST-125` FR3).                                                                                                                                                                                                                                                                                                                                                                                   | DEC-3; `spec:AST-093` FR2, FR3                                                  | verify             |
+| FR7  | `HeaderLargeTitle` MUST show a large title above the content that collapses into the bar's title as the screen's scroll target scrolls (`component:react-native/NavigationStack` FR13, FR14), and returns when it scrolls back to the top. With `isInRow`, the large title stays in the bar row and does not collapse. `HeaderTitle` shows the bar title only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `spec:AST-125` FR5; `component:react-native/NavigationStack` FR6                | verify             |
+| FR8  | The collapse MUST follow the scroll target's offset on the UI thread, with no JavaScript per frame, in both renderings (`spec:AST-125` FR11). Under `drawn`, a part that has risen away takes no touches and leaves the accessibility tree; the bar's title fades in as the large title leaves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `spec:AST-125` FR11; `spec:AST-082` FR11                                        | verify             |
+| FR9  | `HeaderSearch` in `search` MUST rest under the title; in `endContent` it rests in the bar. It is a field (`value`, `onChange`, `onSubmit`, `onFocus`, `onBlur`, `onCancel`, `cancelLabel`, `autoCapitalize`, `hasAutoFocus`) or a starter (`onPress`). With `hidesWhenScrolling`, the row rises with the large title and collapses into the bar's search control; without it, the row stays below the bar. With `obscuresBackground`, the content dims while the field is edited and empty, and a tap on the dim ends the search. Ending a search (Cancel, the dim, the escape gesture) calls `onChange('')`, then `onCancel`. Under `system` on iOS it is the system search field with its scopes (`scopes`, `selectedScope`, `onScopeChange`); under `drawn`, and on Android in both renderings, it is the drawn search row (`spec:AST-125` FR6). While the field has focus, back ends the search before it pops the screen. | DEC-4; `spec:AST-125` FR6; `component:react-native/NavigationStack` ORD1        | verify             |
+| FR10 | The back control MUST show on every screen below the stack's root. `HeaderBack` sets the current screen's back control: `title` (else the screen below's `backTitle` or title), `displayMode`, and `hasMenu`, the menu of earlier screens (default true where the platform has one). Its accessible name is the screen below's title rule (`component:react-native/NavigationStack` AR3), whatever it shows. Pressing it, or choosing a screen from its menu, pops through the stack (`component:react-native/NavigationStack` FR7). On Android the back control is the arrow alone, with no menu.                                                                                                                                                                                                                                                                                                                             | `component:react-native/NavigationStack` FR6, FR7, AR3; `spec:AST-125` FR3, FR5 | verify             |
+| FR11 | `startContent`, `endContent` and `toolbar` MUST lay out their bar items leading to trailing in reading direction, so start and end mirror in right-to-left. An item keeps its badge, selected, disabled, hidden and prominent states, its menu (with checkable groups and a menu title), and its accessibility label. An icon resolves through `Icon` (`spec:AST-127` FR4): under `system` on iOS a system symbol where the name has one; otherwise the Astryx glyph, drawn natively (`spec:AST-127` FR7); a symbol-only icon draws the matching glyph where one exists. Any other element in `heading`, `startContent` or `endContent` is a custom view the bar places as it is.                                                                                                                                                                                                                                              | `spec:AST-125` FR5; `spec:AST-127` FR4, FR7                                     | verify             |
+| FR12 | A title part with menu items MUST make its title open that menu, with checkable groups, the menu's title line and submenus, in web's `DropdownMenu` vocabulary. The title's accessible name says it opens a menu.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `spec:AST-125` FR5                                                              | verify             |
+| FR13 | A title part's `subtitle` MUST show a line under the title: in the bar under `HeaderTitle`, and under the large title under `HeaderLargeTitle`. Under `system` on iOS, a subtitle needs iOS 26 and is not shown below it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `spec:AST-125` FR5                                                              | verify             |
+| FR14 | `toolbar` MUST show its items in the screen's bottom toolbar on iOS: `BarButton`, `BarMenu`, `BarSpacer` (fixed or flexible) and `BarStatus` (static text with an optional subtitle). The options `toolbarShown`, `toolbarHidesOnScroll` and `hidesTabBarWhenPushed` apply. Android has no stack toolbar; the slot is not drawn there.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `spec:AST-125` FR5                                                              | verify             |
+| FR15 | Glass and material MUST be a look the theme's `material` and the component's props set, never a component an app renders (`spec:AST-123` FR1). The drawn header's items sit on glass where the theme asks for it (`spec:AST-123` FR3, FR5, FR7), and on a solid surface under Reduce Transparency or Increase Contrast. Under `system` on iOS 26, `scrollEdgeEffects` sets the bar's scroll edge; the drawn header draws the platform's scroll edge effect under itself where the system has one (`spec:AST-123` FR8), else a page-colour band that fades in as content passes under it.                                                                                                                                                                                                                                                                                                                                       | `spec:AST-123` FR1, FR3, FR5, FR7, FR8; `spec:AST-082` FR10                     | verify             |
+| FR16 | Both renderings MUST honour `headerTintColor`, `headerShadowVisible` (a divider at the bar's bottom edge), `headerTitleStyle`, `headerLargeTitleStyle`, `headerStyle` (with Android's scrolled colours) and `headerTransparent`. Without them, each rendering takes the theme's values: the tint, the title faces and the bar's colours at rest and once scrolled.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `spec:AST-125` FR5; `spec:AST-093` FR4                                          | verify             |
+| FR17 | `Header` MUST be the header of Astryx's router: its stack screens, and `NavigationScreen`'s `title`, `backTitle`, `titleDisplayMode` and `endContent`, which map onto `HeaderTitle` or `HeaderLargeTitle`, the back control's title on the next screen, and `endContent` (`component:react-native/NavigationStack` FR6). An app that navigates with another router, such as Expo Router, keeps that router's header: Astryx's components work inside its screens, and its chrome is not covered by this record.                                                                                                                                                                                                                                                                                                                                                                                                                | DEC-5; `spec:AST-125` FR1, DEC-6                                                | settled            |
+| FR18 | The header MUST need no third-party native library: its native pieces are Astryx's own. An app MAY link react-native-screens, react-native-gesture-handler, Reanimated and react-native-safe-area-context beside it, and the header behaves as this record states.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | DEC-5; `spec:AST-112` FR2                                                       | verify             |
+| FR19 | The header's height MUST reach the screen's insets from its first frame, so `Screen` and `useScreenInsets()` clear it once: the system bar through the host's insets (`spec:AST-125` FR10), the drawn header through the height it reports, a search row included.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `spec:AST-125` FR10; `component:react-native/NavigationStack` FR15              | verify             |
+
+### Option support by rendering
+
+The option keys the parts write, with what each rendering does. "Gap" names a
+line under Current-state impact.
+
+| Option or part                                                                  | `system`, iOS        | `system`, Android          | `drawn`                        |
+| ------------------------------------------------------------------------------- | -------------------- | -------------------------- | ------------------------------ |
+| `title`, `headerShown`, `headerLargeTitleEnabled` (title parts)                 | yes                  | yes                        | yes                            |
+| `headerSubtitle` (`HeaderTitle` `subtitle`)                                     | iOS 26               | yes                        | yes                            |
+| `headerLargeSubtitle` (`HeaderLargeTitle` `subtitle`)                           | iOS 26               | not on Android             | FR13 gap                       |
+| `headerTitleMenu` (title menu)                                                  | yes                  | yes                        | yes; submenus FR12 gap         |
+| `headerLeftItems`, `headerRightItems` (bar items)                               | yes                  | yes                        | yes; image-only icons FR11 gap |
+| view `headerTitle`, `headerLeft`, `headerRight` (custom views)                  | yes                  | yes                        | FR11 gap                       |
+| `headerSearchBarOptions` (`HeaderSearch`)                                       | system field, scopes | drawn row                  | drawn row, no scopes           |
+| `headerBackVisible`                                                             | yes                  | yes                        | yes                            |
+| `headerBackTitle`, `headerBackButtonDisplayMode`, `headerBackButtonMenuEnabled` | yes                  | not on Android             | `minimal` only; FR10 gap       |
+| `headerTintColor`, `headerShadowVisible`                                        | yes                  | yes                        | yes                            |
+| `headerTitleStyle`, `headerLargeTitleStyle`, `headerStyle`, `headerTransparent` | yes                  | yes, with scrolled colours | FR16 gap                       |
+| `toolbarItems`, `toolbarShown`, `toolbarHidesOnScroll`, `BarStatus`             | yes                  | not on Android             | FR14 gap                       |
+| `hidesTabBarWhenPushed`                                                         | yes                  | yes                        | FR14 gap                       |
+| `scrollEdgeEffects`                                                             | iOS 26               | not on Android             | FR15 gap                       |
+| `backPreview`                                                                   | not on iOS           | yes                        | FR6 gap                        |
+
+### Allowed variation
+
+- **AV1 — The system's bar.** Under `system`, the bar's glass, item grouping,
+  title truncation, search field, menus and their motion are the system's own
+  and may change with each OS release.
+- **AV2 — Platform layout.** The drawn header's sizes, title alignment and
+  collapse distances follow each platform's guidance and may differ between iOS
+  and Android.
+
+### Representative states
+
+| State                                    | Required invariant                                                         | Allowed variation           |
+| ---------------------------------------- | -------------------------------------------------------------------------- | --------------------------- |
+| root screen, large title, at rest        | large title under the bar; no back control                                 | the platform's sizes        |
+| large title, scrolled                    | the title has collapsed into the bar; the large row takes no touches       | the system's motion         |
+| pushed screen, `HeaderBack` unset        | back control named by the screen below's `backTitle` or title              | how much of the title shows |
+| search under the title, scrolled         | with `hidesWhenScrolling`, collapsed into the bar's control; else below it | the system's motion         |
+| search field focused, back pressed       | the search ends; the screen stays                                          | none                        |
+| custom view in `endContent`              | placed in the bar under `system`; FR11 gap under `drawn`                   | its own size                |
+| `render="drawn"` on an iOS screen        | the drawn header; the same parts and options                               | the drawn header's look     |
+| Reduce Transparency or Increase Contrast | no glass; solid surfaces                                                   | none                        |
+| largest text size                        | titles scale; the bar title keeps one line and truncates                   | the large title's cap       |
+
+### Transformation and precedence order
+
+- **ORD1 — Header keys.** A key a rendered part writes, then the same key from
+  `NavigationScreen`'s props, then the screen's `options`, then the navigator's
+  `screenOptions`, then the theme's value.
+- **ORD2 — Rendering.** The screen's `render`, then the navigator's `render`,
+  then the platform default (FR4).
+- **ORD3 — Start content.** `startContent`, then `children` (`component:TopNav`
+  ORD1).
+- **ORD4 — Surface.** Reduce Transparency or Increase Contrast (solid), then
+  the theme's `material`, then the component's props (`spec:AST-123` FR7).
+
+### Performance and resources
+
+- **PR1 — No JavaScript per frame.** The large title's collapse, the search
+  row's motion and the scroll edge run on the UI thread (`spec:AST-125` FR11).
+- **PR2 — Options change only on change.** A part writes the screen's options
+  only when a value changes; an unchanged render writes nothing and renders no
+  screen.
+
+## Accessibility contract
+
+- **AR1 — Titles are headings and name the screen.** The bar title and the
+  large title are headings to VoiceOver and TalkBack. The title is the screen's
+  accessibility title: VoiceOver announces it on a screen change, and on
+  Android it is the screen's pane title. After a push, screen-reader focus
+  lands on it (`component:react-native/NavigationStack` AR1).
+- **AR2 — Back is named by its destination.** The back control's accessible
+  name follows `component:react-native/NavigationStack` AR3, whatever it shows;
+  its menu's rows are named by their screens' titles.
+- **AR3 — Text size.** Titles, the subtitle and the search field scale with
+  Dynamic Type and Android's font scale. The bar keeps its height and its
+  title truncates; the large title grows up to the platform's cap. On iOS, bar
+  items show the Large Content Viewer at accessibility sizes, with the drawn
+  glyph as its image (`spec:AST-127` FR9).
+- **AR4 — Reduced motion.** With Reduce Motion, the drawn header's large title
+  and search row swap at the halfway point of the scroll instead of moving; the
+  system bar follows the system's setting.
+- **AR5 — Items keep their names and states.** Bar items, menus and the title
+  menu keep their labels, roles, badges and selected and disabled states in
+  both renderings (`spec:AST-125` FR13). Parts that have risen away are hidden
+  from screen readers (FR8).
+- **AR6 — Contrast settings.** Under Reduce Transparency or Increase Contrast,
+  every item keeps a solid, visible background (FR15).
+
+## Design relationships
+
+| Anatomy or state | Design requirement                                        | Representation authority   | Hierarchy role | Component contract |
+| ---------------- | --------------------------------------------------------- | -------------------------- | -------------- | ------------------ |
+| Bar title        | the screen's name at the bar's centre or start            | prescribed by the platform | prominent      | FR1, FR6, FR7      |
+| Large title      | the screen's name above the content, collapsing on scroll | prescribed by the platform | prominent      | FR7, FR8           |
+| Back control     | a chevron or arrow, with the platform's title rules       | prescribed by the platform | supporting     | FR10               |
+| Bar items        | start and end item groups                                 | prescribed by the platform | supporting     | FR11               |
+| Search           | a search field under the title or in the bar              | prescribed by the platform | supporting     | FR9                |
+| Surface          | glass, material or solid, with a scroll edge              | theme intent               | supporting     | FR15, FR16         |
+
+The component implements design requirements without copying their rationale.
+
+Platform controls (`spec:AST-093` FR2): `UINavigationBar` with
+`UISearchController` and `UIMenu` on iOS; the Material 3 top app bar on
+Android. Guideline pages: Navigation bars, Search fields, Toolbars, Materials
+and Accessibility (Dynamic Type, Reduce Motion, Reduce Transparency) in the
+Apple Human Interface Guidelines; Top app bar and Search in Material 3
+(`spec:AST-093` FR3).
+
+Theme values read (`spec:AST-093` FR4): the native theme's appearance and
+`material` intent (`spec:AST-082` FR10), the tint, the title and large-title
+faces, the page colour and surface colour at rest and once scrolled, the
+border colour for the divider, and the Dynamic Type scale.
+
+### Native pieces
+
+| Native piece                                  | Record                  | What this record uses it for                                                                                            |
+| --------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `AstryxStackScreen`                           | `spec:AST-125` FR5      | the system bar's title, items, menus, back, toolbar and styles; the scroll target the bar follows (FR5, FR7, FR10–FR16) |
+| `AstryxStackScreen` search                    | `spec:AST-125` FR6      | the system search field on iOS, and the bar edge and inset the drawn search row uses (FR9)                              |
+| `AstryxHeaderSlot`                            | `spec:AST-125` FR5      | custom views placed by the system bar (FR5, FR11)                                                                       |
+| `AstryxStackHost`                             | `spec:AST-125` FR3      | the back control and its menu, popping through the stack (FR10)                                                         |
+| Screen insets                                 | `spec:AST-125` FR10     | the header's height in the screen's insets from its first frame (FR19)                                                  |
+| `Icon` resolution                             | `spec:AST-127` FR4      | a system symbol or an Astryx glyph for each bar item (FR11)                                                             |
+| `NativeVectorView`                            | `spec:AST-127` FR7, FR9 | drawn glyphs in bar items, and their Large Content Viewer image (FR11, AR3)                                             |
+| `AstryxGlassView`, `AstryxGlassContainerView` | `spec:AST-123` FR3, FR5 | the drawn header's glass item groups (FR15)                                                                             |
+| `AstryxScrollEdgeView`                        | `spec:AST-123` FR8      | the system scroll edge effect under the drawn header (FR15)                                                             |
+
+## Family and system relationships
+
+- `component:TopNav` owns the slot names and meanings this record keeps; this
+  record states how React Native renders them as a screen header.
+- `component:react-native/NavigationStack` owns the stack, back, transitions,
+  focus and the screen's scroll target; its `NavigationScreen` props map onto
+  this header (FR17).
+- `spec:AST-125` owns the native stack, its bars, the header slot and the
+  native props; it leaves the header's rendering to this record.
+- `spec:AST-127` owns icons and glyph drawing; `spec:AST-123` owns glass,
+  material and the scroll edge view.
+- The tab bar component owns the bottom tab bar, which a screen's
+  `hidesTabBarWhenPushed` hides (FR14).
+
+## Verification map
+
+| Contract              | Verification                                                                                                    | Representative states                                                                        | Mutation or failure expectation                                                                                     | Audit section                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| FR1, FR2              | Type tests of `Header` and its parts against TopNav's slot types; a contract drift test                         | each slot; `children` with and without `startContent`                                        | a renamed slot, a dropped `children` alias, or an accepted and ignored prop fails                                   | `audit:react-native/TopNav/api`     |
+| FR3, ORD1             | Unit tests of the options record through the package's testing doubles (`spec:AST-112` FR15)                    | a part in a wrapper; a conditional part; a part that goes; options and a part on one key     | content rendered by `Header`, a key not restored when its part goes, or precedence other than ORD1 fails            | `audit:react-native/TopNav/options` |
+| FR4, ORD2             | Unit tests of the rendering choice on each platform                                                             | no `render`; a navigator `render`; a screen `render`                                         | a default other than `system` on iOS and `drawn` on Android, or a screen choice that leaks to another screen, fails | `audit:react-native/TopNav/render`  |
+| FR5, FR6              | Simulator and emulator captures in both renderings, light and dark                                              | each part; a custom view; Android's bar                                                      | a part drawn in the content, or an Android bar that draws an option it does not have, fails                         | `audit:react-native/TopNav/render`  |
+| FR7, FR8, PR1, AR4    | UI-thread frame checks while scrolling, with and without Reduce Motion                                          | large title; `isInRow`; a search row hiding on scroll                                        | JavaScript work per frame, a large title that does not collapse or return, or motion under Reduce Motion fails      | `audit:react-native/TopNav/motion`  |
+| FR9                   | Simulator and emulator checks of search                                                                         | field; starter; `obscuresBackground`; scopes; back while focused; Android in both renderings | a Material search bar on Android, a search that ends without `onChange('')`, or back that pops while focused fails  | `audit:react-native/TopNav/search`  |
+| FR10, AR2             | VoiceOver and TalkBack checks of the back control and its menu                                                  | each display mode; `title` set and unset; the menu; Android                                  | a back control named by anything but AR2's rule, or a menu choice that pops in more than one step, fails            | `audit:react-native/TopNav/back`    |
+| FR11, FR12            | Simulator and emulator captures; right-to-left captures                                                         | badges; menus with checkable groups and a title; a symbol-only icon; a submenu               | an item out of reading order in right-to-left, a lost item state, or a missing checked row fails                    | `audit:react-native/TopNav/items`   |
+| FR13, FR14            | Simulator captures on iOS 26 and an earlier iOS; emulator captures                                              | subtitles; a toolbar with a status item; `hidesTabBarWhenPushed`                             | a toolbar drawn on Android, or a subtitle shown below iOS 26 under `system`, fails                                  | `audit:react-native/TopNav/items`   |
+| FR15, FR16, AR6, ORD4 | Captures with each theme `material`, with Reduce Transparency and Increase Contrast, and with each style option | glass; opaque; scrolled; a set tint; a hidden divider                                        | glass under a contrast setting, a dropped style option without a development warning, or a lost tint fails          | `audit:react-native/TopNav/look`    |
+| FR17, FR18            | An app on another router with Astryx components in its screens; a build with each listed library linked         | Expo Router screens; react-native-screens linked                                             | Astryx chrome under another router, a third-party native dependency, or a build conflict fails                      | `audit:react-native/TopNav/routers` |
+| FR19                  | First-frame captures of a pushed screen in both renderings                                                      | large title; search row; inline title                                                        | content under the header, or an edge padded twice, fails                                                            | `audit:react-native/TopNav/render`  |
+| AR1, AR3, AR5         | VoiceOver and TalkBack checks; largest text size captures                                                       | push; title menu; bar items with badges; Large Content Viewer                                | a title that is not a heading, a lost item name or state, or a bar that grows with text size fails                  | `audit:react-native/TopNav/a11y`    |
+| PR2                   | Unit tests counting option writes and renders                                                                   | an unchanged re-render; one changed value                                                    | a write or a screen render for an unchanged value fails                                                             | `audit:react-native/TopNav/options` |
+
+## Decision log
+
+### DEC-1 — React Native's TopNav is the screen header, exported as `Header`
+
+**Reference:** `component:react-native/TopNav/DEC-1`
+**Decider:** imdreamrunner, 2026-11-17
+
+On a phone the top bar belongs to each screen of a stack, and both platforms
+call it a header, so React Native exports TopNav as `Header`. It keeps
+TopNav's slot names (`heading`, `startContent`, `endContent`), so a builder
+writes start and end, never left and right, on both the web and a phone.
+
+Rejected: a separate component with no core record, because it would invent a
+second vocabulary for the same bar.
+
+### DEC-2 — An options record with composed parts
+
+**Reference:** `component:react-native/TopNav/DEC-2`
+**Decider:** imdreamrunner, 2026-11-17
+
+The header has one declaration path: composed parts in the screen write a
+plain options record, which the system bar and the drawn header both read.
+This matches the platforms' own model, a navigation item record that the bar
+renders, and lets an app put its own components in the bar while the router
+keeps a serialisable form.
+
+Rejected: options alone, because an app could not place a component in the
+bar.
+
+### DEC-3 — The system header on iOS and the drawn header on Android, chosen per screen
+
+**Reference:** `component:react-native/TopNav/DEC-3`
+**Decider:** imdreamrunner, 2026-11-17
+
+By default iOS shows the system navigation bar and Android shows the header
+Astryx draws. The choice is this component's, not the navigation library's,
+and it holds over any library-wide default for drawn chrome. An app can choose
+either rendering for any navigator or screen.
+
+### DEC-4 — Android header search is the drawn search row
+
+**Reference:** `component:react-native/TopNav/DEC-4`
+**Decider:** imdreamrunner, 2026-11-17
+
+On Android, header search defaults to Astryx's drawn search row, in both
+renderings, not the Material search bar.
+
+### DEC-5 — Astryx's router carries the header; the navigation library stays neutral
+
+**Reference:** `component:react-native/TopNav/DEC-5`
+**Decider:** imdreamrunner, 2026-11-17
+
+Astryx's router supports this header, so an app that uses it declares the
+header once per screen. An app that uses another router, such as Expo Router,
+gets Astryx's components inside its screens but not Astryx's header. The
+header needs no third-party native library and works beside the common
+navigation, gesture and safe-area libraries.
+
+## Open questions
+
+- **OQ1 — What does `Header` do outside a stack screen of Astryx's router?**
+  (`human-api`) Options: it draws the drawn header in place, in the layout
+  flow, so a sheet or another router's screen can have an Astryx bar; or it
+  renders nothing and warns once in development, so a header only ever comes
+  from the router.
+
+## Content boundary
+
+This file does not duplicate consumer prop tables/examples, current audit
+results, implementation steps, or family/system rules. It links to their owners.
