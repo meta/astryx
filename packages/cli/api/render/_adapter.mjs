@@ -420,14 +420,16 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
     const suggestions = [];
     let message = e.message;
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      // The integration's install guidance first, then the install command
-      // the render named, then one line for every package in the page's
-      // project's package manager.
+      // The run folder's integration line first, when the page is in the run
+      // folder's package; then the install command the render named; then
+      // one line for every package from the page's own package.
       const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
-      const guidance = installGuidanceFor(packages, cwd);
       const needs = `install ${packages.join(', ')}, which this render needs`;
       const what = packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports';
       const pageRoot = findPackageRoot(pageDir);
+      const runRoot = findPackageRoot(cwd);
+      const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
+      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
@@ -442,8 +444,7 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
         // when the project's lockfiles disagree.
         const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
-        const runRoot = findPackageRoot(cwd);
-        if (line && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot)) {
+        if (line && samePackage) {
           suggestions.push({name: line, reason: what});
         } else if (line) {
           // Run from here, the line would add the packages to this folder's

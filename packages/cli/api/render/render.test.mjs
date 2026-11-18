@@ -18,6 +18,7 @@ import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -2103,6 +2104,38 @@ describe('render(): refusals', () => {
     put(name, source);
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
   }, 30_000);
+
+  it("gives the run folder's integration line only for a page in the run folder's package", async () => {
+    put('acme-app/package.json', '{"name":"acme-app","private":true}');
+    put('acme-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('acme-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    put('guided.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    recordDeclaredSettings(dir, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let own;
+      try {
+        await render('guided.tsx', {cwd: dir});
+      } catch (e) {
+        own = e;
+      }
+      expect(own?.suggestions?.[0]?.name).toBe('acme add not-real-a-xyz');
+      /** @type {any} */
+      let other;
+      try {
+        await render('acme-app/page.tsx', {cwd: dir});
+      } catch (e) {
+        other = e;
+      }
+      expect(other?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(other?.suggestions ?? []).toEqual([]);
+      expect(other?.message).toBe(
+        'The page imports not-real-a-xyz, which is not installed. Install it in acme-app, the package that holds this page: from there, run pnpm add not-real-a-xyz',
+      );
+    } finally {
+      recordDeclaredSettings(dir, []);
+    }
+  }, 60_000);
 
   it("suggests one install line for every missing package, in the project's package manager", async () => {
     put('pnpm-app/package.json', '{"name":"pnpm-app","private":true}');
