@@ -95,6 +95,8 @@ describe('tokenize', () => {
 
   it.each([
     ['bash', 'curl https://example.com/#top # fetch', 30],
+    ['bash', 'make build;# then deploy', 11],
+    ['bash', 'sleep 10 &# in the background', 10],
     ['yaml', 'url: https://example.com/#top # docs', 30],
   ])(
     'starts a %s comment only at a # that begins a word',
