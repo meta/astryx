@@ -46,15 +46,22 @@ core (`spec:AST-112/FR1`) and link in every app.
 
 ## Why this exists
 
-The ecosystem covers much of this ground. Astryx owns these pieces for the
-gaps stated per piece.
-
-| Native piece      | What the ecosystem does well                                                                                                                                                                                                                                                                                                             | The gap Astryx closes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System menu       | @react-native-menu/menu puts a UIMenu on iOS and a PopupMenu on Android behind one view, with subtitles, images, check states, destructive rows, and nesting. react-native-ios-context-menu wraps UIContextMenuInteraction with custom React previews and deferred rows. zeego gives both a Radix-style compound API and a web fallback. | Astryx's DropdownMenu, MoreMenu, ContextMenu, and Selector already own their rows as compound parts, so the platform takes the menu as data from them and hands it back to the drawn surface when it cannot show it (an OS without the API, React content in a row). Icon names go through Astryx's one icon table. The package takes no third-party native dependency (`spec:AST-112/FR2`), and every public API has an Astryx Stage implementation (`spec:AST-112/FR12`). The menu behaviour itself overlaps these libraries; DEC-3.                                                |
-| Action sheet      | React Native's own `ActionSheetIOS` shows UIAlertController's action sheet from the top-most controller, with destructive and disabled rows, an iPad anchor, and an interface style, at no dependency cost.                                                                                                                              | `ActionSheetIOS` answers through a callback with an index only: it reports no refused presentation, no second sheet while one is up, and no calling surface, and it has no Astryx Stage implementation. These are small gaps; OQ1 asks whether the platform builds on it instead.                                                                                                                                                                                                                                                                                                     |
-| Presentation host | React Native's `Modal` presents page and form sheets and full-screen windows. react-native-screens' `formSheet` gives a navigation route UIKit's detent sheet with a grabber and corner radius. @gorhom/bottom-sheet draws a fully customisable sheet with gesture-handler and Reanimated on both platforms.                             | `Modal` has no detents, and it presents from the view controller of its own screen; when that controller already shows a sheet, UIKit refuses the next one. A react-native-screens sheet is a route of its navigator, not a component a screen opens anywhere in its tree, and the package takes no third-party navigation dependency (`spec:AST-112/DEC-9`). A drawn sheet is not the system container: no iOS 26 Liquid Glass at partial heights, no card effect, no system keyboard avoidance. The host gives every Astryx surface the system container through one queue (DEC-2). |
-| Modal host        | React Native's `Modal` host is the platform's window for drawn content, with orientations, swipe dismissal, `onRequestClose`, and VoiceOver focus save and restore.                                                                                                                                                                      | It has the same limit: UIKit refuses a second drawn window from the same screen. The modal host keeps React Native's host and changes only where it presents from, so each drawn sheet gets a window of its own.                                                                                                                                                                                                                                                                                                                                                                      |
+- **System menu.** The library's menu components own their rows as compound
+  parts; the platform takes those rows as data, uses the library's icon
+  resolution, hands the menu back to the drawn surface when the system cannot
+  show it, and adds no third-party native dependency (`spec:AST-112/FR2`).
+  The menu behaviour itself is the system's (DEC-3).
+- **Action sheet.** It answers in the platform's result shape, with a
+  refused presentation, a second sheet, and the asking surface told apart.
+  React Native's own action sheet covers most of this; OQ1 asks whether the
+  platform builds on it.
+- **Presentation host.** No dependency-free piece presents a component's
+  content in UIKit's detent sheet from anywhere in the tree, stacked in
+  request order with other surfaces (DEC-2), and the package takes no
+  third-party navigation dependency (`spec:AST-112/DEC-9`).
+- **Modal host.** React Native's modal host refuses a second window from the
+  same screen; the modal host lifts that limit for drawn sheets. OQ5 asks
+  whether the presentation host covers it.
 
 ## Who uses it
 
@@ -111,11 +118,12 @@ gaps stated per piece.
     either an inline section between separators or a submenu, one level deep;
     it can be single-selection, disabled, or a row of icon elements (`small`
     or `medium`). A loading row shows the system's progress row.
-  - A row's icon is an Astryx icon name. The host maps it to a system symbol
-    through the library's icon table, so a row and an `Icon` with the same
-    name match; a name without a symbol shows no image.
-    `createNativeSystemMenu({symbols})` adds an app's own names. A glyph (an
-    emoji or a few characters) is drawn as the image of a row without an icon.
+  - A row's icon is an Astryx icon name, resolved as `Icon` resolves it
+    under `spec:AST-082/FR17`: the icon the app or theme defines for the name
+    (a system symbol or an image the app ships), else the platform's default
+    symbol. A row and an `Icon` with the same name therefore show the same
+    image, and a name with neither shows no image. A glyph (an emoji or a few
+    characters) is drawn as the image of a row without an icon.
   - `useAnySystemMenuOpen()` and `isAnySystemMenuOpen()` tell whether any of
     the package's system menus is open in the current JavaScript runtime.
 - **FR3 — The system menu behaves as the system's menu.**
@@ -125,8 +133,8 @@ gaps stated per piece.
     `trigger: 'longPress'`, a long press opens a context menu: the system
     raises the wrapped view above a dimmed background with its haptic, and
     short taps still reach the wrapped view.
-  - The host builds the native menu only when it is about to show it, so many
-    closed menus cost nothing at mount. When `menu` changes while the menu is
+  - A closed menu adds no work when its trigger mounts, so a long list of
+    rows with menus scrolls as one without them. When `menu` changes while the menu is
     open, the open menu shows the change. An empty menu does not open.
   - `present()` opens the menu on request from JavaScript. When the system
     cannot open it, `onUnavailable` gives the reason: `os` (iOS before 17.4),
@@ -205,12 +213,12 @@ gaps stated per piece.
   closed it, that it is off the screen; reports arrive in the order the
   presentations closed. The host stays mounted until `onDismissed`, so the
   content stays visible through the exit.
-- **FR8 — Presentations stack in request order.** All presentation hosts use
-  one queue. Each presentation waits until no other host is in a transition
-  and is presented by the topmost presented view controller. A surface opened
-  beside, inside, or through a deep link to another one therefore appears
-  over it, in the order of the requests, and two requests in one update
-  present one after the other. When a covered sheet closes, the sheets over
+- **FR8 — Presentations stack in request order.** Presentations from every
+  presentation host appear in the order they were requested, each over the
+  one before it: a surface opened beside another, from inside another, or
+  through a deep link that opens several levels comes up on top, and two
+  requests in one update present one after the other, never refused and
+  never at once. When a covered sheet closes, the sheets over
   it close with it and the ones still wanted present again. A replaced sheet
   and its replacement close together in one motion.
 - **FR9 — Appearance and status bar in presented windows.**
@@ -243,7 +251,9 @@ gaps stated per piece.
   come back at once, without animation. The library reaches it through the
   internal `./host` entry. Where it is not registered, the library uses React
   Native's `Modal`. When the system removes a window that is still meant to be
-  visible, the host reports it, and the surface that opened it closes.
+  visible, the host reports it, and the surface that opened it closes. No
+  modal window stays on screen after the component that owns it unmounts,
+  even during a transition.
 - **FR12 — Accessibility.**
   - The system menu, action sheet, and presentation hosts take no
     accessibility props. The trigger or the presented content supplies the
@@ -278,23 +288,16 @@ gaps stated per piece.
   `onUnavailable({reason: 'no-native-view'})`. A missing action sheet module
   resolves `no-module`. A kind that the host does not present reports
   `unsupported`. Nothing throws or rejects (`spec:AST-112/FR6`).
-- **FR15 — Contract baseline.** Every contract in the group is at revision 1.
-  A behaviour added after revision 1 is a named feature
-  (`<Contract>.<feature>`) that the binary lists and the JavaScript checks with
-  `hasContractFeature` before it uses it; without it the JavaScript keeps the
-  revision-1 behaviour or answers `unsupported`, with a development warning,
-  never a silent weaker path. No contract in this group lists a named feature.
-  Astryx Stage pairs with the package by each contract's spec hash and the
-  package's Stage version floor: the package names the oldest Stage that
-  answers its whole contract set, and an older Stage refuses the project with the
-  gaps listed.
+- **FR15 — Contract baseline.** Every contract in the group follows
+  `spec:AST-112/FR8` (revision 1; later behaviour is a named feature) and
+  `spec:AST-112/FR12` (the Astryx Stage version floor). No contract in this
+  group lists a named feature.
 - **FR16 — Native code uses public API only.** The group's native code calls
-  only the public API of iOS, Android, and React Native. One exception: the
-  modal host resets the presented state of React Native's modal host by name
-  and hooks its recycle and invalidate steps. This guarantees that no modal
-  window stays on screen after the component that owns it unmounts during a
-  transition. If React Native renames that state, the hook logs a fault and
-  does nothing.
+  only the public API of iOS, Android, and React Native. One exception: to
+  keep FR11's guarantee that no modal window stays on screen after the
+  component that owns it unmounts, the modal host relies on non-public state
+  of React Native's modal host. Where React Native changes that state, the
+  modal host logs a fault and keeps React Native's own behaviour.
 
 ### Native contract
 
@@ -342,13 +345,19 @@ resolves `{index, reason, message}`; `show` is its positional form.
 - None beyond `spec:AST-112`. This record details its FR1 (the presentation,
   menu, and action-sheet hosts in the core), FR6 to FR9, and FR12 for this
   group.
+- Relies on `spec:AST-112` FR3 (amended): the core, with the native half of
+  every library component, links by default.
+- Relies on `spec:AST-112` FR8 (amended): every native contract is at
+  revision 1, and later behaviour is a named feature that JavaScript checks.
+- Relies on `spec:AST-112` FR12 (amended): Astryx Stage refuses a project
+  below its version floor and lists the missing contracts.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                | Representative states                                                                                                           | Mutation or failure expectation                                                                                                                     |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Unit tests of each host's probes through the `./testing` doubles                                                                            | absent, older, and current view and module shapes; `nativeHosts` with a host off                                                | A probe answers true without the native piece, or a turned-off host still presents                                                                  |
-| FR2      | Unit tests of the description and its native form                                                                                           | every row type; an unmapped icon; a glyph; an app's own icon names                                                              | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different symbols                                   |
+| FR2      | Unit tests of the description and its native form                                                                                           | every row type; an unmapped icon; a glyph; a theme's symbol icon and image icon                                                 | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different images                                    |
 | FR3      | Simulator checks of both triggers; Astryx Stage contract checks; unit tests of the unavailable reasons                                      | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card; a preview project | The trigger also opens the drawn menu, `present()` fails without `onUnavailable`, or a preview project shows a card                                 |
 | FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet                                                              | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                                    | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                                                |
 | FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind; Astryx Stage contract checks                            | each kind; a kind the host does not build; `animation` values; an undimmed sheet                                                | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches                                             |
@@ -380,15 +389,15 @@ the system's material.
 Rejected: painting the theme's panel colour on the system sheet, because it
 hides the system material and Liquid Glass.
 
-### DEC-2 — One queue presents from the topmost controller
+### DEC-2 — Every presentation comes up over the one on top
 
 **Reference:** `spec:AST-128/DEC-2`
 **Decider:** imdreamrunner, 2026-11-17
 
-Surfaces open from anywhere in the tree, so every presentation goes through
-one queue and presents from the topmost presented controller. A dialog from a
-sheet, a sheet from a modal route, and a deep link that opens three levels
-all stack in request order.
+Surfaces open from anywhere in the tree, so each presentation comes up over
+whatever is on top at that moment, in request order. A dialog from a sheet, a
+sheet from a modal route, and a deep link that opens three levels all stack
+as asked, and no request is refused because another surface is up.
 
 Rejected: presenting from the view controller of the host's own screen, as
 React Native's `Modal` does, because UIKit refuses a second sibling
