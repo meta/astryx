@@ -3,11 +3,11 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-119
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: nynexman4464
+approved_at: 2026-11-18
 phase: proposed
 owners: [nynexman4464]
 affects_architecture: []
@@ -233,7 +233,7 @@ description, and no `aria-modal` under a backdrop.
 ### DEC-1 — Steps are data the app controls by id
 
 **Reference:** `spec:AST-119/DEC-1`
-**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 Steps are an array of plain objects with stable ids, and the app names the
 active step. The app can then advance from its own handlers, resume a tour,
@@ -246,7 +246,7 @@ step builder.
 ### DEC-2 — A step is conditional by being absent
 
 **Reference:** `spec:AST-119/DEC-2`
-**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 The app knows at render time whether a step applies, so it leaves the step out
 of the array, and the count and the controls follow.
@@ -257,7 +257,7 @@ array already does.
 ### DEC-3 — Tour never waits on a timer
 
 **Reference:** `spec:AST-119/DEC-3`
-**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 Only the app knows whether a missing anchor will appear, so Tour follows the
 app's `missingAnchorBehavior` (FR8) or waits for the app's own preparation (FR9). An anchor that exists but is
@@ -271,7 +271,7 @@ option; a step's `showAction` promise waits for exactly what the app needs.
 ### DEC-4 — Tour owns the chrome; the app owns the words and the journey
 
 **Reference:** `spec:AST-119/DEC-4`
-**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 Tour owns the callout, the highlight, the dimming, focus and its own control
 labels. The app owns every title and body, the intro Dialog, whether a person
@@ -282,7 +282,7 @@ Rejected: an intro-modal step type inside Tour, which duplicates Dialog.
 ### DEC-5 — Names follow the API conventions
 
 **Reference:** `spec:AST-119/DEC-5`
-**Decider:** `nynexman4464`, `2026-11-18`, pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 Tour takes `steps`, `activeId`, `onActiveIdChange`, `onEnd`,
 `missingAnchorBehavior`, `onMissingAnchor`, `hasScrollIntoView`,
@@ -305,7 +305,7 @@ label props for Back and the close control.
 ### DEC-6 — The backdrop decides modality
 
 **Reference:** `spec:AST-119/DEC-6`
-**Decider:** `nynexman4464`, `2026-11-18`, pending owner review
+**Decider:** `nynexman4464`, `2026-11-18`
 
 A step without a backdrop is non-modal, so the person can use the control it
 points at. A step with a backdrop is modal: a press outside its callout
