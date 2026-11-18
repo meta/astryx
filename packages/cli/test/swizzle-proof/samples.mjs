@@ -524,8 +524,16 @@ export const samples = {
     return React.createElement(
       TabBar,
       {value: 'home', onChange: noop, label: 'Sections'},
-      React.createElement(C, {value: 'home', label: 'Home'}),
-      React.createElement(C, {value: 'search', label: 'Search'}),
+      React.createElement(C, {
+        value: 'home',
+        label: 'Home',
+        icon: dotIcon(React),
+      }),
+      React.createElement(C, {
+        value: 'search',
+        label: 'Search',
+        icon: dotIcon(React),
+      }),
     );
   },
   core__ComplexSelector: ({C, React}) =>
@@ -735,17 +743,16 @@ export const samples = {
     return React.createElement(
       C,
       {value: 'home', onChange: noop, label: 'Sections'},
-      React.createElement(Item, {value: 'home', label: 'Home'}),
-      React.createElement(Item, {value: 'search', label: 'Search'}),
-    );
-  },
-  lab__TabBarMoreList: ({C, React, mod, Pkg}) => {
-    const Item = mod.TabBarItem ?? Pkg.TabBarItem;
-    return React.createElement(
-      C,
-      {onChange: noop},
-      React.createElement(Item, {value: 'archive', label: 'Archive'}),
-      React.createElement(Item, {value: 'settings', label: 'Settings'}),
+      React.createElement(Item, {
+        value: 'home',
+        label: 'Home',
+        icon: dotIcon(React),
+      }),
+      React.createElement(Item, {
+        value: 'search',
+        label: 'Search',
+        icon: dotIcon(React),
+      }),
     );
   },
   richtext__RichTextEditor: ({C, React}) =>
@@ -789,7 +796,12 @@ export const notRendered = {
  * playground defaults give, and that render without it: the proof renders
  * them with the defaults alone. A target with a required prop that is in none
  * of `samples`, `needsNoSample` and `notRendered` fails by name
- * (samples.test.mjs, and the proof before it renders). Every such target now
- * has a sample, so the browser step renders each with its required props.
+ * (samples.test.mjs, and the proof before it renders). Every other such target
+ * has a sample, so the browser step renders it with its required props.
  */
-export const needsNoSample = {};
+export const needsNoSample = {
+  // Its rows are the tabs past the fourth, read from the copy's own
+  // TabBarItem, which the copy's entry does not export to a sample.
+  lab__TabBarMoreList:
+    "renders without onChange; its rows need the copy's TabBarItem, which its entry does not export",
+};
