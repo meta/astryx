@@ -234,12 +234,14 @@ const styles = stylex.create({
     minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
     minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   infoText: {
     display: 'flex',
@@ -291,18 +293,22 @@ const styles = stylex.create({
   inputLabel: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputLabelSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   inputTotal: {
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     userSelect: 'none',
   },
   inputTotalSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   pageSizeSelector: {
     display: 'flex',
