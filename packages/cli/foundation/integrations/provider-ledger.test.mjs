@@ -13,7 +13,6 @@
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -22,12 +21,11 @@ import {
   isRunnable,
   writeScenario,
 } from '../../test-utils/provider-scenarios.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
 
-// The code under test loads natively, as the CLI runs, so each seed's fixture
-// modules load as Node loads them. Through Vitest, each would be one fetch from
-// its main process, which waits behind other workers on a loaded box.
-// SYNC: require any other code under test here too.
-const require = createRequire(import.meta.url);
+// The code under test loads natively, so each seed's fixture modules load as
+// Node loads them, not as one Vitest request each.
+const require = requireNatively(import.meta.url);
 /** @type {typeof import('../config/project.mjs')} */
 const {Project, providerLedgerOf} = require('../config/project.mjs');
 /** @type {typeof import('../../api/upgrade/_adapter.mjs')} */

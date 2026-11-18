@@ -35,6 +35,16 @@ test.beforeAll(async () => {
 
 const POINTS = [0, 240, 480];
 
+// WebKit stamps a touch when it reaches the page, so a loaded runner can hand
+// the page another release than the script's. Each play that depends on its
+// release fails by name when the page's strays past what its settle allows.
+// The flick's script releases at 1,375 px/s: within a quarter of it, the page
+// reads at least 1,031 px/s, past the flick speed (1,008).
+const FLICK_TOLERANCE = 0.25;
+// The move back releases at -303 px/s: within 90% of it, the page still reads
+// it moving back, all its settle depends on.
+const MOVE_BACK_TOLERANCE = 0.9;
+
 // A real navigation: touch emulation exposes the Touch Events API to
 // documents it creates.
 async function open(page: Page): Promise<TouchDriver> {
@@ -60,18 +70,22 @@ async function open(page: Page): Promise<TouchDriver> {
   return touchDriver(page);
 }
 
-/** A finger from (x, y) moving by `dy` over `steps` steps of `ms`, then lifting. */
+/**
+ * A finger from (x, y) moving by `dy` over `steps` steps of `ms`, then lifting
+ * `liftMs` after its last move (one more step by default).
+ */
 function dragScript(
   x: number,
   y: number,
   moves: ReadonlyArray<number>,
   ms: number,
+  liftMs = ms,
 ) {
   const steps = [{t: 0, fingers: [{x, y, id: 1}]}];
   moves.forEach((dy, i) => {
     steps.push({t: (i + 1) * ms, fingers: [{x, y: y + dy, id: 1}]});
   });
-  steps.push({t: (moves.length + 1) * ms, fingers: []});
+  steps.push({t: moves.length * ms + liftMs, fingers: []});
   return steps;
 }
 
@@ -121,7 +135,10 @@ test('a slow drag settles on the nearest snap point', async ({page}) => {
 test('a quick flick carries to the next snap point', async ({page}) => {
   const driver = await open(page);
   // 110 px in about 80 ms: past 1008 px/s, yet nearer 0 than 240.
-  await driver.play(dragScript(120, 100, linear(110, 5), 16));
+  await driver.play(dragScript(120, 100, linear(110, 5), 16), {
+    pacing: 'spacing',
+    releaseTolerance: FLICK_TOLERANCE,
+  });
   expect(await settled(page)).toEqual([1]);
   expect(await panelTop(page)).toBeCloseTo(40 + 240, 0);
 });
@@ -131,8 +148,13 @@ test('a release moving back returns to the snap point the drag started from', as
 }) => {
   const driver = await open(page);
   // Down 300 px, then back up 40 px over the last frames before the lift.
+  // It lifts a frame after its last move: a lift past the stillness
+  // interval (40 ms) would read a resting finger, not a move back.
   const moves = [...linear(300, 20), 290, 280, 270, 260];
-  await driver.play(dragScript(120, 100, moves, 33));
+  await driver.play(dragScript(120, 100, moves, 33, 16), {
+    pacing: 'spacing',
+    releaseTolerance: MOVE_BACK_TOLERANCE,
+  });
   expect(await settled(page)).toEqual([0]);
   expect(await panelTop(page)).toBeCloseTo(40, 0);
 });

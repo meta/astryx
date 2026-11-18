@@ -26,6 +26,8 @@ import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Center} from '@astryxdesign/core/Center';
+import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   UserIcon,
   LockClosedIcon,
@@ -221,6 +223,7 @@ const TIMEZONES = [
 ];
 
 export default function SettingsSecurityTemplate() {
+  const showToast = useToast();
   const isNarrow = useMediaQuery('(max-width: 768px)');
   // Mobile is a master→detail drill-down: 'nav' shows the menu, 'detail' shows
   // the selected section with a back button. Desktop shows both side-by-side.
@@ -256,7 +259,7 @@ export default function SettingsSecurityTemplate() {
 
   const navList = (
     <VStack gap={4} style={sideNavPadding}>
-      <Heading level={2} style={sideNavHeading}>
+      <Heading level={2} accessibilityLevel={1} style={sideNavHeading}>
         Account settings
       </Heading>
       <List density="spacious">
@@ -267,7 +270,12 @@ export default function SettingsSecurityTemplate() {
             startContent={<Icon icon={item.icon} />}
             endContent={
               isNarrow ? (
-                <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+                <Icon
+                  icon={ChevronRightIcon}
+                  size="sm"
+                  color="secondary"
+                  xstyle={rtlStyles.mirror}
+                />
               ) : undefined
             }
             isSelected={!isNarrow && activeNav === item.label}
@@ -280,7 +288,13 @@ export default function SettingsSecurityTemplate() {
         <ListItem
           label="Professional hosting tools"
           startContent={<Icon icon={WrenchScrewdriverIcon} />}
-          onClick={() => {}}
+          onClick={() =>
+            // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: 'Demo: professional hosting tools would open here',
+              uniqueID: 'hosting-tools',
+            })
+          }
         />
       </List>
     </VStack>
@@ -292,7 +306,11 @@ export default function SettingsSecurityTemplate() {
       <Layout
         height="fill"
         style={fillViewport}
-        content={<LayoutContent padding={2}>{navList}</LayoutContent>}
+        content={
+          <LayoutContent role="main" padding={2}>
+            {navList}
+          </LayoutContent>
+        }
       />
     );
   }
@@ -310,7 +328,7 @@ export default function SettingsSecurityTemplate() {
         )
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           <VStack gap={0}>
             {/* Mobile detail view: a back button sits beside the section title
                 (the per-section headings below are hidden on mobile). Toolbar's
@@ -327,10 +345,20 @@ export default function SettingsSecurityTemplate() {
                       variant="ghost"
                       size="sm"
                       isIconOnly
-                      icon={<Icon icon={ArrowLeftIcon} size="sm" />}
+                      icon={
+                        <Icon
+                          icon={ArrowLeftIcon}
+                          size="sm"
+                          xstyle={rtlStyles.mirror}
+                        />
+                      }
                       onClick={() => setMobileView('nav')}
                     />
-                    <Heading level={2}>{SECTION_TITLES[activeNav]}</Heading>
+                    {/* The phone detail view's title is its level-1 heading:
+                        the nav that carries the page title is not shown. */}
+                    <Heading level={2} accessibilityLevel={1}>
+                      {SECTION_TITLES[activeNav]}
+                    </Heading>
                   </>
                 }
               />
@@ -347,7 +375,9 @@ export default function SettingsSecurityTemplate() {
                 {activeTab === 'login' && (
                   <VStack gap={8}>
                     <VStack gap={0}>
-                      <Heading level={3}>Login</Heading>
+                      <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                        Login
+                      </Heading>
                       <Divider />
                       {LOGIN_ROWS.map(row => (
                         <InfoRowItem key={row.label} {...row} />
@@ -355,7 +385,9 @@ export default function SettingsSecurityTemplate() {
                     </VStack>
 
                     <VStack gap={0}>
-                      <Heading level={3}>Social accounts</Heading>
+                      <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                        Social accounts
+                      </Heading>
                       <Divider />
                       {SOCIAL_ROWS.map(row => (
                         <InfoRowItem key={row.label} {...row} />
@@ -363,7 +395,9 @@ export default function SettingsSecurityTemplate() {
                     </VStack>
 
                     <VStack gap={0}>
-                      <Heading level={3}>Device history</Heading>
+                      <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                        Device history
+                      </Heading>
                       <Divider />
                       {DEVICE_ROWS.map((device, i) => (
                         <HStack
@@ -397,7 +431,9 @@ export default function SettingsSecurityTemplate() {
                     </VStack>
 
                     <VStack gap={0}>
-                      <Heading level={3}>Account</Heading>
+                      <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                        Account
+                      </Heading>
                       <Divider />
                       <HStack
                         hAlign="between"
@@ -424,7 +460,9 @@ export default function SettingsSecurityTemplate() {
                 {activeTab === 'shared' && (
                   <VStack gap={8}>
                     <VStack gap={2}>
-                      <Heading level={3}>Shared access</Heading>
+                      <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                        Shared access
+                      </Heading>
                       <Divider />
                       <Text type="body" color="secondary">
                         Review each request carefully before approving access.
@@ -701,7 +739,9 @@ export default function SettingsSecurityTemplate() {
 
                 <VStack gap={8}>
                   <VStack gap={0}>
-                    <Heading level={3}>Messages</Heading>
+                    <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                      Messages
+                    </Heading>
                     <VStack style={rowPadding}>
                       <Switch
                         label="Show people when I've read their messages."
@@ -721,7 +761,9 @@ export default function SettingsSecurityTemplate() {
                   </VStack>
 
                   <VStack gap={0}>
-                    <Heading level={3}>Listings</Heading>
+                    <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                      Listings
+                    </Heading>
                     <VStack style={rowPadding}>
                       <Switch
                         label="Include my listing(s) in search engines"
@@ -736,7 +778,9 @@ export default function SettingsSecurityTemplate() {
                   </VStack>
 
                   <VStack gap={4}>
-                    <Heading level={3}>Reviews</Heading>
+                    <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                      Reviews
+                    </Heading>
                     <Text type="supporting" color="secondary">
                       Choose what&apos;s shared when you write a review.{' '}
                       <Link href="#" type="supporting">
@@ -781,7 +825,9 @@ export default function SettingsSecurityTemplate() {
                   </VStack>
 
                   <VStack gap={4}>
-                    <Heading level={3}>Data privacy</Heading>
+                    <Heading level={3} accessibilityLevel={isNarrow ? 2 : 3}>
+                      Data privacy
+                    </Heading>
                     <Card>
                       <HStack hAlign="between" vAlign="center">
                         <Text type="body">Request my personal data</Text>

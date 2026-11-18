@@ -5,7 +5,7 @@
  * @input A workload: a multi-file preset (file count and changed lines) or
  *   one file of a given size
  * @output Deterministic old/new file contents, their line and changed-line
- *   totals, and small formatting helpers for the DiffViewer performance sandbox
+ *   totals, and the megabyte formatter for the DiffViewer performance sandbox
  * @position Pure support utilities for the DiffViewer performance sandbox;
  *   no React and no DOM, so any harness can render the same fixtures
  *
@@ -373,14 +373,6 @@ export function countLines(files: ReadonlyArray<DiffBenchmarkFile>): number {
       total + lineCount(file.newContents ?? file.oldContents ?? null),
     0,
   );
-}
-
-export function formatDuration(value: number | null): string {
-  return value == null ? '—' : `${value.toFixed(1)} ms`;
-}
-
-export function formatCount(value: number | null): string {
-  return value == null ? '—' : value.toLocaleString();
 }
 
 export function formatMegabytes(bytes: number | null): string {

@@ -6,10 +6,11 @@
  * @output readThemeTiming: the eased progress from 0 to 1 that times a motion,
  *   as one timed MotionCurve. It reads the element's own transition, or
  *   tokens where the element is. It plays an easing that is not a cubic
- *   Bézier as the browser plays it. readThemeTokens and resolveTiming: that
- *   duration and easing as values. readThemeTokenText: a token's text where
- *   the element is. easedProgress: the curve for a length and an easing
- *   already read.
+ *   Bézier as the browser plays it. readThemeTimingOrInstant: that curve, or
+ *   one of no length when it does not resolve. readThemeTokens and
+ *   resolveTiming: that duration and easing as values. readThemeTokenText: a
+ *   token's text where the element is. easedProgress: the curve for a length
+ *   and an easing already read.
  * @position Motion foundation, internal to core. Motion that a tap, a key or
  *   the program starts reads its duration and easing from the theme with it.
  *
@@ -101,7 +102,6 @@ export function easedProgress(
   };
 }
 
-/** The first transition's duration in a computed style, in ms. */
 function firstDurationMs(style: CSSStyleDeclaration): number | null {
   return parseMotionRoleValue(
     'duration',
@@ -181,7 +181,7 @@ function progressOf(
  * them where `element` is. A plain time or easing parses as written. Other
  * text, such as `calc()`, resolves on a hidden probe's transition. The
  * duration is null when it is not a time of zero or more. The easing is null
- * when it is not a cubic Bézier, and a text left out gives null.
+ * when it is not a cubic Bézier. A value left out gives null.
  */
 export function resolveTiming(
   element: Element,
@@ -300,5 +300,20 @@ export function readThemeTiming(
     doc,
     {ms: firstDurationMs(style), points: parseCssEasing(easing)},
     easing,
+  );
+}
+
+/**
+ * The theme's timing for `tokens` where `element` is, as readThemeTiming
+ * reads it. A timing that does not resolve, or no element, plays no motion:
+ * the curve has no length, so the motion lands at once.
+ */
+export function readThemeTimingOrInstant(
+  element: Element | null,
+  tokens: ThemeTimingTokens,
+): MotionCurve {
+  return (
+    (element == null ? null : readThemeTiming(element, tokens)) ??
+    easedProgress(0, x => x)
   );
 }

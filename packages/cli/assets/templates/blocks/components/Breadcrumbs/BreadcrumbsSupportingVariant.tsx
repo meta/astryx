@@ -13,7 +13,7 @@ export default function BreadcrumbsSupportingVariant() {
         <Text type="supporting" color="secondary">
           Default
         </Text>
-        <Breadcrumbs>
+        <Breadcrumbs label="Default breadcrumb">
           <BreadcrumbItem href="/">Home</BreadcrumbItem>
           <BreadcrumbItem href="/projects">Projects</BreadcrumbItem>
           <BreadcrumbItem isCurrent>My Project</BreadcrumbItem>
@@ -23,7 +23,7 @@ export default function BreadcrumbsSupportingVariant() {
         <Text type="supporting" color="secondary">
           Supporting
         </Text>
-        <Breadcrumbs variant="supporting">
+        <Breadcrumbs label="Supporting breadcrumb" variant="supporting">
           <BreadcrumbItem href="/">Home</BreadcrumbItem>
           <BreadcrumbItem href="/projects">Projects</BreadcrumbItem>
           <BreadcrumbItem isCurrent>My Project</BreadcrumbItem>

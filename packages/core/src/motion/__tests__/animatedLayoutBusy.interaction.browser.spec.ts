@@ -21,6 +21,7 @@ import {
   type BlockedWindow,
   BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
+  BusyWindowTooLateError,
   castStep,
   CONTROL_RGB,
   MARKER_RGB,
@@ -64,9 +65,8 @@ test.afterAll(async () => {
 const BLOCK_MS = 700;
 
 /**
- * The glide's length here, ms. `--duration-medium-min` and `--duration-medium`
- * are both set to it, whichever the module plays. It is longer than the
- * theme's, so the judged part spans about 20 frames. The length changes
+ * The glide's length here, ms, set as `--duration-medium`. It is longer than
+ * the theme's, so the judged part spans about 20 frames. The length changes
  * nothing the proof judges.
  */
 const GLIDE_MS = 1000;
@@ -85,7 +85,7 @@ interface GlideRead {
   delayMs: number;
   /** The animation's own time, ms, at `at`. */
   local: number;
-  /** Epoch ms on the page clock when `local` was read. */
+  /** The document timeline's time `local` was read at, in epoch ms. */
   at: number;
 }
 
@@ -99,7 +99,7 @@ async function openStory(page: Page, story: string): Promise<void> {
     .first()
     .waitFor({state: 'attached'});
   await page.addStyleTag({
-    content: `* { --duration-medium-min: ${GLIDE_MS}ms !important; --duration-medium: ${GLIDE_MS}ms !important; }`,
+    content: `* { --duration-medium: ${GLIDE_MS}ms !important; }`,
   });
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -111,11 +111,14 @@ async function openStory(page: Page, story: string): Promise<void> {
 
 /**
  * Clicks `trigger`, and the page blocks its own main thread for BLOCK_MS from
- * a task queued in the first frame after the click. The glide starts in the
- * click's own task, so it is under way when the block starts, however the
- * glide is driven. A round trip from the test could miss most of it. Just
- * before the block, the page reads the translate animations that carry
- * `follower`, for the judgment's expected positions.
+ * a task queued in a frame after the click. A round trip from the test could
+ * miss most of the glide. The block waits until each glide that carries
+ * `follower` was present at the frame before and has run 16 ms, as
+ * `blockMainThread` waits. Animated layout sets each glide's start time, so
+ * its glides are never pending. The frame in between hands them to the
+ * compositor. Just before the block, the page reads those glides, for the
+ * judgment's expected positions. With no such glide within 5 s of the click,
+ * it reports none. A glide that never qualifies fails by name.
  */
 async function clickThenBlock(
   page: Page,
@@ -138,33 +141,84 @@ async function clickThenBlock(
       element.addEventListener(
         'click',
         () => {
-          requestAnimationFrame(() => {
-            const glides: GlideRead[] = [];
+          const deadline = performance.now() + 5000;
+          // The glides that counted at the frame before.
+          let seen = new Set<Animation>();
+          // The glides of the last frame that had any, for the deadline's message.
+          let lastFound: [Animation, ComputedKeyframe[]][] = [];
+          const tick = () => {
+            const found: [Animation, ComputedKeyframe[]][] = [];
             for (
               let node: Element | null = carried;
               node != null;
               node = node.parentElement
             ) {
               for (const animation of node.getAnimations()) {
-                const effect = animation.effect as KeyframeEffect;
-                const frames = effect
+                const frames = (animation.effect as KeyframeEffect)
                   .getKeyframes()
                   .filter(frame => typeof frame.translate === 'string');
-                if (frames.length < 2) {
-                  continue;
+                if (frames.length >= 2) {
+                  found.push([animation, frames]);
                 }
-                glides.push({
-                  frames: frames.map((frame): [number, number] => [
-                    frame.computedOffset,
-                    offsetOf(frame.translate),
-                  ]),
-                  durationMs: Number(effect.getComputedTiming().duration),
-                  delayMs: effect.getTiming().delay ?? 0,
-                  local: Number(animation.currentTime ?? 0),
-                  at: performance.timeOrigin + performance.now(),
-                });
               }
             }
+            const ready =
+              found.length > 0 &&
+              found.every(
+                ([animation]) =>
+                  !animation.pending &&
+                  animation.playState === 'running' &&
+                  Number(animation.currentTime ?? 0) >= 16 &&
+                  seen.has(animation),
+              );
+            const before = seen;
+            seen = new Set(found.map(([animation]) => animation));
+            if (found.length > 0) {
+              lastFound = found;
+            }
+            if (!ready) {
+              if (performance.now() > deadline) {
+                const now = performance.timeOrigin + performance.now();
+                const named = found.length > 0 ? found : lastFound;
+                const label = (animation: Animation) =>
+                  found.length === 0
+                    ? 'gone by the deadline'
+                    : before.has(animation)
+                      ? 'present at the frame before'
+                      : 'new at the frame before';
+                (window as unknown as {busy: unknown}).busy =
+                  named.length === 0
+                    ? {busy: {from: now, to: now, spanMs: 0}, glides: []}
+                    : {
+                        error: `clickThenBlock: within 5 s of the click, the glides that carry the follower never all ran 16 ms on two frames in a row: ${named
+                          .map(
+                            ([animation]) =>
+                              `${animation.playState} at ${Number(animation.currentTime ?? 0).toFixed(0)} ms, ${label(animation)}`,
+                          )
+                          .join('; ')}`,
+                      };
+                return;
+              }
+              requestAnimationFrame(tick);
+              return;
+            }
+            const glides: GlideRead[] = found.map(([animation, frames]) => {
+              const effect = animation.effect as KeyframeEffect;
+              return {
+                frames: frames.map((frame): [number, number] => [
+                  frame.computedOffset,
+                  offsetOf(frame.translate),
+                ]),
+                durationMs: Number(effect.getComputedTiming().duration),
+                delayMs: effect.getTiming().delay ?? 0,
+                local: Number(animation.currentTime ?? 0),
+                // The animation's time is on the document timeline, which
+                // holds the frame's time through the task.
+                at:
+                  performance.timeOrigin +
+                  Number(document.timeline.currentTime ?? performance.now()),
+              };
+            });
             setTimeout(() => {
               const from = performance.now();
               let now = from;
@@ -180,7 +234,8 @@ async function clickThenBlock(
                 glides,
               };
             }, 0);
-          });
+          };
+          requestAnimationFrame(tick);
         },
         {capture: true, once: true},
       );
@@ -190,15 +245,20 @@ async function clickThenBlock(
   await trigger.click();
   const signal = await page.waitForFunction(
     () =>
-      (window as unknown as {busy?: {busy: BlockedWindow; glides: GlideRead[]}})
-        .busy,
+      (
+        window as unknown as {
+          busy?: {busy: BlockedWindow; glides: GlideRead[]} | {error: string};
+        }
+      ).busy,
     undefined,
     {polling: 50, timeout: 0},
   );
-  return (await signal.jsonValue()) as {
-    busy: BlockedWindow;
-    glides: GlideRead[];
-  };
+  const read = (await signal.jsonValue()) as
+    {busy: BlockedWindow; glides: GlideRead[]} | {error: string};
+  if ('error' in read) {
+    throw new Error(read.error);
+  }
+  return read;
 }
 
 /**
@@ -244,24 +304,28 @@ async function busyGlide(
   await startBusyControl(page);
   const cast = await startScreencast(page);
   const {busy, glides} = await clickThenBlock(page, trigger, follower, axis);
-  // Until every animation but the control's has ended.
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () =>
-          document
-            .getAnimations()
-            .filter(
-              a =>
-                !(
-                  (a.effect as KeyframeEffect | null)?.target?.closest(
-                    '[data-harness-control]',
-                  ) ?? false
-                ),
-            ).length,
-      ),
-    )
-    .toBe(0);
+  expect(glides.length, 'a glide carries the follower').toBeGreaterThan(0);
+  // Until every animation but the control's has ended. A count polled
+  // against a fixed 5 s measured the starved main thread, not the glide.
+  await page.evaluate(async () => {
+    for (;;) {
+      const left = document
+        .getAnimations()
+        .filter(
+          a =>
+            a.playState !== 'finished' &&
+            !(
+              (a.effect as KeyframeEffect | null)?.target?.closest(
+                '[data-harness-control]',
+              ) ?? false
+            ),
+        );
+      if (left.length === 0) {
+        break;
+      }
+      await Promise.allSettled(left.map(async a => a.finished));
+    }
+  });
   // Where the marker rests, read from the page. A glide frozen through the
   // block stays far from it, and a frame after the block can still be stale.
   const settledAt = await follower.evaluate((el, along) => {
@@ -291,6 +355,21 @@ async function busyGlide(
     ) >= step
   ) {
     readable += 1;
+  }
+  // Too little of the glide moves a cast step a frame inside the block,
+  // because the block began too late. That is when the block ran, not how the
+  // glide moved. So it fails under that name, with the numbers.
+  if (readable - busy.from < MIN_JUDGED_FRAMES * FRAME_MS) {
+    const [glide] = glides;
+    const startedMs = glide.local + (busy.from - glide.at) - glide.delayMs;
+    throw new BusyWindowTooLateError(
+      `${name}: the block began ${startedMs.toFixed(0)} ms into the ${glide.durationMs.toFixed(0)} ms glide, which moves the follower a cast step a frame for only ${(readable - busy.from).toFixed(0)} ms of the block, under the ${MIN_JUDGED_FRAMES} frames the proof judges: the block started too late for the glide. Start the block earlier.`,
+      {
+        readableMs: readable - busy.from,
+        glideStartedMs: startedMs,
+        glideDurationMs: glide.durationMs,
+      },
+    );
   }
   // The part of the block the judgment reads ends there.
   const judgedWindow = {...busy, to: Math.min(busy.to, readable)};
@@ -353,7 +432,6 @@ async function markAppDiv(page: Page, text: string): Promise<Locator> {
 
 function expectKeptAdvancing(run: Awaited<ReturnType<typeof busyGlide>>) {
   expect(run.busy.spanMs).toBeGreaterThanOrEqual(BLOCK_MS);
-  expect(run.glides.length, 'a glide carries the follower').toBeGreaterThan(0);
   expect(run.proof.verdict.failures, run.summary).toEqual([]);
   expect(run.proof.monotonic, run.summary).toBe(true);
 }

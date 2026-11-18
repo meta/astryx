@@ -27,6 +27,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
+import {textDirectionProps} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -47,6 +48,11 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     whiteSpace: 'nowrap',
+    // A badge is as wide as its label. A grid cell and the cross axis of a
+    // stack stretch a child whose width is `auto`. In a flex row the badge
+    // still shrinks: its flex basis follows this width, and the minimum below
+    // lets it go under.
+    width: 'fit-content',
     // A badge is one line by construction — one line tall, `nowrap` — so a
     // label wider than the space available has to go somewhere. Without these
     // it went *outside* its container: `nowrap` with nothing to clip it
@@ -75,6 +81,7 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
 });
 
@@ -269,7 +276,9 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...stylex.props(styles.label)}>{label}</span>
+      <span {...textDirectionProps(label)} {...stylex.props(styles.label)}>
+        {label}
+      </span>
     </span>
   );
 }

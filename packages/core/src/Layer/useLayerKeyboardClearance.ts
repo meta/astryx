@@ -7,7 +7,7 @@
  * @input Whether an anchor-mode layer is open, its element, and the keyboard
  *   module: its one height, and its layout guide for timing.
  * @output Exports `useLayerKeyboardClearance` and its result type,
- *   `keyboardClearanceCap`, `LAYER_ANCHORED_ATTRIBUTE`,
+ *   `keyboardLiftStyle`, `keyboardClearanceCap`, `LAYER_ANCHORED_ATTRIBUTE`,
  *   `LAYER_KEYBOARD_CAP_PROPERTY`, `LAYER_KEYBOARD_OVERFLOW_PROPERTY`,
  *   `LAYER_KEYBOARD_INSET_PROPERTY` and `LAYER_KEYBOARD_CLEARANCE_PX`
  * @position Layer runtime, through the layer's touch module: the software
@@ -22,7 +22,13 @@
  * - /docs/specs/AST-059-layer-viewport-inset/spec.md
  */
 
-import {useCallback, useRef, useState, type RefObject} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from 'react';
 import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 // The keyboard module's own files, not its index. The index also re-exports
@@ -101,10 +107,25 @@ function keepInView(layer: HTMLElement, target: Element) {
   }
 }
 
+/**
+ * The insets that move a capped layer's anchor area `lift` px toward the
+ * block-start, or null without a lift. They hold the layer's block-start edge
+ * where it was when the cap landed (`LayerKeyboardClearance.lift`).
+ */
+export function keyboardLiftStyle(lift: number | null): CSSProperties | null {
+  return lift == null ? null : {insetBlockStart: -lift, insetBlockEnd: lift};
+}
+
 /** What `useLayerKeyboardClearance` gives the layer runtime. */
 export interface LayerKeyboardClearance {
   /** The block size that keeps the layer clear of the keyboard, or null. */
   readonly cap: number | null;
+  /**
+   * While the cap holds the layer, how far its block-start edge sits above
+   * the place the fallback order picks for the shorter box, in px. The
+   * runtime applies it with `keyboardLiftStyle`. Otherwise null.
+   */
+  readonly lift: number | null;
   /**
    * Once a software keyboard is up, the layout px between the layout
    * viewport's bottom and the line an anchored layer ends above. It keeps its
@@ -132,9 +153,11 @@ export function useLayerKeyboardClearance(
   layerRef: RefObject<HTMLElement | null>,
 ): LayerKeyboardClearance {
   const [cap, setCap] = useState<number | null>(null);
+  const [lift, setLift] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
   // The cap the layer renders with, read by the measurement between commits.
   const capRef = useRef<number | null>(null);
+  const liftRef = useRef<number | null>(null);
   const keyboardInsetRef = useRef<number | null>(null);
   // Set while the layer is open: follows the runtime when it replaces the
   // layer element without closing it.
@@ -156,14 +179,30 @@ export function useLayerKeyboardClearance(
     // replace the layer element while it stays open; `sync` moves both to the
     // element the ref holds now.
     let layer: HTMLElement = initial;
+    // The field reveal after a cap stands down if a person's input reached
+    // the layer since the cap.
+    let personInputs = 0;
+    const notePersonInput = () => {
+      personInputs += 1;
+    };
     const sync = (): boolean => {
       const next = layerRef.current;
       if (next == null || next === layer) {
         return false;
       }
       layer.removeEventListener('pointerdown', handlePress, true);
+      layer.removeEventListener('touchstart', notePersonInput, {capture: true});
+      layer.removeEventListener('wheel', notePersonInput, {capture: true});
       layer = next;
       layer.addEventListener('pointerdown', handlePress, true);
+      layer.addEventListener('touchstart', notePersonInput, {
+        capture: true,
+        passive: true,
+      });
+      layer.addEventListener('wheel', notePersonInput, {
+        capture: true,
+        passive: true,
+      });
       return true;
     };
     // Renders the layer with `next` and returns once that commit has laid it
@@ -172,19 +211,24 @@ export function useLayerKeyboardClearance(
     const commitCap = (
       next: number | null,
       nextInset = keyboardInsetRef.current,
+      nextLift: number | null = null,
     ) => {
       if (
         isDisposed ||
-        (capRef.current === next && keyboardInsetRef.current === nextInset)
+        (capRef.current === next &&
+          keyboardInsetRef.current === nextInset &&
+          liftRef.current === nextLift)
       ) {
         return;
       }
       capRef.current = next;
       keyboardInsetRef.current = nextInset;
+      liftRef.current = nextLift;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the box is measured at its new size in the same task, before the frame paints
       flushSync(() => {
         setCap(next);
         setKeyboardInset(nextInset);
+        setLift(nextLift);
       });
       sync();
     };
@@ -210,14 +254,27 @@ export function useLayerKeyboardClearance(
         return false;
       }
       commitCap(height);
-      // A layer too tall for the room below its trigger can sit higher, over
-      // the trigger, where the viewport fit placed it. Shorter, it goes back
-      // below the trigger: cap it again from where it starts now.
+      // A layer too tall for the room on both sides of its trigger sits over
+      // the trigger, where the viewport fit shifted it. Shorter, it fits below
+      // the trigger, and the fallback order moves it down. Lift it back, so it
+      // keeps the block-start edge it had when the cap landed. A layer that
+      // holds its block-end edge (placed above its trigger) moves only its
+      // top, and is not lifted.
       const placed = settledBox(layer);
-      if (placed.top > box.top + 1) {
-        const again = keyboardClearanceCap(placed, viewport, inset);
-        if (again != null) {
-          commitCap(again);
+      if (
+        placed.top > box.top + 1 &&
+        Math.abs(placed.bottom - box.bottom) > 1
+      ) {
+        commitCap(height, keyboardInsetRef.current, placed.top - box.top);
+        // An engine that does not move the layer by the lift leaves it below
+        // the trigger: cap it from where it starts there.
+        const lifted = settledBox(layer);
+        if (Math.abs(lifted.top - box.top) > 1) {
+          commitCap(height);
+          const again = keyboardClearanceCap(placed, viewport, inset);
+          if (again != null) {
+            commitCap(again);
+          }
         }
       }
       // The cap holds the block-start edge: below its trigger the top stays
@@ -242,12 +299,17 @@ export function useLayerKeyboardClearance(
       }
       // The composing component makes its surface a scroll container once it
       // overflows. That comes a frame later, as its observer reports the
-      // smaller box. Keep the field being typed into in view after that.
+      // smaller box. Keep the field being typed into in view after that. A
+      // person who presses, touches or turns a wheel in the layer by then has
+      // placed its content, so the reveal stands down. A component's own
+      // scroll, such as a list keeping its active option in view, does not
+      // stop it. The next cap reveals the field again.
       const focused = layer.ownerDocument.activeElement;
       if (focused != null && focused !== layer && layer.contains(focused)) {
+        const inputsAtCap = personInputs;
         win.requestAnimationFrame(() =>
           win.requestAnimationFrame(() => {
-            if (!isDisposed) {
+            if (!isDisposed && personInputs === inputsAtCap) {
               keepInView(layer, focused);
             }
           }),
@@ -298,6 +360,7 @@ export function useLayerKeyboardClearance(
       run?.();
     };
     function handlePress(event: PointerEvent) {
+      notePersonInput();
       if (pressed.size === 0) {
         follow();
       }
@@ -317,6 +380,14 @@ export function useLayerKeyboardClearance(
       });
     }
     layer.addEventListener('pointerdown', handlePress, true);
+    layer.addEventListener('touchstart', notePersonInput, {
+      capture: true,
+      passive: true,
+    });
+    layer.addEventListener('wheel', notePersonInput, {
+      capture: true,
+      passive: true,
+    });
     const unsubscribe = guide.subscribe(transition => {
       cancelPending();
       if (transition.animated && transition.to > transition.from) {
@@ -391,11 +462,17 @@ export function useLayerKeyboardClearance(
       cancelPending();
       stopWaiting?.();
       layer.removeEventListener('pointerdown', handlePress, true);
+      layer.removeEventListener('touchstart', notePersonInput, {capture: true});
+      layer.removeEventListener('wheel', notePersonInput, {capture: true});
       unfollow();
       // A closed layer reopens at its own size.
       if (capRef.current != null) {
         capRef.current = null;
         setCap(null);
+      }
+      if (liftRef.current != null) {
+        liftRef.current = null;
+        setLift(null);
       }
       if (keyboardInsetRef.current != null) {
         keyboardInsetRef.current = null;
@@ -409,6 +486,7 @@ export function useLayerKeyboardClearance(
   }, []);
   return {
     cap: isOpen ? cap : null,
+    lift: isOpen ? lift : null,
     inset: isOpen ? keyboardInset : null,
     followLayerElement,
   };

@@ -42,7 +42,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {isRenderable} from '../utils/isRenderable';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;

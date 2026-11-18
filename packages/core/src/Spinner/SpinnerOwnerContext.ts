@@ -16,7 +16,11 @@
  * - /packages/core/src/Spinner/Spinner.tsx
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const SpinnerOwnerContext = createContext(false);
+export const SpinnerOwnerContext = createSharedContext(
+  'SpinnerOwnerContext',
+  1,
+  false,
+);
 SpinnerOwnerContext.displayName = 'SpinnerOwnerContext';

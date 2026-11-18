@@ -27,6 +27,8 @@ beforeEach(() => {
     path.join(dir, 'package.json'),
     JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '^0.0.1'}}),
   );
+  // Set up, so the once-a-day setup reminder plays no part in what is compared.
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '<!-- ASTRYX:START -->\n<!-- ASTRYX:END -->\n');
 });
 
 afterEach(() => {

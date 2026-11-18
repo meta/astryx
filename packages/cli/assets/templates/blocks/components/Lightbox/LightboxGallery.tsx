@@ -39,7 +39,7 @@ export default function LightboxGallery() {
       <Grid columns={2} gap={2} style={{width: 136}}>
         {PHOTOS.map((photo, i) => (
           <Thumbnail
-            key={photo.src}
+            key={photo.alt}
             src={photo.src}
             alt={photo.alt}
             label={photo.alt}

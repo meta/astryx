@@ -1,0 +1,10 @@
+{
+  "name": "astryx",
+  "version": "0.1.0",
+  "description": "Tells coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
+  "author": {"name": "Astryx"},
+  "homepage": "https://github.com/meta/astryx",
+  "repository": "https://github.com/meta/astryx",
+  "license": "MIT",
+  "keywords": ["astryx", "design-system", "ui"]
+}

@@ -9,7 +9,7 @@
 import {describe, expect, it, vi} from 'vitest';
 import lookup from './main-artifact.cjs';
 
-const {mainArtifactRunId} = lookup;
+const {mainArtifactRunId, mainArtifacts} = lookup;
 const SHA = 'a'.repeat(40);
 
 function github(artifacts) {
@@ -86,5 +86,22 @@ describe('mainArtifactRunId', () => {
     await expect(
       lookupAny(artifact({}, {head_repository_id: 2})),
     ).resolves.toBeNull();
+  });
+});
+
+describe('mainArtifacts', () => {
+  it("lists every unexpired artifact Main's own runs on main uploaded, at any commit", async () => {
+    const kept = artifact({id: 1});
+    const older = artifact({id: 2}, {head_sha: 'b'.repeat(40)});
+    const client = github([
+      kept,
+      artifact({id: 3}, {head_branch: 'feature'}),
+      artifact({id: 4}, {head_repository_id: 2}),
+      artifact({id: 5, expired: true}),
+      older,
+    ]);
+    expect(
+      await mainArtifacts({github: client, owner: 'o', repo: 'r', name: 'n'}),
+    ).toEqual([kept, older]);
   });
 });

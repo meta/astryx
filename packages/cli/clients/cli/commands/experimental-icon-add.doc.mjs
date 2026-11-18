@@ -30,7 +30,7 @@ export const doc = {
       flag: '--new-definition <name>',
       param: 'options.newDefinition',
       description:
-        "Add your set's own definition, then map the icon to it; needs --description and --words",
+        "Add your set's own definition, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
     },
     {
       flag: '--description <text>',
@@ -98,7 +98,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the icon is added, already present, or the matching definitions are listed',
+      when: 'the icon is added, already present, or the matching definitions are listed, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

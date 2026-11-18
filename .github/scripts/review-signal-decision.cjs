@@ -121,6 +121,32 @@ function resolveReviewApprovals({
   };
 }
 
+// A pull request the review app opens is the app's own work, which it cannot
+// approve: its code review is a trainer pass, an engineering owner's approval
+// of its exact head. Other bots stay exempt.
+// The success text an engineering owner's exact-head approval leaves. It is
+// review-clear's own, so review-clear re-gates it when that approval is
+// withdrawn or dismissed.
+const OWNER_CLEARED_TEXT = 'Cleared by code-owner approval.';
+const TRAINER_WAITING_TEXT =
+  "Waiting on code review: a trainer pass, an engineering owner's approval of this exact head.";
+
+/** Whether a pull request's author is the review app named in `REVIEW_APP`. */
+function needsTrainerPass({author, reviewApp}) {
+  const app = normalizeReviewApp(reviewApp);
+  return app !== '' && String(author ?? '').toLowerCase() === app;
+}
+
+/** Whether an engineering owner's latest exact-head review approves. */
+function trainerPassed({reviews, headSha, engOwners}) {
+  return resolveReviewApprovals({
+    reviews,
+    headSha,
+    engOwners,
+    designOwners: [],
+  }).codeApproved;
+}
+
 // One review gate (architecture:knowledge-contracts DEC-14, spec:AST-030
 // FR15): every writer of `review-required` composes code review and the spec
 // half that `spec-owner-approval` mirrors.
@@ -137,7 +163,16 @@ const SPEC_WAITING_TEXT = {
     `${SPEC_WAITING_PREFIX}@${login} requested changes and can reply /approve-spec <sha>`,
 };
 const SPEC_MIRROR_PREFIX = 'Mirrors review-required · spec ';
+const SPEC_RECONCILING_PREFIX = 'Reconciling exact head ';
 const SPEC_CHECKING_TEXT = '⏳ Checking for spec changes…';
+// An owner approval on this head that a running reconcile checks again.
+const SPEC_CARRIED_TEXT = '⏳ Spec approval carried (verifying)';
+// What a code wait adds for a spec half that is not satisfied.
+const SPEC_SUFFIX = {
+  waiting: ' (+ spec approval)',
+  checking: ' (+ spec check)',
+  carried: ' · spec approval carried (verifying)',
+};
 // A run over the spec-owner job's request budget decides nothing; a
 // maintainer's dispatch decides (spec:AST-030 FR15).
 const SPEC_TOO_LARGE_TEXT =
@@ -146,24 +181,57 @@ const CODE_WAITING_PREFIX = 'Waiting on code review';
 const REVIEW_COMPLETE = 'Review complete.';
 
 // GitHub lists a ref's statuses newest first.
-function newestTrusted(statuses, contextName) {
+function trustedStatuses(statuses, contextName) {
+  return (statuses ?? []).filter(
+    status =>
+      status.context === contextName &&
+      status.creator?.login === TRUSTED_STATUS_CREATOR,
+  );
+}
+
+function isOwnerApproval(status) {
+  const description = status.description ?? '';
   return (
-    (statuses ?? []).find(
-      status =>
-        status.context === contextName &&
-        status.creator?.login === TRUSTED_STATUS_CREATOR,
-    ) ?? null
+    status.state === 'success' &&
+    description.startsWith(SPEC_MIRROR_PREFIX) &&
+    /^ok \(.+\)$/.test(description.slice(SPEC_MIRROR_PREFIX.length))
   );
 }
 
 /**
  * The spec half, from the newest trusted `spec-owner-approval`. With none yet
  * (or a failed read) it fails closed; the spec-owner job composes on publish.
+ * While a run decides a head again, an owner approval of that head shows as
+ * carried, but the half stays unsatisfied until the run decides.
  */
 function readSpecGate(statuses) {
-  const status = newestTrusted(statuses, SPEC_GATE_CONTEXT);
+  const specStatuses = trustedStatuses(statuses, SPEC_GATE_CONTEXT);
+  const status = specStatuses[0];
   if (!status)
     return {known: false, satisfied: false, text: SPEC_CHECKING_TEXT};
+  if ((status.description ?? '').startsWith(SPEC_RECONCILING_PREFIX)) {
+    const decided = specStatuses.find(earlier =>
+      (earlier.description ?? '').startsWith(SPEC_MIRROR_PREFIX),
+    );
+    if (decided && isOwnerApproval(decided)) {
+      return {
+        known: true,
+        satisfied: false,
+        carried: true,
+        text: SPEC_CARRIED_TEXT,
+        url: status.target_url,
+      };
+    }
+    // No decision yet, or one that needed no owner approval: ask nothing.
+    if (!decided || decided.state === 'success') {
+      return {
+        known: false,
+        satisfied: false,
+        text: SPEC_CHECKING_TEXT,
+        url: status.target_url,
+      };
+    }
+  }
   return {...readSpecStatus(status), url: status.target_url};
 }
 
@@ -211,9 +279,12 @@ function parseCodeGate(status) {
     return {gated: false, description: code};
   }
   if (description.startsWith(CODE_WAITING_PREFIX)) {
+    const suffix = Object.values(SPEC_SUFFIX).find(text =>
+      description.endsWith(text),
+    );
     return {
       gated: true,
-      description: description.replace(/ \(\+ spec approval\)$/, ''),
+      description: suffix ? description.slice(0, -suffix.length) : description,
     };
   }
   return {gated: false, description: REVIEW_COMPLETE};
@@ -253,10 +324,14 @@ function readCodeGate(statuses, {latest = true} = {}) {
 /** The one review gate: code review leads; success needs both; never red. */
 function composeReviewGate({codeGated, codeDescription, spec}) {
   if (codeGated) {
-    const withSpec =
-      spec && !spec.satisfied
-        ? `${codeDescription} (+ spec approval)`
-        : codeDescription;
+    let suffix = '';
+    // A spec half not decided yet asks nothing of the owners.
+    if (spec && !spec.satisfied) {
+      if (spec.carried) suffix = SPEC_SUFFIX.carried;
+      else if (spec.known === false) suffix = SPEC_SUFFIX.checking;
+      else suffix = SPEC_SUFFIX.waiting;
+    }
+    const withSpec = `${codeDescription}${suffix}`;
     return {
       state: 'pending',
       description: (withSpec.length <= 140 ? withSpec : codeDescription).slice(
@@ -281,14 +356,19 @@ module.exports = {
   REVIEW_GATE_CONTEXT,
   SPEC_GATE_CONTEXT,
   SPEC_MIRROR_PREFIX,
+  SPEC_RECONCILING_PREFIX,
   SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
+  OWNER_CLEARED_TEXT,
+  TRAINER_WAITING_TEXT,
   classifyReviewSignalPaths,
   composeReviewGate,
   readCodeGate,
   readSpecGate,
   hasWritePermission,
   isSafeSpace,
+  needsTrainerPass,
   normalizeReviewApp,
   resolveReviewApprovals,
+  trainerPassed,
 };

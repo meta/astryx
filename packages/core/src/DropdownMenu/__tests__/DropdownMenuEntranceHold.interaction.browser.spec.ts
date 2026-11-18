@@ -112,27 +112,32 @@ const activeDescription = async (page: Page) =>
 const menuLayer = (page: Page) =>
   page.locator('[popover]:has([role="menu"])').first();
 
-/** Makes every popover's entrance last 10 s, so input lands inside it. */
+/**
+ * Makes every popover's entrance last 10 s, so input lands inside it. The
+ * entrance runs on the surface, the layer's child.
+ */
 async function lengthenEntrance(page: Page) {
   await page.addStyleTag({
-    content: '[popover] { animation-duration: 10s !important; }',
+    content: '[popover], [popover] > * { animation-duration: 10s !important; }',
   });
 }
 
-/** How many entrance animations run on the menu's layer now. */
+/** How many entrance animations run on the menu's layer or its surface now. */
 const runningEntrances = async (layer: Locator) =>
   layer.evaluate(
     element =>
-      element
-        .getAnimations()
+      [element, element.firstElementChild]
+        .flatMap(node => node?.getAnimations() ?? [])
         .filter(animation => animation.playState === 'running').length,
   );
 
 /** Ends the layer's entrance at once, as if its time had run out. */
 async function finishEntrance(page: Page, layer: Locator) {
   await layer.evaluate(element => {
-    for (const animation of element.getAnimations()) {
-      animation.finish();
+    for (const node of [element, element.firstElementChild]) {
+      for (const animation of node?.getAnimations() ?? []) {
+        animation.finish();
+      }
     }
   });
   await frames(page, 2);

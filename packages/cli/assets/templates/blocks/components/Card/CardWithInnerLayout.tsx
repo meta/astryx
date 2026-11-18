@@ -12,10 +12,12 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function CardWithInnerLayout() {
+  const showToast = useToast();
   return (
-    <Card width={380}>
+    <Card width={380} maxWidth="100%">
       <Layout
         header={
           <LayoutHeader hasDivider>
@@ -33,8 +35,22 @@ export default function CardWithInnerLayout() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="Cancel" variant="ghost" />
-              <Button label="Save changes" variant="primary" />
+              <Button
+                onClick={() =>
+                  showToast({body: 'Demo: your edits would be discarded here'})
+                }
+                label="Cancel"
+                variant="ghost"
+              />
+              <Button
+                onClick={() =>
+                  showToast({
+                    body: 'Demo: your profile changes would be saved here',
+                  })
+                }
+                label="Save changes"
+                variant="primary"
+              />
             </HStack>
           </LayoutFooter>
         }

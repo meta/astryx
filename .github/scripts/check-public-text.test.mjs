@@ -290,6 +290,112 @@ describe('the script on a real repository', () => {
     expect(run(base, head).status).toBe(0);
   });
 
+  it("reads only the pull request's commits when the merge base read is too old", () => {
+    const {commit, run, git, dir, hashes} = repo();
+    // main: base, then two commits; one names an internal change id.
+    const base = commit('a.md', 'a\n', 'base');
+    git('checkout', '-q', '-b', 'topic');
+    const own = commit('b.md', 'b\n', 'add b');
+    git('checkout', '-q', 'main');
+    commit('c.md', 'c\n', `main work (${changeId})`);
+    const tip = commit('d.md', 'd\n', 'more main work');
+    // The branch merges main, then GitHub merges the head into main's tip.
+    git('checkout', '-q', 'topic');
+    git('merge', '-q', '--no-edit', 'main');
+    const head = git('rev-parse', 'HEAD');
+    git('checkout', '-q', '--detach', tip);
+    git('merge', '-q', '--no-edit', head);
+    const merge = git('rev-parse', 'HEAD');
+    // A shallow clone can resolve the merge base to the old branch point: the
+    // range then holds main's own commits and their text.
+    expect(run(base, head).status).toBe(1);
+    // GitHub's list holds only the pull request's commits.
+    const list = path.join(dir, 'commits.jsonl');
+    fs.writeFileSync(
+      list,
+      [own, head]
+        .map(sha =>
+          JSON.stringify({sha, message: git('log', '-1', '--format=%B', sha)}),
+        )
+        .join('\n'),
+    );
+    const listed = spawnSync(
+      process.execPath,
+      [
+        SCRIPT,
+        '--base',
+        base,
+        '--head',
+        head,
+        '--commits-json',
+        list,
+        '--diff-base',
+        tip,
+        '--diff-head',
+        merge,
+        '--hashes',
+        hashes,
+      ],
+      {cwd: dir, encoding: 'utf8'},
+    );
+    expect(listed.stdout).toContain('Checked 2 commit message(s)');
+    expect(listed.status).toBe(0);
+  });
+
+  it("still finds the pull request's own text through the list", () => {
+    const {commit, git, dir, hashes} = repo();
+    const tip = commit('a.md', 'a\n', 'base');
+    git('checkout', '-q', '-b', 'topic');
+    const own = commit('b.md', `uses ${FAKE_NAME}\n`, `add b (${changeId})`);
+    git('checkout', '-q', '--detach', tip);
+    git('merge', '-q', '--no-edit', '--no-ff', own);
+    const merge = git('rev-parse', 'HEAD');
+    const list = path.join(dir, 'commits.jsonl');
+    fs.writeFileSync(
+      list,
+      `${JSON.stringify({sha: own, message: `add b (${changeId})`})}\n`,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        SCRIPT,
+        '--commits-json',
+        list,
+        '--diff-base',
+        tip,
+        '--diff-head',
+        merge,
+        '--hashes',
+        hashes,
+      ],
+      {cwd: dir, encoding: 'utf8'},
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'message has an internal change or task id',
+    );
+    expect(result.stdout).toContain('file=b.md,line=1,');
+    // An empty list is unreadable, never a pass.
+    fs.writeFileSync(list, '\n');
+    expect(
+      spawnSync(
+        process.execPath,
+        [
+          SCRIPT,
+          '--commits-json',
+          list,
+          '--diff-base',
+          tip,
+          '--diff-head',
+          merge,
+          '--hashes',
+          hashes,
+        ],
+        {cwd: dir, encoding: 'utf8'},
+      ).status,
+    ).toBe(2);
+  });
+
   it('fails closed when the range is empty, unreadable or not a sha', () => {
     const {commit, run, hashes} = repo();
     const base = commit('a.md', 'a\n', 'base');
@@ -365,11 +471,27 @@ describe('Lint runs the check (spec:AST-030 FR27)', () => {
     expect(step.run).not.toMatch(/--unshallow origin >/);
   });
 
-  it('checks the pull request head from its merge base, and fails without one', () => {
+  it("reads the pull request's own commits from GitHub's full list, with the merge's diff", () => {
+    expect(step.run).toContain(
+      'gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100"',
+    );
+    // Only a list that holds every commit the pull request reports counts.
+    expect(step.run).toContain('[ "$(grep -c . "$COMMITS")" -eq "$EXPECTED" ]');
+    expect(step.run).toContain(
+      'ARGS+=(--commits-json "$COMMITS" --diff-base "$BASE_TIP" --diff-head "$MERGE_SHA")',
+    );
+    expect(step.run).toContain('MERGE_SHA=$(git rev-parse HEAD)');
+  });
+
+  it('falls back to the merge base without the list, and fails closed without either', () => {
     expect(step.run).toContain('HEAD_SHA=$(git rev-parse HEAD^2)');
     expect(step.run).toContain('git merge-base "$BASE_TIP" "$HEAD_SHA"');
-    expect(step.run).toContain('--base "$MERGE_BASE" --head "$HEAD_SHA"');
-    expect(step.run).toMatch(/merge base was not found[^\n]*\n\s*exit 1/);
+    expect(step.run).toContain(
+      'ARGS=(--base "${MERGE_BASE:-$BASE_TIP}" --head "$HEAD_SHA")',
+    );
+    expect(step.run).toMatch(
+      /if \[ -z "\$MERGE_BASE" \] && \[ "\$LISTED" != true \]; then\n\s*echo "::error[^\n]*merge base could be read[^\n]*"\n\s*exit 1/,
+    );
   });
 
   it('reads the current title and description through the API, and never prints them', () => {

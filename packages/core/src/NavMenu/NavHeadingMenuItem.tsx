@@ -23,6 +23,7 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
@@ -30,6 +31,7 @@ import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
+import {keepDisabledRowUnfocused} from '../DropdownMenu/menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -164,12 +166,14 @@ export function NavHeadingMenuItem({
   return (
     <Element
       {...restProps}
+      onMouseDown={composeEventHandlers(
+        restProps.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={itemRef}
       role="menuitem"
-      // A disabled link row has no href, so without tabIndex it could not take
-      // focus at all. -1 keeps it focusable but out of the Tab order, as an
-      // enabled row is (spec:AST-085 FR1).
-      tabIndex={isDisabled && !href ? undefined : -1}
+      // Every row, disabled included, takes focus but is not a Tab stop.
+      tabIndex={-1}
       aria-disabled={isDisabled || undefined}
       href={isDisabled ? undefined : href}
       // A menu row is never a draggable link: a mouse press that slides to

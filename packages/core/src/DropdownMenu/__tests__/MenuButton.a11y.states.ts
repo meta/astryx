@@ -85,13 +85,14 @@ export const MENU_BUTTON_BINDING_STATES = [
   },
   {
     id: 'dropdown-button-disabled',
-    summary: 'a disabled DropdownMenu trigger that keeps its menu hidden',
+    summary:
+      'a disabled DropdownMenu trigger that stays focusable and keeps its menu hidden',
     storyId: story('dropdown-button-disabled'),
     component: 'DropdownMenu',
     label: 'Actions',
     firstItem: 'Rename',
     lastItem: 'Delete',
-    facts: facts({operable: false, focusable: false}),
+    facts: facts({operable: false, focusable: true}),
     disabled: true,
   },
   {

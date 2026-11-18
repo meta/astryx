@@ -239,7 +239,7 @@ export function isPackedFile(manifest, rel) {
   });
 }
 
-/** The public API report `pnpm api:report` writes at a package's root. */
+/** A package-root API report file; removing one ships nothing unless `files` packs it. */
 const API_REPORT_FILE = 'api-report.md';
 
 /**

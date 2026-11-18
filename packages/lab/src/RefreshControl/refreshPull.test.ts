@@ -219,11 +219,12 @@ describe('release and end', () => {
   });
 });
 
-describe('the end’s timing from the theme’s tokens', () => {
-  it('plays the theme’s duration and move easing tokens as the element computes them (spec:AST-094 FR45)', () => {
+describe('the end’s timing', () => {
+  it('plays UIKit’s easeInEaseOut over the theme’s duration token as the element computes it (spec:AST-094 FR45)', () => {
     const style = (values: Record<string, string>) => ({
       getPropertyValue: (name: string) => values[name] ?? '',
     });
+    // The theme's move easing changes nothing: the curve is UIKit's.
     expect(
       endTiming(
         style({
@@ -231,17 +232,12 @@ describe('the end’s timing from the theme’s tokens', () => {
           '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
         }),
       ),
-    ).toEqual({ms: 300, points: [0.24, 1, 0.4, 1]});
+    ).toEqual({ms: 300, points: [0.42, 0, 0.58, 1]});
     // A theme's tempo reaches the end through the token's value.
+    expect(endTiming(style({'--duration-medium': '450ms'}))?.ms).toBe(450);
+    // No token, or a token in a form it cannot read: no slide.
     expect(
-      endTiming(style({'--duration-medium': '450ms', '--ease-move': 'ease'}))
-        ?.ms,
-    ).toBe(450);
-    // No tokens, or tokens in a form it cannot read: no slide.
-    expect(
-      endTiming(
-        style({'--duration-medium': 'calc(300ms * 1)', '--ease-move': 'ease'}),
-      ),
+      endTiming(style({'--duration-medium': 'calc(300ms * 1)'})),
     ).toBeNull();
     expect(endTiming(style({}))).toBeNull();
   });

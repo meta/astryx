@@ -5,6 +5,7 @@
  */
 
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import componentPackages from '../../scripts/component-packages.cjs';
@@ -722,7 +723,7 @@ describe('documented components outside component directories', () => {
   it('finds Core Theme-family exports that live in a lowercase directory', () => {
     const names =
       componentPackages.documentedComponentsOutsideComponentDirectories(
-        new URL('../..', import.meta.url).pathname,
+        fileURLToPath(new URL('../..', import.meta.url)),
         componentPackages.componentPackage('core'),
       );
     expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));

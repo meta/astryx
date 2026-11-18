@@ -2,8 +2,8 @@
 
 /**
  * A swizzled copy is built by a product that may not install Node's types.
- * Bundlers replace `process.env.NODE_ENV` at build time, so a Core module that
- * reads it must still type-check without those types.
+ * Bundlers replace `process.env.NODE_ENV` at build time, so a module of Core
+ * or of a package swizzle copies from must still type-check without them.
  */
 
 import * as fs from 'node:fs';
@@ -13,19 +13,26 @@ import ts from 'typescript';
 import {describe, expect, it} from 'vitest';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PACKAGES = path.resolve(SRC, '../..');
+/** The packages swizzle copies components from. */
+const SWIZZLE_SOURCES = ['core', 'lab', 'charts', 'richtext', 'vega']
+  .map(name => path.join(PACKAGES, name, 'src'))
+  .filter(dir => fs.existsSync(dir));
 
-/** Core's source modules, without tests, stories and declaration files. */
+/** Their source modules, without tests, stories and declaration files. */
 function sourceModules(): string[] {
-  return fs
-    .readdirSync(SRC, {recursive: true, withFileTypes: true})
-    .filter(
-      entry =>
-        entry.isFile() &&
-        /\.tsx?$/.test(entry.name) &&
-        !/\.(test|spec|stories|d)\.tsx?$/.test(entry.name) &&
-        !entry.parentPath.includes('__tests__'),
-    )
-    .map(entry => path.join(entry.parentPath, entry.name));
+  return SWIZZLE_SOURCES.flatMap(dir =>
+    fs
+      .readdirSync(dir, {recursive: true, withFileTypes: true})
+      .filter(
+        entry =>
+          entry.isFile() &&
+          /\.tsx?$/.test(entry.name) &&
+          !/\.(test|spec|stories|d)\.tsx?$/.test(entry.name) &&
+          !entry.parentPath.includes('__tests__'),
+      )
+      .map(entry => path.join(entry.parentPath, entry.name)),
+  );
 }
 
 /** A module's code without its comments. */
@@ -59,7 +66,7 @@ describe('process.env without Node types', () => {
       program
         .getSemanticDiagnostics(program.getSourceFile(file))
         .filter(d => d.code === 2580 || d.code === 2591)
-        .map(d => `${path.relative(SRC, file)}: TS${d.code}`),
+        .map(d => `${path.relative(PACKAGES, file)}: TS${d.code}`),
     );
     expect(missing).toEqual([]);
   });

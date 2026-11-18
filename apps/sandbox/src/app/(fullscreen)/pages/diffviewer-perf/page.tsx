@@ -48,8 +48,6 @@ import {
 import {
   createMultiFileWorkload,
   createSingleFileWorkload,
-  formatCount,
-  formatDuration,
   formatMegabytes,
   MULTI_FILE_WORKLOADS,
   SINGLE_FILE_LINES,
@@ -57,6 +55,12 @@ import {
   type MultiFileWorkloadId,
   type SingleFileChange,
 } from './benchmark';
+import {
+  formatCount,
+  formatDuration,
+  type LongTaskReading,
+  watchLongTasks,
+} from '../perfReadings';
 
 type Scenario = 'multi' | 'single';
 type Syntax = 'on' | 'off';
@@ -145,42 +149,6 @@ function afterNextPaint(start: number, done: (ms: number) => void) {
   requestAnimationFrame(() => {
     setTimeout(() => done(performance.now() - start), 0);
   });
-}
-
-interface LongTaskReading {
-  count: number;
-  totalMs: number;
-}
-
-/**
- * Collects long tasks until the returned stop function is called. Returns
- * null from stop when the browser has no Long Tasks API, so the page shows no
- * reading rather than a misleading zero.
- */
-function watchLongTasks(): () => LongTaskReading | null {
-  const isSupported =
-    typeof PerformanceObserver !== 'undefined' &&
-    PerformanceObserver.supportedEntryTypes?.includes('longtask') === true;
-  if (!isSupported) {
-    return () => null;
-  }
-  const entries: PerformanceEntry[] = [];
-  const observer = new PerformanceObserver(list => {
-    for (const entry of list.getEntries()) {
-      entries.push(entry);
-    }
-  });
-  observer.observe({type: 'longtask', buffered: false});
-  return () => {
-    for (const entry of observer.takeRecords()) {
-      entries.push(entry);
-    }
-    observer.disconnect();
-    return {
-      count: entries.length,
-      totalMs: entries.reduce((total, entry) => total + entry.duration, 0),
-    };
-  };
 }
 
 function toDiffFile(file: DiffBenchmarkFile): DiffViewerFile {

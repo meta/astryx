@@ -341,3 +341,193 @@ describe('TimeInput nativePicker', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TimeInput native rejected entries', () => {
+  function nativeField(
+    props: Partial<React.ComponentProps<typeof TimeInput>> = {},
+  ) {
+    return (
+      <TimeInput
+        label="Start time"
+        presentation="native"
+        value={'09:00' as ISOTimeString}
+        onChange={() => {}}
+        min={'08:00' as ISOTimeString}
+        max={'17:00' as ISOTimeString}
+        {...props}
+      />
+    );
+  }
+
+  function statusText(container: HTMLElement): string | null {
+    return container.querySelector('.astryx-field-status')?.textContent ?? null;
+  }
+
+  function fieldAlert(container: HTMLElement): HTMLElement | null {
+    return container.querySelector('.astryx-time-input [role="alert"]');
+  }
+
+  it('shows an edit outside min/max as a message when the control reports it', () => {
+    const {container} = render(nativeField());
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+    expect(fieldAlert(container)).toHaveTextContent('');
+  });
+
+  it('restores the committed time at blur, not at Enter, and keeps the rejection shown', () => {
+    const onChange = vi.fn();
+    const {container} = render(nativeField({onChange}));
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(input.value).toBe('18:00');
+    fireEvent.blur(input);
+    expect(input.value).toBe('09:00');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clears the rejection for an accepted edit or a new value', () => {
+    const onChange = vi.fn();
+    const {container, rerender} = render(nativeField({onChange}));
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.change(input, {target: {value: '10:30'}});
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('10:30');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    rerender(nativeField({onChange, value: '11:00' as ISOTimeString}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
+  it.each([
+    ['hasSeconds', {hasSeconds: true}, '9:00:00 AM'],
+    ['a non-1 increment', {increment: 5}, '9:00 AM'],
+  ] as const)(
+    'ends a native rejection when %s brings back the typed field',
+    (_label, change, shown) => {
+      stubPointer(true);
+      const field = (props = {}) =>
+        nativeField({presentation: 'adaptive-native', ...props});
+      const {container, rerender} = render(field());
+      fireEvent.change(getNativeTimeInput(), {target: {value: '18:00'}});
+      expect(statusText(container)).toBe('Invalid time');
+      rerender(field(change));
+      const input = screen.getByRole('textbox', {name: 'Start time'});
+      expect(input).toHaveValue(shown);
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBeNull();
+      expect(fieldAlert(container)).toHaveTextContent('');
+    },
+  );
+
+  it('ends a native rejection when a pointer change brings back the typed field', () => {
+    let isCoarse = true;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      get matches() {
+        return /pointer:\s*coarse/.test(query)
+          ? isCoarse
+          : /pointer:\s*fine/.test(query)
+            ? !isCoarse
+            : HOVER_CAPABLE.test(query);
+      },
+      media: query,
+      onchange: null,
+      addListener: (listener: () => void) => listeners.add(listener),
+      removeListener: (listener: () => void) => listeners.delete(listener),
+      addEventListener: (_type: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) =>
+        listeners.delete(listener),
+      dispatchEvent: () => false,
+    }));
+    const {container} = render(nativeField({presentation: 'adaptive-native'}));
+    fireEvent.change(getNativeTimeInput(), {target: {value: '18:00'}});
+    expect(statusText(container)).toBe('Invalid time');
+    isCoarse = false;
+    act(() => listeners.forEach(listener => listener()));
+    const input = screen.getByRole('textbox', {name: 'Start time'});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
+  it('hides a native rejection while busy and shows it again once idle, and drops it when the field becomes disabled', () => {
+    const {container, rerender} = render(nativeField());
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    expect(statusText(container)).toBe('Invalid time');
+
+    rerender(nativeField({isLoading: true}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    rerender(nativeField());
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+
+    rerender(nativeField({isDisabled: true}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    rerender(nativeField());
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    expect(fieldAlert(container)).toHaveTextContent('');
+  });
+
+  it('inside an InputGroup, announces the rejection through the alert', () => {
+    const {container} = render(
+      <InputGroup label="Schedule">
+        <InputGroupText>Starts</InputGroupText>
+        {nativeField()}
+      </InputGroup>,
+    );
+    const input = getNativeTimeInput();
+    fireEvent.change(input, {target: {value: '18:00'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBeNull();
+    expect(fieldAlert(container)).toHaveTextContent('Invalid time');
+  });
+
+  it('never reports a native rejection through onEntryErrorChange, and keeps the prop and the name on the native input', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      nativeField({
+        onEntryErrorChange,
+        ...({name: 'start'} as object),
+      }),
+    );
+    const input = getNativeTimeInput();
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('name', 'start');
+    expect(input).not.toHaveAttribute('onentryerrorchange');
+  });
+
+  it('never reports from the bottom sheet', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <TimeInput
+        label="Start time"
+        presentation="bottom-sheet"
+        value={'09:00' as ISOTimeString}
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+    expect(document.querySelector('[onentryerrorchange]')).toBeNull();
+  });
+});

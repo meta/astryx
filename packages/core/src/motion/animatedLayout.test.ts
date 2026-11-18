@@ -16,7 +16,9 @@ import {cubicBezier} from './bezier';
 import {
   applyLayoutChangeTransition,
   createAnimatedLayout,
+  glideOf,
   holdLayoutExit,
+  landLayoutGlideSideways,
   playLayoutChange,
   releaseLayoutExit,
   reportLayoutChange,
@@ -1208,5 +1210,94 @@ describe('the walk reaches what the changes can move (spec:AST-105 FR3)', () => 
     );
     expect(glide).toBeDefined();
     expect(translateOf(glide!).y).toBeCloseTo(-80);
+  });
+});
+
+describe('landLayoutGlideSideways', () => {
+  /** The glides here also expose their frames, as a browser's do. */
+  function withFrames() {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      const entry = played[played.length - 1];
+      return Object.assign(animation, {
+        effect: {
+          getKeyframes: () => entry.keyframes,
+          setKeyframes: (next: Keyframe[]) => {
+            entry.keyframes = next;
+          },
+        },
+      });
+    };
+  }
+
+  /** A row that showed 40 px to the left as the change was read. */
+  async function glidingRow() {
+    withFrames();
+    const {area, changed, phase} = setUp(
+      '<div id="area"><div id="changed"></div><p id="row">Row</p></div>',
+    );
+    const row = document.getElementById('row') as HTMLElement;
+    placeAt(row, {before: [-40, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
+    const layout = createAnimatedLayout(() => area);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    phase.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const glide = played.find(entry => entry.element === row);
+    if (glide == null) {
+      throw new Error('no glide');
+    }
+    return {area, changed, row, layout, glide};
+  }
+
+  it("lands a glide's sideways part in its frames and keeps its vertical move and its animation", async () => {
+    const {row, glide} = await glidingRow();
+    expect(translateOf(glide)).toEqual({x: -40, y: -80});
+    const animation = glideOf(row);
+    landLayoutGlideSideways(row);
+    expect(
+      glide.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+    expect(translateOf(glide)).toEqual({x: 0, y: -80});
+    expect(glideOf(row)).toBe(animation);
+  });
+
+  it('a later change carries only the vertical move', async () => {
+    const {changed, row, layout, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    // The change grows again, and the row moves 40 px lower.
+    const second = {current: 'before' as 'before' | 'after'};
+    placeAt(
+      changed,
+      {before: [0, 0, 400, 80], after: [0, 0, 400, 120]},
+      second,
+    );
+    placeAt(row, {before: [0, 80, 400, 40], after: [0, 120, 400, 40]}, second);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    second.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const next = played.filter(entry => entry.element === row).at(-1);
+    expect(next).not.toBe(glide);
+    expect(
+      next?.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+  });
+
+  it('forgets the glide when it ends', async () => {
+    const {row, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    glide.finish?.();
+    expect(glideOf(row)).toBeNull();
   });
 });

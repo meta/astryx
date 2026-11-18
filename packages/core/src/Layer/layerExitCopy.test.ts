@@ -9,7 +9,8 @@
  *   show succeeds, and none without the popover API or past the copy cap. It
  *   sits on the layer's layout box with fractions, and with the transform and
  *   opacity it was drawn with. No keyframes or transitions replay, there is
- *   one copy per layer, and it is scrolled where the layer was.
+ *   one copy per layer, and it is scrolled where the layer was. It keeps the
+ *   padding, border and colors of what it copies.
  * @position Testing; the browser proofs are in
  *   __tests__/layerExitCopy.interaction.browser.spec.ts
  */
@@ -284,9 +285,15 @@ describe('placeLayerExitCopy', () => {
     popoverApi(true);
     const element = layer();
     // Mid-entrance: drawn at half size about its top-left corner, at a
-    // fractional position its whole-pixel offsets round away.
-    const laidOut = {left: 40.391, top: 120.594, width: 320.4, height: 253};
-    const drawn = {...laidOut, width: 160.2, height: 126.5};
+    // fractional position its whole-pixel offsets round away. Like a real
+    // engine, the box is laid out on the 1/64 px grid.
+    const laidOut = {
+      left: 40.390625,
+      top: 120.59375,
+      width: 320.40625,
+      height: 253,
+    };
+    const drawn = {...laidOut, width: 160.203125, height: 126.5};
     // jsdom keeps no `!important`: the read's override shows as `none`.
     const settled = () => element.style.getPropertyValue('scale') === 'none';
     element.getBoundingClientRect = () => {
@@ -315,7 +322,7 @@ describe('placeLayerExitCopy', () => {
     const presented: Record<string, string> = {
       scale: '0.5',
       'transform-origin': '0px 0px',
-      width: '320.4px',
+      width: '320.40625px',
       height: '253px',
       'box-sizing': 'border-box',
     };
@@ -334,9 +341,9 @@ describe('placeLayerExitCopy', () => {
     );
     const copy = place(element);
     // Laid out where the layer is, at its used size, fractions kept...
-    expect(copy.style.getPropertyValue('left')).toBe('40.391px');
-    expect(copy.style.getPropertyValue('top')).toBe('120.594px');
-    expect(copy.style.getPropertyValue('width')).toBe('320.4px');
+    expect(copy.style.getPropertyValue('left')).toBe('40.390625px');
+    expect(copy.style.getPropertyValue('top')).toBe('120.59375px');
+    expect(copy.style.getPropertyValue('width')).toBe('320.40625px');
     expect(copy.style.getPropertyValue('height')).toBe('253px');
     // ...and drawn as it was drawn.
     expect(copy.style.getPropertyValue('scale')).toBe('0.5');
@@ -567,6 +574,31 @@ describe('placeLayerExitCopy', () => {
     const copy = place(element);
     expect(copy.style.getPropertyValue('overflow-y')).toBe('auto');
     expect(copy.scrollTop).toBe(80);
+  });
+
+  it('keeps the padding, border and colors of what it copies, which the popover style would replace', () => {
+    popoverApi(true);
+    const element = layer();
+    // A class, not an inline style, which the clone would carry anyway.
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '.surface { padding: 0px; border: 0px none rgb(0, 0, 0); color: rgb(1, 2, 3); background-color: rgb(4, 5, 6); }';
+    document.body.appendChild(sheet);
+    element.classList.add('surface');
+    const copy = place(element);
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      expect(copy.style.getPropertyValue(`padding-${side}`), side).toBe('0px');
+      expect(copy.style.getPropertyValue(`border-${side}-width`), side).toBe(
+        '0px',
+      );
+      expect(copy.style.getPropertyValue(`border-${side}-style`), side).toBe(
+        'none',
+      );
+    }
+    expect(copy.style.getPropertyValue('color')).toBe('rgb(1, 2, 3)');
+    expect(copy.style.getPropertyValue('background-color')).toBe(
+      'rgb(4, 5, 6)',
+    );
   });
 
   it('takes a form-associated custom element out of every form, as it does a native control', () => {

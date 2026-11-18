@@ -13,6 +13,7 @@
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {requireFrames} from '@astryxdesign/interaction-harness';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -31,6 +32,13 @@ test.afterAll(async () => {
 
 const STORY = 'core-animated-layout--animated-layout';
 
+/**
+ * How far the content may move between its two reads of one sample, px. A
+ * composited motion moves a little between any two reads; this is well
+ * under the edge assertions' 1.5 px.
+ */
+const TORN_READ_PX = 0.25;
+
 async function openStory(page: Page): Promise<void> {
   await page.goto(
     `${storybook?.origin ?? ''}/iframe.html?id=${STORY}&viewMode=story`,
@@ -48,7 +56,20 @@ async function openStory(page: Page): Promise<void> {
 }
 
 interface PaintedFrame {
-  phase: 'opening' | 'closing';
+  /**
+   * `opening ended` once the reveal has stopped running. A `start` read is
+   * taken at the click, before any frame.
+   */
+  phase:
+    'opening start' | 'opening' | 'opening ended' | 'closing start' | 'closing';
+  /** When the page read it, epoch ms. */
+  t: number;
+  /**
+   * Whether the read shows one moment. WebKit evaluates a composited motion
+   * at each read's own wall-clock time, so a pause between two reads mixes
+   * two moments.
+   */
+  atomic: boolean;
   /** From the shown edge of the revealed content to the content after it. */
   gap: number;
   /** How much of the revealed content shows. */
@@ -72,7 +93,9 @@ async function paintedRide(
   page: Page,
   selectors: {trigger: string; content: string; after: string},
 ): Promise<PaintedRide> {
-  return page.evaluate(async ({trigger, content: contentSelector, after}) => {
+  const options = {...selectors, tornReadPx: TORN_READ_PX};
+  return page.evaluate(async options => {
+    const {trigger, content: contentSelector, after, tornReadPx} = options;
     const button = document.querySelector(trigger) as HTMLElement;
     const content = () => document.querySelector<HTMLElement>(contentSelector);
     const next = document.querySelector(after) as HTMLElement;
@@ -90,27 +113,40 @@ async function paintedRide(
     };
     const frames: PaintedFrame[] = [];
     const read = (phase: PaintedFrame['phase']) => {
+      const t = performance.timeOrigin + performance.now();
       const element = content();
       if (element == null || getComputedStyle(element).display === 'none') {
+        // Gone: the frame still counts in the gaps between frames.
+        frames.push({phase, t, gap: Number.NaN, shown: 0, atomic: true});
         return;
       }
-      const box = element.getBoundingClientRect();
-      let edge = box.bottom - clipBottom(element, box);
-      let lowest = Number.NEGATIVE_INFINITY;
-      for (
-        let part = element.firstElementChild;
-        part != null;
-        part = part.nextElementSibling
-      ) {
-        lowest = Math.max(lowest, part.getBoundingClientRect().bottom);
-      }
-      if (Number.isFinite(lowest)) {
-        edge = Math.min(edge, lowest);
-      }
+      const measure = () => {
+        const box = element.getBoundingClientRect();
+        let edge = box.bottom - clipBottom(element, box);
+        let lowest = Number.NEGATIVE_INFINITY;
+        for (
+          let part = element.firstElementChild;
+          part != null;
+          part = part.nextElementSibling
+        ) {
+          lowest = Math.max(lowest, part.getBoundingClientRect().bottom);
+        }
+        if (Number.isFinite(lowest)) {
+          edge = Math.min(edge, lowest);
+        }
+        return {edge, top: box.top};
+      };
+      // The content is read again after the content after it. If its edge
+      // moved more than TORN_READ_PX in between, the pair spans two moments.
+      const shown = measure();
+      const nextTop = next.getBoundingClientRect().top;
+      const again = measure();
       frames.push({
         phase,
-        gap: next.getBoundingClientRect().top - edge,
-        shown: Math.max(0, edge - box.top),
+        t,
+        gap: nextTop - shown.edge,
+        shown: Math.max(0, shown.edge - shown.top),
+        atomic: Math.abs(again.edge - shown.edge) <= tornReadPx,
       });
     };
     const frame = async () =>
@@ -131,19 +167,39 @@ async function paintedRide(
     const beyond = Math.max(0, openTop - closedTop - box.height);
     button.click();
     await settle();
+    // A frame after the reveal has ended shows the content open, so it does
+    // not count as a frame of the motion.
+    const revealing = () =>
+      (content()?.getAnimations({subtree: true}) ?? []).some(
+        animation => animation.playState === 'running',
+      );
+    // Each click's own read counts in the gaps before the first frame.
     button.click();
+    read('opening start');
     for (let i = 0; i < 40; i++) {
       await frame();
-      read('opening');
+      read(revealing() ? 'opening' : 'opening ended');
     }
     await settle();
     button.click();
+    read('closing start');
     for (let i = 0; i < 40; i++) {
       await frame();
       read('closing');
     }
     return {frames, restGap, beyond};
-  }, selectors);
+  }, options);
+}
+
+/** Notes the samples a run dropped as spanning two moments. */
+function noteTornReads(frames: ReadonlyArray<PaintedFrame>): void {
+  const torn = frames.filter(f => !f.atomic).length;
+  if (torn > 0) {
+    test.info().annotations.push({
+      type: 'torn reads',
+      description: `${torn} of ${frames.length} reads moved over ${TORN_READ_PX} px between their two reads and were not judged`,
+    });
+  }
 }
 
 /**
@@ -152,9 +208,16 @@ async function paintedRide(
  * beyond the container gap that content travels.
  */
 function expectPaintedRide(result: PaintedRide): void {
+  noteTornReads(result.frames);
+  // Every drawn frame, the reveal's settled ones too.
   for (const phase of ['opening', 'closing'] as const) {
-    const shown = result.frames.filter(f => f.phase === phase && f.shown > 0.5);
-    expect(shown.length, `${phase} frames`).toBeGreaterThan(4);
+    const shown = result.frames.filter(
+      f =>
+        (f.phase === phase ||
+          (phase === 'opening' && f.phase === 'opening ended')) &&
+        f.shown > 0.5 &&
+        f.atomic,
+    );
     for (const f of shown) {
       const detail = JSON.stringify({...f, ...result, frames: undefined});
       expect(f.gap, detail).toBeLessThan(result.restGap + 1.5);
@@ -162,6 +225,18 @@ function expectPaintedRide(result: PaintedRide): void {
         result.restGap - result.beyond - 1.5,
       );
     }
+  }
+  // The page drew both motions: a starved page fails here by name. Each
+  // phase is judged on its own reads, never across the settle between them.
+  for (const phase of ['opening', 'closing'] as const) {
+    requireFrames(
+      result.frames.filter(f => f.phase.startsWith(phase)),
+      {
+        min: 5,
+        during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
+        where: f => f.phase === phase && f.shown > 0.5 && f.atomic,
+      },
+    );
   }
 }
 
@@ -197,15 +272,25 @@ async function openTable(page: Page): Promise<void> {
 }
 
 /**
- * Opens the marked row. On the next frame, reads whether the panel row's own
- * motion moves a clip, and how many of its cells move.
+ * Opens the marked row. As the change commits, before any frame, reads
+ * whether the panel row's own motion moves a clip, and how many of its cells
+ * move. A frame can come after a short motion has ended.
  */
-async function revealOnNextFrame(page: Page) {
+async function revealAsItCommits(page: Page) {
   return page.evaluate(async () => {
     (document.querySelector('[data-test-id="expand"]') as HTMLElement).click();
     const panel = () => document.querySelector('[data-expansion-panel]');
-    for (let i = 0; i < 30 && !panel()?.getAnimations().length; i++) {
-      await new Promise(requestAnimationFrame);
+    const moving = () => (panel()?.getAnimations().length ?? 0) > 0;
+    // The row commits in the click's microtasks, or in a later task.
+    for (let i = 0; i < 10 && !moving(); i++) {
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+    }
+    for (let i = 0; i < 50 && !moving(); i++) {
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
     }
     return {
       clips: (panel()?.getAnimations() ?? []).some(animation =>
@@ -340,7 +425,7 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     page,
   }) => {
     await openTable(page);
-    expect(await revealOnNextFrame(page)).toEqual({
+    expect(await revealAsItCommits(page)).toEqual({
       clips: false,
       partMotions: 1,
     });
@@ -352,17 +437,28 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
       content: '[data-expansion-panel]',
       after: '[data-test-id="after-row"]',
     });
+    noteTornReads(ride.frames);
     // A closing panel leaves at once and only the rows after it glide.
     const opening = ride.frames.filter(
-      f => f.phase === 'opening' && f.shown > 0.5,
+      f =>
+        (f.phase === 'opening' || f.phase === 'opening ended') &&
+        f.shown > 0.5 &&
+        f.atomic,
     );
-    expect(opening.length, 'opening frames').toBeGreaterThan(4);
     for (const f of opening) {
       expect(f.gap, JSON.stringify(f)).toBeLessThan(ride.restGap + 1.5);
       expect(f.gap, JSON.stringify(f)).toBeGreaterThan(
         ride.restGap - ride.beyond - 1.5,
       );
     }
+    requireFrames(
+      ride.frames.filter(f => f.phase.startsWith('opening')),
+      {
+        min: 5,
+        during: 'the reveal plays',
+        where: f => f.phase === 'opening' && f.shown > 0.5 && f.atomic,
+      },
+    );
   });
 
   test('a Table panel row that paints its own box keeps the moving clip, and its cell stays still', async ({
@@ -373,7 +469,7 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
       content:
         '[data-expansion-panel] { background-color: rgb(240, 240, 240); }',
     });
-    expect(await revealOnNextFrame(page)).toEqual({
+    expect(await revealAsItCommits(page)).toEqual({
       clips: true,
       partMotions: 0,
     });

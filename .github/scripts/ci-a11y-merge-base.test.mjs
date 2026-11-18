@@ -25,7 +25,7 @@ const ci = yaml.parse(
 );
 const step = Object.values(ci.jobs)
   .flatMap(job => job.steps ?? [])
-  .find(s => s.name === 'Run browser accessibility specs');
+  .find(s => s.name === "Count this run's accessibility legs");
 const scratch = [];
 afterAll(() => {
   for (const dir of scratch) fs.rmSync(dir, {recursive: true, force: true});
@@ -65,6 +65,8 @@ function repository() {
       '',
     ].join('\n'),
   );
+  // The runner's shared duration split, which the step copies beside it.
+  write('scripts/lib/duration-split.mjs', '');
   git(origin, 'add', '-A');
   git(origin, 'commit', '-qm', 'opened on', '--no-verify');
   const openedOn = git(origin, 'rev-parse', 'HEAD');
@@ -103,18 +105,23 @@ describe('the opt-in accessibility specs plan from the pull request’s own chan
 
   it('plans only the head’s own change after the base is merged into it', () => {
     const {checkout, openedOn, workflow} = repository();
-    const result = spawnSync('bash', ['-e', '-c', step.run], {
-      cwd: checkout,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        ...step.env,
-        // The event's stale base, which the step must not use.
-        BASE_SHA: openedOn,
-        WORKFLOW_SHA: workflow,
-        RUNNER_TEMP: tmp('a11y-base-temp-'),
+    const result = spawnSync(
+      'bash',
+      // The leg's expressions, as GitHub fills them in for a first leg.
+      ['-e', '-c', step.run.replace(/\$\{\{[^}]*\}\}/g, '1')],
+      {
+        cwd: checkout,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          ...step.env,
+          // The event's stale base, which the step must not use.
+          BASE_SHA: openedOn,
+          WORKFLOW_SHA: workflow,
+          RUNNER_TEMP: tmp('a11y-base-temp-'),
+        },
       },
-    });
+    );
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim().split('\n')).toEqual([
       'packages/core/src/Button/Button.tsx',

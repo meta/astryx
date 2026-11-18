@@ -22,11 +22,12 @@ import {
   resolveInstalledPackageDir,
 } from './autolink.mjs';
 import {Project} from '../config/project.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-autolink-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-autolink-test-'));
 });
 
 afterEach(() => {

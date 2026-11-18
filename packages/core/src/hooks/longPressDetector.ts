@@ -16,6 +16,7 @@ import {
   LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
   LONG_PRESS_DURATION_MS,
 } from '../motion/uikit/longPress';
+import {clockOf, timeOn, type EventClock} from '../utils/inputAge';
 import {claimPress} from '../utils/pressClaim';
 
 // The hold is a deadline on the touch events' timestamps, on the clock of the
@@ -88,41 +89,6 @@ export interface LongPressDetector {
   isPending: () => boolean;
   /** The options the next start, move and fire read. */
   setOptions: (options: LongPressDetectorOptions) => void;
-}
-
-/** The part of a window's performance timeline a press reads. */
-type EventClock = Pick<Performance, 'now'>;
-
-function clockOf(event: LongPressTouchEvent): EventClock | null {
-  const view = event.view as {performance?: EventClock} | null | undefined;
-  return (
-    view?.performance ??
-    (typeof performance === 'undefined' ? null : performance)
-  );
-}
-
-/**
- * An event's time on its window's clock. jsdom stamps events with
- * `Date.now()`. The detector reads the age of such a stamp on that clock, so a
- * frozen system time keeps the hold's length. A stamp nearer `Date.now()` than
- * the window's clock is that kind of stamp.
- */
-function timeOn(
-  clock: EventClock | null,
-  timeStamp: number | undefined,
-): number | undefined {
-  // A stamp of 0 means the event carries no time, so the hold falls back to
-  // the full delay on the page's timer.
-  if (timeStamp == null || !Number.isFinite(timeStamp) || timeStamp <= 0) {
-    return undefined;
-  }
-  if (
-    clock != null &&
-    Math.abs(Date.now() - timeStamp) < Math.abs(clock.now() - timeStamp)
-  ) {
-    return clock.now() - (Date.now() - timeStamp);
-  }
-  return timeStamp;
 }
 
 /** @internal A long-press detector with no React (see LongPressDetector). */

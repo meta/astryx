@@ -8,7 +8,7 @@
  *   the hook watches, an owner's growth and press check, a measurement while
  *   the parent moves, the stop, and the layer's CSS.
  * @position Unit test for utils/touchHitArea.ts and
- *   utils/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
+ *   internal/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
  *   row wiring.
  */
 
@@ -54,7 +54,7 @@ vi.mock('./hitArea', async importOriginal => {
 });
 
 import {useTouchHitArea} from './touchHitArea';
-import {touchHitAreaStyles} from './touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 function Host({
   enabled,
@@ -164,10 +164,10 @@ describe('useTouchHitArea', () => {
     expect(watches[1].stop).toHaveBeenCalledTimes(1);
   });
 
-  it("passes an owner's growth, with the element, and its press check to the watch; a plain watch keeps the defaults", () => {
+  it("passes an owner's growth, with the element, its press check and its descendant-touch choice to the watch; a plain watch keeps the defaults", () => {
     const grown = {top: 1, right: 2, bottom: 3, left: 4};
     const growth = vi.fn(() => grown);
-    const options = {growth, checkAtPress: false};
+    const options = {growth, checkAtPress: false, ownsDescendantTouches: false};
     function Owner() {
       const hitAreaRef = useTouchHitArea(true, options);
       return <span data-testid="owner" ref={hitAreaRef} />;
@@ -184,12 +184,14 @@ describe('useTouchHitArea', () => {
       watch => watch.element === screen.getByTestId('host'),
     );
     expect(ownerWatch?.options?.checkAtPress).toBe(false);
+    expect(ownerWatch?.options?.ownsDescendantTouches).toBe(false);
     const box = {left: 0, top: 0, right: 32, bottom: 32};
     const toLayout = (rect: HitRect) => rect;
     expect(ownerWatch?.options?.growth?.(box, toLayout)).toBe(grown);
     expect(growth).toHaveBeenCalledWith(box, toLayout, owner);
     expect(plainWatch?.options?.growth).toBeUndefined();
     expect(plainWatch?.options?.checkAtPress).toBeUndefined();
+    expect(plainWatch?.options?.ownsDescendantTouches).toBe(true);
   });
 
   it('follows a replaced element: the new element is watched and the old one’s watch stops', async () => {

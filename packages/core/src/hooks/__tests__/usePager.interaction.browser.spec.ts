@@ -98,6 +98,10 @@ async function serve(
   page: Page,
   {rtl = false, startIndex = 1, tall = false} = {},
 ): Promise<void> {
+  // WebKit starts an animation inside a frame, and stamps that frame at or
+  // after the start. Chromium starts it on the compositor after a commit.
+  const stampsStartFrame =
+    page.context().browser()?.browserType().name() === 'webkit';
   const pages = Array.from(
     {length: COUNT},
     (_, i) =>
@@ -123,13 +127,16 @@ async function serve(
   window.moves = [];
   // For a failure's load report. It records the frames the page draws from
   // each touch, wheel or goTo, until 2 s after the last one. It also records
-  // when each settle ends, and the time of each touch and wheel event.
+  // when each frame's callbacks ran, when each settle ends, and the time of
+  // each touch and wheel event.
   window.frameTimes = [];
+  window.frameCallbacks = [];
   window.settleTimes = [];
   let framesUntil = 0;
   let framing = false;
   const frame = time => {
     window.frameTimes.push(time);
+    window.frameCallbacks.push(performance.now());
     if (performance.now() < framesUntil) {
       requestAnimationFrame(frame);
     } else {
@@ -168,13 +175,42 @@ async function serve(
     window.liftPositions.push(track ? parseFloat(getComputedStyle(track).translate) || 0 : 0);
     return velocity;
   };
+  // When each motion on the track was made, for the report check below.
+  window.trackMotions = [];
+  const trackElement = document.getElementById('track');
+  const animateTrack = trackElement.animate;
+  trackElement.animate = function (...args) {
+    window.trackMotions.push(performance.now());
+    return animateTrack.apply(this, args);
+  };
   window.pager = Pager.createPager({
     count: ${COUNT},
     defaultIndex: ${startIndex},
-    // Notes whether the settle was already running on its curve when the
-    // page was reported.
-    onIndexChange: (i, reason) => window.pagerLog.push('index:' + i + ':' + reason +
-      (document.getAnimations().some(a => a.playState === 'running' && a.startTime != null && a.currentTime > 20) ? ':moving' : '')),
+    // Notes whether the settle had run for two of the page's frames when the
+    // page was reported. The browser must also have told its start. The
+    // frames are counted after the one that the pager counts from. In
+    // Chromium, that is the frame that commits the settle: the first one whose
+    // callbacks run after the settle is made. On a loaded runner, Chromium can
+    // date its own start a frame later. WebKit starts the settle inside a
+    // frame and stamps that frame at or after the start. So in WebKit the
+    // count starts at that frame. The frames are the ones the load report
+    // records.
+    onIndexChange: (i, reason) => {
+      const now = document.timeline.currentTime;
+      const frames = [...new Set([...window.frameTimes, now])];
+      const made = window.trackMotions.at(-1);
+      const committed = made == null ? null : window.frameTimes[window.frameCallbacks.findIndex(t => t > made)];
+      const moving = document.getAnimations().some(a => {
+        if (a.playState !== 'running' || a.startTime == null) {
+          return false;
+        }
+        const past = ${stampsStartFrame}
+          ? frames.filter(t => t <= now && t >= a.startTime).length - 1
+          : committed == null ? 0 : frames.filter(t => t <= now && t > committed).length;
+        return past >= 2;
+      });
+      window.pagerLog.push('index:' + i + ':' + reason + (moving ? ':moving' : ''));
+    },
     onSettle: (i, previous) => {
       window.settleTimes.push(performance.now());
       window.pagerLog.push('settle:' + i + ':' + previous);
@@ -357,31 +393,45 @@ test.afterEach(async ({page}, testInfo) => {
  * the input, so it holds the motion at its first frame. A long input can
  * outlast the hold's own 5 s. The driver paces its events on the wall clock,
  * and on a loaded runner they play much longer than scripted. Then the hold
- * is armed again for what is left of 5 s from the input's end.
+ * is armed again for what is left of 5 s from the input's end. `property` is
+ * the track's judged motion: `translate`, or `opacity` for a cross-fade.
  */
 async function playHeld(
   page: Page,
   track: Locator,
   driver: TouchDriver,
   script: TouchScript,
+  property: 'translate' | 'opacity' = 'translate',
 ): Promise<ArmedHold> {
-  const first = await armHold(page, track);
+  const judges = {target: track, property};
+  const first = await armHold(page, track, {judges});
   const caught = first.held().then(
     held => ({held}),
-    () => null,
+    (error: unknown) => ({error}),
   );
   await driver.play(script);
   const inputEnd = Date.now();
   return {
     held: async () => {
       const outcome = await caught;
-      if (outcome != null) {
+      if ('held' in outcome) {
         return outcome.held;
       }
+      // Only a hold that ran out of time is armed again. A hold that took
+      // the wrong motion fails with its own error.
+      const timedOut = (error: unknown) =>
+        String(error).includes('no animation under the scope ran');
+      if (!timedOut(outcome.error)) {
+        throw outcome.error;
+      }
       const again = await armHold(page, track, {
+        judges,
         timeout: Math.max(0, inputEnd + 5_000 - Date.now()),
       });
-      return again.held().catch(() => {
+      return again.held().catch((error: unknown) => {
+        if (!timedOut(error)) {
+          throw error;
+        }
         throw new Error(
           'no motion under the track started within 5 s of the input ending',
         );
@@ -390,9 +440,19 @@ async function playHeld(
   };
 }
 
-/** Calls `goTo(index)` with the motion it starts held at its first frame. */
-const goToHeld = async (page: Page, track: Locator, index: number) => {
-  const hold = await armHold(page, track);
+/**
+ * Calls `goTo(index)` with the motion it starts held at its first frame.
+ * `property` is the track's judged motion, as for `playHeld`.
+ */
+const goToHeld = async (
+  page: Page,
+  track: Locator,
+  index: number,
+  property: 'translate' | 'opacity' = 'translate',
+) => {
+  const hold = await armHold(page, track, {
+    judges: {target: track, property},
+  });
   await page.evaluate(next => {
     window.armFrames();
     window.pager.goTo(next);
@@ -652,6 +712,31 @@ test('callbacks: the new page once the settle is moving, the settle when the tra
   await waitForRest(track);
   await page.waitForTimeout(50);
   expect(await log(page)).toEqual(['index:2:drag:moving', 'settle:2:1']);
+});
+
+test('a flick pages on when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+}) => {
+  const {driver} = await open(page);
+  // A busy app's pointerup listener: WebKit stamps the touchend after it.
+  await page.evaluate(() => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + 50;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  });
+  await driver.play(
+    flick(
+      {x: 320, y: 200},
+      {velocity: {x: -1500, y: 0}, durationMs: 80, hz: 120},
+    ),
+    {pacing: 'spacing'},
+  );
+  await expect
+    .poll(async () => page.evaluate(() => window.pager.index))
+    .toBe(2);
 });
 
 test('a flick pages exactly one page, and the settle starts from the release velocity', async ({
@@ -922,7 +1007,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     {x: 320, y: 200},
     {velocity: {x: -1500, y: 0}, durationMs: 80},
   );
-  const hold = await playHeld(page, track, driver, throwScript);
+  const hold = await playHeld(page, track, driver, throwScript, 'opacity');
   crossFadesOnly(await hold.held());
   await releaseAnimations(page);
   await expect
@@ -930,7 +1015,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     .toBe(false);
   expect(await page.evaluate(() => window.pager.index)).toBe(2);
   // goTo cross-fades too.
-  crossFadesOnly(await goToHeld(page, track, 4));
+  crossFadesOnly(await goToHeld(page, track, 4, 'opacity'));
   await releaseAnimations(page);
   await expect
     .poll(async () => page.evaluate(() => window.pager.isSettling))
@@ -1162,11 +1247,11 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   // Each run's own block has to show the settle at a new position.
   proof.runs.forEach((run, i) => {
-    const read = run.control;
+    const read = run?.control;
     const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
     expect(
       settleFrames,
-      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run.summary}`,
+      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run?.summary ?? proof.late[i]?.message}`,
     ).toBeGreaterThanOrEqual(1);
   });
 });

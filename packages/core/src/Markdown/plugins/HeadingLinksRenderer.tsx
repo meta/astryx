@@ -113,6 +113,8 @@ interface HeadingLinksRendererProps {
   readonly contentAlign: 'start' | 'center';
   readonly headingTextStyle: StyleXStyles;
   readonly blockSpacingStyle: StyleXStyles;
+  /** The heading's own direction; the copy control follows its inline end. */
+  readonly dir?: 'ltr' | 'rtl';
 }
 
 function isUnmodifiedPrimaryActivation(
@@ -137,6 +139,7 @@ export function HeadingLinksRenderer({
   contentAlign,
   headingTextStyle,
   blockSpacingStyle,
+  dir,
 }: HeadingLinksRendererProps): ReactElement {
   const t = useComponentTranslator();
   const copiedLabel = t('@astryx.markdownHeadingLinks.copied');
@@ -163,6 +166,7 @@ export function HeadingLinksRenderer({
 
   return (
     <div
+      dir={dir}
       {...mergeProps(
         getContainerProps(),
         stylex.props(

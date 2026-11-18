@@ -12,7 +12,7 @@
  *   checks the motion itself (the interaction spec and its storyboards)
  */
 
-import {useState, type ReactNode} from 'react';
+import {Suspense, startTransition, use, useState, type ReactNode} from 'react';
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {
   GestureRecognizer,
@@ -862,6 +862,64 @@ describe('useRefreshControl', () => {
     expect(enabled.listScroll - disabled.listScroll).toBe(1);
     expect(enabled.resize - disabled.resize).toBe(0);
     render(<p data-testid="refresh">Gone</p>);
+  });
+
+  it('keeps the edge claimed when React discards a render that disables the pull', async () => {
+    // A transition that suspends for good: React renders the new props, then
+    // keeps the committed tree and never commits that render.
+    const pending = new Promise<never>(() => {});
+    function Pending(): null {
+      use(pending);
+      return null;
+    }
+    function List({isDisabled}: {isDisabled: boolean}) {
+      const control = useRefreshControl({
+        onRefresh: () => {},
+        announce: 'Refreshing',
+        isDisabled,
+      });
+      return (
+        <div data-testid="list" ref={measured} style={{overflowY: 'auto'}}>
+          <div data-testid="refresh" ref={control.contentRef}>
+            <div ref={control.indicatorRef} aria-hidden />
+            <p>Inbox</p>
+          </div>
+        </div>
+      );
+    }
+    function Screen({
+      isDisabled,
+      isPending,
+    }: {
+      isDisabled: boolean;
+      isPending: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <List isDisabled={isDisabled} />
+          {isPending ? <Pending /> : null}
+        </Suspense>
+      );
+    }
+    const {rerender} = render(<Screen isDisabled={false} isPending={false} />);
+    await act(async () => {
+      for (let frame = 0; frame < 3; frame += 1) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
+    });
+    const list = screen.getByTestId('list');
+    expect(list.style.overscrollBehaviorY).toBe('none');
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen isDisabled isPending />);
+      });
+    });
+    act(() => {
+      list.dispatchEvent(new Event('scroll'));
+    });
+    expect(list.style.overscrollBehaviorY).toBe('none');
   });
 
   it('sets up the edge for content that mounts after the hook: its container is claimed near the top, given back when scrolled away, and given back when the content leaves', async () => {

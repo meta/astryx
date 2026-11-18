@@ -8,6 +8,7 @@ import {Center} from '@astryxdesign/core/Center';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
@@ -157,6 +158,8 @@ function ProductInfo() {
   const [color, setColor] = useState('snow');
   const [finish, setFinish] = useState('matte');
   const [quantity, setQuantity] = useState<number | null>(1);
+  const showToast = useToast();
+  const glaze = COLORS.find(c => c.value === color)?.label ?? color;
 
   const decrement = () => setQuantity(q => Math.max(1, (q ?? 1) - 1));
   const increment = () => setQuantity(q => Math.min(10, (q ?? 1) + 1));
@@ -242,28 +245,61 @@ function ProductInfo() {
         </HStack>
       </VStack>
       <VStack gap={2}>
-        <Button label="Add to Cart" variant="primary" size="lg" />
-        <Button label="Buy it now" size="lg" />
+        <Button
+          label="Add to Cart"
+          variant="primary"
+          size="lg"
+          onClick={() =>
+            // Demo only: replace this toast with the call that adds to the cart.
+            showToast({
+              body: `Demo: ${quantity ?? 1} × ${PRODUCT.name} (${glaze}) would be added to the cart here`,
+              uniqueID: 'add-to-cart',
+            })
+          }
+        />
+        <Button
+          label="Buy it now"
+          size="lg"
+          onClick={() =>
+            // Demo only: replace this toast with the call that starts checkout.
+            showToast({
+              body: `Demo: checkout for ${PRODUCT.name} would start here`,
+              uniqueID: 'buy-now',
+            })
+          }
+        />
       </VStack>
       <CollapsibleGroup type="multiple" defaultValue={['composition']}>
         <Divider />
         <Collapsible
           value="composition"
-          trigger={<Heading level={3}>Composition</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Composition
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.composition}</Text>
         </Collapsible>
         <Divider />
         <Collapsible
           value="delivery"
           defaultIsOpen={false}
-          trigger={<Heading level={3}>Delivery &amp; Returns</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Delivery &amp; Returns
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.deliveryReturns}</Text>
         </Collapsible>
         <Divider />
         <Collapsible
           value="dimensions"
           defaultIsOpen={false}
-          trigger={<Heading level={3}>Dimensions</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Dimensions
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.dimensions}</Text>
         </Collapsible>
         <Divider />
@@ -281,8 +317,8 @@ export default function ProductDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={5}>
+        <LayoutContent role="main" padding={6}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={5}>
             <ImageGallery
               selected={selectedThumb}
               onSelect={setSelectedThumb}

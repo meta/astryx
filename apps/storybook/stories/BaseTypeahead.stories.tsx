@@ -13,6 +13,7 @@ import {
   type SearchSource,
 } from '@astryxdesign/core/Typeahead';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
+import BaseTypeaheadMenuBlock from '../../../packages/cli/assets/templates/blocks/components/BaseTypeahead/BaseTypeaheadMenu';
 import {
   borderVars,
   colorVars,
@@ -319,4 +320,10 @@ export const NarrowLongResult: Story = {
       ).toBe(true);
     });
   },
+};
+
+// The documented example: a listbox menu with information around the list,
+// and a dialog menu that a pick or a filter button opens.
+export const Menu: Story = {
+  render: () => <BaseTypeaheadMenuBlock />,
 };

@@ -17,8 +17,11 @@
  *   astryx search dark mode              Every word is part of the query
  *   astryx search modal --type component Filter to a single domain
  *   astryx search forms --limit 5        Cap the result count
- *   astryx search button --verbose       Also print score / reason
+ *   astryx search button --verbose       Also print score / reason, whole descriptions
  *   astryx search button --json          Typed JSON envelope
+ *
+ * A query that asks for an icon also lists the installed icons that answer
+ * it, last.
  */
 
 import {
@@ -27,11 +30,20 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
-import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
+import {
+  docText,
+  emit,
+  formatDeprecation,
+  section,
+  text,
+  records,
+} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -102,6 +114,7 @@ export function registerSearch(program) {
 
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
+      const addable = () => discoverAnswers(query, options.type);
       const {query: q, matchCount, results} = result.data;
       // When Core could not be had, an open search covers the rest alone. Say
       // so, on standard error and in the output, so the list does not read as
@@ -120,6 +133,8 @@ export function registerSearch(program) {
           ]
         : [];
 
+      const icons = iconBlock(result.data.icons);
+
       // No matches is a valid, successful outcome — clean message, exit 0.
       if (results.length === 0) {
         emit(
@@ -128,7 +143,8 @@ export function registerSearch(program) {
           text(
             `Try a broader term, or browse: ${run} ${note.length > 0 ? 'docs' : 'component --list'}`,
           ),
-          ...discoverHint(run, q, options.type),
+          ...discoverHint(run, q, options.type, await addable()),
+          ...icons,
         );
         return answered;
       }
@@ -177,16 +193,22 @@ export function registerSearch(program) {
             ? `Results for "${q}" (${results.length} of ${matchCount})`
             : `Results for "${q}" (${results.length})`,
         ),
-        records(results, {
+        records(results.map(withNotReadyKind), {
           fields,
           format: {
             command: formatCliCommand,
             parent: formatCliCommand,
             deprecated: formatDeprecation,
+            // The text view keeps a description's first sentence. A
+            // component, hook or doc result's command prints the whole doc;
+            // --verbose and --json keep the description whole.
+            description: (/** @type {string} */ value) =>
+              docText(options.verbose ? value : firstSentence(value)),
           },
         }),
         ...note,
-        ...discoverHint(run, q, options.type),
+        ...discoverHint(run, q, options.type, await addable()),
+        ...icons,
       );
       return answered;
     },
@@ -194,16 +216,73 @@ export function registerSearch(program) {
 }
 
 /**
+ * The icon section's text: one line per icon, its id, set and import line.
+ * The JSON has the score, reason and command.
+ * @param {import('../../../api/search/search.type.mjs').SearchIconSection | undefined} icons
+ */
+function iconBlock(icons) {
+  if (!icons) return [];
+  const {matchCount, results} = icons;
+  return [
+    section(
+      matchCount > results.length
+        ? `Icons (${results.length} of ${matchCount})`
+        : `Icons (${results.length})`,
+      results
+        .map(icon => `${icon.id} (${icon.set}): ${icon.import}`)
+        .join('\n'),
+    ),
+  ];
+}
+
+/**
+ * The text view of a result: an unready template's kind reads
+ * `page (not ready)`. The JSON carries the same fact as `isReady: false`.
+ * @param {import('../../../api/search/search.type.mjs').SearchResultEntry} result
+ */
+function withNotReadyKind(result) {
+  return result.isReady === false
+    ? {...result, kind: markNotReady(String(result.kind), false)}
+    : result;
+}
+
+/**
+ * Whether `astryx discover <query>` would list a match, read from the saved
+ * copies of the discover catalogs, or null when that is not known. No
+ * discover source is called. Never throws.
+ * @param {string} query
+ * @param {string | undefined} type
+ * @returns {Promise<boolean | null>}
+ */
+async function discoverAnswers(query, type) {
+  if (type === 'hook') return null;
+  try {
+    const discover = await import('../../../api/discover/discover.mjs');
+    return await discover.wouldAnswer(query, {type});
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search reads only what is installed. Point at `discover` for the packages
- * that could add more, except for hooks, which no integration adds.
+ * that could add more, except for hooks, which no integration adds. When the
+ * saved copies of the discover catalogs say discover would list no match,
+ * the line is left out.
  * @param {string} run - The caller's CLI invocation prefix.
  * @param {string} query
  * @param {string | undefined} type
+ * @param {boolean | null} addable - {@link discoverAnswers}
  */
-function discoverHint(run, query, type) {
-  if (type === 'hook') return [];
+function discoverHint(run, query, type, addable) {
+  if (type === 'hook' || addable === false) return [];
+  // A search kept to one kind points at discover kept to the same kind,
+  // which is what the saved copies were checked for.
+  const kind = type ? ` --type ${type}` : '';
   return [
-    text(`More in packages you could add: ${run} discover ${shellWord(query)}`),
+    text(
+      `More in packages you could add: ${run} discover ${shellWord(query)}${kind}`,
+    ),
   ];
 }
 
@@ -212,7 +291,9 @@ function discoverHint(run, query, type) {
  * @param {string} value
  */
 function shellWord(value) {
-  return /^[\w@./:-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+  return /^[\w@./:-]+$/.test(value)
+    ? value
+    : `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Re-export the API for external consumers.

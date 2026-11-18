@@ -17,7 +17,7 @@
  */
 
 import {RadioListReasonContext} from './RadioListReasonContext';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import React, {
   useCallback,
   useId,
@@ -63,9 +63,12 @@ export interface RadioListContextValue {
   status?: InputStatus;
 }
 
-export const RadioListContext = createContext<RadioListContextValue | null>(
-  null,
-);
+export const RadioListContext =
+  createLayerScopedContext<RadioListContextValue | null>(
+    'RadioListContext',
+    1,
+    null,
+  );
 RadioListContext.displayName = 'RadioListContext';
 
 const styles = stylex.create({

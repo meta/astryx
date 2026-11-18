@@ -9,14 +9,26 @@
  * for its "component not found" suggestions. Resolving core + listing lives
  * here once so neither leaf re-walks the filesystem. Throws AstryxError
  * (ERR_CORE_NOT_FOUND) when core can't be located. The copy receipt's `gh`
- * lookup is here too, on the shared search-path walk.
+ * lookup is here too, on the shared search-path walk, and so is the copy's
+ * module graph (_moduleGraph.mjs), which reads the owner package's source.
  */
 
 import {executablesOnSearchPath} from '../../foundation/env/search-path.mjs';
-import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
+import {
+  findProjectCoreDir,
+  listComponents,
+} from '../../foundation/fs/paths.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
+import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
+
+export {
+  planCopy,
+  relativeSpecifierBetween,
+  renderFile,
+} from './_moduleGraph.mjs';
 
 /**
  * Whether an executable `gh` is on `PATH` (with a `PATHEXT` extension on
@@ -45,7 +57,7 @@ export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/provid
 /**
  * The integration component that replaces the Core component `name`
  * (spec:AST-035 FR11), or undefined when none does.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @param {string} name
  * @returns {Promise<import('../../foundation/discovery/component-replacement.mjs').ActiveComponentReplacement | undefined>}
@@ -62,15 +74,22 @@ export async function resolveComponentReplacement(
 }
 
 /**
- * Locate @astryxdesign/core for `cwd` and list its swizzlable components.
+ * Locate @astryxdesign/core for `cwd` and list its swizzlable components. A
+ * run whose base is not Core reads no Core: its `coreDir` is null and it has
+ * no Core component to copy.
  * @param {string} cwd
- * @returns {{coreDir: string, components: string[]}}
+ * @returns {{coreDir: string | null, components: string[]}}
  */
 export function resolveCore(cwd) {
+  if (currentNonCoreBase()) return {coreDir: null, components: []};
   const coreDir = findProjectCoreDir(cwd);
   if (!coreDir) {
+    // Swizzle copies source into an app, so it needs the app's own Core,
+    // never the one the CLI carries.
     throw new AstryxError(
-      'Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.',
+      isOutsideProject(cwd)
+        ? "Could not find @astryxdesign/core. This folder is outside a project; swizzle copies a component's source into an app project that installs @astryxdesign/core."
+        : 'Could not find installed @astryxdesign/core. Install it in this project, then run swizzle again.',
       [],
       ERROR_CODES.ERR_CORE_NOT_FOUND,
     );

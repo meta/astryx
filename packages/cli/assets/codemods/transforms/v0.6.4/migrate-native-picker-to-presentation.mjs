@@ -21,6 +21,9 @@ export const meta = {
     'and TimeInput, mapping touch→adaptive-native, always→native, and ' +
     'never→adaptive-bottom-sheet (text-input for TimeInput). Dynamic ' +
     'values are left for manual migration; the deprecated prop still works.',
+  // A file changes only through a JSX `nativePicker` prop
+  // (assets/codemods/run-codemod.mjs).
+  mentions: ['nativePicker'],
 };
 
 const CORE_IMPORT_RE = /^@(astryxdesign|xds)\/core(?:\/|$)/;

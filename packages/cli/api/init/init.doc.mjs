@@ -30,7 +30,7 @@ export const doc = {
     'counts as a project, even with a package.json; a folder below it with a package.json does. ' +
     'The managed block is Astryx-owned: it is written, refreshed, and removed whatever ignore rules ' +
     'or generated markers say, and the text around it is never changed. It then ' +
-    "prints getting-started guidance; `features` / `all` print only the chosen features' " +
+    "prints getting-started guidance (the build and search commands instead when every agent-docs block was already current, since the app is set up; an outdated block is still refreshed); `features` / `all` print only the chosen features' " +
     'guidance instead (the theme feature also writes the annotated theme template). ' +
     'With `removeAgents` it removes the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. ' +
     'Outside a project it writes the same files but prints no getting-started steps and no step that adds a theme to an app, since those set up a project the folder does not have. ' +
@@ -70,6 +70,14 @@ export const doc = {
         'Cannot be combined with `features`, `all`, `agent`, or `agentDocsPath`.',
     },
     {
+      name: 'options.to',
+      type: 'string | string[]',
+      description:
+        'Where the Astryx skill goes, one place, a comma list, or several: `agents-md` (the managed block, the default), `skills` (`.agents/skills/astryx-project/SKILL.md` and a byte-identical copy in `.claude/skills/astryx-project` at the project root), `user` (the computer-level skill, the same as the `user` option), or a folder written as a path (`./team`, `~/team`): one in the project gets `<folder>/astryx-project/SKILL.md`, any other the computer-level skill at `<folder>/astryx/SKILL.md`. ' +
+        "The project places are saved in astryx.config `skills.to`, so a later `init` writes the same places; a folder outside the project is saved in the settings file, and the CLI installed for the computer refreshes its copy while it is there. Naming project places moves the project to them: the old places are cleared once a new one holds the text. " +
+        'An edited skill file, or one Astryx did not write, is kept. A project root in the home folder or a settings folder in it takes no project place, as it takes no agent docs.',
+    },
+    {
       name: 'options.agent',
       type: 'string',
       description:
@@ -100,7 +108,7 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead), the places written (`to`), one `{path, place, action, reason?}` row per skill file (`skills`; action `created` | `updated` | `unchanged` | `removed` | `kept`, reason `edited` | `not-astryx` | `pair-kept`), and the `user` place\'s `init.user` data (`user`, null without it). In a project whose saved places hold no `agents-md`, `agentDocsStatus` describes the project skill files.',
     },
     {
       type: 'init.remove',
@@ -116,7 +124,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features',
+            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features; or `to` names an unknown place, `skills` outside a project, or no place, is combined with `user` or `removeAgents`, is `user` alone with `features`, `all`, `agent`, or `agentDocsPath`, leaves out `agents-md` while `agent` or `agentDocsPath` is set, or comes with `features` that leave out agents',
+    },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'with `user`, the file system refuses a write or removal of the computer-level agent text (as a `~/.agents/skills` the user cannot write); the message names the path, the errno, and what to change',
     },
     {
       code: 'ERR_UNKNOWN_AGENT',
@@ -136,13 +148,14 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file in cwd, or at the project root when run there, resolves outside that folder through a symlink (run below the root, a project-root file is left as it is with a note)',
+      when: 'a project skill file `to` would write or clear resolves outside the project (as through a skills folder linked out of it), with nothing changed; the template output path resolves outside cwd (for example through a symlinked src directory), or, with removeAgents, a managed agent-docs file in cwd, or at the project root when run there, resolves outside that folder through a symlink (run below the root, a project-root file is left as it is with a note)',
     },
   ],
   examples: [
     {label: 'Default setup', code: 'const r = await init();'},
     {label: 'All features', code: 'await init({all: true});'},
     {label: 'Remove agent docs', code: 'await init({removeAgents: true});'},
+    {label: 'The skill in the project skills folders', code: "await init({to: 'skills'});"},
         {label: 'Agent text for the whole computer', code: 'const r = await init({user: true});\nfor (const w of r.data.warnings) console.warn(w);'},
   ],
   command: 'init',

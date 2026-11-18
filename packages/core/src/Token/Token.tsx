@@ -37,17 +37,23 @@ import {TokenLink} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
+import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
+import {textDirectionProps} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
+import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
 
 registerEnglishFallback(english);
 
@@ -145,6 +151,7 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
   interactive: {
     cursor: {
@@ -335,6 +342,7 @@ export function Token({
       aria-label={t('@astryx.token.remove', {
         label: naming?.removeName ?? label,
       })}
+      {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -351,6 +359,7 @@ export function Token({
     <>
       {icon}
       <span
+        {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -467,10 +476,14 @@ export function Token({
         icon={icon}
         endContent={endContent}
         removeButton={removeButton}
-        linkStyleProps={stylex.props(styles.invisibleButton)}
+        linkStyleProps={{
+          ...stylex.props(styles.invisibleButton),
+          ...focusOwnerProps,
+        }}
         {...pressable}
         labelContent={
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -484,7 +497,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -518,7 +534,7 @@ export function Token({
       e: React.PointerEvent<HTMLSpanElement>,
     ) => {
       rest.onPointerDown?.(e);
-      cancelNestedTouchPress(
+      cancelNestedPress(
         e,
         e.currentTarget,
         e.currentTarget.querySelector(':scope > button'),
@@ -536,7 +552,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -561,8 +580,10 @@ export function Token({
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

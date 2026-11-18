@@ -790,6 +790,7 @@ export function DateRangeInput({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,

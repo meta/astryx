@@ -111,12 +111,12 @@ export function createCliSearchSource(
 
   /**
    * Send one query when the server is free. A search server is blocked while
-   * it works on a request (and for seconds while it starts), so the host
-   * sends a request that arrives meanwhile to another server, which may start
-   * cold. So the page keeps one request at a time: a query waits for the
-   * request before it and for a running warm-up, at most SERVER_WAIT_MS. A
-   * request already sent is not cancelled when a newer query replaces it: the
-   * server finishes it anyway, and the newer query waits for it.
+   * it works on a request (and while it starts), so the host sends a request
+   * that arrives meanwhile to another server, which may start cold. So the
+   * page keeps one request at a time: a query waits for the request before it
+   * and for a running warm-up, at most SERVER_WAIT_MS. A request already sent
+   * is not cancelled when a newer query replaces it: the server finishes it
+   * anyway, and the newer query waits for it.
    */
   async function sendQuery(
     url: string,

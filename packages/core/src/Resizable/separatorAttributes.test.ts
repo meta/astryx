@@ -72,4 +72,16 @@ describe('separatorAttributes', () => {
     expect(bare['aria-valuemax']).toBeUndefined();
     expect(bare.tabIndex).toBe(0);
   });
+
+  it('keeps its value to the bounds while a pull past one shows the size beyond it', () => {
+    const at = (size: number) =>
+      separatorAttributes({
+        direction: 'horizontal',
+        isDisabled: false,
+        value: {...value, size, minPx: 120, maxPx: 320},
+      })['aria-valuenow'];
+    expect(at(360.4)).toBe(320);
+    expect(at(80)).toBe(120);
+    expect(at(200)).toBe(200);
+  });
 });

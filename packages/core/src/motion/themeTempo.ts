@@ -4,7 +4,8 @@
  * @file themeTempo.ts
  * @input An element on the page
  * @output `themeTempo(element)`: the tempo of the theme the element is in
- * @position Motion foundation; resolveMotion.ts scales a motion role by it
+ * @position Motion foundation; resolveMotion.ts scales a motion role by it,
+ *   and the pager scales its settle by it, which no role names
  *
  * A theme that sets `tempo` writes it, clamped, to the private custom
  * property `--_astryx-motion-tempo` beside its duration tokens. An

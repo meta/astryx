@@ -21,5 +21,5 @@ import {createLayerScopedContext} from '../Layer/layerScopedContext';
 // group is not a radio of it.
 export const RadioListReasonContext = createLayerScopedContext<
   string | undefined
->(undefined);
+>('RadioListReasonContext', 1, undefined);
 RadioListReasonContext.displayName = 'RadioListReasonContext';

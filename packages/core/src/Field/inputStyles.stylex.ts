@@ -3,7 +3,8 @@
 /**
  * @file inputStyles.stylex.ts
  * @input Uses theme tokens (color, spacing, radius, shadow, transition)
- * @output Exports shared input wrapper appearance styles
+ * @output Exports shared input wrapper appearance styles, and the text field
+ *   timing that shows the focus look at once under a coarse pointer
  * @position Shared styles consumed by TextInput, TextArea, NumberInput, DateInput,
  *   TimeInput, Selector, Typeahead, and Tokenizer
  *
@@ -78,6 +79,15 @@ export const inputWrapperStyles = stylex.create({
     // Suppress the base hover ring — a disabled control must not react to hover.
     boxShadow: 'none',
   },
+  // Text fields apply this after `base`. A tap on one raises the keyboard,
+  // and a fade would repaint the field on each frame of that rise.
+  textField: {
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+      '@media (pointer: coarse)': '0s',
+    },
+  },
 });
 
 /**
@@ -117,7 +127,8 @@ export const inputStatusBorderStyles = stylex.create({
 });
 
 /**
- * Status hover shadow styles for input wrappers.
+ * Status hover shadow styles for input wrappers. Each keeps the base focus
+ * ring.
  * Keyed by InputStatusType.
  */
 export const inputStatusHoverShadowStyles = stylex.create({
@@ -128,6 +139,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-warning'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   error: {
@@ -137,6 +152,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-error'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   success: {
@@ -146,6 +165,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-success'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
 });

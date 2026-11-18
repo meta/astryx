@@ -3,6 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../../../../test-utils/repo-root.mjs';
 
 /**
  * Invoke the transform directly with a configured jscodeshift api, mirroring
@@ -364,7 +365,7 @@ describe('migrate-layout-components-to-experimental — end-to-end via runConfig
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     try {
       process.chdir(tmpDir);
@@ -422,7 +423,7 @@ describe('migrate-layout-components-to-experimental — end-to-end via runConfig
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     const configSource = `// Generated Astryx config.
 const config = {
@@ -477,7 +478,7 @@ export default config;
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     const configSource = `const config = {};
 config.layout = { components: { KpiCard: '@/components/KpiCard' } };
@@ -529,7 +530,7 @@ export default config;
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     try {
       process.chdir(tmpDir);

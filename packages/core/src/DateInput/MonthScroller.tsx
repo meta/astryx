@@ -76,7 +76,7 @@ import {
 } from '../utils/calendarSystem';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
-import {useScrollSettle} from './useScrollSettle';
+import {useScrollSettle, useScrollSteer} from './useScrollSettle';
 import {
   type MonthModel,
   paneWindow,
@@ -300,8 +300,11 @@ export interface MonthScrollerProps {
   onVisibleMonthChange: (monthIndex: number) => void;
   /** Currently selected date. */
   selectedDate: PlainDate | null;
-  /** Today, for the `aria-current` marker. */
-  today: PlainDate;
+  /**
+   * Today, for the `aria-current` marker; `null` while it is not known yet
+   * (server render, hydration).
+   */
+  today: PlainDate | null;
   /** Whether a date fails min/max or a custom constraint. */
   isDateDisabled: (date: PlainDate) => boolean;
   /** First column of the week. */
@@ -391,13 +394,13 @@ export function MonthScroller({
   const pendingScrollRef = useRef<number | null>(null);
 
   /**
-   * The row a programmatic scroll is heading for, so its own scroll events
-   * are not reported back as if the user had gone there, and so the settle
-   * correction finishes the steer instead of rounding it back. Null once the
-   * user's own input reaches the scroller (a finger, a wheel or trackpad, a
-   * press, a key), or once the steered scroll has arrived.
+   * The row a programmatic scroll is heading for. Its own scroll events are
+   * not reported back as if the user had gone there. The settle correction
+   * finishes the steer instead of rounding it back. The steer ends once its
+   * scroll has arrived, or once the user's own input reaches the scroller
+   * (useScrollSettle).
    */
-  const steeredRowRef = useRef<number | null>(null);
+  const steer = useScrollSteer();
 
   // Keyboard focus moves by date, not by cell index, so it crosses month
   // boundaries the way a calendar should. Null until the user takes the grid
@@ -481,7 +484,7 @@ export function MonthScroller({
         // by a scroll that moved nothing (the re-assert when the month and
         // year wheels close), which the settle would otherwise finish,
         // pulling the scroller back off the jump's month.
-        steeredRowRef.current = row;
+        steer.start(row);
         recenter(scroller, row);
         return;
       }
@@ -500,7 +503,7 @@ export function MonthScroller({
           // never arrived would otherwise hide every scroll after it, a
           // trackpad's included. Closing the wheels makes such a steer: it
           // re-asserts the month already in view.
-          steeredRowRef.current = null;
+          steer.end();
           if (row === centerRowRef.current) {
             scroller.scrollTo({left, behavior: 'auto'});
             return;
@@ -523,10 +526,10 @@ export function MonthScroller({
         });
         return;
       }
-      steeredRowRef.current = row;
+      steer.start(row);
       scroller.scrollTo({left, behavior});
     },
-    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip],
+    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip, steer],
   );
 
   // Deliberately un-keyed: it runs after every render, costs a null check, and
@@ -609,7 +612,7 @@ export function MonthScroller({
     [],
   );
 
-  useScrollSettle(scrollerRef, scroller => {
+  const settleOnRest = (scroller: HTMLElement) => {
     // At rest, momentum included: the finger no longer drives the scroll.
     isFingerScrollRef.current = false;
     if (paneSize === 0) {
@@ -633,7 +636,7 @@ export function MonthScroller({
       // in the previous arrow's scroll stopped near that month, and rounding
       // to the nearest pane put the scroller back on it while the title named
       // the new one.
-      const steered = steeredRowRef.current;
+      const steered = steer.current();
       const row =
         steered ??
         rowAtScrollOffset(scroller.scrollLeft, paneSize, rowCount, isRTL);
@@ -642,12 +645,13 @@ export function MonthScroller({
       if (Math.abs(scroller.scrollLeft - target) < 1) {
         // At rest on its target, a steer has arrived even if no scroll
         // crossed into its month.
-        steeredRowRef.current = null;
+        steer.end();
         return;
       }
       scroller.scrollTo({left: target, behavior: 'smooth'});
     });
-  });
+  };
+  useScrollSettle(scrollerRef, settleOnRest, true, undefined, steer);
 
   // Claim horizontal gestures, leave vertical ones to the sheet.
   //
@@ -672,7 +676,7 @@ export function MonthScroller({
   // rAF-throttled: a touch scroll fires far more scroll events than frames,
   // and all this does is move a label and widen a window.
   const frameRef = useRef<number | undefined>(undefined);
-  // Syncs scroll, touch and wheel listeners on the scroller with its measured
+  // Syncs scroll and touch listeners on the scroller with its measured
   // height.
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -685,15 +689,6 @@ export function MonthScroller({
     if (scroller == null || paneSize === 0) {
       return;
     }
-    // A finger, a wheel or trackpad, a press or a key on the scroller ends any
-    // steering: from here the months it passes are the user's doing, every
-    // one of them is worth reporting, and the settle rounds to the nearest
-    // month instead of finishing a steer. A steer that moved nothing (the
-    // re-assert when the month and year wheels close on the month shown)
-    // would otherwise pull the user's next scroll back to its month.
-    const endSteer = () => {
-      steeredRowRef.current = null;
-    };
     // From a touch until its scroll comes to rest (the settle above), the
     // finger drives the scroll and a re-center leaves snapping on.
     const onTouchStart = () => {
@@ -730,12 +725,13 @@ export function MonthScroller({
         // the exact moment reports start being trusted again. The month drifted
         // on the way back to the calendar.
         //
-        // Cleared on arrival, or by the user's input below (a finger, a wheel
-        // or trackpad, a press, a key) — from then the user owns the scroller,
-        // and every month it passes is worth reporting.
-        if (steeredRowRef.current != null) {
-          if (steeredRowRef.current === row) {
-            steeredRowRef.current = null;
+        // Ended on arrival, or by the user's input (useScrollSettle). From then
+        // the user owns the scroller, and every month it passes is worth
+        // reporting.
+        const steered = steer.current();
+        if (steered != null) {
+          if (steered === row) {
+            steer.end();
           }
           return;
         }
@@ -743,25 +739,16 @@ export function MonthScroller({
       });
     };
     scroller.addEventListener('scroll', onScroll, PASSIVE);
-    // The user's input on the scroller ends a steer: from here, it's theirs.
-    scroller.addEventListener('touchstart', endSteer, PASSIVE);
-    scroller.addEventListener('wheel', endSteer, PASSIVE);
-    scroller.addEventListener('pointerdown', endSteer, PASSIVE);
-    scroller.addEventListener('keydown', endSteer, PASSIVE);
     scroller.addEventListener('touchstart', onTouchStart, PASSIVE);
     return () => {
       scroller.removeEventListener('scroll', onScroll, PASSIVE);
-      scroller.removeEventListener('touchstart', endSteer, PASSIVE);
-      scroller.removeEventListener('wheel', endSteer, PASSIVE);
-      scroller.removeEventListener('pointerdown', endSteer, PASSIVE);
-      scroller.removeEventListener('keydown', endSteer, PASSIVE);
       scroller.removeEventListener('touchstart', onTouchStart, PASSIVE);
       if (frameRef.current != null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = undefined;
       }
     };
-  }, [paneSize, rowCount, minMonthIndex, isRTL, recenter]);
+  }, [paneSize, rowCount, minMonthIndex, isRTL, recenter, steer]);
 
   // Move the keyboard focus by whole days and let the scroller follow. Paging
   // by month is PageUp/PageDown; everything else is the APG grid vocabulary.
@@ -894,7 +881,8 @@ interface MonthPaneProps {
   inlineSize: number;
   selectedDate: PlainDate | null;
   focusedDate: PlainDate | null;
-  today: PlainDate;
+  /** Today, or `null` while it is not known yet (server render, hydration). */
+  today: PlainDate | null;
   isDateDisabled: (date: PlainDate) => boolean;
   weekStartsOn: DayOfWeek;
   onSelect: (value: ISODateString) => void;
@@ -975,7 +963,10 @@ function MonthPane({
               !day.isOutside &&
               selectedDate != null &&
               plainDateIsEqual(day.date, selectedDate);
-            const isToday = !day.isOutside && plainDateIsEqual(day.date, today);
+            const isToday =
+              !day.isOutside &&
+              today != null &&
+              plainDateIsEqual(day.date, today);
 
             return (
               <div

@@ -194,9 +194,7 @@ No component-local visual decision is recorded.
 
 ## Current-state impact
 
-- **Disabled rows skipped (FR7).** A disabled row renders no `tabIndex`, so the
-  parent's arrow keys and type-ahead skip it instead of reaching it as
-  `component:DropdownMenu` FR17 and DEC-11 state.
+None.
 
 ## Decision log
 

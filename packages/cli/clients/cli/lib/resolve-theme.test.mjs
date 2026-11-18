@@ -280,6 +280,32 @@ describe('resolveTheme package field', () => {
   });
 });
 
+describe('resolveTheme warnings', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['a file path', './\u001b[2Jmissing.cjs'],
+    ['a scoped package', '@evil/\u001b]0;owned\u0007\npkg'],
+    ['a bare name', 'theme\u202e\r\nnext'],
+  ])(
+    'prints %s from astryx.theme as one line without control or format characters',
+    async (_kind, specifier) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(
+        await resolveTheme(fixture({name: 'app', astryx: {theme: specifier}})),
+      ).toBeNull();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0][0]);
+      expect(message).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+      expect(message).toContain('\uFFFD');
+    },
+  );
+});
+
 describe('resolveTheme source precedence', () => {
   it('uses the generated record default and ignores astryx.theme when a module exists', async () => {
     const dir = fixture({

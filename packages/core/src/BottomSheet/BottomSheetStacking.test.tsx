@@ -281,20 +281,33 @@ function fireCancel(dialog: Element): Event {
 }
 
 // Drive a pointer drag on a grab handle. jsdom PointerEvents don't carry
-// clientY, so dispatch plain events with the coords the handlers read.
+// clientY, so dispatch plain events with the coords the handlers read. Each
+// event comes 16 ms after the one before, so the release velocity follows
+// the events' own timestamps.
+let dragTime = 0;
+
 function drag(handle: HTMLElement, points: {y: number}[]) {
+  const fire = (
+    type: 'pointerdown' | 'pointermove' | 'pointerup',
+    y: number,
+  ) => {
+    dragTime += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperties(event, {
+      button: {value: 0},
+      clientY: {value: y},
+      isPrimary: {value: true},
+      pointerId: {value: 1},
+      timeStamp: {value: dragTime},
+    });
+    fireEvent(handle, event);
+  };
   const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-  });
+  fire('pointerdown', down.y);
   for (const point of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: point.y});
+    fire('pointermove', point.y);
   }
-  const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y});
+  fire('pointerup', points[points.length - 1].y);
 }
 
 function classes(element: Element): string {
@@ -2149,6 +2162,68 @@ describe('R10 concurrent React', () => {
     expect(stackSummary()).toEqual(['A:top:0']);
     expect(openDialogs()).toEqual(['A']);
     expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledTimes(1);
+  });
+
+  it('a sheet whose close waits in a suspended transition takes the scrim when the sheet beneath it closes', () => {
+    const never = new Promise<never>(() => {});
+    function Forever(): ReactNode {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- Suspense protocol: a thrown promise suspends the subtree
+      throw never;
+    }
+    // A keeps its own state, so an update to it renders only A.
+    let closeBeneath!: () => void;
+    function Beneath() {
+      const [isOpen, setIsOpen] = useState(true);
+      closeBeneath = () => setIsOpen(false);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="A">
+          a
+        </BottomSheet>
+      );
+    }
+    let closeTopInTransition!: () => void;
+    function App() {
+      const [isTopOpen, setIsTopOpen] = useState(true);
+      const [isWaiting, setIsWaiting] = useState(false);
+      closeTopInTransition = () =>
+        startTransition(() => {
+          setIsTopOpen(false);
+          setIsWaiting(true);
+        });
+      return (
+        <>
+          <Beneath />
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen={isTopOpen}
+              onOpenChange={setIsTopOpen}
+              label="B">
+              b
+            </BottomSheet>
+            {isWaiting ? <Forever /> : null}
+          </Suspense>
+        </>
+      );
+    }
+    render(<App />);
+    const a = getDialog('A');
+    const b = getDialog('B');
+    expect(scrim(a)).toBe('1');
+    expect(scrim(b)).toBe('0');
+    // B's close renders, then suspends for good: B stays open on screen.
+    act(() => {
+      closeTopInTransition();
+    });
+    expect(openDialogs()).toEqual(['A', 'B']);
+    // A closes from code beneath the open B. The dim is B's from here on.
+    act(() => {
+      closeBeneath();
+    });
+    expect(scrim(a)).toBe('0');
+    expect(scrim(b)).toBe('1');
+    finishExit(a);
+    expect(stackSummary()).toEqual(['B:top:0']);
+    expect(scrim(b)).toBe('1');
   });
 
   it('Suspense hide takes a sheet out of the stack; reveal re-presents it on top', async () => {

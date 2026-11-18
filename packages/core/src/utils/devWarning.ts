@@ -48,6 +48,25 @@ export function devWarn(
   console.warn(formatDevMessage(component, message), ...args);
 }
 
+/** Warns once for each key. Internal. */
+export type DevWarnings = (
+  component: string,
+  message: string,
+  key?: string,
+) => void;
+
+/** Per-instance diagnostics for hooks and imperative callbacks. Internal. */
+export function createDevWarnings(): DevWarnings {
+  const warned = new Set<string>();
+  return (component: string, message: string, key: string = message): void => {
+    if (process.env.NODE_ENV === 'production' || warned.has(key)) {
+      return;
+    }
+    warned.add(key);
+    devWarn(component, message);
+  };
+}
+
 /**
  * `console.error` in the standardized `Component: message` format. Unlike
  * {@link devWarn}, this runs in production too: it reports real runtime
@@ -64,6 +83,30 @@ export function devError(
   ...args: unknown[]
 ): void {
   console.error(formatDevMessage(component, message), ...args);
+}
+
+/**
+ * Make the error that a component throws in development when a required prop
+ * is missing or has the wrong shape. The message names the component, the prop
+ * and the fix, so the builder does not get a TypeError from deep inside.
+ *
+ * Call it only inside an inline `process.env.NODE_ENV !== 'production'` check.
+ * A production bundle then drops the check, the message and this helper, and
+ * the component behaves as it did before.
+ *
+ * @example
+ * ```
+ * if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+ *   throw devPropError('Selector', 'options', 'must be an array of {value, label} objects.');
+ * }
+ * ```
+ */
+export function devPropError(
+  component: string,
+  prop: string,
+  message: string,
+): Error {
+  return new Error(formatDevMessage(component, `\`${prop}\` ${message}`));
 }
 
 const warnedKeys = new Set<string>();

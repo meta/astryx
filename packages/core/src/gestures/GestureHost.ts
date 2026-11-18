@@ -130,7 +130,11 @@ import {
   resolvePresented,
   watchPresentedElements,
 } from '../motion/presentation';
-import {UIKIT_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
+import {
+  UIKIT_LONG_PRESS,
+  UIKIT_PRESS,
+  UIKIT_TAP,
+} from '../motion/uikit/gestures';
 import {
   browserClock,
   GestureArena,
@@ -179,6 +183,7 @@ import {
   disarmClickGuard,
   withoutClickGuard,
 } from '../utils/clickGuard';
+import {clockOf, type EventClock} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
 import {
@@ -662,19 +667,33 @@ function panTakesMove(
 }
 
 /**
- * An event's time on the arena's clock (`performance.now()`). Some engines
- * and DOM emulators stamp events in epoch milliseconds instead.
+ * An event's time on the arena's clock: `timing.now()`, with `timing` the
+ * clock of the event's own window. Some engines and DOM emulators stamp
+ * events in epoch milliseconds instead.
  */
-function eventTime(event: Event): number {
+function eventTime(event: Event, timing: EventClock | null): number {
   const time = event.timeStamp;
-  if (
-    time > 1e12 &&
-    typeof performance !== 'undefined' &&
-    performance.timeOrigin > 0
-  ) {
-    return time - performance.timeOrigin;
+  if (time > 1e12 && timing != null && timing.timeOrigin > 0) {
+    return time - timing.timeOrigin;
   }
   return time;
+}
+
+/**
+ * The arena clock for `doc`. The page's own document keeps the page's clock.
+ * A same-origin iframe or a Picture-in-Picture window stamps its events from
+ * its own start, so its clock reads that window's `performance`. A page can
+ * replace that object after the host exists, so each reading looks it up.
+ */
+function documentClock(doc: Document): GestureClock {
+  const view = doc.defaultView;
+  if (view == null || view === globalThis) {
+    return browserClock;
+  }
+  return {
+    ...browserClock,
+    now: () => clockOf(doc)?.now() ?? browserClock.now(),
+  };
 }
 
 /** A touch list as an array; a synthetic event may carry none. */
@@ -779,6 +798,13 @@ export class GestureHost {
    */
   private readonly layoutWatched = new Set<Element>();
   private layoutObserver: ResizeObserver | null = null;
+  /** Where and when the last pen hold the host tracked ended. */
+  private lastPenLift: {target: unknown; time: number} | null = null;
+  /**
+   * Arena ids of the pen contacts that left the long press's tolerance
+   * before its duration. No such contact is a hold.
+   */
+  private readonly driftedPens = new Set<number>();
   /** Fingers whose first uncancelable `touchmove` was already judged. */
   private readonly judgedUncancelable = new Set<number>();
   /**
@@ -792,6 +818,16 @@ export class GestureHost {
   /** Finger pointerdowns still waiting for their touchstart. */
   private readonly pendingPointers = new Map<number, PlacedContact>();
   /**
+   * A paired finger's lift, at its `pointerup`: the place and clock its moves
+   * came on. Linux WebKit stamps the `touchend` that follows only after the
+   * page's pointerup listeners finish. A busy listener would then make a flick
+   * read as a resting finger. Read at the touchend, dropped with the finger.
+   */
+  private readonly liftStamps = new Map<
+    number,
+    {x: number; y: number; time: number}
+  >();
+  /**
    * Where fingers come from their pointer events, where claimed fingers
    * lifted and when: the `touchend` that follows each `pointerup` is
    * cancelled (FR21). A record no `touchend` consumed expires
@@ -802,6 +838,13 @@ export class GestureHost {
   private claimedLiftTimer: unknown = null;
   /** The arena's clock, which the claimed lifts' timer runs on too. */
   private readonly clock: GestureClock;
+  /**
+   * The clock of the document's own window, which stamps its events. A page
+   * can replace it after the host exists, so each read looks it up.
+   */
+  private get timing(): EventClock | null {
+    return clockOf(this.doc);
+  }
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   private readonly isPrimaryPointerCoarse: () => boolean;
@@ -900,7 +943,7 @@ export class GestureHost {
         return {left, top, width, height};
       },
     };
-    this.clock = options.clock ?? browserClock;
+    this.clock = options.clock ?? documentClock(doc);
     this.arena = new GestureArena({
       clock: this.clock,
       environment,
@@ -1396,6 +1439,37 @@ export class GestureHost {
     return this.fingerTargets.some(target =>
       containsAlongFlatTree(node, target),
     );
+  }
+
+  /**
+   * @internal Whether a pen that went down inside `node` is down now,
+   * whichever participant keeps it. A pen's own menu event is that hold's
+   * (contextRequest.ts).
+   */
+  isPenDownIn(node: Node): boolean {
+    return this.arena.touches.some(
+      touch =>
+        touch.pointerType === 'pen' &&
+        // A lifted pen that a recognizer still decides on is no longer down.
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        touch.target instanceof Node &&
+        containsAlongFlatTree(node, touch.target),
+    );
+  }
+
+  /**
+   * @internal When a pen hold that went down inside `node` last ended, at
+   * its lift or a cancel. The time is on the host's clock: negative infinity
+   * when none did.
+   */
+  lastPenLiftIn(node: Node): number {
+    const lift = this.lastPenLift;
+    return lift != null &&
+      lift.target instanceof Node &&
+      containsAlongFlatTree(node, lift.target)
+      ? lift.time
+      : Number.NEGATIVE_INFINITY;
   }
 
   private registrationFor(element: Element): Registration {
@@ -2275,7 +2349,7 @@ export class GestureHost {
       return;
     }
     this.wheelsSeen.add(wheel);
-    const time = eventTime(wheel);
+    const time = eventTime(wheel, this.timing);
     const kind = wheel.ctrlKey ? 'pinch' : 'pan';
     let gesture = this.wheel;
     if (
@@ -2955,6 +3029,33 @@ export class GestureHost {
   }
 
   /**
+   * @internal Whether a press consumer that keeps its press (a hold-repeat
+   * control, `keepsTouch`) sits on the path from `target` up to `boundary`,
+   * both included. Such a control keeps its long press its own. Its right
+   * click and Shift+F10 still reach a context request around it
+   * (contextRequest.ts).
+   */
+  keepsPressBetween(target: unknown, boundary: Element): boolean {
+    for (
+      let node: Node | null = target instanceof Node ? target : null;
+      node != null;
+      node = parentAcrossShadow(node)
+    ) {
+      if (!(node instanceof Element)) {
+        continue;
+      }
+      const consumer = this.registry.get(node)?.consumer;
+      if (consumer?.keepsTouch != null && consumer.isEnabled?.() !== false) {
+        return true;
+      }
+      if (node === boundary) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  /**
    * How many fingers are on the screen: the length of `touches` in the last
    * touch event the host's listeners heard (`touchstart`, `touchmove`,
    * `touchend`, `touchcancel`), whatever its target, so a finger on an
@@ -2976,7 +3077,7 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
-    this.endWheel(eventTime(event));
+    this.endWheel(eventTime(event, this.timing));
     this.noteFingersDown(event);
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
@@ -2986,7 +3087,7 @@ export class GestureHost {
     if (this.fingerTargets.length > 1) {
       this.failUnclaimedLoneFingerPans();
     }
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const inputs: ArenaBeganInput[] = [];
     const untracked: TouchBeganInput[] = [];
     const stale: number[] = [];
@@ -3107,7 +3208,7 @@ export class GestureHost {
       return;
     }
     this.dropFingersNotDown(event);
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const ids: number[] = [];
     const inputs: TouchInput[] = [];
     for (const touch of touchesOf(event.changedTouches)) {
@@ -3215,7 +3316,7 @@ export class GestureHost {
    */
   private readonly onClaimedTouchEnd = (event: Event): void => {
     const end = event as TouchEvent;
-    const time = eventTime(end);
+    const time = eventTime(end, this.timing);
     for (let i = this.claimedLifts.length - 1; i >= 0; i--) {
       if (time - this.claimedLifts[i].time > CLAIMED_LIFT_MS) {
         this.claimedLifts.splice(i, 1);
@@ -3298,7 +3399,7 @@ export class GestureHost {
       return;
     }
     this.dropFingersNotDown(event);
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const inputs: TouchInput[] = [];
     const retargetedEnds: {
       id: number;
@@ -3314,19 +3415,31 @@ export class GestureHost {
       }
       const tracked = this.touchIds.get(touch.identifier);
       const landed = tracked == null ? undefined : this.retargeted.get(tracked);
+      const lift = tracked == null ? undefined : this.liftStamps.get(tracked);
       const id = this.forgetFinger(touch.identifier);
       if (id == null) {
         continue;
       }
-      inputs.push({id, x: touch.clientX, y: touch.clientY, time});
+      inputs.push({
+        id,
+        x: lift?.x ?? touch.clientX,
+        y: lift?.y ?? touch.clientY,
+        time: lift?.time ?? time,
+      });
       if (landed != null) {
         retargetedEnds.push({id, landed, x: touch.clientX, y: touch.clientY});
       }
     }
+    // The arena takes the lifts in time order, so it never raises an earlier
+    // lift to a later one.
+    inputs.sort((a, b) => a.time - b.time);
     // The lift is when momentum starts: the clock the brake wants most.
     const landed = landedOn(event);
     if (isNode(landed)) {
-      this.lastTouch = {target: landed, time};
+      this.lastTouch = {
+        target: landed,
+        time: inputs.length > 0 ? Math.max(...inputs.map(i => i.time)) : time,
+      };
     }
     const dispositions =
       inputs.length > 0
@@ -3406,7 +3519,7 @@ export class GestureHost {
       }
     }
     if (ids.length > 0) {
-      this.arena.cancelled(ids, eventTime(event));
+      this.arena.cancelled(ids, eventTime(event, this.timing));
     }
   };
 
@@ -3469,7 +3582,7 @@ export class GestureHost {
       }
     }
     if (ids.length > 0) {
-      this.arena.cancelled(ids, eventTime(event));
+      this.arena.cancelled(ids, eventTime(event, this.timing));
     }
   }
 
@@ -3668,6 +3781,7 @@ export class GestureHost {
     this.retargeted.delete(id);
     this.lastFed.delete(id);
     this.pointerFed.delete(id);
+    this.liftStamps.delete(id);
     this.judgedUncancelable.delete(id);
     this.unpairedTouches.delete(id);
     for (const [pointerId, paired] of this.fingerPointers) {
@@ -3680,7 +3794,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    this.endWheel(eventTime(event));
+    this.endWheel(eventTime(event, this.timing));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
     if (!isPointerKind(event.pointerType)) {
@@ -3737,7 +3851,7 @@ export class GestureHost {
         id,
         x: event.clientX,
         y: event.clientY,
-        time: eventTime(event),
+        time: eventTime(event, this.timing),
         pointerType: event.pointerType,
         target,
         scroll: createNativeScrollProbe(target),
@@ -3780,8 +3894,8 @@ export class GestureHost {
             id,
             x: event.clientX,
             y: event.clientY,
-            time: eventTime(event),
-            history: coalescedHistory(event),
+            time: eventTime(event, this.timing),
+            history: coalescedHistory(event, this.timing),
           },
         ]);
       }
@@ -3789,13 +3903,21 @@ export class GestureHost {
     }
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
+      if (event.pointerType === 'pen') {
+        this.notePenDrift(
+          id,
+          event.clientX,
+          event.clientY,
+          eventTime(event, this.timing),
+        );
+      }
       this.arena.moved([
         {
           id,
           x: event.clientX,
           y: event.clientY,
-          time: eventTime(event),
-          history: coalescedHistory(event),
+          time: eventTime(event, this.timing),
+          history: coalescedHistory(event, this.timing),
         },
       ]);
       return;
@@ -3805,7 +3927,16 @@ export class GestureHost {
   private readonly onPointerUp = (event: PointerEvent): void => {
     this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
-      // The lift itself is the touchend's: it alone can cancel the click.
+      // The lift itself is the touchend's: it alone can cancel the click. Its
+      // place and time are this event's, where the finger's moves were read.
+      const id = this.fingerPointers.get(event.pointerId);
+      if (id != null && this.pointerFed.has(id)) {
+        this.liftStamps.set(id, {
+          x: event.clientX,
+          y: event.clientY,
+          time: eventTime(event, this.timing),
+        });
+      }
       this.fingerPointers.delete(event.pointerId);
       this.pendingPointers.delete(event.pointerId);
       return;
@@ -3822,11 +3953,24 @@ export class GestureHost {
     this.pointerKinds.delete(event.pointerId);
     const hold = this.claimHolds.get(id);
     this.unlockSelection(id);
+    const target = this.arena.getTouch(id)?.target;
+    const isPenHold =
+      event.pointerType === 'pen' &&
+      this.isPenHold(id, eventTime(event, this.timing));
+    this.driftedPens.delete(id);
     const dispositions = this.arena.ended([
-      {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
+      {
+        id,
+        x: event.clientX,
+        y: event.clientY,
+        time: eventTime(event, this.timing),
+      },
     ]);
     // A selection the lift's own handlers made stays, as a click's does.
     hold?.keepLiftSelection();
+    if (isPenHold) {
+      this.lastPenLift = {target, time: this.arena.now()};
+    }
     // A retargeted tap's own click arms the click guard for the engine's.
     const landed = this.retargeted.get(id);
     this.retargeted.delete(id);
@@ -3871,7 +4015,7 @@ export class GestureHost {
       x: event.clientX,
       y: event.clientY,
       target: landedOn(event),
-      time: eventTime(event),
+      time: eventTime(event, this.timing),
     });
     if (this.claimedLifts.length > CLAIMED_LIFT_LIMIT) {
       this.claimedLifts.shift();
@@ -3922,7 +4066,7 @@ export class GestureHost {
         // browser scrolls with it): its touch events, now the only channel,
         // sample it, as a watcher following the scroll to the lift needs.
         this.pointerFed.delete(id);
-        this.browserTook([id], eventTime(event));
+        this.browserTook([id], eventTime(event, this.timing));
       }
       return;
     }
@@ -3934,9 +4078,47 @@ export class GestureHost {
       this.pointerKinds.delete(event.pointerId);
       this.unlockSelection(id, true);
       this.retargeted.delete(id);
-      this.arena.cancelled([id], eventTime(event));
+      const target = this.arena.getTouch(id)?.target;
+      const isPenHold =
+        event.pointerType === 'pen' &&
+        this.isPenHold(id, eventTime(event, this.timing));
+      this.driftedPens.delete(id);
+      this.arena.cancelled([id], eventTime(event, this.timing));
+      if (isPenHold) {
+        this.lastPenLift = {target, time: this.arena.now()};
+      }
     }
   };
+
+  /**
+   * Whether a pen contact is a hold: it stays within the long press's
+   * tolerance for its duration. Only such a hold fires the platform's own
+   * menu event, so the host notes no other pen's lift.
+   */
+  private isPenHold(id: number, time: number): boolean {
+    const touch = this.arena.getTouch(id);
+    return (
+      touch != null &&
+      !this.driftedPens.has(id) &&
+      time - touch.startTime >= UIKIT_LONG_PRESS.minimumPressDuration.value
+    );
+  }
+
+  /**
+   * A pen contact that leaves the long press's tolerance before its duration
+   * is no hold, so its lift arms no menu refusal.
+   */
+  private notePenDrift(id: number, x: number, y: number, time: number): void {
+    const touch = this.arena.getTouch(id);
+    if (
+      touch != null &&
+      time - touch.startTime < UIKIT_LONG_PRESS.minimumPressDuration.value &&
+      Math.hypot(x - touch.startX, y - touch.startY) >
+        UIKIT_LONG_PRESS.allowableMovement.value
+    ) {
+      this.driftedPens.add(id);
+    }
+  }
 
   /**
    * Which live finger a touch `pointercancel` is about. The pointer keeps
@@ -4051,7 +4233,7 @@ export class GestureHost {
   }
 
   private readonly onScroll = (event: Event): void => {
-    const time = eventTime(event);
+    const time = eventTime(event, this.timing);
     const scroller = event.target === this.doc ? this.doc : event.target;
     if (!isNode(scroller) || this.ownedScrolls.has(scroller)) {
       return;
@@ -4213,12 +4395,14 @@ export class GestureHost {
     }
     this.pointerIds.clear();
     this.pointerKinds.clear();
+    this.driftedPens.clear();
     this.retargeted.clear();
     this.fingerPointers.clear();
     this.pendingPointers.clear();
     this.unpairedTouches.clear();
     this.lastFed.clear();
     this.pointerFed.clear();
+    this.liftStamps.clear();
     // A trackpad pan a recognizer still drives is cancelled with them.
     ids.push(...this.dropDrivenWheel());
     if (ids.length > 0) {
@@ -4238,7 +4422,10 @@ function needsSuppression(
   return false;
 }
 
-function coalescedHistory(event: PointerEvent): TouchSample[] {
+function coalescedHistory(
+  event: PointerEvent,
+  timing: EventClock | null,
+): TouchSample[] {
   if (typeof event.getCoalescedEvents !== 'function') {
     return [];
   }
@@ -4246,7 +4433,7 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
   return coalesced.slice(0, -1).map(sample => ({
     x: sample.clientX,
     y: sample.clientY,
-    time: eventTime(sample),
+    time: eventTime(sample, timing),
   }));
 }
 

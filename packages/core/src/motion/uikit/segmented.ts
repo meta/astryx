@@ -4,8 +4,8 @@
  * @file segmented.ts
  * @input Nothing; data only
  * @output Exports `segmentedControl`, UISegmentedControl's selection slide
- *   spring and its drag overshoot; and `registerSegmentedTable`, which
- *   registers the spring as an internal motion role
+ *   spring, its drag overshoot and its lift; and `registerSegmentedTable`,
+ *   which registers the two springs as internal motion roles
  * @position The segmented-control domain of the UIKit constants table
  *   (motion/uikit); read by SegmentedControl's touch presentation
  *
@@ -26,10 +26,11 @@ import {registerMotionTable} from '../roles';
  * cross-fade needs a second copy of each title. Under Reduce Motion, UIKit's
  * lens fades in at the new segment and scales from 0.88. Astryx allows no
  * scaling there, so the animator's Reduce Motion cross-fade replaces it.
- * UIKit's lens also lifts and stretches under a finger. A theme role owns
- * the lift, and the stretch is not modeled. The lens chases a dragging
- * finger on the shared `springs.fingerTracking` role, which matches the
- * values UIKit reports for this control.
+ * UIKit's lens also stretches along a slide; that stretch is not modeled.
+ * The lens chases a dragging finger on the shared `springs.fingerTracking`
+ * role, which matches the values UIKit reports for this control. A flick
+ * carries the selection no further than a slow drag: UIKit projects no
+ * flick, so the release position alone decides.
  */
 export const segmentedControl = {
   /**
@@ -59,16 +60,40 @@ export const segmentedControl = {
    *   11 pt past its center (312 vs 301), Oct 23 2026
    */
   dragOvershoot: 11,
+  /**
+   * How much a finger's press on the selected segment grows the lens, in pt
+   * (width, height). The growth is the same at every control size.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, per-frame lens bounds of a held selected segment:
+   *   96 × 27 to 120 × 43 (three segments), 71 × 27 to 95 × 43 (four
+   *   segments), 126 × 40 to 150 × 56 (a 390 × 44 control), Oct 23 2026
+   */
+  liftGrowth: [24, 16],
+  /**
+   * The lens growing by `liftGrowth` under a finger that presses the
+   * selected segment, and shrinking back after the release. It is critically
+   * damped and reaches 99 % in about 0.27 s.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, UIViewSpringAnimationBehaviorSettings read on the lens
+   *   while it lifts and settles (dampingRatio 1.0, response 0.25),
+   *   Oct 23 2026
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, per-frame lens bounds of a 600 ms hold of the selected
+   *   segment, spring fit with (1.0, 0.25): lift rms 0.16 pt (width) and
+   *   0.13 pt (height), settle rms 0.05 pt and 0.03 pt, each starting about
+   *   16 ms after the touch event, Nov 2 2026
+   */
+  lift: {response: 0.25, dampingRatio: 1},
 } as const;
 
 /**
  * Registers this table with the motion registry (motion/roles.ts). The
- * slide's spring becomes an internal motion role. The drag overshoot is not
- * motion, so it stays an internal constant. Nothing registers on import, and
- * a second call does nothing.
+ * slide's and the lift's springs become internal motion roles. The drag
+ * overshoot and the lift's growth are not motion, so they stay internal
+ * constants. Nothing registers on import, and a second call does nothing.
  */
 export function registerSegmentedTable(): void {
   registerMotionTable('segmented', segmentedControl, {
-    roles: ['selectionSpring'],
+    roles: ['selectionSpring', 'lift'],
   });
 }

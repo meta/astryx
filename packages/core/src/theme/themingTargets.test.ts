@@ -1009,11 +1009,6 @@ describe('theming.targets matches the themeProps() call sites', () => {
  */
 const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   [
-    'BaseTypeahead.size',
-    'The size pads the result row, and the result row has no target. The ' +
-      'missing row target is a recorded reachability gap.',
-  ],
-  [
     'Skeleton.radius',
     'component:Skeleton FR2: radius is callsite geometry, like width and ' +
       'height, and is not reflected.',

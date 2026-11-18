@@ -4,10 +4,17 @@
 /// A labeled action, painted with the theme's tokens. It takes core's Button
 /// props (`ButtonProps`). With `href` it is a link the system opens. The tap
 /// area reaches the platform's 44-by-44-point minimum even when the drawn
-/// button is smaller.
+/// button is smaller. On iOS and iPadOS 26 and later, in a system bar or a
+/// container `astryxFloating()` marks, it draws the system's Liquid Glass in
+/// place of its own fill, keeping its variant's meaning.
 public struct Button: View {
   public let props: ButtonProps
   @Environment(\.astryx) private var astryx
+  @Environment(\.astryxFloating) private var isFloating
+  @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
+  @Environment(\.colorSchemeContrast) private var contrast
+  /// Whether a system bar hosts this Button, as its bar probe reports.
+  @State private var isInBar = false
   /// Which part of a Button with `href` holds focus: its link, or the button
   /// it draws while disabled.
   enum Part: Hashable { case link, button }
@@ -87,8 +94,8 @@ public struct Button: View {
   nonisolated static func safeDestination(_ href: String) -> String? { astryxSafeDestination(href) }
 
   public var body: some View {
-    control
-      .buttonStyle(style)
+    styledControl
+      .background { barProbe }
       // The shared Astryx tooltip on hover and keyboard focus, as core's
       // Button tooltip; its words are the VoiceOver hint.
       .astryxTooltip(props.tooltip, hint: props.tooltip, focus: .control)
@@ -156,6 +163,38 @@ public struct Button: View {
           ProgressView().controlSize(.small).tint(foreground)
         }
       }
+      .modifier(SystemBarLabel(tint: systemBarTint, style: style))
+  }
+
+  /// The tint a primary or destructive Button in a bar gives the bar's
+  /// glass, through SwiftUI's prominent glass style (FR7, FR8); nil
+  /// elsewhere. It depends on placement and variant only, so disabling the
+  /// Button keeps one view structure and its focus (FR6).
+  var systemBarTint: Color? {
+    guard case .glass(.barProminent(let role)) = surface else { return nil }
+    return role.color(astryx.tokens)
+  }
+
+  /// The control in its style: SwiftUI's prominent glass in a bar for primary
+  /// and destructive, so the bar tints its own glass; the Astryx style
+  /// everywhere else.
+  @ViewBuilder private var styledControl: some View {
+    #if os(iOS) && compiler(>=6.2)
+    if #available(iOS 26, *), let tint = systemBarTint {
+      // The elevation paints beneath the system's capsule (FR11). Disabled,
+      // the whole control dims and takes no touch, so the style shows no
+      // press response, while it keeps its focus stop (FR6, FR11). The bar
+      // draws the capsule itself, so its tint dims as well.
+      control.buttonStyle(.glassProminent).tint(isDisabled ? tint.opacity(0.5) : tint)
+        .astryxShadow(shadow, in: Capsule())
+        .opacity(isDisabled ? 0.5 : 1)
+        .allowsHitTesting(!isDisabled)
+    } else {
+      control.buttonStyle(style)
+    }
+    #else
+    control.buttonStyle(style)
+    #endif
   }
 
   private var style: AstryxButtonStyle {
@@ -166,8 +205,36 @@ public struct Button: View {
       foreground: foreground,
       background: background,
       shadow: shadow,
-      isDimmed: isDisabled
+      isDimmed: isDisabled,
+      surface: surface
     )
+  }
+
+  /// Where this Button sits: a bar wins over a floating container, so glass
+  /// never draws inside the bar's own glass.
+  var placement: ButtonPlacement {
+    isInBar ? .bar : isFloating ? .floating : .content
+  }
+
+  /// What draws behind the label (FR7–FR10, ORD2).
+  var surface: ButtonSurface {
+    ButtonSurface.resolve(
+      variant: props.variant,
+      placement: placement,
+      glassAvailable: ButtonSurface.glassAvailable,
+      prefersSolid: reducesTransparency || contrast == .increased
+    )
+  }
+
+  /// Finds a system bar hosting this Button, only where glass can draw.
+  @ViewBuilder private var barProbe: some View {
+    #if os(iOS)
+    if ButtonSurface.glassAvailable {
+      ButtonBarProbe { isInBar = $0 }
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+    #endif
   }
 
   /// The button's accessible name: its label, also while loading.
@@ -240,26 +307,142 @@ struct AstryxButtonStyle: ButtonStyle {
   let shadow: [ShadowLayer]
   /// Draws the disabled look for a disabled Button that keeps its focus stop.
   var isDimmed = false
+  /// What draws behind the label: the token look unless the Button sits in
+  /// a bar or a floating container on iOS 26 (FR7–FR10).
+  var surface: ButtonSurface = .token
   @Environment(\.isEnabled) private var environmentEnabled
   private var isEnabled: Bool { environmentEnabled && !isDimmed }
 
   func makeBody(configuration: Configuration) -> some View {
-    let shape = RoundedRectangle(cornerRadius: astryx.tokens.radius.element, style: .continuous)
+    switch surface {
+    case .token:
+      tokenBody(configuration, fill: background, edge: nil, keepsTapMinimum: true)
+    case .solid(let role, let inBar):
+      // Drawn on the surface color, so a translucent token such as
+      // `color.neutral` reads as it does on a page, opaque over any content.
+      tokenBody(
+        configuration, fill: role.color(astryx.tokens), edge: astryx.tokens.color.borderEmphasized,
+        underlay: astryx.tokens.color.backgroundSurface, keepsTapMinimum: !inBar
+      )
+    case .glass(.barItem):
+      barItemBody(configuration, labelColor: foreground)
+    case .glass(.barProminent(let role)):
+      // Drawn through SwiftUI's prominent style wherever glass draws; this
+      // is only a fallback, the label in the variant's color on the bar.
+      barItemBody(configuration, labelColor: role.color(astryx.tokens))
+    case .glass(let glass):
+      glassBody(configuration, glass: glass)
+    }
+  }
+
+  private var shape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: astryx.tokens.radius.element, style: .continuous)
+  }
+
+  /// The label in the theme's type, at least the size's height, which grows
+  /// with text size, but not so far that one line becomes a tall slab.
+  private func label(_ configuration: Configuration, padded: Bool, color: Color? = nil) -> some View {
     let font = astryx.tokens.font
-    configuration.label
+    return configuration.label
       .font(astryx.font(TypeStyle(font.label, families: font.family.body)))
-      .foregroundStyle(foreground)
-      .padding(.horizontal, astryx.tokens.space.s3)
-      // Grows with text size, but not so far that one line of a large label
-      // becomes a tall slab.
+      .foregroundStyle(color ?? foreground)
+      .padding(.horizontal, padded ? astryx.tokens.space.s3 : 0)
       .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: height * min(astryx.textScale, 1.4))
-      .background(shape.fill(background))
-      .astryxShadow(shadow, in: shape)
-      .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.5)
+  }
+
+  private func pressOpacity(_ configuration: Configuration) -> Double {
+    isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.5
+  }
+
+  /// The token look, and the solid fill with an edge (FR10).
+  @ViewBuilder
+  private func tokenBody(
+    _ configuration: Configuration, fill: Color, edge: Color?, underlay: Color? = nil, keepsTapMinimum: Bool
+  ) -> some View {
+    let drawn = label(configuration, padded: true)
+      .background(shape.fill(fill))
+      .background { if let underlay { shape.fill(underlay) } }
+      .overlay { if let edge { shape.strokeBorder(edge, lineWidth: astryx.tokens.size.borderWidth) } }
+      .astryxShadow(shadow, in: shape, borderWidth: edge == nil ? 0 : astryx.tokens.size.borderWidth)
+      .opacity(pressOpacity(configuration))
+    if keepsTapMinimum {
       // Drawn at the token size; laid out at least 44 by 44 so the whole
       // platform-minimum tap area counts.
-      .frame(minWidth: 44, minHeight: 44)
+      drawn.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+    } else {
+      // In a bar, which may offer almost no width, the label stays whole
+      // (FR11).
+      drawn.fixedSize(horizontal: !fillsWidth, vertical: false).contentShape(Rectangle())
+    }
+  }
+
+  /// In a system bar: no fill or border, so the bar's glass is the only
+  /// chrome; no Astryx padding, so the label is never cut short in a bar with
+  /// room; a set elevation still paints its shadow (FR7, FR11).
+  private func barItemBody(_ configuration: Configuration, labelColor: Color) -> some View {
+    label(configuration, padded: false, color: labelColor)
+      .fixedSize(horizontal: !fillsWidth, vertical: false)
+      .astryxShadow(shadow, in: shape)
+      .opacity(pressOpacity(configuration))
       .contentShape(Rectangle())
   }
+
+  /// In a floating container: the system's glass in the token shape, tinted
+  /// for primary and destructive, with the elevation shadow beneath (FR8,
+  /// FR9, FR11).
+  @ViewBuilder
+  private func glassBody(_ configuration: Configuration, glass: ButtonGlass) -> some View {
+    #if os(iOS) && compiler(>=6.2)
+    if #available(iOS 26, *) {
+      label(configuration, padded: true)
+        .glassEffect(effect(glass), in: shape)
+        .astryxShadow(shadow, in: shape)
+        .opacity(isEnabled ? 1 : 0.5)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+    } else {
+      tokenBody(configuration, fill: background, edge: nil, keepsTapMinimum: true)
+    }
+    #else
+    tokenBody(configuration, fill: background, edge: nil, keepsTapMinimum: true)
+    #endif
+  }
+
+  #if os(iOS) && compiler(>=6.2)
+  @available(iOS 26, *)
+  private func effect(_ glass: ButtonGlass) -> Glass {
+    switch glass {
+    // A disabled Button keeps its focus stop but answers no touch with the
+    // glass's press effect, as the bar path draws it (FR11).
+    case .regular, .barItem, .barProminent: .regular.interactive(isEnabled)
+    case .clear: .clear.interactive(isEnabled)
+    case .prominent(let role): .regular.tint(role.color(astryx.tokens)).interactive(isEnabled)
+    }
+  }
+  #endif
 }
 
+/// A label drawn by SwiftUI's own prominent glass style in a bar: the theme's
+/// type in the variant's label color, at least the size's height, kept whole
+/// or filling the width as `width` asks (FR11); the Astryx style draws all of
+/// this itself elsewhere.
+private struct SystemBarLabel: ViewModifier {
+  let tint: Color?
+  let style: AstryxButtonStyle
+
+  func body(content: Content) -> some View {
+    if tint != nil {
+      let font = style.astryx.tokens.font
+      content
+        .font(style.astryx.font(TypeStyle(font.label, families: font.family.body)))
+        .foregroundStyle(style.foreground)
+        .fixedSize(horizontal: !style.fillsWidth, vertical: false)
+        .frame(
+          maxWidth: style.fillsWidth ? .infinity : nil,
+          minHeight: style.height * min(style.astryx.textScale, 1.4)
+        )
+    } else {
+      content
+    }
+  }
+}

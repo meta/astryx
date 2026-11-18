@@ -21,12 +21,13 @@ import {
 import {
   blockMainThread,
   busyWindowProof,
+  controlColor,
   markElement,
+  MARKER_RGB,
   openStory,
   startBusyControl,
   startScreencast,
-  trackControl,
-  trackMarker,
+  trackMarkers,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -89,8 +90,9 @@ test('a surface around a closed tooltip trigger keeps moving through a 500 ms ma
   });
   await page.waitForTimeout(150);
   const frames = await cast.stop();
-  const tracked = await trackMarker(page, frames);
-  const control = await trackControl(page, frames);
+  const [tracked, control] = await trackMarkers(page, frames, {
+    colors: [MARKER_RGB, controlColor()],
+  });
   // Judged against the compositor control in the same frames: the surface
   // moves on every frame the control does.
   const proof = busyWindowProof(tracked, block, {settledWithin: 2, control});

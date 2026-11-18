@@ -45,7 +45,12 @@ describe('docs nav model', () => {
       })),
     );
     expect(nav.docTopics).toEqual(
-      docTopics.map(({topic, title, category}) => ({topic, title, category})),
+      docTopics.map(({topic, title, category, parent}) => ({
+        topic,
+        title,
+        category,
+        parent,
+      })),
     );
   });
 

@@ -333,7 +333,11 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.showReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, content));
+    const ride = rideOf(
+      await holdAnimations(page, content, {
+        judges: {target: content, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(content, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
@@ -442,7 +446,11 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.hideReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, content));
+    const ride = rideOf(
+      await holdAnimations(page, content, {
+        judges: {target: content, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(content, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
