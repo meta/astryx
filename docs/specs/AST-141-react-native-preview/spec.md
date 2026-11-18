@@ -72,9 +72,8 @@ project away from the app's own identity and data.
 - Each native contract's behavior on iOS and Android. Its platform group
   record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states it; this record states
   only what a Preview project reaches of it (FR4).
-- The React Native commands outside the `astryx rn preview` group, except
-  the Preview scope of `astryx doctor` (FR11), and the rules every React
-  Native command follows (`spec:AST-112/FR13`).
+- The React Native commands outside the `astryx rn preview` group, and the
+  rules every React Native command follows (`spec:AST-112/FR13`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -126,7 +125,9 @@ project away from the app's own identity and data.
     answers `no-namespace` (`spec:AST-130/FR14`).
   - It never reaches the app's own identity, stored data, files, players,
     or the person's photo library, and it cannot change the app's
-    appearance, bars, or lock-screen controls.
+    appearance or bars. It holds the lock-screen controls only through its
+    own player, under FR5's `AstryxAudio` row, and gives them back at its
+    teardown.
   - A call that the host's policy refuses for a project answers
     `not-allowed`, a reason the host adds to every capability's set
     (`spec:AST-112/FR6`); it is never a silent no-op. The other reasons that
@@ -236,14 +237,12 @@ project away from the app's own identity and data.
   - `preview --start`, `preview serve`, and `preview share` say in their
     summary that they keep running and follow the long-running rule of
     `spec:AST-112/FR13`.
-  - A file that `--qr-png` names is written inside the app, as the group's
+  - A file that `--qr-png` names is written inside the project, as the group's
     other writes are (`architecture:cli-surface` INV10), and never replaces a
     file the command did not write.
-  - `astryx doctor --scope preview` reports the native-build items as `info`.
   - The group answers: how does a Preview host open this project?
     `template --cdn` writes a web page, and no command makes what a Preview
-    host opens. Its function is `preview` in the package's `./commands`
-    entry (`spec:AST-112/FR5`), and its result is links, URLs, and host-check items.
+    host opens. Its result is links, URLs, and host-check items.
   - Outcomes beyond the shared ones of `spec:AST-112/FR13`:
 
     | Outcome                                                                                                                                                    | Code                               |
@@ -281,8 +280,6 @@ project away from the app's own identity and data.
   installers (`spec:AST-112/FR5`) are what the prelude installs (FR6).
 - `spec:AST-139` runs a Preview project under this record's namespaces and
   policy (FR4, FR5).
-- `spec:AST-114` FR5's table gains `doctor`'s `--scope`, which requires
-  `setup.checks`.
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states what a Preview project reaches of them (FR5).
 
@@ -326,8 +323,9 @@ A project opened from a link is code the app did not ship, running in the same
 app as the app's own code. Each module derives the calling runtime's namespace
 natively, so stored data, cache files, and players belong to the runtime that
 made them, and a call the policy refuses answers
-`not-allowed`. Opening a project cannot read or act as the app, or take its
-lock-screen controls away. The person's photo library is the app's alone; a
+`not-allowed`. Opening a project cannot read or act as the app; it holds the
+lock-screen controls only while its own player is the one that started last,
+and gives them back at its teardown. The person's photo library is the app's alone; a
 project reaches the photos the person chooses through the system photo
 picker.
 
