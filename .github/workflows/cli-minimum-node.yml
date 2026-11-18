@@ -28,6 +28,8 @@ jobs:
       contents: read
     outputs:
       node: ${{ steps.minimum.outputs.node }}
+      legs: ${{ steps.legs.outputs.legs }}
+      shards: ${{ steps.legs.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,10 +37,22 @@ jobs:
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
             .github/scripts/node-time-drift.mjs
+            .github/scripts/lib/a11y-spec-files.mjs
             scripts/lib/duration-split.mjs
+            scripts/vitest-node-legs.mjs
+            scripts/vitest-node-files.mjs
+            scripts/vitest-node-durations.json
+            scripts/vitest-node-durations.min-node.json
             packages/cli/package.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      # As many legs as keep the slowest near 20 minutes on this Node, by its
+      # own record (scripts/vitest-node-legs.mjs). When the plan cannot run,
+      # the legs read their fallback count.
+      - name: Plan the CLI's legs on the minimum Node
+        id: legs
+        continue-on-error: true
+        run: node scripts/vitest-node-legs.mjs plan --min-node --github-output
       - name: Read the CLI's minimum Node
         id: minimum
         run: |
@@ -46,13 +60,13 @@ jobs:
           echo "The CLI declares Node $node as its minimum."
           echo "node=$node" >> "$GITHUB_OUTPUT"
 
-  # The CLI's tests, in four legs split by this Node's own recorded times
-  # (scripts/vitest-node-durations.min-node.json, read by
+  # The CLI's tests, in the legs the version job plans, split by this Node's
+  # own recorded times (scripts/vitest-node-durations.min-node.json, read by
   # scripts/vitest-shard-sequencer.mjs): in one job they outgrew its time
   # limit on the minimum Node, where every gather is fresh.
   cli-tests:
     needs: version
-    name: cli-tests (${{ matrix.shard }}/4)
+    name: cli-tests (${{ matrix.shard }}/${{ needs.version.outputs.legs || 6 }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -60,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(needs.version.outputs.shards || '[1, 2, 3, 4, 5, 6]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -77,6 +91,7 @@ jobs:
         id: tests
         env:
           SHARD: ${{ matrix.shard }}
+          LEGS: ${{ needs.version.outputs.legs || 6 }}
           # The legs pack by this Node's own times, not the main Node legs'.
           VITEST_DURATIONS_FILE: scripts/vitest-node-durations.min-node.json
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/min-node-times.json
@@ -86,7 +101,7 @@ jobs:
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 28 * 60 - ${started:-180} ))
           export VITEST_SHARD_WATCHDOG_SECONDS
           set -o pipefail
-          pnpm -F @astryxdesign/cli test --shard="$SHARD/4" \
+          pnpm -F @astryxdesign/cli test --shard="$SHARD/$LEGS" \
             --reporter=default --reporter=github-actions \
             --reporter=./scripts/vitest-shard-watchdog.mjs 2>&1 | tee "$RUNNER_TEMP/cli-tests.log"
 
@@ -99,6 +114,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.tests.outcome }}
           SHARD: ${{ matrix.shard }}
+          LEGS: ${{ needs.version.outputs.legs || 6 }}
         run: |
           # Vitest colours its lines on CI: read the log without the colour codes.
           log="$RUNNER_TEMP/cli-tests.plain.log"
@@ -111,7 +127,7 @@ jobs:
           elif [ "$OUTCOME" = failure ]; then verdict=fail
           else verdict=none
           fi
-          echo "Leg $SHARD/4: $verdict"
+          echo "Leg $SHARD/$LEGS: $verdict"
           mkdir -p verdict
           printf '{"shard": %s, "verdict": "%s"}\n' "$SHARD" "$verdict" > "verdict/leg-$SHARD.json"
 
@@ -234,6 +250,7 @@ jobs:
           PACK_RESULT: ${{ needs.pack.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           NODE_VERSION: ${{ needs.version.outputs.node || 'unknown' }}
+          LEGS: ${{ needs.version.outputs.legs || 6 }}
           VERDICTS: ${{ github.workspace }}/verdicts
           TIMES: ${{ github.workspace }}/times
         with:
@@ -253,7 +270,7 @@ jobs:
             await core.summary.write();
             const verdict = runVerdict({
               version: process.env.VERSION_RESULT,
-              legs: readLegVerdicts(process.env.VERDICTS, 4),
+              legs: readLegVerdicts(process.env.VERDICTS, Number(process.env.LEGS)),
               pack: process.env.PACK_RESULT,
               smoke: process.env.SMOKE_RESULT,
             });

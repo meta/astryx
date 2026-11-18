@@ -391,8 +391,6 @@ replace a pseudo-element's drawing. The Reorderable story's six handles add
 48 elements: 177 at rest, against 129 with three lines drawn as a
 pseudo-element, under a fine and a coarse pointer alike.
 
-Rejected: three lines drawn as a pseudo-element, which no theme can replace.
-
 ## Open questions
 
 - **OQ2 — Who renders a plain row's More actions button and returns focus.** `useContextMenu`

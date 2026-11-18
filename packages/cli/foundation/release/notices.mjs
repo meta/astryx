@@ -69,6 +69,7 @@ import {
 import {installsPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
+import {installGuidanceFor} from '../env/cli-command.mjs';
 
 /** A notice prints at most once in this long. */
 export const NOTICE_INTERVAL_MS = 24 * 60 * 60_000;
@@ -482,6 +483,12 @@ export function addMatchingCore(cwd, name) {
       facts.declaredCoreRange ??
       runningCopy(CLI_ROOT).version)
     : null;
+  // The guidance names the same version the command would add.
+  const guidance = installGuidanceFor(
+    [release ? `${name}@${release}` : name],
+    cwd,
+  );
+  if (guidance != null) return guidance;
   const verb = addVerbFor(root, release);
   if (!release) return `${verb} ${name}`;
   // A range is quoted: `^`, `<`, `>`, `|` and spaces mean something to a
@@ -525,7 +532,7 @@ export function projectAddCommand(cwd) {
   const target = installFolder(cwd);
   if (target == null || target.moved) return null;
   const add = ADD[detectPackageManager(cwd)] ?? ADD.npm;
-  return name => `${add} ${name}`;
+  return name => installGuidanceFor([name], cwd) ?? `${add} ${name}`;
 }
 
 /**

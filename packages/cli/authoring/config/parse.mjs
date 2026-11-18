@@ -13,6 +13,7 @@ import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 import {parseGapReportHandler} from '../gap-report/parse.mjs';
 import {parseDiscoverSource} from '../discover/parse.mjs';
+import {projectPlaceProblem} from './skill-places.mjs';
 
 /** @typedef {import('./type.js').AstryxConfig} AstryxConfig */
 /** @typedef {import('./type.js').PostCodemodHook} PostCodemodHook */
@@ -97,6 +98,20 @@ function buildSchemas() {
       debug: debugSchema.optional(),
       gapReport: gapReportHandlerSchema.optional(),
       discover: discoverSourceSchema.optional(),
+      skills: z
+        .object({
+          to: z
+            .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+            .superRefine((value, ctx) => {
+              for (const name of typeof value === 'string' ? [value] : value) {
+                const problem = projectPlaceProblem(name);
+                if (problem) ctx.addIssue({code: 'custom', message: problem});
+              }
+            })
+            .optional(),
+        })
+        .strict()
+        .optional(),
       experimental: z
         .object({
           xle: z

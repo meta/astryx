@@ -11,10 +11,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
-import {
-  recordDeclaredCliCommands,
-  runWithCliDoor,
-} from '../env/cli-command.mjs';
+import {recordDeclaredSettings, runWithCliDoor} from '../env/cli-command.mjs';
 import {
   NOTICE_INTERVAL_MS,
   availableLine,
@@ -534,9 +531,7 @@ describe('the commands notices print go through the command-name picker (spec AS
   it("use an integration's declared cliCommand for the upgrade step", () => {
     const stateDir = checked('0.7.3');
     const dir = coreOnlyProject();
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     try {
       expect(projectLag({cwd: dir, current: '0.7.1', stateDir})?.upgrade).toBe(
         'acme astryx upgrade --from 0.7.1 --apply',
@@ -545,7 +540,7 @@ describe('the commands notices print go through the command-name picker (spec AS
         'npm install -E @astryxdesign/core@0.7.3, then acme astryx upgrade --from 0.7.1 --apply',
       );
     } finally {
-      recordDeclaredCliCommands(dir, []);
+      recordDeclaredSettings(dir, []);
     }
   });
 

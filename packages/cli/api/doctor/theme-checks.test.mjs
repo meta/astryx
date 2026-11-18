@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file Fault-injection coverage for all ten app-theme doctor checks. */
+/** @file Fault-injection coverage for all eleven app-theme doctor checks. */
 
 import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
@@ -13,6 +13,7 @@ import {
   themeImportWiring,
 } from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {themeAdd} from '../theme/add/add.mjs';
 import {themeEject} from '../theme/eject/eject.mjs';
 import {themeBuild} from '../theme/build/build.mjs';
@@ -180,6 +181,16 @@ describe('the released themes check', () => {
       message: 'No @astryxdesign/theme-* packages are installed.',
       fix: expect.stringContaining('theme add neutral`.'),
     });
+    recordDeclaredSettings(dir, [
+      {
+        name: '@acme/ui',
+        installGuidance: 'Add {packages} to package.json, then relock',
+      },
+    ]);
+    expect(checkThemes(dir, await checkAppThemes(dir)).fix).toContain(
+      '`Add @astryxdesign/theme-neutral to package.json, then relock`',
+    );
+    recordDeclaredSettings(dir, []);
 
     installThemePackage(dir, 'neutral');
     const unwired = checkThemes(dir, await checkAppThemes(dir));
@@ -687,7 +698,7 @@ describe('the released themes check', () => {
 });
 
 describe('app-theme doctor checks', () => {
-  it('returns ten positive passes for a healthy package theme', async () => {
+  it('returns eleven positive passes for a healthy package theme', async () => {
     const {dir} = await fixture();
     const checks = await checkAppThemes(dir);
 
@@ -697,13 +708,14 @@ describe('app-theme doctor checks', () => {
       'theme-module-import',
       'theme-stylesheet-imports',
       'theme-local-builds',
+      'theme-setting-effects',
       'theme-private-variables',
       'theme-core-peers',
       'theme-default',
       'theme-fonts',
       'theme-global-rules',
     ]);
-    expect(checks.map(item => item.status)).toEqual(Array(10).fill('pass'));
+    expect(checks.map(item => item.status)).toEqual(Array(11).fill('pass'));
     expect(check(checks, 'theme-owners').message).toContain(
       'every built module loads',
     );
@@ -754,7 +766,7 @@ describe('app-theme doctor checks', () => {
 
     const checks = await checkAppThemes(dir);
 
-    expect(checks.map(item => item.status)).toEqual(Array(10).fill('pass'));
+    expect(checks.map(item => item.status)).toEqual(Array(11).fill('pass'));
     expect(check(checks, 'theme-owners').message).toContain(
       'every built module loads',
     );
@@ -786,7 +798,7 @@ describe('app-theme doctor checks', () => {
     expect(checks.map(item => [item.id, item.status])).toEqual(
       checks.map(item => [item.id, 'pass']),
     );
-    expect(checks).toHaveLength(10);
+    expect(checks).toHaveLength(11);
     const cli = runDoctor(dir);
     expect(cli.status).toBe(0);
     expect(cli.stdout).not.toContain('could not load its built module');
@@ -816,7 +828,7 @@ describe('app-theme doctor checks', () => {
     expect(checks.map(item => [item.id, item.status])).toEqual(
       checks.map(item => [item.id, 'pass']),
     );
-    expect(checks).toHaveLength(10);
+    expect(checks).toHaveLength(11);
   }, 30_000);
 
   it.each([
@@ -969,6 +981,7 @@ describe('app-theme doctor checks', () => {
 
   it.each([
     'theme-local-builds',
+    'theme-setting-effects',
     'theme-private-variables',
     'theme-core-peers',
     'theme-fonts',
@@ -1203,6 +1216,81 @@ describe('app-theme doctor checks', () => {
         check(await checkAppThemes(dir), 'theme-stylesheet-imports'),
       ).toMatchObject({status: 'fail'});
     }
+  });
+
+  it('warns, with the theme, the setting and the fix, about a local theme setting that never shows', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, components: {tab: {selected: {borderTopColor: '#dddddd', border: '1px solid transparent'}}}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    const result = check(await checkAppThemes(dir), 'theme-setting-effects');
+    expect(result).toMatchObject({status: 'warn'});
+    expect(result.message).toContain(
+      '1 setting does not show as written: ocean: components.tab.selected.borderTopColor (#dddddd) never shows',
+    );
+    expect(result.fix).toBe(
+      'ocean: write borderTopColor after border in components.tab.selected, or give its value in border.',
+    );
+    // Its outputs are current: the freshness check still passes.
+    expect(check(await checkAppThemes(dir), 'theme-local-builds')).toMatchObject(
+      {status: 'pass'},
+    );
+  });
+
+  it('never passes theme-setting-effects for a local theme whose build check did not run', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // The source now sets a private variable: the build refuses it, so its
+    // check never returns.
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, components: {card: {base: {'--_card-radius': '4px'}}}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-setting-effects')).toEqual(
+      {
+        id: 'theme-setting-effects',
+        label: 'Theme settings that show',
+        status: 'info',
+        message:
+          'Not checked, because its build check did not run: ocean (it sets a private variable).',
+      },
+    );
+  });
+
+  it('names what the build said for a local theme whose source loads but is refused', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const sourceFile = path.join(dir, 'src/themes/ocean/oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, motion: {fast: 100}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    const found = check(await checkAppThemes(dir), 'theme-setting-effects');
+    expect(found.status).toBe('info');
+    expect(found.message).toMatch(
+      /^Not checked, because its build check did not run: ocean \(the build refused it: .+\)\.$/,
+    );
+    expect(found.message).not.toContain('did not load');
   });
 
   it('check 5 fails when an added local theme cannot reproduce its outputs', async () => {

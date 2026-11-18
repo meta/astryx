@@ -169,8 +169,10 @@ const linkColorStyles = stylex.create({
   accent: {
     color: {
       default: colorVars['--color-text-accent'],
+      // Read with a fallback, never set here: a container or a theme sets
+      // --link-hover-color on an ancestor or the link, and the link takes it.
       ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': `color-mix(in srgb, ${colorVars['--color-text-accent']}, ${colorVars['--color-tint-hover']} 15%)`,
+        '@media (hover: hover)': `var(--link-hover-color, color-mix(in srgb, ${colorVars['--color-text-accent']}, ${colorVars['--color-tint-hover']} 15%))`,
       },
     },
   },

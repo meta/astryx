@@ -807,6 +807,35 @@ describe("a set that wraps the template's library", () => {
     );
   });
 
+  it('names the library a set wraps when the template imports one of its subpaths', () => {
+    const subpath = SOURCE.replace("'@acme/library'", "'@acme/library/solid'");
+    /** @type {any} */
+    const main = {
+      status: 'selected',
+      set: WRAPPER,
+      configured: 'wrapper',
+      order: [WRAPPER, SET],
+      reason: 'list',
+    };
+    const asMain = map(subpath, DECLARED, main, [WRAPPER, SET]);
+    expect(asMain.source).toBe(subpath);
+    expect(asMain.icons?.kept[0].reason).toBe(
+      'it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+    );
+    /** @type {any} */
+    const backup = {
+      status: 'selected',
+      set: SET,
+      configured: 'glyphs',
+      order: [SET, WRAPPER],
+      reason: 'list',
+    };
+    const asBackup = map(subpath, DECLARED, backup, [SET, WRAPPER]);
+    expect(asBackup.icons?.kept.map(each => each.reason)).toContain(
+      'no set in your list maps its icon definition, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+    );
+  });
+
   it('still draws a placeholder for an icon from a library no listed set wraps', () => {
     const {source} = map(
       SOURCE.replace("'@acme/library'", "'@acme/other'"),

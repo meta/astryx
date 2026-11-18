@@ -20,6 +20,7 @@ import {
   getCliInvocation,
 } from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {definitionCoverageText} from '../../../../foundation/text/definition-coverage.mjs';
 import {logger} from '../../../../api/logger.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {
@@ -341,7 +342,7 @@ export function registerExperimentalIcon(group, program) {
               sets.map(({coverage, ...set}) => ({
                 ...set,
                 builtIn: `${coverage.builtIn.mapped}/${coverage.builtIn.total}`,
-                definitions: `${coverage.astryx.mapped}/${coverage.astryx.total}`,
+                definitions: definitionCoverageText(coverage.astryx),
                 own: coverage.own,
                 missing: coverage.builtIn.missing,
               })),
