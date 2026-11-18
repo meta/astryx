@@ -46,7 +46,7 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
@@ -1060,11 +1060,30 @@ function serveFromSet() {
         ? packageOf(request)
         : null;
       if (!name || !isServedPackage(name, served.integrations)) throw e;
-      const file = resolveFilename.call(this, request, servedParent, false);
+      const file = servedFile(request, () => resolveFilename.call(this, request, servedParent, false));
       if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
       return file;
     }
   };
+}
+
+/**
+ * The file the set serves for `request`: what the CommonJS resolve gives,
+ * or, when that finds the subpath not exported, the file the package exports
+ * to an ES module import (a subpath exported under `import` only).
+ * @param {string} request
+ * @param {() => string} resolveAsRequire
+ * @returns {string}
+ */
+function servedFile(request, resolveAsRequire) {
+  try {
+    return resolveAsRequire();
+  } catch (e) {
+    const file =
+      /** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && served ? servedImportTarget(request, served.dir) : null;
+    if (!file) throw e;
+    return file;
+  }
 }
 
 /**
@@ -1368,7 +1387,10 @@ function notExportedSubpath(spec, file) {
   const pkg = packageOf(spec);
   const attempts = [() => createRequire(file).resolve(spec)];
   if (served && isServedPackage(pkg, served.integrations)) {
-    attempts.push(() => createRequire(path.join(served.dir, 'package.json')).resolve(spec, {paths: [served.dir]}));
+    const servedDir = served.dir;
+    attempts.push(() =>
+      servedFile(spec, () => createRequire(path.join(servedDir, 'package.json')).resolve(spec, {paths: [servedDir]})),
+    );
   }
   for (const attempt of attempts) {
     try {
