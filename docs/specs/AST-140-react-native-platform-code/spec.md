@@ -54,21 +54,22 @@ record or in the neutral foundation record.
 ## Platform group records
 
 Each group record specifies its own native pieces and follows this record for
-the rules above.
+the rules above. Which pieces link in every app and which an app opts in is
+`spec:AST-112/FR3`, and `spec:AST-112/FR7` lists the groups.
 
-| Record         | Group                                             | Links                                 |
-| -------------- | ------------------------------------------------- | ------------------------------------- |
-| `spec:AST-123` | Surfaces and glass                                | core                                  |
-| `spec:AST-124` | Gestures and drag                                 | core                                  |
-| `spec:AST-125` | Navigation hosts                                  | core                                  |
-| `spec:AST-126` | Native controls                                   | core                                  |
-| `spec:AST-127` | Icons and drawing                                 | core                                  |
-| `spec:AST-128` | Menus and presentation                            | core                                  |
-| `spec:AST-129` | Layout, text, and keyboard                        | core                                  |
-| `spec:AST-130` | System modules, the platform info module included | core                                  |
-| `spec:AST-131` | Web                                               | `web`                                 |
-| `spec:AST-132` | Media and camera                                  | `media`, `camera`                     |
-| `spec:AST-135` | Photos and documents                              | `photos`, `pdf`; image markup in core |
+| Record         | Group                                             |
+| -------------- | ------------------------------------------------- |
+| `spec:AST-123` | Surfaces and glass                                |
+| `spec:AST-124` | Gestures and drag                                 |
+| `spec:AST-125` | Navigation hosts                                  |
+| `spec:AST-126` | Native controls                                   |
+| `spec:AST-127` | Icons and drawing                                 |
+| `spec:AST-128` | Menus and presentation                            |
+| `spec:AST-129` | Layout, text, and keyboard                        |
+| `spec:AST-130` | System modules, the platform info module included |
+| `spec:AST-131` | Web                                               |
+| `spec:AST-132` | Media and camera                                  |
+| `spec:AST-135` | Photos                                            |
 
 ## Non-goals
 
@@ -139,7 +140,8 @@ the rules above.
     reasons of its own, such as `unsupported-option` where a platform cannot
     honor an option.
   - `cancelled` is the one failure that is not an error: the person declined
-    or dismissed something. A caller branches on it and shows no error.
+    or dismissed something, or the caller went away. A caller branches on it
+    and shows no error.
   - `message` is platform text for logs. It never carries a URL's query, a
     cookie, a key, or a token.
   - At the binding, a native method takes one request object and resolves one
@@ -250,50 +252,39 @@ the rules above.
     of a gesture or a transition, not only once motion settles, through the
     frame recorder below. The recorder is a test tool: a shipped app does not
     contain it (DEC-7).
-    - `AstryxFrameRecorder` is a test-only native module with
-      `getConstants` (`isRecordingAvailable`), `start`, and `stop`, on iOS.
-      Only Debug builds contain it; a Release binary has no such module, and
-      its handle is `null` there. Tests reach it only through `./testing`
+    - Tests reach the recorder only through `./testing`
       (`recordFrames` and `isFrameRecorderAvailable`), never through `.`.
-      Its own reasons are `unavailable` (the binary cannot record), `busy`,
-      and `not-recording`.
+      Only Debug builds on iOS contain it (OQ3); a Release binary does not.
     - `recordFrames(ids, during, {settleMs?, timeoutMs?})` arms the recorder,
       awaits `during` (a pan, a snap, a push), records `settleMs` more
       (default 500 ms) for animations it started, and resolves the samples.
       `timeoutMs` (default 30 seconds) bounds `during`.
     - `recordFrames` is a test step, and the one call of the package that
-      throws instead of resolving a result (FR3). Where it cannot record (no
-      module, a Release binary, Android, a recorder already armed, a native
-      refusal), it throws an `unsupported-step` error, so a check fails as a
-      runner gap and never passes with nothing checked. When the step under
-      test outlives its bound, or the native recording times out, it throws
-      an error that names the step.
+      throws instead of resolving a result (FR3). Where it cannot record (a
+      binary without the recorder, a Release binary, Android, a recording
+      already running, a native refusal), it throws an `unsupported-step`
+      error, so a check fails as a runner gap and never passes with nothing
+      checked. When the step under test outlives its bound, or the recording
+      stops itself, it throws an error that names the step.
     - A sample has `t` (milliseconds since the recording started), `navBar`
       (the frontmost navigation bar's frame, or `null` when none shows), and
       `frames` (each requested `testID`'s frame, or `null` on a frame where no
       such view is on screen). A frame is `{x, y, width, height}` in window
-      points, as the screen shows it: read from the presentation layers, so
-      the system's own animations (a large title's collapse, a push) appear
-      at each frame, not where they end.
-    - It records once per displayed frame, at the display's full rate, from
-      the key window, sampling on the main thread because the presentation
-      layers live there, and only while it is armed. A requested `testID`
-      that is not on screen does not slow the frames it records.
-    - One recording runs at a time (`busy`). A recording stops itself after
-      60 seconds, so a test that never stops cannot keep recording until the
-      next reload. `stop` then answers `ok` with the samples it took and
-      `isTimedOut: true`, and `recordFrames` throws an error that names the
-      step.
-    - The samples stay on the device and in memory until `stop` returns
-      them: no network request and no hand-off to another process.
+      points, where the screen shows it on that frame, so the system's own
+      animations (a large title's collapse, a push) appear at each frame, not
+      where they end.
+    - It records once per displayed frame, at the display's full rate, and
+      only while it is armed. A requested `testID` that is not on screen does
+      not slow the frames it records.
+    - One recording runs at a time. A recording stops itself after 60
+      seconds, so a test that never stops cannot keep recording until the
+      next reload.
+    - The samples stay on the device and in memory until the recording
+      returns them: no network request and no hand-off to another process.
     - It finds views by their `testID` (the accessibility identifier on iOS)
       and changes nothing that assistive technology reads.
-    - `isFrameRecorderAvailable()` says whether this binary can record; it
-      reads the constants and never throws, answering `false` where the
-      module or the constant is absent.
-
-  FR7 gap: a frame recording that stopped itself answers `stop` with the
-  reason `timed-out`, not `ok` with `isTimedOut: true`.
+    - `isFrameRecorderAvailable()` says whether this binary can record. It
+      never throws, and answers `false` where the recorder is absent.
 
 - **FR8 — The contracts do not depend on the binding.**
   - Engine-specific: the binding layer. That is the codegen specs, the
@@ -364,17 +355,17 @@ the rules above.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                                          | Representative states                                                                                                                                                                                       | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Spec rules check over every codegen spec; package-boundary check of the public types; a Debug and a Release iOS build's module tables                                                                 | a module; a view; a platform-only member; a name React Native uses; a Release binary                                                                                                                        | A name without the prefix, one name of two kinds, an unmarked platform-only member, an app-facing type that carries a handle or a binding-layer type, a build that needs a manual native edit to link the platform, or a frame recorder in a Release binary                                                                                                                                                                                                                       |
-| FR2      | Unit tests through `./testing` doubles of an absent module; an app that does not opt a capability in                                                                                                  | every entry imported with no native side; an opted-out capability; a missing view                                                                                                                           | An import that throws, a call that answers a reason other than `not-linked` or `no-module`, or a missing view that mounts                                                                                                                                                                                                                                                                                                                                                         |
-| FR3      | Unit tests of every asynchronous call through `./testing` doubles; native tests that throw inside a method                                                                                            | absent, older, and current module; a missing option; a native throw; a cancel; an unmount that resolves `cancelled`; a time bound                                                                           | A call rejects, resolves twice, answers a reason outside its set, a native throw crosses the binding, or a `message` carries a query, cookie, key, or token                                                                                                                                                                                                                                                                                                                       |
-| FR4      | Spec rules check of value types; conformance cases of ids and subscriptions                                                                                                                           | a byte result; a released id; an unknown id; a removed subscription                                                                                                                                         | A non-plain value in a spec, bytes in an array, a crash on an unknown id, or an event after removal                                                                                                                                                                                                                                                                                                                                                                               |
-| FR5      | An interface check of each contract against the interface every earlier release carries; unit tests of each named feature with an older double; the current JavaScript on the oldest supported binary | a new method; a new prop; a new union value; a binary without a feature; a canary build                                                                                                                     | A changed or removed shipped member, a new required member, a new member without a named feature, a revision counter, JavaScript that uses a feature or value the binary does not report, or a crash on an older binary                                                                                                                                                                                                                                                           |
-| FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                       | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                  | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                                                            |
-| FR7      | The conformance suites on iOS, Android, Astryx Stage, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                | each contract; a binary with and without each feature; a push; a large title's collapse; a missing `testID`; a second `start`; a step that never settles; a Release binary; VoiceOver on during a recording | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a self-stopped `stop` that is not `ok`, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order |
-| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types; Astryx Stage's run of the suites                                                         | each contract                                                                                                                                                                                               | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                                                           |
-| FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                      | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                       | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public fallback                                                                                                                                                                                                                                                                                               |
+| Contract | Verification                                                                                                                                                                                          | Representative states                                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Spec rules check over every codegen spec; package-boundary check of the public types; a Debug and a Release iOS build's module tables                                                                 | a module; a view; a platform-only member; a name React Native uses; a Release binary                                                                                                                          | A name without the prefix, one name of two kinds, an unmarked platform-only member, an app-facing type that carries a handle or a binding-layer type, a build that needs a manual native edit to link the platform, or a frame recorder in a Release binary                                                                                                                                                                               |
+| FR2      | Unit tests through `./testing` doubles of an absent module; an app that does not opt a capability in                                                                                                  | every entry imported with no native side; an opted-out capability; a missing view                                                                                                                             | An import that throws, a call that answers a reason other than `not-linked` or `no-module`, or a missing view that mounts                                                                                                                                                                                                                                                                                                                 |
+| FR3      | Unit tests of every asynchronous call through `./testing` doubles; native tests that throw inside a method                                                                                            | absent, older, and current module; a missing option; a native throw; a cancel; an unmount that resolves `cancelled`; a time bound                                                                             | A call rejects, resolves twice, answers a reason outside its set, a native throw crosses the binding, or a `message` carries a query, cookie, key, or token                                                                                                                                                                                                                                                                               |
+| FR4      | Spec rules check of value types; conformance cases of ids and subscriptions                                                                                                                           | a byte result; a released id; an unknown id; a removed subscription                                                                                                                                           | A non-plain value in a spec, bytes in an array, a crash on an unknown id, or an event after removal                                                                                                                                                                                                                                                                                                                                       |
+| FR5      | An interface check of each contract against the interface every earlier release carries; unit tests of each named feature with an older double; the current JavaScript on the oldest supported binary | a new method; a new prop; a new union value; a binary without a feature; a canary build                                                                                                                       | A changed or removed shipped member, a new required member, a new member without a named feature, a revision counter, JavaScript that uses a feature or value the binary does not report, or a crash on an older binary                                                                                                                                                                                                                   |
+| FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                       | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                    | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                    |
+| FR7      | The conformance suites on iOS, Android, Astryx Stage, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                | each contract; a binary with and without each feature; a push; a large title's collapse; a missing `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order |
+| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types; Astryx Stage's run of the suites                                                         | each contract                                                                                                                                                                                                 | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                   |
+| FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                      | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                         | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public fallback                                                                                                                                                                                                                                                       |
 
 ## Decision log
 
