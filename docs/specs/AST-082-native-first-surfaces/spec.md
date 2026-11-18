@@ -108,7 +108,7 @@ depends only on runtimes it can maintain.
     web caller's types, because the web types are the core contract plus the web
     contract; native contracts stop offering it.
   - Every public prop is defined in the private contracts package, which each
-    package builds in. Astryx manages each prop there for every surface at
+    package builds in; `@astryxdesign/core` still exposes the core contracts (FR5). Astryx manages each prop there for every surface at
     once. A new prop is a permanent part of every contract that carries it, so
     admitting one is a high bar (`spec:AST-002/DEC-1`): when a better default
     behavior meets the need, the component changes its default and adds no

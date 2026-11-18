@@ -510,7 +510,7 @@ role that an existing input already names.
 ### DEC-9 — Public-API review searches for the same role and raises every mismatch
 
 **Reference:** `architecture:public-component-api/DEC-9`
-**Decider:** `cixzhang`, `2026-11-18 13:34 PT`
+**Decider:** `cixzhang`, `2026-11-18 13:35 PT`
 
 The owner said: "when we have codebunny review API updates, we should hold a
 high bar for API consistency, it should search for related components and
