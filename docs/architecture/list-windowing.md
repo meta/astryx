@@ -125,8 +125,6 @@ row-position accuracy (DEC-3).
   page or an outer container is its scroller, it renders every row.
 - **INV5 gap:** Table's adapter (its virtualization plugin and column
   windowing, with their wiring) measures about 2.4 KB.
-- **INV5 gap:** Table's adapter wiring lives in Table's own component code, so
-  a plain Table that never windows carries about 4.3 KB of the windowing stack.
 - **INV5 gap:** Lab's `ChatVirtualizer` measures about 5 KB in its own code. It
   does not use the shared engine, so it has no split between engine and chat
   adapter.
