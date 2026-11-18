@@ -46,7 +46,16 @@ describe('status colors for color-blind readers', () => {
         n,
       ),
     );
-    expect(note).toMatch(/set cb warning '#[0-9a-f]{6}'$/);
+    // (The line it offers keeps the moved fill standing out from the page:
+    // set, it asks for no darker one.)
+    const line = /set cb (\w+) '(#[0-9a-f]{6})'$/.exec(String(note));
+    expect(line).not.toBeNull();
+    const after = /** @type {any} */ (
+      await themeEditSet('cb', String(line?.[1]), String(line?.[2]), {cwd})
+    );
+    expect(JSON.stringify(after.data.newProblems ?? [])).not.toMatch(
+      /stands out from the page/,
+    );
   }, 240_000);
 
   it('how answers a color-blind question', async () => {
