@@ -884,6 +884,108 @@ test.describe('a single row’s minimum width', () => {
     expect(narrow.clipped).toBe(false);
   });
 
+  test('under an ancestor scaled to one half, a list shows every item at exactly its width, whatever fraction of a pixel that width has', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    // A small letter spacing on every item moves the width of the list and its
+    // measure copy through fractions of a pixel, so some widths round down and
+    // some round up.
+    const style = await page.addStyleTag({content: '/* spacing */'});
+    const shown: Record<string, number> = {};
+    for (let tenth = 0; tenth < 10; tenth += 1) {
+      await style.evaluate((element, spacing) => {
+        element.textContent = `[data-testid="scaled-wide"] button { letter-spacing: ${spacing}px; }`;
+      }, tenth / 300);
+      await page.waitForTimeout(150);
+      // The row at exactly the list's unfolded width still fits all six.
+      shown[String(tenth)] = await page.evaluate(async () => {
+        const row = document.querySelector<HTMLElement>(
+          '[data-testid="scaled-wide"]',
+        );
+        const list = row?.querySelector<HTMLElement>('.astryx-overflow-list');
+        if (row == null || list == null) {
+          return 0;
+        }
+        row.style.width = '';
+        await new Promise(resolve => setTimeout(resolve, 100));
+        row.style.width = getComputedStyle(list).width;
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const count = list.children.length;
+        row.style.width = '';
+        return count;
+      });
+    }
+    test.info().annotations.push({
+      type: 'scaled-fractions',
+      description: JSON.stringify(shown),
+    });
+    expect(Object.values(shown).every(count => count === 6)).toBe(true);
+  });
+
+  test('a list inside a box that scales in from 0.9 shows every item during and after the scale', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const count = async () =>
+      page.evaluate(
+        () =>
+          document.querySelector(
+            '[data-testid="scaled-wide"] .astryx-overflow-list',
+          )?.children.length ?? 0,
+      );
+    // A layer that scales in: the list mounts at 0.9, then the scale ends.
+    // A transform fires no resize, so the list measures only at 0.9.
+    await page.evaluate(() => {
+      const frame = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-frame"]',
+      );
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-wide"]',
+      );
+      if (frame == null || row == null) {
+        throw new Error('missing story parts');
+      }
+      frame.style.transform = 'scale(0.9)';
+      // The row at exactly the list's width resizes, so the list measures
+      // again, under the 0.9 scale.
+      const list = row.querySelector<HTMLElement>('.astryx-overflow-list');
+      if (list != null) {
+        row.style.width = getComputedStyle(list).width;
+      }
+    });
+    await page.waitForTimeout(300);
+    const during = await count();
+    await page.evaluate(() => {
+      const frame = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-frame"]',
+      );
+      if (frame != null) {
+        frame.style.transform = 'none';
+      }
+    });
+    await page.waitForTimeout(300);
+    const after = await count();
+    test.info().annotations.push({
+      type: 'scale-in',
+      description: JSON.stringify({during, after}),
+    });
+    expect(during).toBe(6);
+    expect(after).toBe(6);
+  });
+
   test('a list capped with calc() holds one fold across frames', async ({
     page,
   }) => {

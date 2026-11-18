@@ -22,6 +22,7 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
+import {screenScale} from '../utils/screenScale';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -133,19 +134,6 @@ function isFlexRow(parent: Element | null): boolean {
 function exactWidth(element: HTMLElement, scale: number): number {
   const width = element.getBoundingClientRect().width;
   return width > 0 ? width / scale : element.offsetWidth;
-}
-
-/**
- * How many screen pixels one layout pixel takes, from the measure copy (a
- * scaled ancestor makes it differ from 1). The copy is the widest box the
- * list owns, so its rounded layout width gives the smallest error.
- */
-function layoutScale(measure: HTMLElement): number {
-  const screen = measure.getBoundingClientRect().width;
-  const layout = measure.offsetWidth;
-  // offsetWidth is rounded to a whole pixel, so a difference within that
-  // rounding is no scale.
-  return layout > 0 && Math.abs(screen - layout) > 1 ? screen / layout : 1;
 }
 
 /** The bounds of a single-row set, from sub-pixel widths. */
@@ -607,7 +595,12 @@ export function useOverflowInternal(
           px(style.borderLeftWidth) +
           px(style.borderRightWidth);
       }
-      const scale = tracksInlineBounds ? layoutScale(measure) : 1;
+      // The visible list shares the measure copy's scale and, unlike the
+      // zero-height copy, has a box to read it from. The exact ratio counts: a
+      // whole-pixel width can be most of a pixel short of the list's.
+      const scale = tracksInlineBounds
+        ? screenScale(container, container.getBoundingClientRect(), 0).x
+        : 1;
       const exact = (element: HTMLElement) => exactWidth(element, scale);
       if (tracksInlineBounds && !observeParent) {
         // The list publishes its unfolded width as its own width. It fits
