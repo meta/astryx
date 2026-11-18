@@ -864,23 +864,27 @@ async function playgroundDefaults(packages, t) {
 }
 
 /**
- * The required props a doc names that its playground defaults do not give
- * (children aside): without a sample, the proof renders the copy without them.
+ * The required props a doc names for one component that its playground
+ * defaults do not give (children aside): without a sample, the proof renders
+ * the copy without them. A multi-component doc keeps each component's props
+ * on its `components` entry.
  * @param {any} doc
+ * @param {string} [name] the component, for a multi-component doc
  * @returns {string[]}
  */
-export function requiredWithoutDefault(doc) {
-  const defaults = doc?.playground?.defaults ?? {};
-  return (doc?.props ?? [])
+export function requiredWithoutDefault(doc, name) {
+  const entry = doc?.components?.find(c => c?.name === name) ?? doc;
+  const defaults = (entry?.playground ?? doc?.playground)?.defaults ?? {};
+  return (entry?.props ?? [])
     .filter(prop => prop?.required && prop.name !== 'children')
     .map(prop => prop.name)
-    .filter(name => !(name in defaults));
+    .filter(prop => !(prop in defaults));
 }
 
 /**
  * Why a target cannot be rendered by its doc's defaults alone, or null: a
  * required prop with no sample, no default and no `needsNoSample` mark.
- * @param {{key: string}} t
+ * @param {{key: string, name?: string}} t
  * @param {any} doc
  * @param {{samples: Record<string, unknown>, needsNoSample?: Record<string, string>, notRendered?: Record<string, string>}} marks
  */
@@ -890,7 +894,7 @@ export function missingSample(
   {samples, needsNoSample = {}, notRendered = {}},
 ) {
   if (samples[t.key] || needsNoSample[t.key] || notRendered[t.key]) return null;
-  const missing = requiredWithoutDefault(doc);
+  const missing = requiredWithoutDefault(doc, t.name);
   if (missing.length === 0) return null;
   return `swizzle target ${t.key} has no sample in samples.mjs, and its doc gives no default for its required prop(s) ${missing.join(', ')}: add a sample, or mark it in needsNoSample`;
 }

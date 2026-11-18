@@ -73,6 +73,22 @@ describe('swizzle proof samples', () => {
     ).toBeNull();
   });
 
+  it('read a multi-component doc by the entry named for the target', () => {
+    const doc = {
+      name: 'Tabs',
+      components: [
+        {name: 'Tabs', props: [{name: 'label'}]},
+        {name: 'TabBar', props: [{name: 'value', required: true}]},
+      ],
+    };
+    expect(
+      missingSample({key: 'lab__TabBar', name: 'TabBar'}, doc, {samples: {}}),
+    ).toContain('required prop(s) value');
+    expect(
+      missingSample({key: 'lab__Tabs', name: 'Tabs'}, doc, {samples: {}}),
+    ).toBeNull();
+  });
+
   it('render lab__ChatVirtualizer with rows', () => {
     expect(samples.lab__ChatVirtualizer).toBeTypeOf('function');
     expect(needsNoSample.lab__ChatVirtualizer).toBeUndefined();
