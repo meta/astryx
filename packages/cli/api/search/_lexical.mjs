@@ -260,14 +260,37 @@ export function rankLexical(query, options, catalog) {
     a = b;
   }
   /**
+   * The names a candidate goes by, or null when it goes by none. In search's
+   * reading (`ownEvidence`), a doc page goes by its route and the route's last
+   * part (`tokens/tokens-color`, `tokens-color`); a doc's section answers as
+   * its page, so it goes by none, and so does a doc in the gathered reading.
+   * @param {Candidate} candidate
+   * @returns {string[] | null}
+   */
+  const namesOf = candidate => {
+    if (candidate.domain !== 'doc') {
+      return [candidate.name, ...(candidate.aliases ?? [])];
+    }
+    if (
+      !catalog.ownEvidence ||
+      (candidate._topic != null && candidate._topic !== candidate.name)
+    )
+      return null;
+    const route = String(candidate.name);
+    return [route, route.slice(route.lastIndexOf('/') + 1)];
+  };
+  /**
    * Where a query word is the candidate's whole name, or null: such an entry
-   * keeps the rank its name earns, whatever else it matched.
+   * keeps the rank its name earns, whatever else it matched. A doc is named
+   * this way only by a name of two or more words (`tokenscolor`): one word
+   * names a doc no more than any other entry.
    * @param {Candidate} candidate
    * @returns {[number, number] | null}
    */
   const wordNamed = candidate => {
-    if (candidate.domain === 'doc') return null;
-    for (const name of [candidate.name, ...(candidate.aliases ?? [])]) {
+    const doc = candidate.domain === 'doc';
+    for (const name of namesOf(candidate) ?? []) {
+      if (doc && phraseWords(spellIdentifiers(name)).length < 2) continue;
       const n = joined(name);
       const at = queryWords.findIndex(w => w === n || w === `${n}s`);
       if (at >= 0) return [at, at + 1];
@@ -276,26 +299,15 @@ export function rankLexical(query, options, catalog) {
   };
   /**
    * Where adjacent query words joined are the candidate's whole name, or
-   * null. In search's reading (`ownEvidence`), a doc page is named by its
-   * route or the route's last part (`tokens color` names
-   * `tokens/tokens-color`), and only by a run of two or more words: one word
-   * names a doc no more than any other entry.
+   * null. A doc is named this way only by a run of two or more words
+   * (`tokens color` names `tokens/tokens-color`).
    * @param {Candidate} candidate
    * @returns {[number, number] | null}
    */
   const namedSpan = candidate => {
     const doc = candidate.domain === 'doc';
-    // A doc's section answers as its page; only the page goes by the route.
-    if (
-      doc &&
-      (!catalog.ownEvidence ||
-        (candidate._topic != null && candidate._topic !== candidate.name))
-    )
-      return null;
-    const route = String(candidate.name);
-    const names = doc
-      ? [route, route.slice(route.lastIndexOf('/') + 1)]
-      : [candidate.name, ...(candidate.aliases ?? [])];
+    const names = namesOf(candidate);
+    if (!names) return null;
     /** @type {[number, number] | null} */
     let best = null;
     for (const name of names) {

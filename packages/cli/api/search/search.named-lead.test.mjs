@@ -136,6 +136,11 @@ describe('a name written as one word', () => {
 
   it("names a doc by its route's last part", () => {
     expect(leadsOf('flux-colors example')).toEqual(['guides/flux-colors']);
+    expect(leadsOf('fluxcolors flux example')).toEqual(['guides/flux-colors']);
+    expect(leadsOf('guidesfluxcolors flux example')).toEqual([
+      'guides/flux-colors',
+    ]);
+    expect(names('fluxcolors flux example')[0]).toBe('guides/flux-colors');
     expect(names('flux-colors example')[0]).toBe('guides/flux-colors');
   });
 });
@@ -147,6 +152,7 @@ describe('nothing leads', () => {
 
   it('for a one-word name inside a longer ask', () => {
     expect(leadsOf('Glim board sorted rows paging example')).toEqual([]);
+    expect(leadsOf('flux colors example board')).toEqual([]);
   });
 
   it('for a name the typed word only starts', () => {
