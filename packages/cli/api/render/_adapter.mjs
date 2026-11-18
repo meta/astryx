@@ -581,6 +581,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
+    ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
   };
 }
 

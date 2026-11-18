@@ -536,6 +536,24 @@ const CASES = [
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
   },
   {
+    // A page that names an https image: the text names the images not
+    // fetched under the JSON's own key. `.invalid` never resolves. It shares
+    // the folder of the case above, which links React and Core.
+    name: 'experimental export',
+    args: ['experimental', 'export', 'remote.jsx'],
+    cwd: '__TMP__',
+    setup: dir => {
+      fs.writeFileSync(
+        path.join(dir, 'remote.jsx'),
+        'export default function Page() { return <img src="https://images.example.invalid/a.png" alt="" />; }\n',
+      );
+    },
+    jsonFieldAllowlist: [
+      'warnings — listed under Warnings when present',
+      "code — each warning's kind; the text prints its message",
+    ],
+  },
+  {
     // The --reverse projection (same command, same folder as the case above).
     name: 'experimental export',
     args: [
