@@ -68,14 +68,14 @@ export function headerNote(facts) {
     "This is one file. The page's own script, at the end of the file, draws the page when it",
     'opens, so its buttons and other controls work. The render adds no network request.',
     facts.notCarried?.length
-      ? 'It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.'
+      ? 'It also carries the source of the page, except the files named under "Not carried" below; experimental import gives back the rest.'
       : 'It also carries the source of the page, so the page can come back exactly.',
     '',
     `Page: ${facts.page}`,
     `Carried files (${facts.files.length}): ${shown}${more}`,
     ...(facts.notCarried?.length
       ? [
-          `Not carried: ${facts.notCarried.slice(0, MAX_LISTED).join(', ')}${facts.notCarried.length > MAX_LISTED ? `, and ${facts.notCarried.length - MAX_LISTED} more` : ''} (--reverse cannot give them back)`,
+          `Not carried: ${facts.notCarried.slice(0, MAX_LISTED).join(', ')}${facts.notCarried.length > MAX_LISTED ? `, and ${facts.notCarried.length - MAX_LISTED} more` : ''} (experimental import cannot give them back)`,
         ]
       : []),
     ...(versions.length > 0 ? [`Rendered with: ${versions.join(', ')}`] : []),
