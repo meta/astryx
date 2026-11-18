@@ -97,6 +97,15 @@ export type ToastContentRenderFn = (
 /** Function returned by useToast to show toasts. */
 export type ShowToastFn = (options: ToastOptions) => ToastDismissFn;
 
+/**
+ * The current Theme of the component that showed a toast.
+ * @internal
+ */
+export interface CallerThemeSource {
+  get: () => ThemeContextValue;
+  subscribe: (onChange: () => void) => () => void;
+}
+
 /** Internal toast state with ID and metadata. */
 export interface ToastEntry {
   id: string;
@@ -108,10 +117,11 @@ export interface ToastEntry {
    */
   rowKey?: string;
   /**
-   * The Theme the toast was shown from, when the fallback viewport draws it:
-   * that viewport sits outside the app's tree, so the row draws the toast
-   * under this theme and mode.
+   * The Theme the toast was shown from, when the fallback viewport draws it.
+   * That viewport sits outside the app's tree, so the row draws the toast
+   * under this Theme, and follows a change to its theme or mode while the
+   * toast shows.
    * @internal
    */
-  callerTheme?: ThemeContextValue;
+  callerTheme?: CallerThemeSource;
 }

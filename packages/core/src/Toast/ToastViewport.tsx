@@ -25,6 +25,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
@@ -57,7 +58,12 @@ import {
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
-import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
+import type {
+  CallerThemeSource,
+  ToastEntry,
+  ToastPosition,
+  ToastDismissReason,
+} from './types';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {findToastNamesake, registerToastHost} from '../Layer/toastHost';
 import type {LayerInset} from '../Layer/LayerContext';
@@ -270,6 +276,35 @@ interface ToastRowProps {
   isLiveRegion: boolean;
 }
 
+const noCallerTheme = () => () => {};
+
+/**
+ * Draws a toast shown into the fallback viewport under the caller's current
+ * Theme, so the caller's theme CSS reaches it and the page's `<html>` does
+ * not.
+ */
+function CallerTheme({
+  source,
+  children,
+}: {
+  source: CallerThemeSource | undefined;
+  children: ReactNode;
+}) {
+  const caller = useSyncExternalStore(
+    source?.subscribe ?? noCallerTheme,
+    () => source?.get() ?? null,
+    () => source?.get() ?? null,
+  );
+  if (caller == null) {
+    return children;
+  }
+  return (
+    <Theme theme={caller.theme} mode={caller.mode}>
+      {children}
+    </Theme>
+  );
+}
+
 /**
  * One row of the stack: the grid wrapper that opens and collapses, and the
  * clip that releases once it is open so the card's elevation can paint.
@@ -361,7 +396,7 @@ function ToastRow({
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
         )}>
-        {entry.callerTheme == null ? (
+        <CallerTheme source={entry.callerTheme}>
           <ToastSurface
             type={type}
             body={o.body}
@@ -380,29 +415,7 @@ function ToastRow({
             }
             hasEntryStarted={hasEntryStarted}
           />
-        ) : (
-          // Shown from a Theme into the fallback viewport: drawn under it.
-          <Theme theme={entry.callerTheme.theme} mode={entry.callerTheme.mode}>
-            <ToastSurface
-              type={type}
-              body={o.body}
-              endContent={o.endContent}
-              isAutoHide={isAutoHide}
-              autoHideDuration={dur}
-              isExiting={isExiting}
-              gestureDirection={isReversed ? -1 : 1}
-              onDismiss={reason => onDismiss(entry.id, reason)}
-              renderContent={o.renderContent}
-              timerKey={entry.id}
-              isLiveRegion={isLiveRegion}
-              announce={announce}
-              isRenderedBodyAnnouncement={
-                o.renderContent == null && getNodeText(o.body) === ''
-              }
-              hasEntryStarted={hasEntryStarted}
-            />
-          </Theme>
-        )}
+        </CallerTheme>
       </div>
     </div>
   );
@@ -592,7 +605,12 @@ export function ToastViewport({
       const keepsRow =
         overwritten != null && !exitingIdsRef.current.has(overwritten.id);
       const placed: ToastEntry = keepsRow
-        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        ? {
+            ...entry,
+            rowKey: overwritten.rowKey ?? overwritten.id,
+            // The card stays mounted, under the Theme it drew in or none.
+            callerTheme: overwritten.callerTheme,
+          }
         : entry;
       if (keepsRow) {
         // If the update removes the focused control, the commit hands focus

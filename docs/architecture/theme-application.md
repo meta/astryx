@@ -16,6 +16,7 @@ applies_to:
     packages/core/src/theme/useTheme.ts,
     packages/core/src/theme/themeRegistry.ts,
     packages/core/src/AppShell/AppShell.tsx,
+    packages/core/src/Toast/useToast.tsx,
   ]
 verified_by:
   [
@@ -24,6 +25,7 @@ verified_by:
     packages/core/src/theme/useTheme.test.tsx,
     packages/core/src/theme/themeRegistry.test.ts,
     packages/core/src/AppShell/AppShell.test.tsx,
+    packages/core/src/Toast/useToast.test.tsx,
   ]
 deciding_specs: [spec:AST-012/DEC-1, spec:AST-087/DEC-2, spec:AST-108/DEC-1]
 ---
@@ -83,6 +85,13 @@ A normal React portal keeps provider context and does not need this fallback.
 The fallback cannot recover a nested provider for a separate React root. Content
 that needs a nested theme must keep that provider context in the same React tree.
 
+The fallback toast viewport is the one separate root that carries a provider
+across. `useToast` holds the current Theme of the component that calls it, root
+or nested. A toast that it shows into the fallback viewport draws under that
+Theme and follows a change to its theme or mode while the toast shows. A host
+page that rewrites `<html>` does not change it. A toast shown with no Theme
+around its caller follows `<html>`.
+
 `MediaTheme` marks a local surface as dark, light, automatically detected, or
 off. Compiled theme CSS uses that marker to switch surface tokens while keeping
 the parent theme's component rules.
@@ -102,7 +111,9 @@ standard width map.
 - **INV3 — Detached consumers share one root-theme store.** A separate React
   root or fallback viewport reads root attributes and the theme registry through
   one internal store with one observer per document. A normal React portal keeps
-  provider context. The fallback cannot recover a nested provider.
+  provider context. The fallback cannot recover a nested provider. One
+  exception: a toast in the fallback toast viewport draws under the current
+  Theme of the component that showed it, when one is present.
 - **INV4 — Built themes are not compiled again.** A theme marked as built uses its
   loaded stylesheet and skips runtime style generation and injection.
 - **INV5 — Runtime styles are shared safely.** Multiple providers using the same
@@ -188,7 +199,7 @@ which component parts are public theme targets.
 
 | Invariant        | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Failure signal                                                                                                                                                                                                                                                                     |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2, INV3 | `Theme.test.tsx` and portal/root fixtures                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | A nested provider changes `<html>`, or portal content cannot find the root theme                                                                                                                                                                                                   |
+| INV1, INV2, INV3 | `Theme.test.tsx` and portal/root fixtures; `useToast.test.tsx` "draws a toast shown from a Theme under that Theme, whatever <html> says" and "follows a theme or mode change of its caller while the toast shows"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | INV4, INV5       | Runtime injection and cleanup tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | A built theme injects CSS, duplicate providers duplicate CSS, or one unmount removes shared styles                                                                                                                                                                                 |
 | INV6             | `useTheme.test.tsx` "useTheme root-attribute observer lifecycle" and "system follows the page root": a consumer under a forced Theme creates no observer; no-provider consumers share the root's mode and name observers; `system` consumers under no forced Theme share one root-scheme observer, re-read on a head stylesheet change, a linked stylesheet's load and a link's attribute change; each observer disconnects after its last consumer; `Theme.test.tsx` "names the scheme the root provider draws in on `<html>` when its mode or the page decides it, and removes it on unmount", and "names the page scheme again when the reader changes their preference, on a root that follows it through a media query" for the re-read on a change of the reader's preference | A consumer under a forced Theme observes the DOM, a `system` consumer under no forced Theme misses a root scheme change, or an observer outlives its last consumer                                                                                                                 |
 | INV7             | `useTheme.test.tsx` "modes outside light\|dark\|system": `"banana"` under a light and a dark platform preference, `"DARK"` and `""` under a light preference only; `useTheme.test.tsx` "system follows the page root": a root that names only dark, a root that names none (light), a forced Theme above that ignores it, the shared observer created once and disconnected after the last consumer; `ThemeColorScheme.a11y.chromium.spec.ts`: `useTheme().mode` under a host's dark root; `Theme.test.tsx` "removes data-theme from `<html>` for root provider in system mode".                                                                                                                                                                                                    | System mode resolves differently from the wrapper's CSS, `useTheme().mode` returns anything but `'light'` or `'dark'` (such as the raw unknown value), a root provider in `system` or an unknown mode writes a forced mode to `<html>`, or the observer outlives its last consumer |
