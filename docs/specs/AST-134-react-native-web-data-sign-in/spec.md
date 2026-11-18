@@ -89,8 +89,8 @@ optional add-on package, not the core package. `WebView` uses
 - The runtime's network cookie jar and the cookie methods of `AstryxNetwork`
   (`spec:AST-130/OQ2`), and the files module's cache, where snapshots are
   written (its own record).
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - Browser features of the sign-in sheet: autofill, passkeys, and saved
   passwords are the system browser's.
 - Equivalent internal implementations remain valid when they satisfy this
