@@ -212,7 +212,7 @@ shared icon names under FR17.
     the platform to an Expo app's lifecycle and add no capability.
   - The platform layer ships its native code as source that the app's native
     build compiles; how the core and each opted-in capability register and
-    reach JavaScript is `spec:AST-140`'s.
+    reach JavaScript is `spec:AST-140/FR1`'s.
   - The platform layer carries all the native code Astryx needs; it takes no
     third-party native dependency (FR2).
   - The platform's native code calls public platform API only. A capability
@@ -227,7 +227,7 @@ shared icon names under FR17.
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported.
   - How native modules and native components are exposed to JavaScript is
-    `spec:AST-140`'s; this requirement owns the package's entries.
+    `spec:AST-140/FR1`'s; this requirement owns the package's entries.
   - `.` is the app API: the library layer's components, themes, and hooks,
     and the platform core's always-present objects, views, and result
     vocabulary. It holds no router and no optional capability's objects or
@@ -286,7 +286,7 @@ shared icon names under FR17.
 - **FR6 — One result vocabulary.** Every asynchronous call in the platform
   resolves one result shape with a closed set of reasons and never rejects;
   a person's cancel is not an error, and a message never carries a secret.
-  `spec:AST-140` owns the shape, the common reasons, and their rules.
+  `spec:AST-140/FR3` owns the shape, the common reasons, and their rules.
 - **FR7 — One capability shape.**
   - Every capability object has `isAvailable(): boolean` (synchronous, cheap,
     cached), and `supports(feature)` where the capability has named features
@@ -329,7 +329,7 @@ shared icon names under FR17.
     | Diagnostics (crash reports, daily metrics; the frame recorder in tests only)                                  | `spec:AST-137` | add-on                                                              |
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
-  never silently wrong. `spec:AST-140` owns the rules and the check that
+  never silently wrong. `spec:AST-140/FR5` owns the rules and the check that
   enforces them.
   - FR6, FR7, and FR8 are internal conventions while the package is
     canary-only, and they may change in any canary; the public promise is
@@ -530,7 +530,7 @@ shared icon names under FR17.
   - A passing build is not evidence of behavior. A claim about camera,
     haptic feel, screen-reader behavior, or performance needs a real device.
   - The platform's tests cover each native module in its absent, older, and
-    current shapes through `./testing`; `spec:AST-140` owns the native-layer
+    current shapes through `./testing`; `spec:AST-140/FR7` owns the native-layer
     conformance tests.
   - API blocks in each package's documentation are generated from source, and
     a check fails when they drift.
@@ -594,7 +594,7 @@ shared icon names under FR17.
 - **FR22 — Contracts are engine-neutral.** The contracts and the conformance
   tests assume no particular JavaScript engine or renderer where one is not
   essential, and each native module is specified at an interface that another
-  engine could host. `spec:AST-140` owns which parts of the platform code are
+  engine could host. `spec:AST-140/FR8` owns which parts of the platform code are
   engine-specific and which are neutral. React Native's
   New Architecture is today's floor (Platform support), because its native
   component and module interfaces are the ones the platform implements.
@@ -657,10 +657,12 @@ record depends on an ask whose owner has not agreed to it.
   gives them their own declared version; they join the release group once a
   platform is supported (FR14, `spec:AST-082/FR15`).
 - `spec:AST-140` owns the platform code's shared rules: how native pieces
-  register and reach JavaScript, the result vocabulary across the boundary,
-  additive evolution of native interfaces, threading, the native-layer
-  conformance tests, and which parts are engine-specific (FR4 to FR6, FR8,
-  FR15, FR22).
+  register and reach JavaScript (FR1), a missing piece (FR2), the result
+  vocabulary across the boundary (FR3), the values that cross (FR4), additive
+  evolution of native interfaces (FR5), threading (FR6), the native-layer
+  conformance tests (FR7), which parts are engine-specific (FR8), and
+  coexistence (FR9). This record's FR4 to FR6, FR8, FR15, and FR22 point
+  there.
 - `spec:AST-017` FR21 extends the status of Core's `./internal/*` to the
   package's internal entries (FR5).
 - The group records `spec:AST-123` to `spec:AST-137` detail FR3's linking and
@@ -685,7 +687,7 @@ record depends on an ask whose owner has not agreed to it.
 | FR5      | `exports` map and public-entry name check; package-boundary check of the internal entries' imports; source check of global reads; unit tests of the installers                                                                                                                                                   | `.`, `./storage`, `./network`, `./theme`, `./styles`, `./i18n`, each capability entry, `./navigation-legacy`, `./testing`, `./testing/jest-setup`, the internal entries, `./declarations/*`, the deprecated `./app.plugin.js`, the Expo package's `./app.plugin.js`; a runtime without a global `fetch`; an installer called twice                  | A private name on `.`, a deep import resolving, an app importing an internal entry, a router or optional capability exported from `.`, another entry importing `./navigation-legacy`, a `./navigation` entry that does not hold the router, a deprecated `./app.plugin.js` that writes declarations other than the Expo package's or prints no warning naming `@astryxdesign/react-native-expo`, a module with side effects other than the Jest setup, an import other than the Jest setup that installs a global, package code that reads the global `crypto`, package code that depends on `fetch`'s redirect modes, an installer that reports nothing or changes anything on a second call, or a `fetch` that follows a redirect under `redirect: 'error'` or `'manual'` after its installer ran |
 | FR6      | Unit tests of every asynchronous call through `./testing` mocks                                                                                                                                                                                                                                                  | absent, older, and current module; a missing option; a native throw; cancel                                                                                                                                                                                                                                                                         | A call rejects, or answers a reason outside its set                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR7      | Unit tests of each capability's probes, permissions, and hook cleanup                                                                                                                                                                                                                                            | an older binary; a view mounted without permission; unmount                                                                                                                                                                                                                                                                                         | A silent no-op, a prompt on mount, or work that outlives its component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| FR8      | The additive-evolution check that `spec:AST-140` names                                                                                                                                                                                                                                                           | a new behavior on a shipped interface; an older binary                                                                                                                                                                                                                                                                                              | A shipped interface that changes, or an older binary that is silently wrong                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR8      | The additive-evolution check of `spec:AST-140/FR5`                                                                                                                                                                                                                                                               | a new behavior on a shipped interface; an older binary                                                                                                                                                                                                                                                                                              | A shipped interface that changes, or an older binary that is silently wrong                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR9      | Source check of platform public types; library tests of the mappings and the default hosts                                                                                                                                                                                                                       | an icon name; a feedback moment; a theme change                                                                                                                                                                                                                                                                                                     | Astryx vocabulary in a generic capability type, or the app root without hosts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR10     | Token comparison between the library and core's theme; review of shared native controls                                                                                                                                                                                                                          | every token; each component with a shared native control                                                                                                                                                                                                                                                                                            | A token value that differs from core's, or a second native control drawn beside a shared one                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | FR11     | Prebuild and EAS Build of the sample app with `@astryxdesign/react-native-expo`; the old plugin entry in a prebuild                                                                                                                                                                                              | the sample with every capability opted in; `@astryxdesign/react-native`'s `./app.plugin.js`                                                                                                                                                                                                                                                         | The build needs a manual native edit, `@astryxdesign/react-native` requires an Expo library, or the old plugin entry writes declarations other than the Expo package's or prints no warning naming `@astryxdesign/react-native-expo`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -833,7 +835,8 @@ An app's behavior does not depend on the order of its imports, and the package
 runs in a runtime whose globals it does not control. The package's own code
 calls its platform directly instead of relying on the global `crypto` or on
 `fetch`'s redirect modes. An app calls the exported installers when it wants
-them. How the platform's native code reaches JavaScript is `spec:AST-140`'s.
+them. How the platform's native code reaches JavaScript is
+`spec:AST-140/FR1`'s.
 
 Rejected: a side-effect `./polyfills` entry that an app imports first in its
 entry file, because every app must remember the step and its effect depends on
