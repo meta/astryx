@@ -112,17 +112,9 @@ and a token fill.
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
     or in a `platforms.ios` or `platforms.android` entry (`spec:AST-082/FR10`),
     sets the look for every surface (FR7).
-  - Rendering: a component's `render` (`'auto' | 'system' | 'drawn'`) says who
-    draws the element's pixels. `system`: the platform draws it (a
-    host-presented bar, a platform control, system menu or sheet chrome).
-    `drawn`: Astryx draws it in React. `auto`: the component's own default, per
-    platform where it differs (`spec:AST-112/FR21`). One theme member,
-    `render.default`, overrides every `auto`; `spec:AST-112` adds it to the
-    `defineNativeTheme` configuration of `spec:AST-082/FR10`.
-  - Glass and material are not `render` values. The look is the component's
-    `surface` (`glass`, `material`, or `plain`), which applies only when the
-    element is drawn. A `plain` surface uses the token paints of FR7 and none
-    of the native components.
+  - Rendering: `render` and `surface` are as `spec:AST-112/FR21` states. A
+    `plain` surface uses the token paints of FR7 and none of the native
+    components.
   - The library's own surfaces here (bars, bar buttons, glass buttons, the
     overlays it builds, and floating surfaces) are `drawn`, with
     `surface="glass"` or `surface="material"` for the look. The native
@@ -143,9 +135,6 @@ and a token fill.
   - FR1 gap: the app root's `isPlatformEnabled` switches every surface
     between the native components and the token paints; the target uses each
     component's `surface` instead.
-  - FR1 gap: the code spells the axis two ways: the navigators take
-    `render: 'system' | 'drawn'`, and the components take `presentation`
-    with a `'native'` value (such as `'auto' | 'native' | 'drawn'`).
 - **FR2 — A system material behind content.** `AstryxMaterialView` paints a
   system material behind whatever a surface draws over it:
   - Props: `variant` (`glass`, `glassClear`, or `blur`; default `glass`),
@@ -457,8 +446,7 @@ An app states the look through component props and the theme's native intent.
 The library then decides per platform, OS version, and accessibility setting
 whether system glass, a system material, a translucent token fill, or a solid
 surface renders it, and the native components stay free to change. The surface
-stays `drawn` in every case: `render` says only who draws the element's pixels,
-and glass or material is its `surface`.
+stays `drawn` in every case (`spec:AST-112/FR21`).
 
 Rejected: public glass and material components, because an app would hard-code
 one platform's effect and bypass the theme and accessibility rules.
