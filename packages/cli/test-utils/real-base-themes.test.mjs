@@ -179,11 +179,18 @@ describe('installRealBaseThemes', () => {
       path.join(THEMES, 'neutral', 'package.json'),
       path.join(own, 'package.json'),
     );
-    fs.symlinkSync(
-      fs.realpathSync(path.join(THEMES, 'neutral', 'node_modules')),
-      path.join(own, 'node_modules'),
-      process.platform === 'win32' ? 'junction' : 'dir',
-    );
+    // (A folder of its own, whose entries link to the package's: the build
+    // writes its scratch output there.)
+    const deps = fs.realpathSync(path.join(THEMES, 'neutral', 'node_modules'));
+    fs.mkdirSync(path.join(own, 'node_modules'));
+    for (const entry of fs.readdirSync(deps)) {
+      if (entry.startsWith('.')) continue;
+      fs.symlinkSync(
+        fs.realpathSync(path.join(deps, entry)),
+        path.join(own, 'node_modules', entry),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+    }
     fs.mkdirSync(path.join(own, 'dist'));
     fs.writeFileSync(path.join(own, 'dist', 'neutral.js'), '// stale\n');
     const long = new Date(Date.now() - 86_400_000);

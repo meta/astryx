@@ -21,6 +21,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {inject} from 'vitest';
 import {themeBuild} from '../api/theme/build/build.mjs';
+import {coreBuildIsStale} from '../clients/cli/commands/ensure-core-built.mjs';
 
 const THEMES = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -54,21 +55,6 @@ function ownScope(cwd) {
 }
 
 /**
- * The newest modification time of a file under `dir`, or 0 when it has
- * none.
- * @param {string} dir
- */
-function newestIn(dir) {
-  if (!fs.existsSync(dir)) return 0;
-  let newest = 0;
-  for (const file of fs.readdirSync(dir, {recursive: true}).map(String)) {
-    const stat = fs.statSync(path.join(dir, file));
-    if (stat.isFile() && stat.mtimeMs > newest) newest = stat.mtimeMs;
-  }
-  return newest;
-}
-
-/**
  * Whether the theme package's build is complete and current: its module,
  * the icon registry the module imports (a later build step writes it), and
  * no source file newer than the module. A build older than its source
@@ -79,8 +65,7 @@ function newestIn(dir) {
 function builtWhole(own, like) {
   const module = path.join(own, 'dist', `${like}.js`);
   if (!fs.existsSync(module)) return false;
-  if (newestIn(path.join(own, 'src')) > fs.statSync(module).mtimeMs)
-    return false;
+  if (coreBuildIsStale(module, [path.join(own, 'src')])) return false;
   return (
     !/from ["']\.\/icons\.mjs["']/.test(fs.readFileSync(module, 'utf8')) ||
     fs.existsSync(path.join(own, 'dist', 'icons.mjs'))
