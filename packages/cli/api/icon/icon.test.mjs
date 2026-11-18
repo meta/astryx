@@ -565,6 +565,28 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'go')).toEqual([]);
   });
 
+  it('leaves out the words that only join others: `with` and `and` match no icon name, `all` still does', () => {
+    const set = setOf([
+      {id: 'star'},
+      {id: 'credit-card'},
+      {id: 'person-walking-with-cane'},
+      {id: 'plus'},
+      {id: 'minus'},
+      {id: 'pen-and-paper'},
+      {id: 'border-all'},
+    ]);
+    expect(answer(set, 'card with an icon of a star')).toEqual([
+      'star',
+      'credit-card',
+    ]);
+    expect(answer(set, 'plus and minus')).toEqual(['minus', 'plus']);
+    expect(answer(set, 'select all')).toEqual(['border-all']);
+    // An id the query names in full still answers as typed.
+    expect(answer(set, 'person walking with cane')).toEqual([
+      'person-walking-with-cane',
+    ]);
+  });
+
   it('reads a word written as an export name as the words it runs together', () => {
     const set = setOf([
       {id: 'search'},
