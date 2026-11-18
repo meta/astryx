@@ -34,8 +34,7 @@ const sheetModule = vi.hoisted(() => {
 
 vi.mock('./SelectorBottomSheetFrame', async importOriginal => {
   await sheetModule.released;
-  const module =
-    await importOriginal<typeof import('./SelectorBottomSheetFrame')>();
+  const module = await importOriginal();
   sheetModule.markReady();
   return module;
 });
