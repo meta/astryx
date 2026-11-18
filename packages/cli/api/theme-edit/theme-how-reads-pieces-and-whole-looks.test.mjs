@@ -119,8 +119,44 @@ describe('one variant made to look like another', () => {
   it(
     'leaves "look like before" a reset',
     async () => {
-      const data = await answer('make the cards look like before');
-      expect(JSON.stringify(data.results)).not.toMatch(/variant:/);
+      for (const q of ['make the cards look like before', 'make it look like before']) {
+        const text = JSON.stringify((await answer(q)).results);
+        expect(text, q).not.toMatch(/variant:/);
+        // ("before" is the earlier look, never a product's name.)
+        expect(text, q).not.toMatch(/never guesses a brand|"before"/);
+      }
+      // (Said of no part, it is the theme's earlier look: undo; a theme
+      // named is the app's choice of theme.)
+      for (const q of [
+        'make it look like before',
+        'clear everything',
+        'make it look standard',
+      ])
+        expect(JSON.stringify((await answer(q)).results), q).toMatch(
+          /undo t steps back one change|has no change to undo/,
+        );
+      const use = JSON.stringify((await answer('use the default theme')).results);
+      expect(use).toMatch(/astryx theme use /);
+      expect(use).toMatch(/back to the base theme/);
+      expect(use).not.toMatch(/steps back one change/);
+    },
+    T,
+  );
+});
+
+describe("a piece the ask says not to take away", () => {
+  it(
+    'is kept: "don\'t hide", "never hide" and "do not remove" write nothing',
+    async () => {
+      for (const q of [
+        "don't hide the code block copy button",
+        'never hide the tab underline',
+        'do not remove the copy button on code blocks',
+      ]) {
+        const data = await answer(q);
+        expect(first(data), q).toEqual([]);
+        expect(JSON.stringify(data.results), q).toMatch(/asks for no change/);
+      }
     },
     T,
   );
