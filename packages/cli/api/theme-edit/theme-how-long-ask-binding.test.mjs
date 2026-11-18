@@ -99,6 +99,62 @@ const ROWS = [
     },
   ],
   [
+    'labels one per line each set their dial',
+    {
+      q: 'Density: roomy\nRadius: small',
+      has: ['spacing roomy', 'corners small'],
+    },
+  ],
+  [
+    'a label that starts its clause sets its dial at the value said',
+    {
+      q: 'Density: roomy. Radius: small.',
+      has: ['spacing roomy', 'corners small'],
+    },
+  ],
+  [
+    'sans after a design system is still "without"',
+    {q: 'a minimal UI sans shadows', never: /^font system/},
+  ],
+  [
+    'sans after a design system is still "without" for borders',
+    {q: 'a clean design system sans borders', never: /^font system/},
+  ],
+  [
+    'a design system sans shadows writes no stronger shadows',
+    {
+      q: 'design system sans shadows',
+      never: /^font system|--shadow-(?:low|med|high) (?!none)/,
+    },
+  ],
+  [
+    "a label that belongs to a part is that part's, never a dial's",
+    {
+      q: 'Body weight: bold. Letter spacing: tight.',
+      never: /^headings bold|^spacing tight/,
+    },
+  ],
+  [
+    "a label that is a part's dial word keeps the part's reading",
+    {q: 'Tracking: tight.', never: /--on heading$/},
+  ],
+  [
+    'sans between ordinary words is still without',
+    {q: 'cards: simple sans borders', has: ['border none --on card']},
+  ],
+  [
+    'sans after a kind of typeface is the typeface',
+    {q: 'a humanist sans for the body', has: ['font system --on body']},
+  ],
+  [
+    "a label under a part heading stays the part's",
+    {q: 'Card\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    "a label in a part's colon list stays the part's",
+    {q: 'cards: white background, radius: large', never: /^corners large$/},
+  ],
+  [
     "a look's name before its colon is the theme's look, never an unknown part",
     {
       q: 'neon synthwave: deep purple night background, hot pink accent #ff69b4, cyan accent, a glow',
