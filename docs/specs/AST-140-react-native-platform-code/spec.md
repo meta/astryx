@@ -83,7 +83,14 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 
 ## Non-goals
 
-None.
+- Equivalent internal implementations remain valid when they satisfy this
+  contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
+  topology belong in architecture or implementation unless callers or
+  interoperating systems intentionally depend on that exact mechanism as a public
+  protocol. In that case, state who depends on it and why an equivalent
+  implementation would not satisfy the contract.
 
 ## Requirements
 
@@ -196,7 +203,9 @@ None.
     named features that the binary implements, or `null` when the binary does
     not carry the contract. Feature names are of a generated, typed
     `ContractFeature` union, so type checking catches an unknown or misspelt
-    feature.
+    feature. `contractFeatures` is the package-wide read; each capability's
+    `supports(feature)` (`spec:AST-112/FR7`) is the per-capability check, and
+    both read the same feature list.
   - JavaScript checks a feature through that read before it uses the
     behavior, and sends the values the binary reports. On a binary without
     the feature, JavaScript keeps the baseline behavior, draws its fallback,
@@ -337,6 +346,9 @@ None.
     from React Native's Fabric and Turbo Native Modules today, and another
     engine can bind the same members. A native class adopts its seam, and the
     seam carries its own typed values (DEC-8).
+  - The seam is internal to the package's native layer: React Native's glue
+    and other engines bind through it, and apps reach the platform through its
+    JavaScript API (FR1).
   - Every engine binding depends on the seam's exact members: React Native's
     Fabric components, view managers, and Turbo Native Modules call them by
     name, and another engine's binding calls the same names, so each member's
