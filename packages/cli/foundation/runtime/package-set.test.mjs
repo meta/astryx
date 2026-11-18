@@ -27,6 +27,7 @@ import {
   recordResolvedIntegrations,
   resolvedPackages,
   servingRootPackages,
+  hostedPagePackages,
 } from './package-root.mjs';
 
 afterEach(cleanupFixtures);
@@ -460,5 +461,29 @@ describe('servingRootPackages', () => {
   it('names nothing when the starting root has no readable package.json', () => {
     activateHostedRun({startingRoot: tempDir('bare')});
     expect(servingRootPackages()).toEqual([]);
+  });
+});
+
+describe('hostedPagePackages', () => {
+  afterEach(() => _resetHostedRun());
+
+  it('names the approved integrations the starting root holds, then what it declares', () => {
+    const set = tempDir('set');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const held = path.join(set, 'node_modules', '@acme', 'held-kit');
+    fs.mkdirSync(held, {recursive: true});
+    fs.writeFileSync(path.join(held, 'package.json'), '{}');
+    expect(hostedPagePackages()).toEqual([]);
+    activateHostedRun({
+      startingRoot: set,
+      integrations: ['@acme/held-kit', '@acme/missing-kit'],
+    });
+    expect(hostedPagePackages()).toEqual([
+      '@acme/held-kit',
+      '@heroicons/react',
+    ]);
   });
 });

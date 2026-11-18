@@ -2,7 +2,7 @@
 
 /**
  * @file A project's `compilerOptions.paths` (tsconfig.json or jsconfig.json),
- * read and matched by TypeScript's rules, for `astryx experimental render`,
+ * read and matched by TypeScript's rules, for `astryx experimental export`,
  * `theme build`, and Doctor.
  * The config of a file is the nearest tsconfig.json (else jsconfig.json) in
  * its folder or above, read through its `extends`; a config that does not
@@ -39,6 +39,17 @@ const EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.mts', '.cts'
 
 /** The extensions the render's module loader tries for an extensionless import, in its order. */
 export const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'];
+
+/**
+ * The TypeScript sources a JavaScript extension in an import stands for, in
+ * TypeScript's order: `./helper.js` names helper.ts, then helper.tsx.
+ */
+export const TS_SOURCES = /** @type {Readonly<Record<string, readonly string[]>>} */ ({
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx', '.ts'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+});
 
 /** The config file names TypeScript looks for in a folder, in its order. */
 const CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json'];
@@ -388,7 +399,8 @@ export function matchPath(patterns, spec) {
 export const candidatesOf = match => match.pattern.targets.map(t => t.replace('*', match.capture));
 
 /**
- * The file a candidate path stands for: itself, with an extension, or its
+ * The file a candidate path stands for: itself, the TypeScript source its
+ * JavaScript extension names (TS_SOURCES), itself with an extension, or its
  * folder's index; null when none exists.
  * @param {string} candidate
  * @param {readonly string[]} [extensions] the extensions to try, in order (default: TypeScript's)
@@ -403,6 +415,11 @@ export function existingFile(candidate, extensions = EXTENSIONS) {
     }
   };
   if (isFile(candidate)) return candidate;
+  // As TypeScript does, a JavaScript name stands for its TypeScript source:
+  // `./helper.js` for helper.ts or helper.tsx.
+  const jsExt = path.extname(candidate);
+  const stem = candidate.slice(0, candidate.length - jsExt.length);
+  for (const ext of TS_SOURCES[jsExt] ?? []) if (isFile(stem + ext)) return stem + ext;
   for (const ext of extensions) if (isFile(candidate + ext)) return candidate + ext;
   for (const ext of extensions) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
   return null;

@@ -5,7 +5,7 @@ import {Chart, area, line, ChartGrid, ChartAxis} from '@astryxdesign/charts';
 import {monthlyData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/Area',
+  title: 'Charts/Marks/Area',
   component: Chart,
 };
 export default meta;

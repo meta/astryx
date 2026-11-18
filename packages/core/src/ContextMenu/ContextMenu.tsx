@@ -65,6 +65,7 @@ import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
@@ -1002,13 +1003,16 @@ function useContextMenuElement(
     };
   }, [externalTrigger, triggerHandlers]);
 
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
   const menuSurface = usesBottomSheet ? (
-    <MenuBottomSheet
+    <SheetForContent
       isOpen={isOpen}
       onOpenChange={updateOpenState}
       label={sheetLabel}>
       {renderedBottomSheetContent}
-    </MenuBottomSheet>
+    </SheetForContent>
   ) : (
     layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
       placement: 'below',

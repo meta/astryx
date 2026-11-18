@@ -2,7 +2,7 @@
 
 /**
  * @file Which embedded files the page itself reaches, for `astryx
- * experimental render --reverse`. A received file is untrusted, so its list
+ * experimental export --reverse`. A received file is untrusted, so its list
  * of files is not: a file is written only when the embedded page reaches it
  * through its own imports (static, re-exports, `import()` and `require()` of
  * a string), followed module by module through the embedded tree. Relative
@@ -126,15 +126,16 @@ export function moduleImports(source, file) {
 }
 
 /**
- * Relative asset paths in a piece of text: a `./`/`../` path to an image or
- * font, bare or inside `url(...)`.
+ * Asset paths in a piece of text: a `./`/`../` path, or a path from the
+ * site's root (`/pics/a.png`, served from `public/`), to an image or font,
+ * bare or inside `url(...)`.
  * @param {string} text
  * @returns {string[]}
  */
 export function assetRefsIn(text) {
   /** @type {string[]} */
   const out = [];
-  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+)/g)) {
+  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+|\/(?!\/)[^'")\s]+)/g)) {
     const ref = m[1].split(/[?#]/)[0];
     if (isAssetPath(ref)) out.push(ref);
   }
@@ -280,32 +281,40 @@ export function receivingAliases(file) {
  */
 
 /**
+ * The tree paths a relative import may name, in the order a reverse resolves
+ * it: the path as written, then with each extension an extensionless import
+ * stands for, then as its folder's index file with each.
+ * @param {string} spec a tree path, `/`-separated
+ * @returns {string[]}
+ */
+export function resolutionCandidates(spec) {
+  return [
+    spec,
+    ...RESOLVE_EXTENSIONS.map(ext => spec + ext),
+    ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`),
+  ];
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown, publicDir?: unknown}} [options]
  *   the receiving project's path aliases (see receivingAliases), and the
  *   alias imports the render recorded (an untrusted record: only an entry
  *   that names a carried file counts)
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
-export function reachableFiles(files, {aliases = [], recorded} = {}) {
+export function reachableFiles(files, {aliases = [], recorded, publicDir} = {}) {
   const byPath = new Map(files.map(f => [f.path, f]));
   /** @type {Map<string, Reach>} */
   const reached = new Map();
   /** @type {Set<string>} */
   const missing = new Set();
   /** @param {string} candidate tree path, `/`-separated */
-  const resolveIn = candidate => {
-    if (byPath.has(candidate)) return candidate;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(candidate + ext)) return candidate + ext;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(`${candidate}/index${ext}`))
-        return `${candidate}/index${ext}`;
-    return null;
-  };
+  const resolveIn = candidate =>
+    resolutionCandidates(candidate).find(p => byPath.has(p)) ?? null;
   /**
    * The one tree file an alias import names: the file whose path ends with
    * the import's rest (`@/components/Header` -> `.../components/Header.tsx`).
@@ -315,11 +324,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     /** @type {{path: string, tail: string}[]} */
     const hits = [];
     for (const p of byPath.keys()) {
-      for (const tail of [
-        rest,
-        ...RESOLVE_EXTENSIONS.map(e => rest + e),
-        ...RESOLVE_EXTENSIONS.map(e => `${rest}/index${e}`),
-      ]) {
+      for (const tail of resolutionCandidates(rest)) {
         if (p === tail || p.endsWith(`/${tail}`)) {
           hits.push({path: p, tail});
           break;
@@ -338,6 +343,39 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     }
     return {r, fresh};
   };
+  /**
+   * Where a path from the site's root lies in the tree: under the `public/`
+   * folder the render recorded reading, else the nearest one at or above the
+   * page's folder. Null when there is none, or when the path leaves it.
+   * @param {string} ref
+   */
+  const publicPath = ref => {
+    /** @param {string} dir a tree folder holding `public/` files */
+    const under = dir => {
+      const joined = path.posix.normalize(`${dir}/${ref.slice(1)}`);
+      return joined.startsWith(`${dir}/`) ? joined : null;
+    };
+    const holds = (/** @type {string} */ dir) => [...byPath.keys()].some(p => p.startsWith(`${dir}/`));
+    // The public/ the render read, as it recorded it (an untrusted record:
+    // only a plain tree path that holds carried files counts).
+    if (
+      typeof publicDir === 'string' &&
+      publicDir !== '' &&
+      !publicDir.startsWith('/') &&
+      path.posix.normalize(publicDir) === publicDir &&
+      !climbsOut(publicDir) &&
+      holds(publicDir)
+    )
+      return under(publicDir);
+    // A file without the record: the nearest public/ above the page.
+    const page = files[0]?.path ?? '';
+    for (let d = path.posix.dirname(page); ; d = path.posix.dirname(d)) {
+      const dir = d === '.' ? 'public' : `${d}/public`;
+      if (holds(dir)) return under(dir);
+      if (d === '.' || d === '/' || d === '') return null;
+    }
+  };
+
   /** @type {string[]} */
   const queue = [];
   if (files.length > 0) {
@@ -381,9 +419,14 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
-      const joined = path.posix.normalize(
-        path.posix.join(path.posix.dirname(current), ref),
-      );
+      const joined = ref.startsWith('/')
+        ? publicPath(ref)
+        : path.posix.normalize(
+            path.posix.join(path.posix.dirname(current), ref),
+          );
+      // A path from the site's root names nothing when the tree holds no
+      // `public/` on the page's path: the render had none to read it from.
+      if (joined === null) continue;
       if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);

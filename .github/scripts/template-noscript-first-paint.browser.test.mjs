@@ -3,7 +3,7 @@
 /**
  * @file The page templates people share as a file read correctly with no
  * script. Each one is rendered to static HTML with `astryx experimental
- * render`, the form a shared page takes, and shown in Chromium with
+ * export`, the form a shared page takes, and shown in Chromium with
  * JavaScript off at a phone's and a desktop's width. On that first paint:
  *
  * - the page is no wider than the screen;
