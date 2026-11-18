@@ -729,7 +729,7 @@ it once as durable intent rather than repeating it in each platform's entry.
 Rejected: iOS platform-entry terms only, because every other native platform
 would need the same words again.
 
-### DEC-17 — Props live in the contracts package, and a new prop is a high bar
+### DEC-17 — Every public prop has one definition, and a new prop is a high bar
 
 **Reference:** `spec:AST-082/DEC-17`
 **Decider:** `cixzhang`, `2026-11-18 13:35 PT`
