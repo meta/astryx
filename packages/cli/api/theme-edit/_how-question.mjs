@@ -112,7 +112,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
  */
 
 /**
@@ -14144,6 +14144,7 @@ export function draftAnswer(ctx, env, question) {
       ),
       ...(input.unmet ? {unmet: input.unmet} : {}),
       ...(d.offer || input.offer ? {offer: true} : {}),
+      ...(d.already || input.already ? {already: true} : {}),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -22384,18 +22385,56 @@ export function draftAnswer(ctx, env, question) {
                         ...modeOf(c),
                       }),
                     );
-            const nowAt =
-              ownNow != null
-                ? fourOf(String(ownNow).trim())
-                : tok
-                  ? fourOf(`var(${tok})`)
-                  : null;
-            const resolvedAt =
-              ownNow != null
-                ? nowAt
-                : tok
-                  ? fourOf(String(current(tok)).trim())
-                  : null;
+            // (Then each corner longhand the theme sets on the part, in the
+            // order it set them: a longhand after the radius changes its
+            // corner, a radius after a longhand replaces it. A physical
+            // corner is the logical one it is in a left-to-right page, as
+            // the side words are. The plain rule first, then the rule of
+            // the state or variant asked about.)
+            const LONGHAND = /** @type {Record<string, string>} */ ({
+              'border-start-start-radius': 'start-start',
+              'border-start-end-radius': 'start-end',
+              'border-end-start-radius': 'end-start',
+              'border-end-end-radius': 'end-end',
+              'border-top-left-radius': 'start-start',
+              'border-top-right-radius': 'start-end',
+              'border-bottom-left-radius': 'end-start',
+              'border-bottom-right-radius': 'end-end',
+            });
+            const scoped = Boolean(f.state || f.when);
+            const own = [...env.data.settings].filter(
+              st =>
+                st.on === on &&
+                !st.mode &&
+                (st.thing === 'border-radius' || st.thing in LONGHAND) &&
+                ((!st.state && !st.when) ||
+                  (scoped &&
+                    (st.state ?? null) === (f.state ?? null) &&
+                    (st.when ?? null) === (f.when ?? null))),
+            );
+            const ordered = [
+              ...own.filter(st => !st.state && !st.when),
+              ...own.filter(st => st.state || st.when),
+            ];
+            /** @param {Record<string, string> | null} base @param {(v: string) => string} read */
+            const layered = (base, read) => {
+              /** @type {Record<string, string> | null} */
+              let at = base ? {...base} : null;
+              for (const st of ordered) {
+                const v = read(String(st.value).trim());
+                if (st.thing === 'border-radius') at = fourOf(v);
+                else if (at) at[LONGHAND[st.thing]] = v;
+              }
+              return at;
+            };
+            const nowAt = layered(tok ? fourOf(`var(${tok})`) : null, v => v);
+            const resolvedAt = layered(
+              tok ? fourOf(String(current(tok)).trim()) : null,
+              v =>
+                v.replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi, (m, t) =>
+                  String(current(t) || m),
+                ),
+            );
             const isZero = (/** @type {string | undefined} */ x) =>
               parseFloat(String(x)) === 0;
             const roundedAt = (/** @type {string} */ k) =>
@@ -22426,26 +22465,33 @@ export function draftAnswer(ctx, env, question) {
             );
             // (A rounded corner that is rounded now, or a corner squared by
             // "only" that is square now, needs no write.)
-            const changes = (/** @type {string} */ k) =>
-              target[k] != null &&
-              !(
-                (rounded && named.corners.includes(k) && roundedAt(k)) ||
-                (!named.corners.includes(k) &&
-                  resolvedAt != null &&
-                  isZero(resolvedAt[k]))
+            // (A corner already as asked needs no write: a rounded corner
+            // rounded now, a size or square it already has, a corner squared
+            // by "only" that is square now.)
+            const changes = (/** @type {string} */ k) => {
+              if (target[k] == null) return false;
+              if (!named.corners.includes(k))
+                return !(resolvedAt != null && isZero(resolvedAt[k]));
+              if (rounded) return !roundedAt(k);
+              return !(
+                resolvedAt != null &&
+                (nowAt?.[k] === target[k] ||
+                  (isZero(String(target[k])) && isZero(resolvedAt[k])))
               );
+            };
             const changing = [
               'start-start',
               'start-end',
               'end-start',
               'end-end',
             ].filter(changes);
-            const nowSaid =
-              ownNow != null
-                ? String(ownNow).trim()
-                : tok
-                  ? `${tok}, ${String(current(tok)).trim()}`
-                  : 'square';
+            const nowSaid = ordered.length
+              ? nowAt
+                ? radiusOf(ALL.map(k => nowAt[k]))
+                : String(ownNow ?? '').trim()
+              : tok
+                ? `${tok}, ${String(current(tok)).trim()}`
+                : 'square';
             // (Rounded on one side, the part rounded all round: those corners
             // are as asked and the others stay as they are. The line that
             // squares the others, as "only" would, is offered, never written
@@ -22479,6 +22525,7 @@ export function draftAnswer(ctx, env, question) {
               return {
                 text: `${sideWords(named.corners)} on ${on}: already ${rounded ? 'rounded' : sidePx === '0' ? 'square' : sidePx} (now ${nowSaid}), nothing to change`,
                 options: [],
+                already: true,
               };
             // (Every corner written: one radius of four, top-left first,
             // clockwise, as CSS gives them, elliptical where a corner has
