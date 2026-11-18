@@ -60,8 +60,6 @@ the same rules, so they live once, here.
   linking relates to the app's build settings: `spec:AST-112/FR3`.
 - Packages outside the core that carry native code, their roles, the host
   interface, and the version pin: `spec:AST-112/FR4`.
-- How a host that runs other projects checks what a project requires:
-  `spec:AST-139/FR7` and `spec:AST-141/FR7`.
 
 ## Platform group records
 
