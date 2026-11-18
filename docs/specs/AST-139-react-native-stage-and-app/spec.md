@@ -278,7 +278,16 @@ define, so Astryx React Native itself stays the same with or without it.
       dev server, FR4), `--bundle <path>` (a prebuilt app bundle),
       `--sample <name>` (one of Stage's built-in samples), `--engine <path>`,
       and `--out <path>`. Without `--dev-server-url`, `--bundle`, or
-      `--sample`, a run builds the project's one-shot production bundle.
+      `--sample`, a run builds the project's one-shot production bundle; any
+      two of them fail with `ERR_INVALID_OPTION`.
+  - Outside an app, the render commands refuse with `ERR_PROJECT_REQUIRED`
+    unless `--bundle` or `--sample` names what runs, and `install`,
+    `windows`, and `which` answer as they do in an app (`spec:AST-081` FR4).
+    Outside an app, a run writes only to the Stage cache and the file `--out`
+    names.
+  - A prebuilt bundle is paired by the package version it records (FR7), and
+    one that records none is refused with `ERR_STAGE_CONTRACTS`; a sample is
+    Stage's own and needs no pairing.
   - `--window <id>` on `stage shot`, `stage a11y`, and `stage play` acts on
     that window's running app, with its state kept, instead of a fresh render:
     a capture of the live screen, its accessibility tree, or a script of steps
@@ -325,6 +334,7 @@ define, so Astryx React Native itself stays the same with or without it.
     | The Stage download fails                                                                                                          | `ERR_FETCH_FAILED`                 |
     | A Stage binary fails its checksum or signature                                                                                    | `ERR_STAGE_UNTRUSTED`              |
     | `--window` names no open Stage window                                                                                             | `ERR_STAGE_NO_WINDOW`              |
+    | A render command runs outside an app with neither `--bundle` nor `--sample`                                                       | `ERR_PROJECT_REQUIRED`             |
     | A script step fails; the report names the step                                                                                    | `ERR_STAGE_STEP_FAILED`            |
     | The app throws or fails to start in Stage                                                                                         | `ERR_STAGE_JS_ERROR`               |
     | The app does not take the route `--route` names                                                                                   | `ERR_STAGE_ROUTE_NOT_TAKEN`        |
@@ -366,11 +376,12 @@ define, so Astryx React Native itself stays the same with or without it.
 - `spec:AST-042` FR1 and FR2 extend to the command functions of
   `@astryxdesign/react-native-stage`, the experimental package that
   contributes the `astryx experimental rn stage` group (FR8).
-- The `astryx experimental rn` level, and how the CLI loads the groups
-  installed packages add under it, are `spec:AST-112/FR13`'s, with its own
-  `architecture:cli-surface` impact. This record adds only the stage group
-  (FR8); the CLI carries no Stage command code and reserves no Stage name,
-  and `@astryxdesign/react-native` does not change.
+- `architecture:cli-surface` INV6 gains command groups that installed
+  packages add under the `astryx experimental rn` level of
+  `spec:AST-112/FR13`, loaded by the mechanism `spec:AST-112` OQ5 settles.
+  This record adds only the stage group (FR8); the CLI carries no Stage
+  command code and reserves no Stage name, and `@astryxdesign/react-native`
+  does not change.
 - `architecture:cli-surface` INV2 and INV9 admit a command that keeps
   running, writes its one result, and closes standard output, for
   `stage open` (FR8).
@@ -385,7 +396,7 @@ define, so Astryx React Native itself stays the same with or without it.
   `ERR_STAGE_NO_WINDOW`, `ERR_STAGE_STEP_FAILED`, `ERR_STAGE_JS_ERROR`,
   `ERR_STAGE_PROJECT_SETUP`, `ERR_STAGE_CONTRACTS`, `ERR_STAGE_ROUTE_NOT_TAKEN`,
   and `ERR_STAGE_DEV_SERVER_UNREACHABLE` are new and the group's own, and `ERR_DEP_MISSING`,
-  `ERR_FETCH_FAILED`, and `ERR_INVALID_OPTION` keep the meanings the CLI
+  `ERR_FETCH_FAILED`, `ERR_INVALID_OPTION`, and `ERR_PROJECT_REQUIRED` keep the meanings the CLI
   gives them.
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states how Stage shows them (FR6) and how Stage
@@ -543,7 +554,7 @@ contracts to a development tool's output.
   app does. The second lets a reviewer without a phone open the same link; it
   brings the encrypted-bundle checks of `spec:AST-141/FR8` to Stage.
 - **OQ7 — Does Stage simulate the Android root back gate and launch hold?**
-  (`checkable`) Both are absent today, a divergence from Android that FR6
+  (`checkable`) Both are absent, a divergence from Android that FR6
   lists as a gap; keeping them absent would amend DEC-4 for these two
   modules. Options: keep both absent, as on iOS; or simulate the
   back-to-home animation at the root and a launch window held until the
