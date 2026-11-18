@@ -22,45 +22,18 @@ function isSwizzledSource(filePath: string, memo: Map<string, boolean>) {
 }
 
 const LIBRARY_PATTERN = 'node_modules/@astryxdesign/';
-/** Where a stylesheet the source build replaces resolves: an empty module. */
-const REPLACED_STYLESHEET = 'virtual:astryx-replaced-stylesheet:';
 
 /**
- * The stylesheets a package declares in its `exports`, as import specifiers
- * with the file each one names. The package-wide alias maps the package to
- * its source, so these subpaths resolve through their exports instead.
- * @param packageName such as `@astryxdesign/core`
- * @param packageDir the package's folder
+ * Core's prebuilt stylesheet export, as the PostCSS integration names it
+ * (`./astryx.css`), read from beside babel.js like the marker reader.
  */
-function exportedStylesheets(
-  packageName: string,
-  packageDir: string,
-): {specifier: string; file: string}[] {
-  let exportsField: unknown;
-  try {
-    exportsField = JSON.parse(
-      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
-    ).exports;
-  } catch {
-    return [];
-  }
-  if (exportsField == null || typeof exportsField !== 'object') return [];
-  const sheets: {specifier: string; file: string}[] = [];
-  for (const [subpath, target] of Object.entries(exportsField)) {
-    if (!subpath.startsWith('./') || !subpath.endsWith('.css')) continue;
-    const named =
-      typeof target === 'string'
-        ? target
-        : ((target as {default?: unknown; import?: unknown})?.default ??
-          (target as {import?: unknown})?.import);
-    if (typeof named !== 'string') continue;
-    sheets.push({
-      specifier: `${packageName}/${subpath.slice(2)}`,
-      file: path.join(packageDir, named),
-    });
-  }
-  return sheets;
+function corePrebuiltStylesheet(): string {
+  const {PREBUILT_STYLESHEETS} = createRequire(import.meta.url)(
+    path.resolve(__dirname, 'source-stylesheet.js'),
+  ) as {PREBUILT_STYLESHEETS: Record<string, string>};
+  return PREBUILT_STYLESHEETS['@astryxdesign/core'];
 }
+
 const STYLEX_CSS_PATH = '/virtual:stylex.css';
 
 /**
@@ -253,14 +226,6 @@ export function astryxStylex(
   // Config plugin — injects resolve.alias and optimizeDeps
   const configPlugin: Plugin = {
     name: 'astryx-config',
-    resolveId(id) {
-      return id.startsWith(REPLACED_STYLESHEET) ? `\0${id}` : null;
-    },
-    load(id) {
-      if (!id.startsWith(`\0${REPLACED_STYLESHEET}`)) return null;
-      const specifier = id.slice(REPLACED_STYLESHEET.length + 1);
-      return `/* ${specifier}: this source build compiles these rules with StyleX. */\n`;
-    },
     config(): UserConfig {
       // Discover all @astryxdesign/* packages to exclude from pre-bundling.
       // Astryx ships as source that must be compiled by StyleX — pre-bundling
@@ -283,28 +248,20 @@ export function astryxStylex(
         'node_modules/@astryxdesign/core',
       );
       const coreSourceDir = path.join(corePackageDir, 'src');
-      // A stylesheet Core's exports name in its source (`reset.css`) is that
-      // file. One they name outside it is the prebuilt stylesheet
-      // (`astryx.css`), which this build replaces: StyleX compiles Core's
-      // rules from source, and loading both would add a second copy of
-      // them, so its import resolves to nothing.
-      const stylesheetAliases = exportedStylesheets(
-        '@astryxdesign/core',
-        corePackageDir,
-      ).map(({specifier, file}) => {
-        const fromSource = path.relative(coreSourceDir, file);
-        const inSource =
-          !fromSource.startsWith('..') && !path.isAbsolute(fromSource);
-        return {
-          find: specifier,
-          replacement: inSource ? file : `${REPLACED_STYLESHEET}${specifier}`,
-        };
-      });
+      // StyleX compiles Core's rules from source. The prebuilt
+      // `astryx.css` holds a second copy of them, so its import loads an
+      // empty stylesheet. A real file serves a CSS `@import` too, which
+      // Vite reads from disk. The package-wide alias below maps the other
+      // stylesheets (`reset.css`) to their files in `src`.
+      const prebuiltAlias = {
+        find: `@astryxdesign/core/${corePrebuiltStylesheet().slice(2)}`,
+        replacement: path.resolve(__dirname, 'replaced-stylesheet.css'),
+      };
 
       return {
         resolve: {
           alias: [
-            ...stylesheetAliases,
+            prebuiltAlias,
             {
               find: /^@astryxdesign\/core\/locales\/(.+)\.generated\.js$/,
               replacement: path.join(

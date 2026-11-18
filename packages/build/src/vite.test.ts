@@ -8,7 +8,13 @@
  */
 
 import {describe, it, expect, beforeAll, afterAll, vi} from 'vitest';
-import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -201,7 +207,6 @@ describe('astryxStylex stylesheet subpaths', () => {
             types: './src/astryx.css.d.ts',
             default: './dist/astryx.css',
           },
-          './extra.css': './src/styles/extra.css',
           './theme': './src/theme/index.ts',
         },
       }),
@@ -212,26 +217,19 @@ describe('astryxStylex stylesheet subpaths', () => {
     rmSync(rootDir, {recursive: true, force: true});
   });
 
-  it('resolves a stylesheet the exports name in the source to that file', () => {
+  it('resolves reset.css to its file in the source', () => {
     const aliases = getInjectedConfig(rootDir).resolve.alias;
     expect(applyAlias(aliases, '@astryxdesign/core/reset.css')).toBe(
       path.join(corePackage, 'src/reset.css'),
     );
-    expect(applyAlias(aliases, '@astryxdesign/core/extra.css')).toBe(
-      path.join(corePackage, 'src/styles/extra.css'),
-    );
   });
 
-  it('resolves the prebuilt stylesheet to an empty module, since StyleX compiles its rules', async () => {
-    const plugins = astryxStylex({rootDir});
-    const configPlugin = plugins.find(p => p.name === 'astryx-config') as any;
+  it('resolves the prebuilt stylesheet to an empty stylesheet, since StyleX compiles its rules', () => {
     const aliases = getInjectedConfig(rootDir).resolve.alias;
     const replaced = applyAlias(aliases, '@astryxdesign/core/astryx.css');
-    expect(replaced).not.toContain(path.join(corePackage, 'dist'));
-    const id = configPlugin.resolveId(replaced);
-    expect(id).toMatch(/^\0/);
-    const css = configPlugin.load(id);
-    expect(css).toContain('@astryxdesign/core/astryx.css');
+    expect(replaced).not.toContain(corePackage);
+    expect(path.basename(replaced)).toBe('replaced-stylesheet.css');
+    const css = readFileSync(replaced, 'utf8');
     expect(css.replace(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('');
   });
 
@@ -245,14 +243,16 @@ describe('astryxStylex stylesheet subpaths', () => {
     );
   });
 
-  it('adds no stylesheet alias when the package has no exports to read', () => {
+  it('aliases only the prebuilt stylesheet, even when Core is not installed', () => {
     const aliases = getInjectedConfig(path.join(tmpdir(), 'astryx-vite-none'))
       .resolve.alias;
     expect(
-      aliases.some(
-        (a: any) => typeof a.find === 'string' && a.find.endsWith('.css'),
-      ),
-    ).toBe(false);
+      aliases
+        .filter(
+          (a: any) => typeof a.find === 'string' && a.find.endsWith('.css'),
+        )
+        .map((a: any) => a.find),
+    ).toEqual(['@astryxdesign/core/astryx.css']);
   });
 });
 
@@ -328,6 +328,15 @@ describe('astryxStylex optimizeDeps package discovery', () => {
           'node:url',
         ],
       });
+      // SYNC: the same path rewrites build.mjs applies to dist/vite.mjs.
+      let bundled = readFileSync(outfile, 'utf8');
+      for (const file of ['source-stylesheet.js', 'replaced-stylesheet.css']) {
+        bundled = bundled.replaceAll(
+          `resolve(__dirname, "${file}")`,
+          `resolve(__dirname, "../src/${file}")`,
+        );
+      }
+      writeFileSync(outfile, bundled);
       const script = [
         `const {astryxStylex} = await import(${JSON.stringify(pathToFileURL(outfile).href)});`,
         `const plugin = astryxStylex({rootDir: ${JSON.stringify(rootDir)}})`,
