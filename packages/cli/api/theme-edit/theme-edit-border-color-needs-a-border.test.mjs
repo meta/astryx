@@ -8,8 +8,8 @@
  * the theme's border width, written in the same change and named in the
  * result, so one undo takes back both. A border the theme itself sets to
  * none there is refused instead. Whether a part draws a border is read
- * one way for set and how: drawsLine, by the variant asked, never from a
- * grouped button's join.
+ * one way for set and how: drawsLine, by the variant asked, with a side
+ * cleared only on the first or last child still drawn on the others.
  */
 
 import * as fs from 'node:fs';
@@ -217,19 +217,42 @@ describe("how's check", () => {
 
 describe('whether a part draws a border', () => {
   it(
-    'reads the variant asked and never a grouped button\'s join',
+    'reads the variant asked; a side cleared on the first or last child counts',
     async () => {
       const {C} = /** @type {any} */ (await context(cwd));
       expect(drawsLine(C, ['text-input'], 'border')).toBe(true);
       expect(drawsLine(C, ['tab'], 'border')).toBe(false);
-      // A secondary button's top and start edges are joins inside a
-      // button group, cleared on the first child: no border of its own.
-      expect(drawsLine(C, ['button'], 'border')).toBe(false);
+      // A side cleared only on the first or last child is drawn on the
+      // others: a list row's divider, a secondary button's join.
+      expect(drawsLine(C, ['list-item'], 'border')).toBe(true);
+      expect(drawsLine(C, ['button'], 'border', null, 'variant:secondary')).toBe(
+        true,
+      );
+      expect(drawsLine(C, ['button'], 'border', null, 'variant:primary')).toBe(
+        false,
+      );
       expect(drawsLine(C, ['selector'], 'border', null, 'variant:input')).toBe(
         true,
       );
       expect(drawsLine(C, ['selector'], 'border', null, 'variant:ghost')).toBe(
         false,
+      );
+    },
+    T,
+  );
+});
+
+describe('a part whose side is cleared only on its last child', () => {
+  it(
+    'keeps its own border: a list row takes the color, no border is added',
+    async () => {
+      const r = await themeEditSet('t', 'border-bottom-color', '#dddddd', {
+        cwd,
+        on: 'list-item',
+      });
+      expect(r.data.notes.join('\n')).not.toContain('added a');
+      expect(css()).not.toMatch(
+        /\.astryx-list-item \{\s*border: var\(--border-width\) solid transparent;/,
       );
     },
     T,
