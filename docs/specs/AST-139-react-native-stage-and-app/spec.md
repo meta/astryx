@@ -108,8 +108,7 @@ define, so Astryx React Native itself stays the same with or without it.
   - Every headless result is one machine-readable report with a status. A
     JavaScript exception, a failed step, a start that throws, and a route the
     app does not take are failed results, never a picture of nothing.
-  - A running headless session can be driven by later commands, and a command
-    can drive an open window (FR8).
+  - A command can drive an open window (FR8).
 - **FR3 — The render options are the device's settings.** A run takes a
   platform profile (iOS-style or Android-style, with operating-system version
   presets), a device size, an orientation, light or dark appearance, a locale,
@@ -121,10 +120,10 @@ define, so Astryx React Native itself stays the same with or without it.
 - **FR4 — Stage runs a project from its sources or from a bundle.** It runs
   the local project through its dev server, with hot reload that keeps the
   app's state, or as a one-shot production bundle of the project. It also runs
-  a prebuilt app bundle and its own built-in samples. When it runs a project
-  as a Preview project, it applies the namespaces and the Preview policy of
-  `spec:AST-141/FR4` and `spec:AST-141/FR5`, so the project meets the same
-  limits as on a phone.
+  a prebuilt app bundle and its own built-in samples. Whether it opens a
+  Preview project is OQ6; a Preview project it opens meets the namespaces and
+  the Preview policy of `spec:AST-141/FR4` and `spec:AST-141/FR5`, as on a
+  phone.
 - **FR5 — Every result says what is simulated.** Each report lists what in it
   is not the device's own rendering or behavior: drawn look-alikes of system
   chrome, stand-in fonts, a system service that Stage records instead of
@@ -226,9 +225,11 @@ define, so Astryx React Native itself stays the same with or without it.
   | `astryx rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
   | `astryx rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
   | `astryx rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
-  - The group is experimental (`spec:AST-017` FR21, DEC-6): its help and its
-    docs say so, the docs carry `stability: 'experimental'`, and its commands,
-    flags, and results may change or be removed in any release.
+  - The group is experimental (`spec:AST-017` FR21; this record's DEC-6): its
+    help and its docs say so, the docs carry `stability: 'experimental'`, and
+    its commands, flags, and results may change or be removed in any release.
+    Its outcome codes are the exception: they are append-only, and a shipped
+    code keeps its meaning (`architecture:cli-surface` INV3).
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
     - the device: `--platform ios|android`, `--device <name>`,
@@ -291,8 +292,8 @@ define, so Astryx React Native itself stays the same with or without it.
 - **FR9 — Stage results are development evidence.** A Stage result shows
   what the app does on the platform's contracts. A claim about native
   behavior is checked on the Simulator, the emulator, or a device
-  (`spec:AST-112/FR15`); every change to native behavior is checked there and
-  in Stage, and Stage is kept matched to them (FR6).
+  (`spec:AST-112/FR15`); every change to native behavior is checked there,
+  and Stage is kept matched to them (FR6).
 
 ### Platform support
 
