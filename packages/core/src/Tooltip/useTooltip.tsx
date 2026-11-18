@@ -79,10 +79,9 @@ const pickTooltipSide: MediaSidePicker = (
  * Content on the tooltip surface, with the tokens of the media side that
  * reads on it. Token-colored content, such as `Text`, otherwise resolves
  * against the page theme and can take the surface's own color. Inherited
- * text keeps the `tooltip` surface's color. This component renders
- * only inside the layer, which mounts on the first show, and it measures only
- * while the tooltip shows. So a trigger whose tooltip does not show pays
- * nothing for it.
+ * text keeps the `tooltip` surface's color. This component renders with
+ * the tooltip content, also while the tooltip is closed, as one element. It
+ * measures only while the tooltip shows.
  */
 function TooltipMediaContent({
   surfaceRef,
