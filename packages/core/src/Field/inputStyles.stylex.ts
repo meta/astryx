@@ -96,14 +96,14 @@ export const inputWrapperStyles = stylex.create({
  * The row height of a one-line text field, by size. The size token is the
  * height at the theme's default text size: the block padding is what is left
  * after the text line and the two borders, so the row is exactly the size
- * there. Larger text grows the row instead of being cut, keeping at least a
- * hairline of padding. The coarse-pointer line follows the iOS 16px floor the
+ * there, and `inputRowPadStyles` applies it. Larger text grows the row
+ * instead of being cut, keeping at least a hairline of padding. The coarse-pointer line follows the iOS 16px floor the
  * input's own font size has.
  */
 export const inputRowSizeStyles = stylex.create({
   sm: {
     minHeight: sizeVars['--size-element-sm'],
-    paddingBlock: {
+    '--_field-row-pad': {
       default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
         '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
@@ -112,7 +112,7 @@ export const inputRowSizeStyles = stylex.create({
   },
   md: {
     minHeight: sizeVars['--size-element-md'],
-    paddingBlock: {
+    '--_field-row-pad': {
       default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
         '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
@@ -121,12 +121,22 @@ export const inputRowSizeStyles = stylex.create({
   },
   lg: {
     minHeight: sizeVars['--size-element-lg'],
-    paddingBlock: {
+    '--_field-row-pad': {
       default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
         '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       },
     },
+  },
+});
+
+/**
+ * The block padding the row size leaves, for a field that applies its own
+ * per-side padding (NumberInput's stepper column cancels it edge by edge).
+ */
+export const inputRowPadStyles = stylex.create({
+  pad: {
+    paddingBlock: 'var(--_field-row-pad)',
   },
 });
 
