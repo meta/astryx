@@ -32,7 +32,7 @@ export const docs = {
       name: 'options.selectableItems',
       type: 'ReadonlyArray<T extends {value: string; disabled?: boolean}>',
       description:
-        'The options in the same order as they render: `SelectorOptionData`, or any option type with a string `value` and an optional `disabled`. Options with `disabled` cannot be picked and are skipped while moving through the open list; ArrowDown or ArrowUp that opens the list from `onKeyDown` still lands on the first or last option.',
+        'The options in the same order as they render: `SelectorOptionData`, or any option type with a string `value` and an optional `disabled`. Options with `disabled` cannot be picked and are skipped while moving through the open list; ArrowDown or ArrowUp that opens the list from `onKeyDown` lands on the selected option when it is enabled, else on the first or last enabled option.',
       required: true,
     },
     {
@@ -66,7 +66,7 @@ export const docs = {
       name: 'options.value',
       type: 'string',
       description:
-        'The selected value. Without search, opening by a press, Enter or Space highlights it, or the first option when nothing is selected; ArrowDown and ArrowUp open on the first and last option.',
+        'The selected value. Opening the list highlights it when it is enabled; otherwise ArrowUp opens on the last enabled option and ArrowDown, a press, Enter or Space on the first. A disabled option is never highlighted on opening, and with no enabled option nothing is.',
     },
     {
       name: 'options.onSelect',
@@ -84,7 +84,7 @@ export const docs = {
       name: 'options.hasSearch',
       type: 'boolean',
       description:
-        'Whether the list has its own search field. Space then types instead of picking, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last option), and printable keys on the closed control go to `onSearchSeed`.',
+        'Whether the list has its own search field. Space then types instead of picking, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the selected or the first or last enabled option), and printable keys on the closed control go to `onSearchSeed`.',
       default: 'false',
     },
     {
@@ -105,7 +105,7 @@ export const docs = {
       name: 'highlightedIndex',
       type: 'number',
       description:
-        'Index of the active option, or -1 when none is active. With `hasSearch`, opening by a press or Enter does not set one, so it stays -1 after the hook itself closes the list; ArrowDown and ArrowUp still open on the first or last option. Render it as the active option and name it in `aria-activedescendant` only while it points at a rendered option.',
+        'Index of the active option, or -1 when none is active. With `hasSearch`, opening by a press or Enter does not set one, so it stays -1 after the hook itself closes the list; ArrowDown and ArrowUp still open on the selected or the first or last enabled option. Render it as the active option and name it in `aria-activedescendant` only while it points at a rendered option.',
     },
     {
       name: 'setHighlightedIndex',
@@ -260,7 +260,7 @@ export const docsDense = {
   paramDescriptions: {
     options: 'config.',
     'options.selectableItems':
-      'options in render order: SelectorOptionData or any type w/ string value + optional disabled; disabled ones not pickable, skipped while moving in open list (onKeyDown ArrowDown/Up opening still lands first / last).',
+      'options in render order: SelectorOptionData or any type w/ string value + optional disabled; disabled ones not pickable, skipped while moving in open list (onKeyDown ArrowDown/Up opening lands on the enabled selected option, else first / last enabled).',
     'options.isOpen': 'list shown; caller owns state.',
     'options.onOpen':
       'show list; return false to refuse (highlight untouched).',
@@ -268,19 +268,19 @@ export const docsDense = {
       'hook hides list; resets highlight first. caller closing itself (outside press): also setHighlightedIndex(-1).',
     'options.listboxId': 'listbox id; option ids derive from it (getItemId).',
     'options.value':
-      'selected value; w/o search, press / Enter / Space opening highlights it (else first); ArrowDown/Up open on first / last.',
+      'selected value; opening highlights it when enabled, else ArrowUp -> last enabled, other opens -> first enabled; never a disabled option.',
     'options.onSelect': 'called w/ picked value; picking closes.',
     'options.onClear':
       'clears value; Delete / Backspace on closed control. ignored when open or hasSearch.',
     'options.hasSearch':
-      'list has own search field: Space types, press / Enter opening does not pre-highlight (ArrowDown/Up still first / last), printable keys on closed control -> onSearchSeed.',
+      'list has own search field: Space types, press / Enter opening does not pre-highlight (ArrowDown/Up still selected, else first / last enabled), printable keys on closed control -> onSearchSeed.',
     'options.onSearchSeed':
       'w/ hasSearch, each printable char except Space typed while control focused (opens first if closed).',
     'options.isDisabled': 'ignore clicks + keys.',
   },
   returnDescriptions: {
     highlightedIndex:
-      'active option index, -1 = none. hasSearch: press / Enter opening sets none (stays -1 after hook closes); ArrowDown/Up still first / last. name in aria-activedescendant only when it points at a rendered option.',
+      'active option index, -1 = none. hasSearch: press / Enter opening sets none (stays -1 after hook closes); ArrowDown/Up still selected, else first / last enabled. name in aria-activedescendant only when it points at a rendered option.',
     setHighlightedIndex: 'set active option (e.g. after filtering).',
     getItemId:
       'id for option at index; aria-activedescendant = isOpen && highlightedIndex >= 0 && highlightedIndex < selectableItems.length ? getItemId(highlightedIndex) : undefined (empty list safe).',

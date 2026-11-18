@@ -11,6 +11,8 @@
  *   the trigger, never opens for a touch that turns into a scroll, and a
  *   tap-opened layer closes when a tap outside lifts or a scroll starts
  *   outside.
+ *   A plain Tooltip and InfoTip's press-to-pin each answer a finger or pen
+ *   tap as they say, and InfoTip pins on a press, also under a mouse.
  * @position Run with `pnpm test:a11y-contract`. Only a real engine decides
  *   whether a touch is a tap, a scroll or a long press, so these outcomes
  *   cannot be shown in jsdom; the unit suites (Tooltip.test.tsx,
@@ -23,7 +25,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -198,3 +200,165 @@ for (const {name, story, trigger, action, layer} of cases) {
     });
   });
 }
+
+test.describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
+  const STORY = 'a11y-tooltip-toggle-behavior--button-toggle';
+  const CARD_STORY = 'a11y-tooltip-toggle-behavior--in-a-clickable-card';
+  const LAYER = '.astryx-tooltip:popover-open';
+  const pinButton = (page: Page) =>
+    page.getByRole('button', {name: 'What is this?'});
+
+  test('a real tap pins the tooltip, and the next tap on the trigger closes it', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(page.locator(LAYER)).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap outside closes a pinned tooltip', async ({page}) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await finger.down(...OUTSIDE);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('Enter pins it and Space closes it from the keyboard', async ({
+    page,
+  }) => {
+    await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await page.keyboard.press(' ');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap on the trigger inside a clickable card pins its tooltip and stops there', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, CARD_STORY);
+    const button = pinButton(page);
+    const count = page.getByText(/^Card opened \d+ times$/);
+    await expect(button).toBeVisible();
+    await expect(count).toHaveText('Card opened 0 times');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(count).toHaveText('Card opened 0 times');
+    await page.mouse.click(x, y);
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(count).toHaveText('Card opened 0 times');
+  });
+});
+
+test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip FR5, FR9)', () => {
+  const STORY = 'a11y-tooltip-toggle-behavior--trigger-behaviors';
+  const LAYER = '.astryx-tooltip:popover-open';
+  const term = (page: Page, name: string) =>
+    page.getByText(name, {exact: true});
+
+  /**
+   * A tap: a finger through touch events, or a landed pen through pen-typed
+   * presses. A held pen stays down past the hover delay before it lifts.
+   */
+  async function tapWith(
+    page: Page,
+    finger: Finger,
+    target: Locator,
+    pointer: 'finger' | 'pen' | 'held pen',
+  ) {
+    const [x, y] = await centerOf(target);
+    if (pointer === 'finger') {
+      await finger.down(x, y);
+      await finger.up();
+      return;
+    }
+    const cdp = await page.context().newCDPSession(page);
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      if (type === 'mouseReleased' && pointer === 'held pen') {
+        await page.waitForTimeout(300);
+      }
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x,
+        y,
+        button: 'left',
+        clickCount: 1,
+        pointerType: 'pen',
+      });
+    }
+    await cdp.detach();
+  }
+
+  for (const pointer of ['finger', 'pen', 'held pen'] as const) {
+    test(`a ${pointer} tap opens a plain Tooltip term and pins an InfoTip`, async ({
+      page,
+    }) => {
+      const finger = await openStory(page, STORY);
+      await tapWith(page, finger, term(page, 'Adaptive term'), pointer);
+      await expect(page.locator(LAYER)).toHaveText('Adaptive: a tap opens it');
+      const toggle = page.getByRole('button', {name: 'Toggle term'});
+      await tapWith(page, finger, toggle, pointer);
+      await expect(page.locator(LAYER)).toHaveText('Toggle: a press pins it');
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+  }
+});
+
+test.describe('a pinned InfoTip under a mouse (component:InfoTip FR2)', () => {
+  test.use({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1024, height: 768},
+  });
+
+  async function open(page: Page, id: string) {
+    await page.goto(`${storybook.origin}/iframe.html?id=${id}&viewMode=story`);
+  }
+
+  /** Whether focus sits on no element: a press on text that takes none. */
+  async function focusIsOnBody(page: Page): Promise<boolean> {
+    return page.evaluate(() => document.activeElement === document.body);
+  }
+
+  test('a click on a pinned tooltip’s own text keeps it pinned', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-toggle-behavior--button-toggle');
+    const button = page.getByRole('button', {name: 'What is this?'});
+    const layer = page.locator('.astryx-tooltip:popover-open');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await layer
+      .getByText('Rows are ranked by how many places import the icon')
+      .click();
+    expect(await focusIsOnBody(page)).toBe(true);
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+});

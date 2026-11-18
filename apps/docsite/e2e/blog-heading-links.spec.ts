@@ -5,7 +5,8 @@
  * @input Production docsite blog post (the 0.6.0 release post)
  * @output Proof that post headings reveal a copy-link control, that it copies
  *   the heading's permalink, and that a copied link lands the heading below
- *   the sticky header, left to right and right to left
+ *   the sticky header on a fresh load and in place, left to right and right
+ *   to left
  * @position Docsite browser tests; jsdom has no hover, clipboard, or layout
  */
 
@@ -58,6 +59,26 @@ test('hovering a post heading reveals a control that copies its permalink', asyn
   expect(new URL(copied).hash).toBe(`#${HEADING_ID}`);
 });
 
+test('opening a copied heading link lands the heading below the sticky header', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 900});
+  // A fresh load scrolls to the fragment before hydration. The offset must
+  // already include the whole header, banner included.
+  await page.goto(`${POST}#${HEADING_ID}`);
+
+  const heading = page.getByRole('heading', {name: HEADING});
+  await expect(heading).toBeInViewport();
+  const headerBox = await page
+    .locator('.astryx-app-shell-header')
+    .first()
+    .boundingBox();
+  const headingTop = (await heading.boundingBox())?.y ?? -1;
+  expect(headingTop).toBeGreaterThanOrEqual(
+    (headerBox?.y ?? 0) + (headerBox?.height ?? 0) - 1,
+  );
+});
+
 for (const [dir, colorScheme] of [
   ['ltr', 'light'],
   ['rtl', 'dark'],
@@ -90,7 +111,12 @@ for (const [dir, colorScheme] of [
     await heading.hover();
     const button = copyButton(page, HEADING);
     await expect(button).toBeVisible();
-    // The control trails the heading text on the inline-end side.
+    // The control trails the heading text on the heading's own inline-end
+    // side. The heading lays out in the direction of its own text, so an
+    // English heading keeps it on its right in a right-to-left page too.
+    const headingDirection = await heading.evaluate(
+      el => getComputedStyle(el).direction,
+    );
     const textBox = await heading.evaluate(el => {
       const range = document.createRange();
       range.selectNodeContents(el);
@@ -101,7 +127,7 @@ for (const [dir, colorScheme] of [
     if (buttonBox == null) {
       throw new Error('missing layout');
     }
-    if (dir === 'rtl') {
+    if (headingDirection === 'rtl') {
       expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(textBox.x + 1);
     } else {
       expect(buttonBox.x).toBeGreaterThanOrEqual(textBox.x + textBox.width - 1);

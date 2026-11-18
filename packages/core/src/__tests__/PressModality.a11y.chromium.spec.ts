@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Button ^packages/core/src/(utils/(pressFeedback|pressGesture|interactionOverlay|touchPresentation)|hooks/usePressFeedback)
+// @pr-a11y scope core/Button ^packages/core/src/(utils/(pressFeedback|pressGesture|interactionOverlay|touchPresentation)|hooks/usePressFeedback|privateAttributes/press)
 
 /**
  * @file PressModality.a11y.chromium.spec.ts
@@ -9,8 +9,8 @@
  * @output Real-engine proof that on a touch-first device a held mouse press
  *   and a held Space press paint the pressed state with the same pixels and
  *   scale a desktop `:active` press paints, and fade at the release; that a
- *   desktop press is still `:active` alone; and that a finger's press still
- *   waits for the touch press model's onset
+ *   desktop press is still `:active` alone; and that a finger's press on a
+ *   control is highlighted as the finger lands
  * @position Run with `pnpm test:a11y-contract`. Browser layer of the touch
  *   press model (utils/pressFeedback.ts); the jsdom layer is
  *   utils/pressFeedback.test.ts.
@@ -20,7 +20,12 @@
  * is the only thing that can paint a mouse or keyboard press.
  */
 
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -28,6 +33,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {waitForRest} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 
@@ -269,7 +275,7 @@ test('a desktop press is unchanged: `:active` paints it and the controller write
   expectSameColour(space.pressed, mouse.pressed);
 });
 
-test("a finger's press is unchanged: it waits for the onset, then fades at the lift", async ({
+test("a finger's press on a control highlights as the finger lands, then fades at the lift", async ({
   browser,
   browserName,
 }) => {
@@ -289,14 +295,19 @@ test("a finger's press is unchanged: it waits for the onset, then fades at the l
             : [],
       });
     await touch('touchStart');
-    await phone.page.waitForTimeout(60);
-    const early = await pressAttribute(phone.page);
-    await phone.page.waitForTimeout(190);
-    const believed = await pressAttribute(phone.page);
+    // Outside a scroller a control highlights in the frame the finger lands
+    // (UIControl's touchDown); nothing waits for a scroll that cannot come.
+    await phone.page.evaluate(
+      async () =>
+        new Promise(resolve => requestAnimationFrame(() => resolve(null))),
+    );
+    const landed = await pressAttribute(phone.page);
+    await phone.page.waitForTimeout(250);
+    const held = await pressAttribute(phone.page);
     await touch('touchEnd');
     const lifted = await pressAttribute(phone.page);
-    expect(early).toBeNull();
-    expect(believed).toBe('on');
+    expect(landed).toBe('on');
+    expect(held).toBe('on');
     expect(lifted).toBe('fading');
   } finally {
     await phone.close();
@@ -320,6 +331,10 @@ test('a mouse press dragged across menu rows lights only the row under the point
     ).toBe(true);
     const rows = page.getByRole('menuitem');
     await rows.first().waitFor();
+    // The menu's box and its paint are read once its entrance has ended.
+    await waitForRest(
+      page.locator('[popover]:has([data-astryx-menu-press])').first(),
+    );
     const menu = await page.locator('[data-astryx-menu-press]').boundingBox();
     const first = await rows.nth(0).boundingBox();
     const second = await rows.nth(1).boundingBox();

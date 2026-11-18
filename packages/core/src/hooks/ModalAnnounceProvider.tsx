@@ -133,6 +133,7 @@ export function ModalAnnounceProvider({
     );
     sessionRef.current = {dialog, stop};
   }, [dialogRef, isOpen]);
+  // Releases the presentation watch and the held announcements on unmount.
   useEffect(
     () => () => {
       const session = sessionRef.current;

@@ -11,7 +11,12 @@ import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 let rootDir;
 const CLI_BIN = path.join(
@@ -73,7 +78,7 @@ afterEach(() => {
 describe('integration authoring across a real npm package boundary', () => {
   it('authors, packs, installs, upgrades, and builds contributed source', async () => {
     rootDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-theme-provider-consumer-'),
+      path.join(REPO_ROOT, '.astryx-theme-provider-consumer-'),
     );
     const providerDir = path.join(rootDir, 'provider');
     const consumerDir = path.join(rootDir, 'consumer');
@@ -505,8 +510,8 @@ export const oceanTheme = defineTheme({
         package: '@acme/brand-integration',
         outputDir: target,
         files: expect.arrayContaining([
-          'oceanTheme.ts',
-          'oceanTheme.doc.mjs',
+          'acmeOceanTheme.ts',
+          'acmeOceanTheme.doc.mjs',
           'tokens/ocean.palette.receipt.json',
           'tokens/ocean.palette.ts',
         ]),
@@ -532,16 +537,17 @@ export const oceanTheme = defineTheme({
       ).recipe,
     ).toBe('astryx-oklch-v1');
 
-    const copiedEntry = path.join(target, 'oceanTheme.ts');
+    const copiedEntry = path.join(target, 'acmeOceanTheme.ts');
     const built = await runCli(
       ['theme', 'build', copiedEntry, '--json'],
       consumerDir,
     );
     expect(built.status, `${built.stdout}\n${built.stderr}`).toBe(0);
     const buildReceipt = parseEnvelope(built.stdout);
+    // The fork takes the name of its folder in the local themes root.
     expect(buildReceipt).toMatchObject({
       type: 'theme.build',
-      data: {name: 'ocean'},
+      data: {name: 'acme-ocean'},
     });
     for (const output of Object.values(buildReceipt.data.outputs)) {
       expect(fs.existsSync(path.join(consumerDir, output))).toBe(true);

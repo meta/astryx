@@ -141,7 +141,7 @@ describe('discoverComponents', () => {
     expect(result).toEqual({});
   });
 
-  // XDS-prefix migration (P2380608025, P4): source files are renamed from
+  // XDS-prefix migration (phase 4): source files are renamed from
   // `XDS{Name}.tsx` to the bare `{Name}.tsx`. Discovery must find both.
   it('discovers components from bare {Name}.tsx files (post-rename)', () => {
     const srcDir = path.join(tmpDir, 'src');

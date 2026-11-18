@@ -56,7 +56,9 @@ export const navItemStyles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     width: '100%',
-    height: sizeVars['--size-element-md'],
+    // A minimum, so an item grows with a larger text size and its label never
+    // leaves it.
+    minHeight: sizeVars['--size-element-md'],
     paddingInline: spacingVars['--spacing-2'],
     paddingBlock: 0,
     borderRadius: radiusVars['--radius-element'],
@@ -138,19 +140,19 @@ export const navItemStyles = stylex.create({
 
   /** Small size variant */
   sm: {
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
     paddingInline: spacingVars['--spacing-1'],
   },
 
   /** Medium size variant (default) */
   md: {
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     paddingInline: spacingVars['--spacing-2'],
   },
 
   /** Large size variant */
   lg: {
-    height: sizeVars['--size-element-lg'],
+    minHeight: sizeVars['--size-element-lg'],
     paddingInline: spacingVars['--spacing-2'],
   },
 });

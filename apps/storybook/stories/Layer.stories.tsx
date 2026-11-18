@@ -6,7 +6,9 @@ import * as stylex from '@stylexjs/stylex';
 import {useLayer} from '@astryxdesign/core/Layer';
 import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
+import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Text} from '@astryxdesign/core/Text';
+import {readAnchorNames} from '../../../packages/core/src/Layer/anchorName';
 
 const styles = stylex.create({
   popoverContent: {
@@ -21,6 +23,22 @@ const styles = stylex.create({
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 200,
+  },
+  contextZone: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 200,
+    height: 96,
+    border: '1px dashed var(--color-border-default)',
+    borderRadius: 8,
+  },
+  contextRow: {
+    display: 'flex',
+    gap: 24,
+    alignItems: 'center',
+    minHeight: 200,
+    paddingInline: 24,
   },
 });
 
@@ -612,13 +630,46 @@ function sameRect(a: DOMRect, b: DOMRect) {
   );
 }
 
+/** The open layer that anchors to this trigger, or null. */
+function openLayerOf(trigger: HTMLElement): HTMLElement | null {
+  const names = readAnchorNames(trigger);
+  for (const layer of document.querySelectorAll<HTMLElement>(
+    '[popover]:popover-open[id]',
+  )) {
+    if (names.includes(layer.style.getPropertyValue('position-anchor'))) {
+      return layer;
+    }
+  }
+  return null;
+}
+
 /**
- * Click the trigger, read the first frame's geometry synchronously (the
- * discrete event flushes React and the rect read forces layout), then settle
- * and read again. A difference is a paint-then-shift (FR8).
+ * Fail unless the trigger's own layer is open by the end of the click's task.
+ * The click's update can commit in the microtask after `click()` returns. That
+ * is still before the next paint, so a read after this check is the first
+ * frame's geometry.
+ */
+async function assertLayerOpened(trigger: HTMLElement): Promise<void> {
+  await committed();
+  if (openLayerOf(trigger) == null) {
+    fail("the layer did not open by the end of the click's task");
+  }
+}
+
+/**
+ * Click the trigger, check that its layer opened in the click's task, read the
+ * first frame's geometry (the rect read forces layout), then settle and read
+ * again. A difference is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
-  canvasElement.querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+  const trigger = canvasElement.querySelector<HTMLElement>(
+    '[data-testid="trigger"]',
+  );
+  if (!trigger) {
+    throw new Error('No trigger');
+  }
+  trigger.click();
+  await assertLayerOpened(trigger);
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);
@@ -1584,4 +1635,54 @@ function BrowserHideWakesAFocusLayerDemo() {
 
 export const BrowserHideWakesAFocusLayer: Story = {
   render: () => <BrowserHideWakesAFocusLayerDemo />,
+};
+
+/**
+ * A right click on a zone opens a light-dismissible layer
+ * from its `contextmenu` event, and a DropdownMenu through `isMenuOpen`. The
+ * release of that same press stays outside both, so the browser's light
+ * dismiss reads it as a dismissal unless the layer claims the press.
+ */
+function ContextMenuPressOpensALayerDemo() {
+  const layer = useLayer({mode: 'context', lightDismiss: true});
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  return (
+    <div {...stylex.props(styles.contextRow)}>
+      <div
+        ref={layer.ref}
+        data-testid="layer-zone"
+        onContextMenu={event => {
+          event.preventDefault();
+          layer.show();
+        }}
+        {...stylex.props(styles.contextZone)}>
+        <Text type="body">Right-click for a layer</Text>
+      </div>
+      {layer.render(
+        <div {...stylex.props(styles.popoverContent)} data-testid="layer">
+          <Text type="body">Opened by a right click.</Text>
+        </div>,
+        {placement: 'below', alignment: 'center'},
+      )}
+      <div
+        data-testid="menu-zone"
+        onContextMenu={event => {
+          event.preventDefault();
+          setIsMenuOpen(true);
+        }}
+        {...stylex.props(styles.contextZone)}>
+        <Text type="body">Right-click for the menu</Text>
+      </div>
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        isMenuOpen={isMenuOpen}
+        onOpenChange={setIsMenuOpen}
+        items={[{label: 'Rename'}, {label: 'Duplicate'}]}
+      />
+    </div>
+  );
+}
+
+export const ContextMenuPressOpensALayer: Story = {
+  render: () => <ContextMenuPressOpensALayerDemo />,
 };

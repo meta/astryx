@@ -27,7 +27,11 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-item', visualProps: ['density', 'align']},
+      {
+        className: 'astryx-item',
+        visualProps: ['density', 'align'],
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-item-swipe-panel', visualProps: ['side']},
       {className: 'astryx-item-swipe-action', visualProps: ['variant']},
     ],
@@ -192,32 +196,50 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disabled state.',
+          description:
+            'Disabled state. Interactive rows stay keyboard-reachable but cannot activate.',
           default: 'false',
+        },
+        {
+          name: 'swipe',
+          type: 'Swipe',
+          description:
+            "Swipe actions for touch, made by createSwipe({leading?, trailing?, swipeBehavior?}): the verbs a sideways drag uncovers on each side, outermost last, each `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`; `itemKey` is the `ListItem`'s, `undefined` on a plain `Item`. `leading` is uncovered by a drag toward the inline end, `trailing` toward the inline start. A finger, a pen or a trackpad's two-finger swipe drags the row; a mouse drag and a mouse wheel's notches never do, and a mostly vertical drag stays the scroller's. An open row closes on a touch tap on its own content, which activates nothing and paints no press, on a press elsewhere, when the list or page scrolls with focus outside it, and on Escape. The gesture is a touch accelerator and never a row's only path to a verb: a verb reachable only by swipe is unreachable by keyboard and by mouse, so every entry must also be reachable through the row's own content. Served on a row whose role permits interactive descendants (a listitem, a row with no role) and not on an option, a menu item, or a row that is the enlarged target of a native radio. The element containing the rows clips in the inline axis with overflow-inline: clip — List does; any other host does it once. `hasRemoval` only says the row holds out after the action fires instead of springing back. The swipe is the same on every device: a finger or a pen swipes the row whatever the primary pointer, a touchscreen laptop's included, and so does a trackpad's two-finger swipe, which moves the row with the fingers and lets it go at their speed; a mouse never does. The swipe's code comes with createSwipe, so a row given swipe is swipeable at its first paint and an app that never imports createSwipe ships none of it. Define the swipe once at module scope, or in useMemo when its handlers need component state. A new value with the same ids neither closes an open row nor restarts its settle; one with other ids closes it.",
         },
         {
           name: 'swipeActions',
           type: '{leading?: ItemSwipeAction[]; trailing?: ItemSwipeAction[]}',
           description:
-            "Swipe actions for touch: the verbs a sideways drag uncovers on each side, outermost last, each `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. `leading` is uncovered by a drag toward the inline end, `trailing` toward the inline start. A mouse never starts the drag and a mostly vertical drag stays the scroller's. The gesture is a touch accelerator and never a row's only path to a verb: a verb reachable only by swipe is unreachable by keyboard and by mouse, so every entry must also be reachable through the row's own content. Served on a row whose role permits interactive descendants (a listitem, a row with no role) and not on an option, a menu item, or a row that is the enlarged target of a native radio. The element containing the rows clips in the inline axis with overflow-inline: clip — List does; any other host does it once. `hasRemoval` only says the row holds out after the action fires instead of springing back. The gesture and its panels are loaded on demand the first time a row has swipe actions, so a row without them ships none of it.",
+            "Deprecated (DEP-0017): pass swipe={createSwipe({leading, trailing})} instead. Each entry is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. Still works, with the swipe's current behavior, loading the swipe the first time a row has it, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
         },
         {
           name: 'swipeBehavior',
           type: "'reveal' | 'commit'",
           description:
-            'What a swipe does. `reveal` rests the row open with every entry a real button and fires the outermost on a long drag or a fling; `commit` slides the row out and fires the outermost on release, with nothing resting and a presentational panel. `commit` fits one entry per side.',
+            "Deprecated (DEP-0017): pass swipeBehavior in createSwipe's options instead. Still works beside swipeActions, with the swipe's current behavior, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
           default: "'reveal'",
         },
         {
           name: 'ref',
-          type: 'React.Ref<HTMLDivElement>',
-          description: 'Ref forwarded to the root element.',
+          type: 'React.Ref<HTMLElement>',
+          description:
+            'Ref forwarded to the root element, whose type follows `as`.',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
-            'StyleX styles for layout customization. Must be a stylex.create() value.',
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'CSS class name(s) for the root element.',
+        },
+        {
+          name: 'style',
+          type: 'React.CSSProperties',
+          description: 'Inline styles for the root element.',
         },
         {
           name: 'data-testid',

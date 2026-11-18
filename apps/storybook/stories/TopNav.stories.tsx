@@ -133,6 +133,41 @@ export const WithHeadingMenu: Story = {
   },
 };
 
+/**
+ * A heading whose superheading and heading are separate links, beside a full
+ * set of nav items. In a narrow window the start region is crowded.
+ */
+export const IndependentHeadingLinks: Story = {
+  args: {
+    label: 'Main navigation',
+    heading: (
+      <TopNavHeading
+        superheading="Northwind workspace"
+        superheadingHref="#"
+        heading="Operations overview"
+        headingHref="#"
+        logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+      />
+    ),
+    startContent: (
+      <>
+        <TopNavItem label="Dashboard" href="#" isSelected />
+        <TopNavItem label="Reports" href="#" />
+        <TopNavItem label="Analytics" href="#" />
+        <TopNavItem label="Settings" href="#" />
+      </>
+    ),
+    endContent: (
+      <Button
+        label="Profile"
+        variant="ghost"
+        icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+    ),
+  },
+};
+
 export const TitleOnly: Story = {
   args: {
     label: 'Main navigation',

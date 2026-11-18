@@ -22,6 +22,7 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {layoutHeaderMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
+import {LayoutContainerContext} from './LayoutContainerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
@@ -33,6 +34,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   // Outer shell: owns border/divider and sizing. No padding — that lives on inner.
@@ -138,12 +140,12 @@ export interface LayoutHeaderProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     header={<LayoutHeader hasDivider>Page Title</LayoutHeader>}
  *     content={<LayoutContent>...</LayoutContent>}
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutHeader({
@@ -161,6 +163,7 @@ export function LayoutHeader({
   ...props
 }: LayoutHeaderProps) {
   const dividerCtx = use(LayoutDividerContext);
+  const container = use(LayoutContainerContext);
   const resolvedHasDivider =
     hasDivider ?? dividerCtx?.defaultHasDividers ?? false;
   const isZeroPadding = padding === 0;
@@ -170,9 +173,8 @@ export function LayoutHeader({
       ref={ref}
       role={role}
       aria-label={label}
-      data-divider={resolvedHasDivider || undefined}
       {...mergeProps(
-        themeProps('layout-header'),
+        themeProps('layout-header', {container}),
         stylex.props(
           layoutHeaderMarker,
           styles.header,
@@ -184,7 +186,8 @@ export function LayoutHeader({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      data-divider={resolvedHasDivider || undefined}>
       <div
         {...stylex.props(
           styles.inner,
@@ -199,6 +202,7 @@ export function LayoutHeader({
           paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
           paddingBlockEnd != null &&
             containerPaddingBlockEndVarStyles[paddingBlockEnd],
+          containerBlockBleedStyles.publish,
         )}>
         {children}
       </div>

@@ -23,6 +23,7 @@
  */
 
 const path = require('node:path');
+const {isSwizzledSource} = require('./swizzle-marker');
 const fs = require('node:fs');
 const babel = require('@babel/core');
 const stylexBabelPlugin = require('@stylexjs/babel-plugin');
@@ -178,6 +179,15 @@ function createPlugin() {
       postcssPlugin: PLUGIN_NAME,
       plugins: [
         async function (root, result) {
+          if (process.env.TURBOPACK && process.env.ASTRYX_BUILD_TURBOPACK) {
+            throw new Error(
+              'withAstryx() under Turbopack cannot run beside @astryxdesign/build/postcss, ' +
+                "the webpack setup's PostCSS plugin: its rules never match the classes " +
+                'Turbopack renders, so every Astryx component would be unstyled. Use ' +
+                "'@astryxdesign/build/next/postcss' and `@astryx;` (see the " +
+                '@astryxdesign/build README), or build with `next build --webpack`.',
+            );
+          }
           const fileName = result.opts.from;
 
           let styleXAtRule = null;
@@ -233,11 +243,24 @@ function createPlugin() {
           // Partition files into library vs product, then compile
           // each group with its own babel config (different prefix)
           const transforms = [];
+          // A swizzled copy is Astryx source too: it compiles in the library pass.
+          const markerMemo = new Map();
           for (const filePath of files) {
+            // Classify every file on each pass: when a marker appears or goes,
+            // `withAstryx()` rebuilds the copy with the other prefix.
+            const isLibrary =
+              libraryPatterns.some(p => filePath.includes(p)) ||
+              isSwizzledSource(filePath, markerMemo);
+            const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
+            const movedSides = (
+              isLibrary ? productRulesMap : libraryRulesMap
+            ).delete(filePath);
+
             const mtimeMs = fs.existsSync(filePath)
               ? fs.statSync(filePath).mtimeMs
               : -Infinity;
             if (
+              !movedSides &&
               fileModifiedMap.has(filePath) &&
               mtimeMs === fileModifiedMap.get(filePath)
             ) {
@@ -248,9 +271,7 @@ function createPlugin() {
             const contents = fs.readFileSync(filePath, 'utf-8');
             if (!contents.includes(STYLEX_IMPORT_SOURCE)) continue;
 
-            const isLibrary = libraryPatterns.some(p => filePath.includes(p));
             const config = isLibrary ? libraryBabelConfig : productBabelConfig;
-            const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
 
             transforms.push(
               babel

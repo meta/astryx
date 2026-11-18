@@ -6,7 +6,7 @@
  * @file layerClickBoundary.ts
  * @input React pointer, mouse, touch and click events on a layer root
  * @output Exports layerClickBoundary, the props every layer content root
- *   spreads, including the layer-root mark
+ *   spreads, including the layer-root mark; also stopInReactTree
  * @position Internal to Layer; used by useLayer's renderers and the Dialog,
  *   Drawer, Lightbox, MobileNav, BottomSheetPanel and ToastViewport roots.
  *   Not exported from the package.
@@ -61,7 +61,7 @@ const returnTrue = () => true;
  * React's dispatch asks `isPropagationStopped()` before each further
  * listener; the native event is left alone.
  */
-function stopInReactTree(event: SyntheticEvent): void {
+export function stopInReactTree(event: SyntheticEvent): void {
   event.isPropagationStopped = returnTrue;
 }
 

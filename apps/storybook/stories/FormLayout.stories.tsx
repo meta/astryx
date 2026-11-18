@@ -8,6 +8,9 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Field} from '@astryxdesign/core/Field';
 import {Text} from '@astryxdesign/core/Text';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
+import {Switch} from '@astryxdesign/core/Switch';
 import * as stylex from '@stylexjs/stylex';
 
 const meta: Meta<typeof FormLayout> = {
@@ -338,6 +341,43 @@ export const DefaultOptionalityRequired: Story = {
           value={nickname}
           onChange={setNickname}
           isOptional
+        />
+      </FormLayout>
+    );
+  },
+};
+
+/**
+ * Choice controls in a form whose fields are required by default. An unchecked
+ * box, an off switch and an empty group are answers, so only a control's own
+ * `isRequired` makes it required; the text field still takes the default.
+ */
+export const DefaultOptionalityRequiredChoices: Story = {
+  name: 'Default Optionality — Required, choice controls',
+  render: () => {
+    const [name, setName] = useState('');
+    const [subscribe, setSubscribe] = useState(false);
+    const [darkMode, setDarkMode] = useState(false);
+    const [topics, setTopics] = useState<string[]>([]);
+    const [terms, setTerms] = useState(false);
+    return (
+      <FormLayout defaultOptionality="required">
+        <TextInput label="Name" value={name} onChange={setName} />
+        <CheckboxInput
+          label="Subscribe to the newsletter"
+          value={subscribe}
+          onChange={setSubscribe}
+        />
+        <Switch label="Dark mode" value={darkMode} onChange={setDarkMode} />
+        <CheckboxList label="Topics" value={topics} onChange={setTopics}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Code" value="code" />
+        </CheckboxList>
+        <CheckboxInput
+          label="Accept the terms"
+          value={terms}
+          onChange={setTerms}
+          isRequired
         />
       </FormLayout>
     );

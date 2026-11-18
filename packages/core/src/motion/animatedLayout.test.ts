@@ -4,19 +4,21 @@
  * @file animatedLayout.test.ts
  * @input vitest (jsdom), the animated-layout module, a recording stand-in for
  *   Element.animate and stubbed layout rectangles (jsdom lays nothing out)
- * @output Checks the handle (`spec:AST-105` FR1), that nothing runs without
- *   one (FR2), which elements the walk takes and how it moves them (FR3),
- *   the shared `springs.settle` motion and Reduce Motion by pointer (FR4),
- *   and the indicator's transition
+ * @output Checks the handle, that nothing runs without one, and which
+ *   elements the walk takes and how it moves them. Checks the theme's move
+ *   curve, Reduce Motion by pointer, and the indicator's transition
  * @position Testing; the real geometry is proven in
  *   __tests__/animatedLayout.interaction.browser.spec.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {cubicBezier} from './bezier';
 import {
   applyLayoutChangeTransition,
   createAnimatedLayout,
+  glideOf,
   holdLayoutExit,
+  landLayoutGlideSideways,
   playLayoutChange,
   releaseLayoutExit,
   reportLayoutChange,
@@ -120,6 +122,23 @@ function translateOf(entry: Played): {x: number; y: number} {
   return match == null
     ? {x: 0, y: 0}
     : {x: Number(match[1]), y: Number(match[2])};
+}
+
+/** Each keyframe's time in ms and its vertical offset. */
+function verticalCurveOf(entry: Played): {t: number; y: number}[] {
+  return entry.keyframes.map(keyframe => ({
+    t: Number(keyframe.offset) * Number(entry.options.duration),
+    y: translateOf({...entry, keyframes: [keyframe]}).y,
+  }));
+}
+
+/** The move curve core declares, as remaining distance at `t` of `ms`. */
+function remainingOn(
+  points: [number, number, number, number],
+  ms: number,
+): (t: number) => number {
+  const ease = cubicBezier(points);
+  return t => (t >= ms ? 0 : 1 - ease(t / ms));
 }
 
 async function runChange(
@@ -344,26 +363,44 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     );
   }
 
-  it('plays the changed element and its followers on springs.settle, with one duration', async () => {
+  it("plays the changed element and its followers on the theme's move curve over --duration-medium, with one duration", async () => {
+    // With no stylesheet, the tokens read core's declared values.
     await changeOnce();
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
     const own = played.find(p => (p.element as HTMLElement).id === 'changed');
     expect(follower).toBeDefined();
     expect(own).toBeDefined();
     expect(own?.options.duration).toBe(follower?.options.duration);
-    // SwiftUI's smooth spring (0.5 s, no bounce) settles in about 0.6 s.
-    expect(Number(follower?.options.duration)).toBeGreaterThan(400);
-    expect(Number(follower?.options.duration)).toBeLessThan(900);
+    expect(Number(follower?.options.duration)).toBeCloseTo(410, 6);
+    const remaining = remainingOn([0.24, 1, 0.4, 1], 410);
+    for (const {t, y} of verticalCurveOf(follower as Played)) {
+      expect(y).toBeCloseTo(-80 * remaining(t), 3);
+    }
   });
 
-  it("ignores a scope's --motion-springs-settle: the role is internal", async () => {
-    await changeOnce();
-    const shared = played.find(p => (p.element as HTMLElement).id === 'a');
-    played = [];
-    document.body.innerHTML = '';
-    await changeOnce('--motion-springs-settle: 0.2s 0');
-    const scoped = played.find(p => (p.element as HTMLElement).id === 'a');
-    expect(scoped?.options.duration).toBe(shared?.options.duration);
+  it('plays the --duration-medium and --ease-move of the theme the area is in', async () => {
+    await changeOnce(
+      '--duration-medium: 200ms; --ease-move: cubic-bezier(0, 0, 1, 1)',
+    );
+    const follower = played.find(p => (p.element as HTMLElement).id === 'a');
+    expect(Number(follower?.options.duration)).toBeCloseTo(200, 6);
+    for (const {t, y} of verticalCurveOf(follower as Played)) {
+      expect(y).toBeCloseTo(-80 * (1 - t / 200), 3);
+    }
+  });
+
+  it("follows the theme's tempo through its duration token, never scaled twice (spec:AST-108 FR2)", async () => {
+    // A theme at tempo 1.5 writes the scaled token beside its tempo.
+    await changeOnce('--duration-medium: 615ms; --_astryx-motion-tempo: 1.5');
+    const follower = played.find(p => (p.element as HTMLElement).id === 'a');
+    const own = played.find(p => (p.element as HTMLElement).id === 'changed');
+    expect(Number(follower?.options.duration)).toBeCloseTo(615, 6);
+    expect(own?.options.duration).toBe(follower?.options.duration);
+  });
+
+  it('lands at once when the theme sets a zero duration', async () => {
+    await changeOnce('--duration-medium: 0ms');
+    expect(played).toEqual([]);
   });
 
   it('cross-fades with no travel under Reduce Motion on a coarse pointer', async () => {
@@ -385,8 +422,9 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
   });
 
   it('retargets an element already gliding: one glide, started from where it is on screen', async () => {
+    // A long, even curve, so the first glide still moves fast 100 ms in.
     const {area, changed, phase} = setUp(
-      '<div id="area"><div id="changed"></div><div id="a"></div></div>',
+      '<div id="area" style="--duration-medium: 1000ms; --ease-move: cubic-bezier(0, 0, 1, 1)"><div id="changed"></div><div id="a"></div></div>',
     );
     const a = document.getElementById('a') as HTMLElement;
     let top = 0;
@@ -417,13 +455,20 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     expect(second).toHaveLength(1);
     // From 50 on screen to 120: it starts 70 px above its new place.
     expect(translateOf(second[0]).y).toBeCloseTo(-70);
-    // And it keeps the first glide's speed 100 ms in (about 6 px a frame);
-    // a new spring from rest moves about 1.4 px in its first frame.
-    const next = translateOf({
-      ...second[0],
-      keyframes: second[0].keyframes.slice(1),
-    });
-    expect(next.y - -70).toBeGreaterThan(3);
+    // The rest of the first glide from 100 ms in, plus the new move on a
+    // fresh curve.
+    const remaining = remainingOn([0, 0, 1, 1], 1000);
+    const held = -80 * remaining(100);
+    const curve = verticalCurveOf(second[0]);
+    for (const {t, y} of curve) {
+      expect(y).toBeCloseTo(
+        -80 * remaining(100 + t) + (-70 - held) * remaining(t),
+        3,
+      );
+    }
+    // A glide started over from rest would sit more than 3 px from it.
+    const restart = curve.map(({t, y}) => Math.abs(y - -70 * remaining(t)));
+    expect(Math.max(...restart)).toBeGreaterThan(3);
   });
 
   it('drops a measurement no commit claims by the next frame', async () => {
@@ -529,7 +574,7 @@ describe('the changed element exits (spec:AST-105 FR4)', () => {
     expect(content.style.getPropertyValue('margin-block-end')).toBe('');
   });
 
-  it('keeps the content where it is while it gives up its space, conceals it on the spring, then hands it back', () => {
+  it('keeps the content where it is while it gives up its space, conceals it on the move curve, then hands it back', () => {
     const {content, layout} = exitSetUp();
     const done = vi.fn();
     const written = vi.spyOn(content.style, 'setProperty');
@@ -701,7 +746,7 @@ describe('two changes in one frame (spec:AST-105 FR3)', () => {
 });
 
 describe('the indicator transition', () => {
-  it('takes the spring as a linear() easing with a handle, and clears without one', () => {
+  it("takes the theme's move curve and duration with a handle, and clears without one", () => {
     document.body.innerHTML = '<div id="area"><svg id="chevron"></svg></div>';
     const area = document.getElementById('area') as HTMLElement;
     const chevron = document.getElementById(
@@ -711,14 +756,29 @@ describe('the indicator transition', () => {
       createAnimatedLayout(() => area),
       chevron,
     );
-    expect(
-      chevron.style.getPropertyValue('transition-timing-function'),
-    ).toMatch(/^linear\(0 0%, .*1 100%\)$/);
-    expect(chevron.style.getPropertyValue('transition-duration')).toMatch(
-      /^\d+ms$/,
+    expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
+      'cubic-bezier(0.24, 1, 0.4, 1)',
     );
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('410ms');
     applyLayoutChangeTransition(null, chevron);
     expect(chevron.style.getPropertyValue('transition-duration')).toBe('');
+  });
+
+  it('takes the timing read where the area is, whatever scope sits between them', () => {
+    document.body.innerHTML = `<div id="area" style="--duration-medium: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
+      <div style="--duration-medium: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
+    const area = document.getElementById('area') as HTMLElement;
+    const chevron = document.getElementById(
+      'chevron',
+    ) as unknown as SVGSVGElement;
+    applyLayoutChangeTransition(
+      createAnimatedLayout(() => area),
+      chevron,
+    );
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('465ms');
+    expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
+      'cubic-bezier(0, 0, 0.2, 1)',
+    );
   });
 
   it('is immediate under Reduce Motion', () => {
@@ -1150,5 +1210,94 @@ describe('the walk reaches what the changes can move (spec:AST-105 FR3)', () => 
     );
     expect(glide).toBeDefined();
     expect(translateOf(glide!).y).toBeCloseTo(-80);
+  });
+});
+
+describe('landLayoutGlideSideways', () => {
+  /** The glides here also expose their frames, as a browser's do. */
+  function withFrames() {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      const entry = played[played.length - 1];
+      return Object.assign(animation, {
+        effect: {
+          getKeyframes: () => entry.keyframes,
+          setKeyframes: (next: Keyframe[]) => {
+            entry.keyframes = next;
+          },
+        },
+      });
+    };
+  }
+
+  /** A row that showed 40 px to the left as the change was read. */
+  async function glidingRow() {
+    withFrames();
+    const {area, changed, phase} = setUp(
+      '<div id="area"><div id="changed"></div><p id="row">Row</p></div>',
+    );
+    const row = document.getElementById('row') as HTMLElement;
+    placeAt(row, {before: [-40, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
+    const layout = createAnimatedLayout(() => area);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    phase.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const glide = played.find(entry => entry.element === row);
+    if (glide == null) {
+      throw new Error('no glide');
+    }
+    return {area, changed, row, layout, glide};
+  }
+
+  it("lands a glide's sideways part in its frames and keeps its vertical move and its animation", async () => {
+    const {row, glide} = await glidingRow();
+    expect(translateOf(glide)).toEqual({x: -40, y: -80});
+    const animation = glideOf(row);
+    landLayoutGlideSideways(row);
+    expect(
+      glide.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+    expect(translateOf(glide)).toEqual({x: 0, y: -80});
+    expect(glideOf(row)).toBe(animation);
+  });
+
+  it('a later change carries only the vertical move', async () => {
+    const {changed, row, layout, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    // The change grows again, and the row moves 40 px lower.
+    const second = {current: 'before' as 'before' | 'after'};
+    placeAt(
+      changed,
+      {before: [0, 0, 400, 80], after: [0, 0, 400, 120]},
+      second,
+    );
+    placeAt(row, {before: [0, 80, 400, 40], after: [0, 120, 400, 40]}, second);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    second.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const next = played.filter(entry => entry.element === row).at(-1);
+    expect(next).not.toBe(glide);
+    expect(
+      next?.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+  });
+
+  it('forgets the glide when it ends', async () => {
+    const {row, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    glide.finish?.();
+    expect(glideOf(row)).toBeNull();
   });
 });

@@ -5,7 +5,7 @@
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
-import {Table, pixel} from '@astryxdesign/core/Table';
+import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import {Badge} from '@astryxdesign/core/Badge';
 import type {PropDoc} from '../../generated/componentRegistry';
 import {MarkdownText} from '../MarkdownText';
@@ -73,6 +73,10 @@ export function PropsTable({props, heading}: PropsTableProps) {
             {
               key: 'description',
               header: 'Description',
+              // Without a floor, a narrow screen squeezes this column to a
+              // few characters and every row grows thousands of pixels tall.
+              // The floor makes the table scroll sideways instead.
+              width: proportional(1, {minWidth: 240}),
               renderCell: (item: Record<string, unknown>) => (
                 <MarkdownText type="body">
                   {item.description as string}
@@ -82,6 +86,7 @@ export function PropsTable({props, heading}: PropsTableProps) {
           ]}
           density="spacious"
           dividers="rows"
+          verticalAlign="top"
         />
       </VStack>
     </Section>

@@ -24,6 +24,9 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {Suspense, startTransition, use, useState} from 'react';
+import type {Ref, RefCallback} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -159,6 +162,277 @@ describe('useTooltip — show delay', () => {
 
     expect(onShow).not.toHaveBeenCalled();
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+});
+
+// A caller that removes the trigger wiring while its own layer is open, as
+// DropdownMenu's Button does.
+function DetachableHarness({
+  isAttached,
+  ...options
+}: TooltipOptions & {isAttached: boolean}) {
+  // As Button does for DropdownMenu: removing the wiring also disables it.
+  const tooltip = useTooltip({
+    ...options,
+    isEnabled: isAttached && (options.isEnabled ?? true),
+  });
+  return (
+    <div>
+      <button
+        type="button"
+        ref={isAttached ? tooltip.ref : undefined}
+        aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a trigger that detaches and attaches again', () => {
+  it('closes an open tooltip when its trigger stays detached', async () => {
+    const onHide = vi.fn();
+    const {rerender} = render(<DetachableHarness isAttached onHide={onHide} />);
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    rerender(<DetachableHarness isAttached={false} onHide={onHide} />);
+    await act(async () => {});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows on attach for keyboard focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+
+    rerender(<DetachableHarness isAttached />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('stays closed after a commit that swaps its wiring as it disables it and holds it closed', async () => {
+    // As SideNavItem's rail leaf on an app-driven expand: one render disables
+    // the tooltip and holds it closed, and its inline ref swaps the wiring.
+    const {rerender} = render(<InlineRefHarness label="Trigger" />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    rerender(
+      <InlineRefHarness label="Trigger" isEnabled={false} isOpen={false} />,
+    );
+    await act(async () => {});
+
+    // The collapse enables it again with keyboard focus still on the trigger.
+    rerender(<InlineRefHarness label="Trigger" />);
+    await act(async () => {});
+
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('detaches a trigger the same way after React discards a render that disables the tooltip', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    // The trigger has its own state, so its removal commits without a
+    // render of the hook.
+    function Slot({
+      triggerRef,
+      describedBy,
+    }: {
+      triggerRef: RefCallback<HTMLElement>;
+      describedBy: string | undefined;
+    }) {
+      const [isShown, setIsShown] = useState(true);
+      return (
+        <>
+          {isShown && (
+            <button
+              type="button"
+              ref={triggerRef}
+              aria-describedby={describedBy}>
+              Trigger
+            </button>
+          )}
+          <button type="button" onClick={() => setIsShown(false)}>
+            Remove
+          </button>
+        </>
+      );
+    }
+    function Host({isPending}: {isPending: boolean}) {
+      const tooltip = useTooltip({isEnabled: !isPending});
+      return (
+        <div>
+          <Slot triggerRef={tooltip.ref} describedBy={tooltip.describedBy} />
+          {tooltip.renderTooltip('Helpful text')}
+          {isPending ? <Forever /> : null}
+        </div>
+      );
+    }
+    function Screen({isPending}: {isPending: boolean}) {
+      return (
+        <Suspense fallback={null}>
+          <Host isPending={isPending} />
+        </Suspense>
+      );
+    }
+    // Opens the tooltip, removes its trigger, and reads whether it is open.
+    async function removeTrigger(discardFirst: boolean): Promise<boolean> {
+      const {rerender, unmount} = render(<Screen isPending={false} />);
+      fireEvent.mouseEnter(trigger());
+      tick(200);
+      const tip = tooltipElement();
+      expect(tip.matches(':popover-open')).toBe(true);
+      if (discardFirst) {
+        await act(async () => {
+          startTransition(() => {
+            rerender(<Screen isPending />);
+          });
+        });
+      }
+      fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+      await act(async () => {});
+      const isOpen = tip.matches(':popover-open');
+      unmount();
+      return isOpen;
+    }
+
+    const withoutDiscard = await removeTrigger(false);
+    expect(await removeTrigger(true)).toBe(withoutDiscard);
+  });
+
+  it('unmounts a disabled tooltip with no error after its detach settles', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const {unmount} = render(<Harness isEnabled={false} />);
+    unmount();
+    await act(async () => {});
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('stays closed on attach for pointer focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
+    act(() => trigger().focus());
+
+    rerender(<DetachableHarness isAttached />);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+});
+
+/** A trigger whose caller merges its own inline ref, as Button and InfoTip do. */
+function InlineRefHarness({
+  label,
+  isShown = true,
+  ...options
+}: TooltipOptions & {label: string; isShown?: boolean}) {
+  const tooltip = useTooltip(options);
+  return (
+    <div>
+      {isShown && (
+        <button
+          type="button"
+          ref={el => {
+            tooltip.ref(el);
+          }}
+          aria-describedby={tooltip.describedBy}>
+          {label}
+        </button>
+      )}
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+/** A trigger that merges its consumer's ref, as Button does. */
+function MergedRefHarness({
+  consumerRef,
+  ...options
+}: TooltipOptions & {consumerRef: Ref<HTMLButtonElement>}) {
+  const tooltip = useTooltip(options);
+  const ref = useMergedRefs<HTMLButtonElement>(consumerRef, tooltip.ref);
+  return (
+    <div>
+      <button type="button" ref={ref} aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a caller ref that changes on each render', () => {
+  it('keeps a hovered tooltip open when the parent renders again', () => {
+    const onHide = vi.fn();
+    const {rerender} = render(
+      <MergedRefHarness consumerRef={() => {}} onHide={onHide} />,
+    );
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tooltip dismissed with Escape closed when the parent renders again', () => {
+    const {rerender} = render(<MergedRefHarness consumerRef={() => {}} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    fireEvent.keyDown(trigger(), {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    rerender(<MergedRefHarness consumerRef={() => {}} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('removes its listeners when the caller reports null for a removed trigger', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(
+      <InlineRefHarness label="Trigger" onShow={onShow} />,
+    );
+    const removed = screen.getByRole('button', {name: 'Trigger'});
+    rerender(
+      <InlineRefHarness label="Trigger" onShow={onShow} isShown={false} />,
+    );
+    fireEvent.mouseEnter(removed);
+    tick(1000);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip — a pending show and isEnabled', () => {
+  it('drops a pending show when the tooltip is disabled, even if it is enabled again before the delay ends', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<Harness onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    rerender(<Harness onShow={onShow} isEnabled={false} />);
+    rerender(<Harness onShow={onShow} />);
+    tick(200);
+    expect(onShow).not.toHaveBeenCalled();
   });
 });
 

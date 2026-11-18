@@ -50,9 +50,18 @@ function walk(dir) {
   });
 }
 
+/**
+ * Every `*.doc.mjs` file under the doc roots, as absolute paths. Listing them
+ * imports none.
+ * @returns {string[]}
+ */
+export function docFiles() {
+  return DOC_ROOTS.flatMap(walk);
+}
+
 /** @returns {Promise<{file: string, doc: any}[]>} */
 export async function collectDocs() {
-  const files = DOC_ROOTS.flatMap(walk);
+  const files = docFiles();
   const out = [];
   for (const f of files) {
     const mod = await import(pathToFileURL(f).href);
@@ -113,7 +122,7 @@ export async function runDrift() {
   manifest.commands.forEach(walkCmd);
   // Hidden commands (a package-script hook) have a CommandDoc but no manifest
   // entry, by design.
-  const {program} = await import('../../clients/cli/index.mjs');
+  const {program} = await import('../../clients/cli/program.mjs');
   const hiddenNames = new Set(
     program.commands
       .filter(c => /** @type {any} */ (c)._hidden)

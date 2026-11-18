@@ -111,7 +111,7 @@ pnpm dev
 
 Storybook will open at http://localhost:6006 with:
 
-- **Theme switcher** - Toggle between the base tokens and the Neutral, Stone, and Y2K themes
+- **Theme switcher** - Toggle between the base tokens (None) and the bundled Neutral, Butter, Chocolate, Matcha, Stone, Gothic, and Y2K themes, plus the generated Probe test fixture
 - **Mode switcher** - Toggle between Light and Dark modes
 - **Component stories** - Interactive component examples
 
@@ -668,10 +668,10 @@ Chromium and fails on any other cursor.
 
 The docsite playground runs user-authored code in a sandboxed iframe with an
 opaque origin, tied to the page only by a nonce-attested MessagePort handshake
-(`apps/docsite/src/app/playground/previewChannel.ts`). The required
-`docsite-test` check's browser-contract step proves that boundary in
-Chromium against a production build: a reloaded
-preview document recovers with the current code and theme, and a document that
+(`apps/docsite/src/app/playground/previewChannel.ts`). The browser
+contracts in the `docsite-browser` job, which the required `docsite-test`
+check joins, prove that boundary in Chromium against a production build: a
+reloaded preview document recovers with the current code and theme, and a document that
 previewed code navigated the frame to receives nothing. The sandbox only exists
 in production builds (`next dev` cannot serve its assets to an opaque origin),
 so the specs need a build first:

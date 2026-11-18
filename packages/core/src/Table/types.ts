@@ -22,6 +22,7 @@ import type {
 } from 'react';
 import type {StyleXStyles} from '../theme/types';
 import type {BaseProps} from '../BaseProps';
+import type {TableVirtualizationCapability} from './plugins/virtualization/useTableRowsVirtualization';
 import type {TableFilterFieldRef} from './plugins/filtering/useTableFiltering';
 
 // =============================================================================
@@ -423,6 +424,64 @@ export type TableContextActions =
 // =============================================================================
 
 /**
+ * Immutable facts about the table that Table passes to row, cell and
+ * scroll-wrapper transforms.
+ */
+export interface TableRenderContext {
+  /** The branch Table renders: `data` rows from `data`, or caller `children`. */
+  readonly mode: 'data' | 'children';
+  /**
+   * The row model the plugins admit. `flat` unless a plugin declares another
+   * model, or has a body transform and declares none (`custom`).
+   */
+  readonly rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom';
+  /** The number of product rows in the complete `data` input. */
+  readonly logicalRowCount: number;
+  /** The number of header rows: 1 when Table renders a header, else 0. */
+  readonly headerRowCount: number;
+  /** The scroll container around the `<table>`. Its reference is stable. */
+  readonly viewport: React.RefObject<HTMLDivElement | null>;
+}
+
+/**
+ * Immutable facts about one body row that Table passes to its transforms.
+ * Read its values during the transform, and copy what a returned callback
+ * needs: a row that does not re-render keeps its old context.
+ */
+export interface TableRowContext {
+  /** The row's key: its `idKey` value, or its index when there is no `idKey`. */
+  readonly key: string | number | undefined;
+  /** Whether the key is a usable identity. */
+  readonly identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate';
+  /** `product` for a row of a flat dataset; `unknown` for another row model. */
+  readonly kind: 'product' | 'synthetic' | 'unknown';
+  /**
+   * The zero-based position of the row in the complete `data` input. A row
+   * keeps this index when only some rows are mounted.
+   */
+  readonly logicalIndex: number;
+  /** The number of product rows in the complete `data` input. */
+  readonly logicalRowCount: number;
+  /** The number of header rows: 1 when Table renders a header, else 0. */
+  readonly headerRowCount: number;
+  /** The table's render context. */
+  readonly render: TableRenderContext;
+}
+
+/**
+ * An observable loading source a plugin hands to Table. Table reads it before
+ * it builds the table sections, so an empty table that is loading shows no
+ * default empty state. Keep the source and each snapshot object stable while
+ * the values do not change.
+ */
+export interface TablePluginRenderState {
+  subscribe(onChange: () => void): () => void;
+  /** `hasMore` is optional: an absent value makes no claim about more rows. */
+  getSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
+  getServerSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
+}
+
+/**
  * Table plugin — transforms render props at each structural level.
  * Plugins compose by sequential application (first plugin's output feeds next).
  *
@@ -450,6 +509,17 @@ export interface TablePlugin<
   T extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
+   * The row model this plugin's body transforms keep. Declare `'flat'` when
+   * they keep one product row per data item. A body transform without a
+   * declaration makes the table's row model `custom`.
+   */
+  readonly rowModel?: TableRenderContext['rowModel'];
+  /**
+   * A loading source Table reads before it builds the sections. Table uses it
+   * only in data mode, with a flat row model and the default scroll wrapper.
+   */
+  readonly renderState?: TablePluginRenderState;
+  /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,
    * or inject synthetic columns (e.g. a selection checkbox column).
@@ -471,14 +541,19 @@ export interface TablePlugin<
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
   ) => HeaderCellRenderProps;
-  /** Transform each body `<tr>` props */
+  /**
+   * Transform each body `<tr>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
+   */
   transformBodyRow?: (
     props: BodyRowRenderProps,
     item: T,
     index: number,
+    context?: TableRowContext,
   ) => BodyRowRenderProps;
   /**
-   * Transform each body `<td>` props.
+   * Transform each body `<td>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
    *
    * `columnIndex` and the full `columns` list are provided for plugins that
    * need to reason about column position (e.g. cumulative sticky offsets).
@@ -489,6 +564,7 @@ export interface TablePlugin<
     item: T,
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
+    context?: TableRowContext,
   ) => BodyCellRenderProps;
   /**
    * Transform the scroll-wrapper region — the `<div>` wrapping the `<table>`
@@ -498,6 +574,7 @@ export interface TablePlugin<
    */
   transformScrollWrapper?: (
     props: ScrollWrapperRenderProps,
+    context?: TableRenderContext,
   ) => ScrollWrapperRenderProps;
   /** Wrap the table output in context providers */
   transformTableContext?: (children: ReactNode) => ReactNode;
@@ -558,6 +635,13 @@ export interface BaseTableProps<
   T extends Record<string, unknown>,
 > extends BaseProps<HTMLTableElement> {
   ref?: React.Ref<HTMLTableElement>;
+  /**
+   * Geometry-only windowing: one capability, or a list with at most one rows
+   * and one columns capability. Styled Table owns its coordinated viewport.
+   */
+  virtualization?:
+    | TableVirtualizationCapability
+    | ReadonlyArray<TableVirtualizationCapability>;
   /** Array of data items to render as rows */
   data?: T[];
   /** Column definitions. If omitted, auto-generated from data keys. */

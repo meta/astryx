@@ -30,7 +30,7 @@ export const docs = {
           "type": "table",
           "headers": [
             "Token",
-            "Value"
+            "Core default"
           ],
           "rows": [
             [
@@ -68,6 +68,10 @@ export const docs = {
             [
               "--duration-slow-max",
               "1300ms"
+            ],
+            [
+              "--duration-exit",
+              "var(--duration-fast)"
             ]
           ]
         }

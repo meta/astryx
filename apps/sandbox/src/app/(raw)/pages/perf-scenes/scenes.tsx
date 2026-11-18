@@ -277,7 +277,7 @@ const SCENES: Readonly<Record<PerfSceneId, () => React.ReactNode>> = {
   table: TableScene,
   'tree-list': TreeListScene,
   markdown: MarkdownScene,
-  'overlay-churn': OverlayChurnScene,
+  'overlay-churn-settled': OverlayChurnScene,
 };
 
 export function PerfScene({scene}: {scene: PerfSceneId}) {

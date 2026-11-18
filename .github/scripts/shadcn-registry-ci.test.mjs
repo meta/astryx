@@ -5,7 +5,7 @@
  * @description Pins the full-catalog ShadCN compatibility check
  *   (test-registry-e2e), which runs for release-check until the production
  *   registry launches; its network-free production gate runs with the unit
- *   tests (verify-production-gate.test.mjs) and in docsite-test.
+ *   tests (verify-production-gate.test.mjs) and in docsite-build.
  * @input The PR CI workflow, docsite manifest, and catalog verifier source.
  * @output Mutation-sensitive assertions for generation, release gating, stock
  *   client installation, compilation, and the historical required join.
@@ -63,9 +63,9 @@ describe('ShadCN registry CI contract', () => {
         ),
       ),
     ).toBe(true);
-    // A docsite-only change skips test-node; docsite-test runs the gate too.
+    // A docsite-only change skips test-node; docsite-build runs the gate too.
     expect(
-      ci.jobs['docsite-test'].steps.find(
+      ci.jobs['docsite-build'].steps.find(
         candidate =>
           candidate.name === 'Verify the hidden production registry gate',
       ).run,

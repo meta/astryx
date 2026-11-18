@@ -43,16 +43,16 @@ export const docs = {
     },
     {
       name: 'icon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label. See `astryx docs icons` for valid semantic names.',
+        'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
       default: 'false',
       description:
-        'Whether this individual radio item is disabled. A disabled item stays in the accessibility tree as disabled (aria-disabled) but takes no focus: the arrow keys, typeahead, and the pointer highlight skip it, and selection is blocked.',
+        'Whether this individual radio item is disabled. A disabled item stays in the accessibility tree as disabled (aria-disabled), and the arrow keys and typeahead reach it so keyboard users find it. The pointer highlight skips it, and selection is blocked.',
     },
     {
       name: 'endContent',
@@ -79,7 +79,7 @@ export const docsZh = {
     value: '该项在组内代表的值。组的 value 与之匹配以确定勾选状态。',
     label: '标识该选项的主标签文本。',
     description: '显示在标签下方的次要描述文本。',
-    icon: '显示在标签前的图标。',
+    icon: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     isDisabled: '该单选项是否禁用。',
     endContent: '在标签和描述之后渲染的内容。',
     ref: '转发到行根元素（带 role="menuitemradio" 的元素）的 ref。',
@@ -95,9 +95,9 @@ export const docsDense = {
     value: "item's value within the group (matched vs group value)",
     label: 'primary label text',
     description: 'secondary text below label',
-    icon: 'icon before label',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     isDisabled:
-      'disabled (aria-disabled); skipped by arrows/typeahead, not focusable',
+      'disabled (aria-disabled); reached by arrows/typeahead, focusable, inert',
     endContent: 'content after label+description',
     ref: 'forwarded to the row root (the role="menuitemradio" element)',
   },

@@ -16,6 +16,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act, within, fireEvent} from '@testing-library/react';
 import {Chart} from './Chart';
 import {bar, line} from './marks';
+import {computeLayout} from './layout';
 import {InternationalizationProvider} from '@astryxdesign/core';
 
 const data = [
@@ -81,6 +82,58 @@ describe('Chart accessible name', () => {
     expect(
       screen.getByRole('img', {name: 'Chart of revenue and profit by month'}),
     ).toBeInTheDocument();
+  });
+
+  it('ignores xDomain for a categorical x-axis', () => {
+    const {container} = render(
+      <Chart
+        data={data}
+        xKey="month"
+        series={[bar('revenue')]}
+        xDomain={[0, 10]}
+      />,
+    );
+    reportWidth(600);
+
+    // xDomain is documented as ignored for band scales: the categories must
+    // still drive the axis and the bars must still render.
+    expect(screen.getByText('Jan')).toBeInTheDocument();
+    expect(screen.getByText('Mar')).toBeInTheDocument();
+    const plot = container.querySelector('g[clip-path]');
+    expect(plot).not.toBeNull();
+    const bars = Array.from(plot!.querySelectorAll('path'));
+    expect(bars).toHaveLength(3);
+    for (const path of bars) {
+      expect(path.getAttribute('d')).not.toContain('NaN');
+    }
+  });
+
+  it('keeps xDomain as a linear window for Date and numeric-string x', () => {
+    const start = Date.UTC(2026, 0, 1);
+    const hour = 60 * 60 * 1000;
+    for (const toX of [
+      (ms: number) => new Date(ms),
+      (ms: number) => String(ms),
+    ]) {
+      const {xScale} = computeLayout({
+        data: [
+          {t: toX(start), v: 1},
+          {t: toX(start + hour), v: 2},
+          {t: toX(start + 3 * hour), v: 3},
+        ],
+        xKey: 't',
+        series: [line('v')],
+        width: 600,
+        height: 300,
+        xDomain: [start, start + 3 * hour],
+      });
+      // A band scale would space the readings evenly; the window places
+      // them by time.
+      expect('bandwidth' in xScale).toBe(false);
+      expect((xScale as (value: number) => number)(start + hour)).toBeCloseTo(
+        200,
+      );
+    }
   });
 
   it('prefers the title prop as the accessible name', () => {

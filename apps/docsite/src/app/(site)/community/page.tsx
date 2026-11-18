@@ -31,6 +31,7 @@ import {FileText, Scale} from 'lucide-react';
 import {NavSurfaceMode} from './NavSurfaceMode';
 import {TemplatesPreview} from '../_landing/TemplatesPreview';
 import {ThemesPreview} from '../_landing/ThemesPreview';
+import {FrozenPreview} from '../_landing/FrozenPreview';
 import {pageMetadata} from '../../../lib/pageMetadata';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
@@ -624,7 +625,7 @@ const START_HERE: ReadonlyArray<StartHerePath> = [
       'Full visual control through defineTheme(). Tokens, component overrides, and mode switching.',
     href: '/docs/theme',
     effort: '~1 day',
-    preview: <ThemesPreview />,
+    preview: <ThemesPreview store={<FrozenPreview id="themes-store" />} />,
   },
 ];
 

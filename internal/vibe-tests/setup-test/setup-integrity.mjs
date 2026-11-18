@@ -115,15 +115,27 @@ function git(appDir, args, options = {}) {
 }
 
 function assertRepositoryRoot(appDir) {
-  const root = path.resolve(
-    git(appDir, ['rev-parse', '--show-toplevel']).trim(),
-  );
+  // One launch reads the top level and checks HEAD. When it fails, the two
+  // checks run apart, so the first failure is reported as before.
+  let topAndHead = null;
+  try {
+    topAndHead = git(appDir, [
+      'rev-parse',
+      '--show-toplevel',
+      '--verify',
+      'HEAD',
+    ]);
+  } catch {
+    topAndHead = null;
+  }
+  const top = topAndHead ?? git(appDir, ['rev-parse', '--show-toplevel']);
+  const root = path.resolve(top.split('\n')[0].trim());
   const requested = fs.realpathSync(appDir);
   const actual = fs.realpathSync(root);
   if (requested !== actual) {
     throw new Error(`--app must name the sandbox repository root: ${appDir}`);
   }
-  git(appDir, ['rev-parse', '--verify', 'HEAD']);
+  if (topAndHead === null) git(appDir, ['rev-parse', '--verify', 'HEAD']);
 }
 
 function trackedPatch(appDir) {
@@ -181,6 +193,13 @@ function updateFramed(hash, label, bytes) {
   hash.update(`${label}\0${content.length}\0`);
   hash.update(content);
   hash.update('\0');
+}
+
+function untrackedEntries(appDir) {
+  return untrackedPaths(appDir).map(relativePath => ({
+    path: relativePath,
+    ...untrackedEntry(appDir, relativePath),
+  }));
 }
 
 function digestDiff(patch, untracked) {
@@ -286,13 +305,12 @@ function isHostSource(relativePath) {
  *
  * `astryx theme build` emits, for any theme with `light-dark()` values:
  *
- *   :root { color-scheme: light dark; }
  *   html[data-theme="light"] { color-scheme: light; }
  *   html[data-theme="dark"] { color-scheme: dark; }
  *
- * Those three rules *implement* mode support — they are what lets a mode
+ * Those two rules *implement* mode support — they are what lets a mode
  * attribute resolve `light-dark()` — but a lexical `color-scheme: light` scan
- * reads the second one as disabling dark mode. Established hosts write the same
+ * reads the first one as disabling dark mode. Established hosts write the same
  * shape by hand (the `enterprise-scoped-synthetic` fixture pairs
  * `.fixture-shell[data-mode='light']` with its dark twin), so this is not a
  * generated-file problem and is not fixed by ignoring generated files.
@@ -632,8 +650,8 @@ function addedLinesFromPatch(patch) {
   return lines;
 }
 
-function trackedAddedLines(appDir, relativePath) {
-  const patch = git(appDir, [
+function zeroContextPatch(appDir, relativePath) {
+  return git(appDir, [
     '-c',
     'core.quotePath=false',
     'diff',
@@ -646,7 +664,6 @@ function trackedAddedLines(appDir, relativePath) {
     '--',
     relativePath,
   ]);
-  return addedLinesFromPatch(patch);
 }
 
 function removedLinesFromPatch(patch) {
@@ -667,23 +684,6 @@ function removedLinesFromPatch(patch) {
     }
   }
   return lines;
-}
-
-function trackedRemovedLines(appDir, relativePath) {
-  const patch = git(appDir, [
-    '-c',
-    'core.quotePath=false',
-    'diff',
-    '--unified=0',
-    '--no-color',
-    '--no-ext-diff',
-    '--no-textconv',
-    '--no-renames',
-    'HEAD',
-    '--',
-    relativePath,
-  ]);
-  return removedLinesFromPatch(patch);
 }
 
 function untrackedAddedLines(file) {
@@ -753,6 +753,20 @@ function findingsFor(relativePath, lines, maskedSpans, importantLines) {
 }
 
 /**
+ * The `diffSha256` that `analyzeSetupIntegrity` reports for the working tree,
+ * from only the git reads the digest needs. A caller that only attests a
+ * working tree uses it instead of a full analysis.
+ */
+export function setupDiffSha256(appDir) {
+  const resolvedAppDir = path.resolve(appDir);
+  assertRepositoryRoot(resolvedAppDir);
+  return digestDiff(
+    trackedPatch(resolvedAppDir),
+    untrackedEntries(resolvedAppDir),
+  );
+}
+
+/**
  * Analyze the working tree relative to its committed pre-agent HEAD.
  * This function only invokes read-only Git commands and reads file bytes.
  */
@@ -761,26 +775,42 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
   assertRepositoryRoot(resolvedAppDir);
 
   const patch = trackedPatch(resolvedAppDir);
-  const untracked = untrackedPaths(resolvedAppDir).map(relativePath => ({
-    path: relativePath,
-    ...untrackedEntry(resolvedAppDir, relativePath),
-  }));
+  const untracked = untrackedEntries(resolvedAppDir);
   const untrackedByPath = new Map(untracked.map(file => [file.path, file]));
   const tracked = trackedNumstat(resolvedAppDir);
+  // Each git command is a process launch, so a file's baseline and its
+  // zero-context diff are read once per run.
+  const baselines = new Map();
+  const baselineOf = relativePath => {
+    if (!baselines.has(relativePath)) {
+      let bytes = null;
+      try {
+        bytes = baselineBytes(resolvedAppDir, relativePath);
+      } catch {
+        bytes = null;
+      }
+      baselines.set(relativePath, bytes);
+    }
+    return baselines.get(relativePath);
+  };
+  const patches = new Map();
+  const zeroContextPatchOf = relativePath => {
+    if (!patches.has(relativePath)) {
+      patches.set(relativePath, zeroContextPatch(resolvedAppDir, relativePath));
+    }
+    return patches.get(relativePath);
+  };
+  const trackedAddedLines = relativePath =>
+    addedLinesFromPatch(zeroContextPatchOf(relativePath));
+  const trackedRemovedLines = relativePath =>
+    removedLinesFromPatch(zeroContextPatchOf(relativePath));
   const changedFiles = [];
   const escapeHatches = [];
   const astryxEvidence = [];
 
   for (const file of tracked) {
     const absolutePath = path.join(resolvedAppDir, file.path);
-    const existedAtBaseline = (() => {
-      try {
-        baselineBytes(resolvedAppDir, file.path);
-        return true;
-      } catch {
-        return false;
-      }
-    })();
+    const existedAtBaseline = baselineOf(file.path) !== null;
     const existsNow = fs.existsSync(absolutePath);
     const status = !existedAtBaseline
       ? 'added'
@@ -810,7 +840,7 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
       const currentSource = fs.readFileSync(absolutePath, 'utf8');
       const {baselineLines, deletedLines, deletedFraction} =
         substantiveLineDelta(
-          baselineBytes(resolvedAppDir, file.path).toString('utf8'),
+          baselineOf(file.path).toString('utf8'),
           currentSource,
         );
       if (
@@ -843,10 +873,7 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
         });
       }
 
-      const removedModeLines = trackedRemovedLines(
-        resolvedAppDir,
-        file.path,
-      ).filter(removed =>
+      const removedModeLines = trackedRemovedLines(file.path).filter(removed =>
         /\b(?:dark|color-scheme|data-theme)\b/i.test(removed.text),
       );
       if (
@@ -871,7 +898,7 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
       });
     }
     if (status !== 'deleted' && !file.binary) {
-      const addedLines = trackedAddedLines(resolvedAppDir, file.path);
+      const addedLines = trackedAddedLines(file.path);
       if (isHostSource(file.path)) {
         const currentSource = fs.readFileSync(absolutePath, 'utf8');
         escapeHatches.push(
@@ -882,9 +909,7 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
               resolvedAppDir,
               file.path,
               currentSource,
-              existedAtBaseline
-                ? trackedRemovedLines(resolvedAppDir, file.path)
-                : [],
+              existedAtBaseline ? trackedRemovedLines(file.path) : [],
             ),
             importantDeclarationLines(file.path, currentSource),
           ),

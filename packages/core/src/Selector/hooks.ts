@@ -5,10 +5,12 @@
 /**
  * @file hooks.ts
  * @input Uses untransformed DOM layout geometry from the Selector's outer
- *   anchor, listbox, and selected option
- * @output Hooks for Selector: useSelectedItemOffset, and useCombobox (public,
- *   exported from the Selector entry point; also used by CommandPalette, and
- *   by products for a combobox over a text field they render, spec:AST-075)
+ *   anchor, listbox, and selected option, the open listbox's resize reports,
+ *   and the layer runtime's keyboard inset
+ * @output Hooks for Selector. useSelectedItemOffset and useCombobox are
+ *   public, exported from the Selector entry point. CommandPalette also uses
+ *   useCombobox, and so do products with a combobox over their own text field
+ *   (spec:AST-075). useSelectedItemOverlayMargin is Selector's own.
  * @position Selector hooks; used by Selector.tsx and CommandPalette
  *
  * SYNC: When useCombobox's options or return change, update:
@@ -16,9 +18,18 @@
  */
 
 import {useCallback, useState} from 'react';
+import {flushSync} from 'react-dom';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from '../Layer/layerEntranceSide';
+import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
+import {layoutViewportHeight} from '../utils/layoutViewport';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
 
@@ -58,6 +69,118 @@ interface UseSelectedItemOffsetResult {
   isPositioned: boolean;
 }
 
+interface SelectedItemPlacement {
+  /** The block-start shift, px, from the anchor's bottom to the clamped top. */
+  offset: number;
+  /** The anchor's bottom edge, viewport px. */
+  anchorBottom: number;
+  /** The listbox's layout height, px. */
+  listboxHeight: number;
+  /** The anchor's top edge, viewport px. */
+  anchorTop: number;
+  /** The listbox's clamped top, viewport px. */
+  clampedTop: number;
+  /** The layer's margin at the viewport's block end, which the clamp keeps. */
+  gutter: number;
+  /** Whether the browser placed the layer above its anchor (a flip). */
+  isAboveAnchor: boolean;
+}
+
+/**
+ * Measures where the open list goes so that its selected item sits over the
+ * anchor, clamped to the viewport. Returns null when there is nothing to
+ * measure.
+ */
+function measureSelectedItem(
+  listbox: HTMLElement | null,
+  anchor: HTMLElement | null,
+  listboxId: string,
+  selectedItemIndex: number,
+  {countsLayerGutter = false}: {countsLayerGutter?: boolean} = {},
+): SelectedItemPlacement | null {
+  if (listbox == null || anchor == null) {
+    return null;
+  }
+
+  // Find the target item: selected item or first item
+  const targetIndex = selectedItemIndex >= 0 ? selectedItemIndex : 0;
+  const targetItemId = `${listboxId}-item-${targetIndex}`;
+  // Use getElementById - works with special characters without escaping
+  const targetItem = document.getElementById(targetItemId);
+
+  if (!targetItem) {
+    return null;
+  }
+
+  const anchorRect = anchor.getBoundingClientRect();
+
+  // offset* metrics intentionally exclude the popover's entry transform.
+  const listboxHeight = listbox.offsetHeight;
+  if (listboxHeight <= 0) {
+    return null;
+  }
+
+  // Item center relative to listbox top. This remains stable even as the
+  // popover animates between scale values. scrollTop keeps the calculation
+  // correct when a previously scrolled listbox is reopened.
+  const itemCenterInListbox =
+    getLayoutTop(targetItem) -
+    getLayoutTop(listbox) -
+    listbox.scrollTop +
+    targetItem.offsetHeight / 2;
+  const anchorCenter = anchorRect.top + anchorRect.height / 2;
+
+  // Desired top aligns the selected item's center with the anchor center.
+  const desiredTop =
+    anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+  // The layer keeps a gutter from the viewport's block end. A list that
+  // reaches into it overflows the layer's room, and the browser then takes a
+  // position fallback, which can flip the list off screen. The gutter is the
+  // layer's far-edge margin, the one that the overlay margin does not set. A
+  // flip swaps the two block margins, so a flipped layer keeps the gutter in
+  // its block-start margin. A software keyboard's own inset replaces the
+  // gutter.
+  const layer = countsLayerGutter
+    ? listbox.closest<HTMLElement>('[popover]')
+    : null;
+  let blockEndGutter = 0;
+  let isAboveAnchor = false;
+  if (layer != null) {
+    const layerStyle = getComputedStyle(layer);
+    // The position area's block keyword names the side the browser chose:
+    // its block-start side once a fallback flipped the layer. An engine
+    // without anchor positioning reads an empty string here.
+    const [blockArea = ''] = layerStyle
+      .getPropertyValue('position-area')
+      .split(' ');
+    isAboveAnchor = /start$|^top$/.test(blockArea);
+    blockEndGutter = Math.max(
+      0,
+      parseFloat(
+        isAboveAnchor ? layerStyle.marginBlockStart : layerStyle.marginBlockEnd,
+      ) || 0,
+    );
+  }
+  const viewportHeight = window.innerHeight;
+  const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
+  const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
+
+  // useLayer positions the popover below the outer anchor. Apply a negative
+  // block-start margin to the layer container so the listbox top moves from
+  // anchorRect.bottom to clampedTop.
+  const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
+
+  return {
+    offset: clampedOffset,
+    anchorBottom: anchorRect.bottom,
+    listboxHeight,
+    anchorTop: anchorRect.top,
+    clampedTop,
+    gutter: blockEndGutter,
+    isAboveAnchor,
+  };
+}
+
 /**
  * Calculates the offset needed to position the dropdown so that the selected
  * item appears centered over the outer selector control (macOS-style selector).
@@ -94,56 +217,13 @@ export function useSelectedItemOffset({
       commitPosition(0, false);
       return;
     }
-
-    if (!listboxRef.current || !anchorRef.current) {
-      commitPosition(0, true);
-      return;
-    }
-
-    // Find the target item: selected item or first item
-    const targetIndex = selectedItemIndex >= 0 ? selectedItemIndex : 0;
-    const targetItemId = `${listboxId}-item-${targetIndex}`;
-    // Use getElementById - works with special characters without escaping
-    const targetItem = document.getElementById(targetItemId);
-
-    if (!targetItem) {
-      commitPosition(0, true);
-      return;
-    }
-
-    const listbox = listboxRef.current;
-    const anchorRect = anchorRef.current.getBoundingClientRect();
-
-    // offset* metrics intentionally exclude the popover's entry transform.
-    const listboxHeight = listbox.offsetHeight;
-    if (listboxHeight <= 0) {
-      commitPosition(0, true);
-      return;
-    }
-
-    // Item center relative to listbox top. This remains stable even as the
-    // popover animates between scale values. scrollTop keeps the calculation
-    // correct when a previously scrolled listbox is reopened.
-    const itemCenterInListbox =
-      getLayoutTop(targetItem) -
-      getLayoutTop(listbox) -
-      listbox.scrollTop +
-      targetItem.offsetHeight / 2;
-    const anchorCenter = anchorRect.top + anchorRect.height / 2;
-
-    // Desired top aligns the selected item's center with the anchor center.
-    const desiredTop =
-      anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
-    const viewportHeight = window.innerHeight;
-    const maxTop = Math.max(0, viewportHeight - listboxHeight);
-    const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
-
-    // useLayer positions the popover below the outer anchor. Apply a negative
-    // block-start margin to the layer container so the listbox top moves from
-    // anchorRect.bottom to clampedTop.
-    const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
-
-    commitPosition(clampedOffset, true);
+    const placement = measureSelectedItem(
+      listboxRef.current,
+      anchorRef.current,
+      listboxId,
+      selectedItemIndex,
+    );
+    commitPosition(placement?.offset ?? 0, true);
   }, [
     isOpen,
     selectedItemIndex,
@@ -154,6 +234,111 @@ export function useSelectedItemOffset({
   ]);
 
   return {offset, isPositioned};
+}
+
+interface SelectedItemOverlayMargin {
+  marginBlockStart: string | undefined;
+  isPositioned: boolean;
+}
+
+/**
+ * Selector's own overlay margin: `useSelectedItemOffset`'s shift, or more
+ * while a software keyboard is up. The keyboard's part is CSS. The layer
+ * runtime's keyboard inset lifts the list above the keyboard. It does so in
+ * the commit that publishes the inset, before the runtime's cap reads the box.
+ */
+export function useSelectedItemOverlayMargin({
+  isOpen,
+  selectedItemIndex,
+  listboxId,
+  listboxRef,
+  anchorRef,
+}: UseSelectedItemOffsetOptions): SelectedItemOverlayMargin {
+  const [marginBlockStart, setMarginBlockStart] = useState<string>();
+  const [isPositioned, setIsPositioned] = useState(false);
+  const [listboxResizes, setListboxResizes] = useState(0);
+
+  // The open list measures again when its own box resizes. An option that
+  // grows or shrinks moves the selected row. The report comes before paint.
+  // The commit is synchronous, so no frame shows the old margin.
+  useIsomorphicLayoutEffect(() => {
+    const listbox = listboxRef.current;
+    if (!isOpen || listbox == null) {
+      return;
+    }
+    // The measuring Effect already runs in this commit, so the observation
+    // skips the report at registration.
+    const stop = observeResizeAfterLayout(listbox, () => {
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+      flushSync(() => setListboxResizes(count => count + 1));
+    });
+    return stop ?? undefined;
+  }, [isOpen, listboxRef]);
+
+  // Syncs the overlay's margin with the open list's layout: its selected
+  // item, its anchor and the viewport.
+  useIsomorphicLayoutEffect(() => {
+    const placement = isOpen
+      ? measureSelectedItem(
+          listboxRef.current,
+          anchorRef.current,
+          listboxId,
+          selectedItemIndex,
+          {countsLayerGutter: true},
+        )
+      : null;
+    let belowAnchor: string | undefined;
+    let aboveAnchor: string | undefined;
+    if (placement != null) {
+      const {offset, anchorTop, anchorBottom, listboxHeight, gutter} =
+        placement;
+      const viewport = layoutViewportHeight(window);
+      // The room below the anchor for the list, in the keyboard inset's
+      // layout px. With no keyboard the inset falls back to the room itself.
+      // The keyboard term is then 0, and the measured shift stands.
+      const room = viewport - listboxHeight - anchorBottom;
+      belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
+      // A flip swaps the block margins, so this margin sets the list's end
+      // from the anchor's top. It puts the list's top at the clamped top, or
+      // lifts the list's end above a software keyboard. The list's top stays
+      // below the gutter.
+      const flipped = anchorTop - placement.clampedTop - listboxHeight;
+      const keyboardEnd = anchorTop - viewport;
+      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
+    }
+    // At the open, the browser picks the layer's side after this margin
+    // applies. The margin below the anchor always fits there, so the layer
+    // opens below its anchor, where the runtime caps it above a keyboard. A
+    // layer that the browser flips while the list is open stays flipped, so
+    // it gets the flipped margin.
+    const isFlippedWhileOpen = placement?.isAboveAnchor === true;
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+    setMarginBlockStart(previous =>
+      previous != null && isFlippedWhileOpen ? aboveAnchor : belowAnchor,
+    );
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+    setIsPositioned(isOpen);
+  }, [
+    isOpen,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+    listboxResizes,
+  ]);
+
+  // The list moves over its trigger in the commit that applies the margin.
+  // The runtime skips its read at the show (`writesEntranceSide`), so the
+  // entrance takes its side here, once, before the first paint.
+  useIsomorphicLayoutEffect(() => {
+    const layer = listboxRef.current?.closest<HTMLElement>('[popover]');
+    const anchor = anchorRef.current;
+    if (isOpen && isPositioned && layer != null && anchor != null) {
+      writeLayerEntranceSide(layer, readLayerEntranceSide(layer, anchor));
+    }
+  }, [isOpen, isPositioned, listboxRef, anchorRef]);
+
+  return {marginBlockStart, isPositioned};
 }
 
 // =============================================================================
@@ -294,6 +479,18 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     return selectableItems.findIndex(item => item.value === value);
   }, [selectableItems, value]);
 
+  /** Opening never lands on a disabled option. */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => {
+      const selectedIndex = findSelectedIndex();
+      if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
+        return selectedIndex;
+      }
+      return enabledEdgeIndex(selectableItems, fromEnd);
+    },
+    [findSelectedIndex, selectableItems],
+  );
+
   const closeAndReset = useCallback(() => {
     setHighlightedIndex(-1);
     onClose();
@@ -319,11 +516,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        const selectedIndex = findSelectedIndex();
-        setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findSelectedIndex, hasSearch]);
+  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -356,7 +552,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -372,7 +568,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -398,8 +594,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              const selectedIndex = findSelectedIndex();
-              setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -487,7 +682,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       selectableItems,
       highlightedIndex,
       selectItem,
-      findSelectedIndex,
+      findOpeningIndex,
       getEnabledIndices,
       hasSearch,
       onClear,

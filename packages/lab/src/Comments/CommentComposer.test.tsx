@@ -1,6 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ComponentProps,
+} from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {
   afterAll,
@@ -106,7 +112,7 @@ describe('CommentComposer', () => {
       <CommentComposer value="" onChange={() => {}} onSubmit={onSubmit} />,
     );
     const post = screen.getByRole('button', {name: /send/i});
-    expect(post).toBeDisabled();
+    expect(post).toHaveAttribute('aria-disabled', 'true');
     rerender(
       <CommentComposer
         value="Looks good"
@@ -310,6 +316,60 @@ describe('CommentComposer', () => {
     expect(onUploadImages).not.toHaveBeenCalled();
   });
 
+  it('refuses images pasted or dropped into the input while a post is in flight (AST-085 FR2)', async () => {
+    const onChange = vi.fn();
+    const onUploadImages = vi
+      .fn()
+      .mockResolvedValue([{url: 'https://example.com/a.png', alt: 'Chart'}]);
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={onChange}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+        isSubmitting
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('starts no second upload from a paste while an upload is pending', async () => {
+    const onUploadImages = vi.fn(
+      () => new Promise<{url: string; alt: string}[]>(() => {}),
+    );
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={() => {}}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    await settle();
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).toHaveBeenCalledTimes(1);
+  });
+
   it('does not open the image chooser from the error banner while busy', async () => {
     const onUploadImages = vi.fn();
     const props = {
@@ -439,5 +499,111 @@ describe('CommentComposer', () => {
     );
     expect(screen.queryByRole('button', {name: 'Add emoji'})).toBeNull();
     expect(screen.getByRole('button', {name: 'Pin to moment'})).toBeTruthy();
+  });
+});
+
+describe('CommentComposer, when React discards a render', () => {
+  // A transition that suspends for good: React renders the new props, then
+  // keeps the committed tree and never commits that render.
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    isPending,
+    ...props
+  }: Partial<ComponentProps<typeof CommentComposerBase>> & {
+    isPending: boolean;
+  }) {
+    return (
+      <Suspense fallback={null}>
+        <CommentComposerBase
+          value="Committed draft"
+          onChange={() => {}}
+          onSubmit={() => {}}
+          placeholder="Reply"
+          context={{kind: 'comment'}}
+          highlightColor="yellow"
+          triggers={[]}
+          agentCommands={[]}
+          hasEmojiPicker={false}
+          isSubmitting={false}
+          {...props}
+        />
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  const neverUploads = () =>
+    new Promise<{url: string; alt: string}[]>(() => {});
+  async function pickImage(container: HTMLElement) {
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('File input not found');
+    }
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    await act(async () => {
+      fireEvent.change(input, {target: {files: [file]}});
+      await Promise.resolve();
+    });
+    return file;
+  }
+
+  it('posts the committed draft', async () => {
+    const onSubmit = vi.fn();
+    const {rerender} = render(<Screen isPending={false} onSubmit={onSubmit} />);
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen isPending value="Discarded draft" onSubmit={onSubmit} />,
+        );
+      });
+    });
+    fireEvent.click(screen.getByRole('button', {name: /send/i}));
+    expect(onSubmit).toHaveBeenCalledWith('Committed draft');
+  });
+
+  it('reports an upload to the committed onActionPendingChange', async () => {
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const onUploadImages = vi.fn(neverUploads);
+    const {container, rerender} = render(
+      <Screen
+        isPending={false}
+        onUploadImages={onUploadImages}
+        onActionPendingChange={committed}
+      />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            isPending
+            onUploadImages={onUploadImages}
+            onActionPendingChange={discarded}
+          />,
+        );
+      });
+    });
+    await pickImage(container);
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalledWith(true);
+  });
+
+  it('starts an upload while the committed composer is not submitting', async () => {
+    const onUploadImages = vi.fn(neverUploads);
+    const {container, rerender} = render(
+      <Screen isPending={false} onUploadImages={onUploadImages} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen isPending isSubmitting onUploadImages={onUploadImages} />,
+        );
+      });
+    });
+    const file = await pickImage(container);
+    expect(onUploadImages).toHaveBeenCalledWith([file]);
   });
 });

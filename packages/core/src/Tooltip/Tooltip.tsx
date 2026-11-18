@@ -19,9 +19,11 @@ import React, {
   useRef,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useTooltip,
   type TooltipFocusTrigger,
@@ -109,9 +111,7 @@ export interface TooltipProps {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip. This is what an info icon rendered
-   *   as a button wants: it looks like an action to the DOM, but revealing the
-   *   tooltip is the only thing it does
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
    *
    * @default 'auto'
@@ -152,6 +152,10 @@ export interface TooltipProps {
    * answers by calling `onOpenChange(false)` without hiding itself — closing is
    * your update's decision, exactly as for a controlled Dialog. Ignore the call
    * and the tip stays, and so does the press: nothing underneath dismisses.
+   *
+   * The same holds for focus held closed: focus that would open the tooltip
+   * calls `onOpenChange(true)` and shows nothing until your update sets
+   * `isOpen`.
    */
   isOpen?: boolean;
 
@@ -343,7 +347,9 @@ export function Tooltip({
           ref={tooltip.ref}
           tabIndex={0}
           aria-describedby={tooltip.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>
@@ -366,3 +372,36 @@ export function Tooltip({
 }
 
 Tooltip.displayName = 'Tooltip';
+
+/**
+ * A tooltip whose content is its anchor's own name (a cut Button label or
+ * table heading), so it adds no description. It is open while it is mounted;
+ * `onHide` closes it (Escape). Internal: the truncation tooltip module loads
+ * it with this module; the Tooltip entry does not export it.
+ */
+export function UndescribedTooltip({
+  anchorRef,
+  content,
+  onHide,
+}: {
+  anchorRef: RefObject<HTMLElement | null>;
+  content: ReactNode;
+  onHide: () => void;
+}): ReactNode {
+  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
+  const attach = tooltip.ref;
+  // Syncs the trigger listeners with the anchor's current element on every
+  // render: a Button that renders a new element (a link Button that becomes
+  // disabled) moves them to it. Attaching the same element again is a no-op.
+  useIsomorphicLayoutEffect(() => {
+    attach(anchorRef.current);
+  });
+  // Syncs the trigger listeners with this tooltip's lifetime.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      attach(null);
+    },
+    [attach],
+  );
+  return tooltip.renderTooltip(content);
+}

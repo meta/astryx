@@ -90,8 +90,18 @@ export interface ArenaBeganInput extends TouchBeganInput {
 export interface GestureArenaOptions {
   clock?: GestureClock;
   environment?: GestureEnvironment;
-  /** Touches a recognizer now owns: cancel the browser's default for them. */
-  onClaim?: (touchIds: ReadonlyArray<number>) => void;
+  /**
+   * Touches a recognizer now owns, and the recognizer that claimed them. A
+   * claim comes in any state: a recognizer that waits on another's failure
+   * claims while `possible`, and a swipe claims as `ended`. Each claim is
+   * reported once.
+   */
+  onClaim?: (
+    touchIds: ReadonlyArray<number>,
+    claimer: GestureRecognizer,
+  ) => void;
+  /** Claimed touches given back to the browser (releaseClaim). */
+  onRelease?: (touchIds: ReadonlyArray<number>) => void;
   /** A click deferred at touch end resolved: replay it, or drop it. */
   onDeferredClick?: (touch: GestureTouch, allowed: boolean) => void;
   /**
@@ -100,6 +110,13 @@ export interface GestureArenaOptions {
    * listening now (`spec:AST-094` FR24).
    */
   onIdle?: () => void;
+  /**
+   * Whether the browser keeps a contact for itself while it is down. Then no
+   * claiming recognizer recognizes with it before its lift. So a mouse or pen
+   * drag that starts on selectable text selects that text. A recognition at
+   * the lift, such as a tap's, is unaffected.
+   */
+  refusesClaim?: (touch: GestureTouch) => boolean;
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: (
     recognizer: GestureRecognizer,
@@ -228,6 +245,7 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
+          ...(input.scrollType == null ? {} : {scrollType: input.scrollType}),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
@@ -495,6 +513,11 @@ export class GestureArena {
     }
   }
 
+  /** @internal A recognizer takes its touches from the view, unclaimed. */
+  cancelTouchesInViewOf(recognizer: GestureRecognizer): void {
+    this.cancelViewTouchesOf(recognizer);
+  }
+
   /**
    * Runs `body`, code outside input that stops recognizers (an Effect that
    * turns one off or detaches it), without resolving what those stops
@@ -552,7 +575,8 @@ export class GestureArena {
   ): void {
     if (
       !internals(recognizer).shouldBegin() ||
-      this.isVetoedByConsumer(recognizer)
+      this.isVetoedByConsumer(recognizer) ||
+      this.isRefusedByBrowser(recognizer)
     ) {
       this.fail(recognizer);
       return;
@@ -610,7 +634,9 @@ export class GestureArena {
     }
     this.claim(recognizer);
     // A watcher takes nothing from the view either: the press and the click
-    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers).
+    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers). Only
+    // `cancelTouchesInView` takes them, as a pager's catch on a release's settle
+    // does.
     if (recognizer.claimsTouches && recognizer.cancelsTouchesInView) {
       this.cancelViewTouchesOf(recognizer);
     }
@@ -632,6 +658,23 @@ export class GestureArena {
       return false;
     }
     return winner.canPrevent(other) && other.canBePrevented(winner);
+  }
+
+  /**
+   * Whether a recognizer that claims touches would take a contact the
+   * browser keeps while it is down (`refusesClaim`).
+   */
+  private isRefusedByBrowser(recognizer: GestureRecognizer): boolean {
+    const refuses = this.options.refusesClaim;
+    if (refuses == null || !recognizer.claimsTouches) {
+      return false;
+    }
+    return recognizer.trackedTouches.some(
+      touch =>
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        refuses(touch),
+    );
   }
 
   /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
@@ -673,6 +716,7 @@ export class GestureArena {
     recognizer: GestureRecognizer,
     keep: ReadonlySet<number> = new Set(),
   ): void {
+    const released: number[] = [];
     for (const touch of recognizer.trackedTouches) {
       const record = this.records.get(touch.id);
       if (record == null || !record.isClaimed || keep.has(touch.id)) {
@@ -691,7 +735,11 @@ export class GestureArena {
       );
       if (!isOwned) {
         record.isClaimed = false;
+        released.push(touch.id);
       }
+    }
+    if (released.length > 0) {
+      this.options.onRelease?.(released);
     }
   }
 
@@ -767,7 +815,7 @@ export class GestureArena {
       }
     }
     if (claimed.length > 0) {
-      this.options.onClaim?.(claimed);
+      this.options.onClaim?.(claimed, recognizer);
     }
   }
 

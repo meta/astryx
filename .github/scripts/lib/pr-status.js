@@ -364,7 +364,15 @@ function buildVisualDeltas({verdict, frames = null}) {
       .filter(Boolean)
       .map(inline)
       .join(', ');
-    return variant ? `${story} (${variant})` : story;
+    const shown = variant ? `${story} (${variant})` : story;
+    // inherited-shots.mjs proves a change came from main, or says the
+    // reports it read do not show it: unknown, never "made here".
+    if (row.inherited?.from === 'main') return `${shown} · inherited from main`;
+    if (row.inherited?.found === true)
+      return `${shown} · same image also changed on another pull request, not proven from main`;
+    if (row.inherited?.found === false)
+      return `${shown} · inheritance unknown: not found in the ${num(verdict?.inheritedChecked)} newest reports of other pull requests`;
+    return shown;
   };
   const published = new Set(frames?.published || []);
   const base =
@@ -395,7 +403,7 @@ function buildVisualDeltas({verdict, frames = null}) {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
   const components = new Set(all.map(componentOf));
-  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}</details>\n\n`;
+  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}${verdict?.inheritedLookupFailed ? `Inheritance lookup failed: ${inline(String(verdict.inheritedLookupFailed).slice(0, 200))}.\n\n` : ''}${verdict?.inheritedChecked != null && !verdict?.inheritedLookupFailed ? `Inheritance checked against the ${num(verdict.inheritedChecked)} newest reports of other pull requests.\n\n` : ''}</details>\n\n`;
 }
 
 function previewLine(preview) {
@@ -477,11 +485,11 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     return false;
   });
   if (notRun.length === 0) return '';
-  const labels = notRun.map(suite => `\`${SUITE_LABELS[suite.id]}\``);
-  const list =
-    labels.length === 1
-      ? labels[0]
-      : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
+  // Each label runs only its own suite, so each names the suite it runs.
+  const labels = notRun.map(
+    suite => `\`${SUITE_LABELS[suite.id]}\` for ${suite.label}`,
+  );
+  const list = labels.join(', ');
   // Too wide for the touched-components check: it says so, and names only
   // the suites that did not run. A narrower change's touched components were
   // checked, so the labels run the full suites.
@@ -500,7 +508,7 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
               ', ',
             )}${foundations.length > 3 ? `, and ${foundations.length - 3} more` : ''})`
         : `Wide change (${num(touched.componentCount)} components)`;
-    return `${why}: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+    return `${why}: add ${list}.\n\n`;
   }
   // Claim the touched check only when it produced a result.
   const checked = (touched?.components || []).some(component =>
@@ -509,24 +517,27 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     ),
   );
   if (touched && checked)
-    return `Touched components checked; add ${list} to run the full suite${labels.length === 1 ? '' : 's'}.\n\n`;
+    return `Touched components checked; for the full suite${labels.length === 1 ? '' : 's'}, add ${list}.\n\n`;
   if (touched)
-    return `Touched components identified; checks did not run. Add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
-  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+    return `Touched components identified; checks did not run. Add ${list}.\n\n`;
+  return `Not run on this PR: add ${list}.\n\n`;
 }
 
 // The API report step's own renderer (scripts/api-report/changes.mjs), so
-// the PR report and `pnpm api:report` show API changes one way.
+// the PR report and the step's api-changes.md show API changes one way.
 const {renderChanges} = require('../../../scripts/api-report/changes.mjs');
 
 /**
  * API changes (the API report step's api-changes.json): one visible line per
  * package, the rows in one closed disclosure; nothing when no package has a
- * change or a report to refresh.
+ * change. A null `baseRecord` means no built surface of the merge base, so
+ * nothing was compared; the line says so for each package it lists.
  */
 function apiChangesLine(report) {
   if (!report || !Array.isArray(report.packages)) return '';
-  const out = renderChanges(report.packages);
+  const out = renderChanges(report.packages, {
+    compared: report.baseRecord !== null,
+  });
   return out ? `${out}\n` : '';
 }
 

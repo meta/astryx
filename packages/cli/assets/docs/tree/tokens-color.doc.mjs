@@ -45,7 +45,7 @@ export const docs = {
             ],
             [
               "--color-icon-<status>",
-              "Status icons on the page or a card. Defaults to the text colour.",
+              "Status icons and marks on the page or a card, such as a StatusDot. Defaults to the text colour.",
               "—"
             ],
             [
@@ -55,7 +55,7 @@ export const docs = {
             ],
             [
               "--color-<status>",
-              "Strong status fill, such as a Badge or StatusDot.",
+              "Strong status fill, such as a Badge.",
               "--color-on-<status>"
             ],
             [
@@ -79,14 +79,14 @@ export const docs = {
           "type": "table",
           "headers": [
             "Token",
-            "Light",
-            "Dark"
+            "Core default (light)",
+            "Core default (dark)"
           ],
           "rows": [
             [
               "--color-accent",
               "#0064E0",
-              "#2694FE"
+              "#0171E3"
             ],
             [
               "--color-accent-muted",

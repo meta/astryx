@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "dark-mode-toggle",
+  "source": "tc-1",
+  "title": "Dark mode switch for the whole page",
+  "prompt": "Build a settings card titled \"Appearance\" with a switch labelled \"Dark mode\" that assistive technology reads as a switch. It starts off and the page uses its light theme. Turning it on switches the whole page to its dark theme: the page background becomes dark and the text becomes light. Turning it off returns to the light theme."
+}

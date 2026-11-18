@@ -21,6 +21,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -235,17 +236,28 @@ export function CommentComposerBase({
         : [...hostTriggers, agentCommandTrigger],
     [agentCommandTrigger, hostTriggers],
   );
+  // The host owns these props, so no handler here sees each change. Each ref
+  // is written at commit: a render React discards must not leave its value.
   const latestValueRef = useRef(value);
-  latestValueRef.current = value;
+  // Syncs the handlers' draft with the committed `value`.
+  useLayoutEffect(() => {
+    latestValueRef.current = value;
+  });
   const isMountedRef = useRef(true);
   const actionPendingRef = useRef(false);
   // The latest callback, read when reporting. An inline callback is new on
   // every render; depending on it would re-run the unmount cleanup below on
   // each render and leave the composer busy after its upload ends.
   const onActionPendingChangeRef = useRef(onActionPendingChange);
-  onActionPendingChangeRef.current = onActionPendingChange;
+  // Syncs the reporting callback with the committed prop.
+  useLayoutEffect(() => {
+    onActionPendingChangeRef.current = onActionPendingChange;
+  });
   const isSubmittingRef = useRef(isSubmitting);
-  isSubmittingRef.current = isSubmitting;
+  // Syncs the busy guard with the committed `isSubmitting`.
+  useLayoutEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<ChatComposerInputHandle | null>(null);
   // Focus lands once per `focusKey`, when the input attaches: the handle ref
@@ -328,8 +340,15 @@ export function CommentComposerBase({
     }
   };
 
+  // The picker, a paste, and a drop all arrive here. A busy composer starts
+  // no upload, so none of them can add images to a draft in flight.
   const beginImageUpload = (files: readonly File[]) => {
-    if (onUploadImages == null || files.length === 0) {
+    if (
+      onUploadImages == null ||
+      files.length === 0 ||
+      isSubmittingRef.current ||
+      actionPendingRef.current
+    ) {
       return;
     }
     const images = files.filter(file => file.type.startsWith('image/'));

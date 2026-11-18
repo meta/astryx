@@ -14,6 +14,7 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
+import {Button} from '../Button/Button';
 import {MoreMenu} from '../MoreMenu';
 import {
   paddingBlockStyles,
@@ -248,7 +249,7 @@ describe('Toolbar', () => {
       expect(clipsOverflow(slotOf('end'))).toBe(false);
     });
 
-    it('still lets the center slot shrink below its content width', () => {
+    it('sizes the center slot from its minimum width and wraps the row instead', () => {
       render(
         <Toolbar
           label="Actions"
@@ -257,9 +258,13 @@ describe('Toolbar', () => {
           endContent={<span data-testid="end">End</span>}
         />,
       );
-      // The `auto` track only shrinks for an item whose minimum width is zero.
-      // Dropping the clip must not turn a narrow toolbar into a wider one.
-      expect(parseFloat(getComputedStyle(slotOf('center')).minWidth)).toBe(0);
+      // The center lane claims its content's minimum width when the row
+      // decides where to wrap, so its text never spills over the lanes beside
+      // it; a row that does not fit wraps.
+      expect(getComputedStyle(slotOf('center')).flexBasis).toBe('min-content');
+      expect(getComputedStyle(screen.getByRole('toolbar')).flexWrap).toBe(
+        'wrap',
+      );
     });
   });
 
@@ -368,6 +373,42 @@ describe('Toolbar', () => {
     expect(buttons[0]).toHaveAttribute('tabindex', '0');
     expect(buttons[1]).toHaveAttribute('tabindex', '-1');
     expect(buttons[2]).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('stays a single tab stop when every control is a disabled Button', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">before</button>
+        <Toolbar
+          label="Formatting"
+          startContent={
+            <>
+              <Button label="Bold" isDisabled />
+              <Button label="Italic" isDisabled />
+              <Button label="Underline" isDisabled />
+            </>
+          }
+        />
+        <button type="button">after</button>
+      </>,
+    );
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    expect(screen.getByRole('button', {name: 'Italic'})).toHaveAttribute(
+      'tabindex',
+      '-1',
+    );
+    expect(screen.getByRole('button', {name: 'Underline'})).toHaveAttribute(
+      'tabindex',
+      '-1',
+    );
+
+    await user.tab();
+    await user.tab();
+    expect(bold).toHaveFocus();
+    expect(bold).toHaveAttribute('aria-disabled', 'true');
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
   });
 
   it('keeps a link member in the arrow order and off the tab order', async () => {

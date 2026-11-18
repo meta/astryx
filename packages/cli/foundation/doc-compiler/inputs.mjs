@@ -27,6 +27,7 @@ import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs'
 import {CLI_ROOT, findCoreDir} from '../fs/paths.mjs';
 import {packageSource} from './source.mjs';
 import {treeDocFiles} from './tree.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 export {packageSource};
 
@@ -203,7 +204,7 @@ function unlistedCoreComponentDocs(coreDir, list) {
   const walk = dir => {
     const entries = fs
       .readdirSync(dir, {withFileTypes: true})
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -235,7 +236,7 @@ export function selfDocFiles() {
   const walk = dir => {
     const entries = fs
       .readdirSync(dir, {withFileTypes: true})
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {

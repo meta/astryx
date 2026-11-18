@@ -19,14 +19,17 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('test-results/markdown-table-narrow');
+const EVIDENCE = path.resolve('test-results/markdown-table-narrow');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 
 /** Reading widths: two phone-sized columns, a side panel, a roomy document. */
 const WIDTHS = [320, 390, 528, 1024] as const;
@@ -108,8 +111,7 @@ let storybook: StaticServer;
 const evidence: Record<string, unknown>[] = [];
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   storybook = await serveStorybook(
     process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
   );

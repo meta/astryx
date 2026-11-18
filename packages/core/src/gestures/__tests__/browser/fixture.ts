@@ -14,6 +14,7 @@
  *   test-only
  */
 
+import {createPanGesture} from '../../createPanGesture';
 import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
@@ -53,6 +54,11 @@ declare global {
     __attachListeners: string[];
     /** Every touch listener added to the document or the window, by type. */
     __pageTouchListeners: string[];
+    /**
+     * The last release velocities, read as each ends: the pan's for a dragged
+     * surface and for a scrolling one, and the pinch's.
+     */
+    __releases: {hpan?: number; hpanScroll?: number; pinch?: number};
     /**
      * The same, as the page left them once loaded: the test driver adds its
      * own window listeners when it first runs a script.
@@ -163,6 +169,7 @@ document.body.innerHTML = `
       <div id="feedRow" style="height: 80px; background: #cfc">feed row (tap)</div>
       <div style="height: 1200px">feed content</div>
     </div>
+    <div id="publicPan" style="height: 80px; background: #fde">public pan (drag sideways)</div>
     <div style="height: 1600px">page</div>
     <div id="passiveEnd" style="height: 60px; background: #dfd; touch-action: pan-y pinch-zoom">passive control at the page's end</div>
   </div>`;
@@ -210,6 +217,13 @@ function record(recognizer: GestureRecognizer, extra: () => Partial<Entry>) {
 const hpan = new PanGestureRecognizer({name: 'hpan', direction: 'horizontal'});
 record(hpan, () => ({x: hpan.translation().x, y: hpan.translation().y}));
 host.attach(element('hpan'), hpan);
+window.__releases = {};
+hpan.addTransitionListener((_current, _from, to) => {
+  if (to === 'ended') {
+    window.__releases.hpan = hpan.velocity().x;
+    window.__releases.hpanScroll = hpan.scrollVelocity().x;
+  }
+});
 
 const tap = new TapGestureRecognizer({name: 'tap'});
 record(tap, () => ({}));
@@ -235,6 +249,11 @@ const pinchPan = new PanGestureRecognizer({
 });
 pinch.recognizeSimultaneouslyWith(pinchPan);
 record(pinch, () => ({scale: pinch.scale}));
+pinch.addTransitionListener((_current, _from, to) => {
+  if (to === 'ended') {
+    window.__releases.pinch = pinch.velocity;
+  }
+});
 record(pinchPan, () => ({x: pinchPan.translation().x}));
 host.attach(element('pinchable'), pinch);
 host.attach(element('pinchable'), pinchPan);
@@ -280,6 +299,19 @@ for (const id of ['edgeZone', 'edgeWide', 'edgeZoneRtl', 'edgeWideRtl']) {
   record(edge, () => ({x: edge.translation().x}));
   host.attach(element(id), edge);
 }
+// The public pan (spec:AST-107 FR1): a drag reported as values, on its axis.
+createPanGesture(element('publicPan'), {
+  axis: 'x',
+  onPan: ({state, translation}) => {
+    window.__gestures.push({
+      name: 'publicPan',
+      state,
+      time: performance.now(),
+      x: translation.x,
+      y: translation.y,
+    });
+  },
+});
 
 // A control with no recognizer of its own (no blocking listener): only a
 // press consumer, under pan-y, as a passive switch is.

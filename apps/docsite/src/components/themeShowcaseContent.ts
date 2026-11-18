@@ -11,6 +11,9 @@
  * falls back to its own neutral defaults for any theme not listed here.
  *
  * Keyed by theme slug (the `<slug>` in `@astryxdesign/theme-<slug>` / /themes?theme=<slug>).
+ *
+ * The photos load through the image optimizer. As PNG files they are 0.5 to
+ * 1.2 MB each, and a theme switch loads six of them.
  */
 
 import type {
@@ -18,21 +21,30 @@ import type {
   InventoryRow,
 } from '../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 
+import {optimizedImageUrl} from '../lib/optimizedImageUrl.mjs';
+
+// A product card shows its photo up to about 400 CSS pixels wide. Most of the
+// photos are 700 pixels wide, so this width keeps their pixel size.
+export const SHOWCASE_PHOTO_WIDTH = 828;
+
+function photo(path: string): string {
+  return optimizedImageUrl(path, SHOWCASE_PHOTO_WIDTH);
+}
+
 export interface ThemeShowcaseContent {
   images: Record<string, string>;
   products: ProductSpec[];
   inventory: InventoryRow[];
 }
 
-
 // Matcha café — matcha-drink photos.
 const MATCHA_IMAGES: Record<string, string> = {
-  watch: '/images/matcha/preview-watch.png',
-  headphones: '/images/matcha/preview-headphones.png',
-  backpack: '/images/matcha/preview-backpack.png',
-  wallet: '/images/matcha/preview-wallet.png',
-  tumbler: '/images/matcha/preview-tumbler.png',
-  throw_: '/images/matcha/preview-throw.png',
+  watch: photo('/images/matcha/preview-watch.png'),
+  headphones: photo('/images/matcha/preview-headphones.png'),
+  backpack: photo('/images/matcha/preview-backpack.png'),
+  wallet: photo('/images/matcha/preview-wallet.png'),
+  tumbler: photo('/images/matcha/preview-tumbler.png'),
+  throw_: photo('/images/matcha/preview-throw.png'),
 };
 
 const MATCHA_CONTENT: ThemeShowcaseContent = {
@@ -130,12 +142,12 @@ const MATCHA_CONTENT: ThemeShowcaseContent = {
 // Butter bakery — butter/breakfast photos. Only five Butter assets exist, so
 // the croissant is reused for the sixth slot.
 const BUTTER_IMAGES: Record<string, string> = {
-  watch: '/images/butter/preview-watch.png',
-  headphones: '/images/butter/preview-headphones.png',
-  backpack: '/images/butter/preview-backpack.png',
-  wallet: '/images/butter/preview-wallet.png',
-  tumbler: '/images/butter/preview-tumbler.png',
-  throw_: '/images/butter/preview-throw.png',
+  watch: photo('/images/butter/preview-watch.png'),
+  headphones: photo('/images/butter/preview-headphones.png'),
+  backpack: photo('/images/butter/preview-backpack.png'),
+  wallet: photo('/images/butter/preview-wallet.png'),
+  tumbler: photo('/images/butter/preview-tumbler.png'),
+  throw_: photo('/images/butter/preview-throw.png'),
 };
 
 const BUTTER_CONTENT: ThemeShowcaseContent = {
@@ -232,12 +244,12 @@ const BUTTER_CONTENT: ThemeShowcaseContent = {
 
 // Stone homeware — stoneware photos on stone plinths.
 const STONE_IMAGES: Record<string, string> = {
-  watch: '/images/stone/preview-watch.png',
-  headphones: '/images/stone/preview-headphones.png',
-  backpack: '/images/stone/preview-backpack.png',
-  wallet: '/images/stone/preview-wallet.png',
-  tumbler: '/images/stone/preview-tumbler.png',
-  throw_: '/images/stone/preview-throw.png',
+  watch: photo('/images/stone/preview-watch.png'),
+  headphones: photo('/images/stone/preview-headphones.png'),
+  backpack: photo('/images/stone/preview-backpack.png'),
+  wallet: photo('/images/stone/preview-wallet.png'),
+  tumbler: photo('/images/stone/preview-tumbler.png'),
+  throw_: photo('/images/stone/preview-throw.png'),
 };
 
 const STONE_CONTENT: ThemeShowcaseContent = {
@@ -334,12 +346,12 @@ const STONE_CONTENT: ThemeShowcaseContent = {
 
 // Y2K trinkets — iridescent/holo objects.
 const Y2K_IMAGES: Record<string, string> = {
-  watch: '/images/y2k/preview-watch.png',
-  headphones: '/images/y2k/preview-headphones.png',
-  backpack: '/images/y2k/preview-backpack.png',
-  wallet: '/images/y2k/preview-wallet.png',
-  tumbler: '/images/y2k/preview-tumbler.png',
-  throw_: '/images/y2k/preview-throw.png',
+  watch: photo('/images/y2k/preview-watch.png'),
+  headphones: photo('/images/y2k/preview-headphones.png'),
+  backpack: photo('/images/y2k/preview-backpack.png'),
+  wallet: photo('/images/y2k/preview-wallet.png'),
+  tumbler: photo('/images/y2k/preview-tumbler.png'),
+  throw_: photo('/images/y2k/preview-throw.png'),
 };
 
 const Y2K_CONTENT: ThemeShowcaseContent = {
@@ -436,12 +448,12 @@ const Y2K_CONTENT: ThemeShowcaseContent = {
 
 // Gothic botanicals — moody single-stem floral photos.
 const GOTHIC_IMAGES: Record<string, string> = {
-  watch: '/images/gothic/preview-watch.png',
-  headphones: '/images/gothic/preview-headphones.png',
-  backpack: '/images/gothic/preview-backpack.png',
-  wallet: '/images/gothic/preview-wallet.png',
-  tumbler: '/images/gothic/preview-tumbler.png',
-  throw_: '/images/gothic/preview-throw.png',
+  watch: photo('/images/gothic/preview-watch.png'),
+  headphones: photo('/images/gothic/preview-headphones.png'),
+  backpack: photo('/images/gothic/preview-backpack.png'),
+  wallet: photo('/images/gothic/preview-wallet.png'),
+  tumbler: photo('/images/gothic/preview-tumbler.png'),
+  throw_: photo('/images/gothic/preview-throw.png'),
 };
 
 const GOTHIC_CONTENT: ThemeShowcaseContent = {
@@ -543,6 +555,14 @@ const CONTENT_BY_THEME: Record<string, ThemeShowcaseContent> = {
   y2k: Y2K_CONTENT,
   gothic: GOTHIC_CONTENT,
 };
+
+/**
+ * Every bespoke showcase photo. The /themes page loads them ahead of a theme
+ * switch (themeShowcaseWarmup.ts).
+ */
+export const THEME_SHOWCASE_PHOTOS: ReadonlyArray<string> = Object.values(
+  CONTENT_BY_THEME,
+).flatMap(content => Object.values(content.images));
 
 /**
  * Resolve bespoke showcase content for a theme slug, or `undefined` when the

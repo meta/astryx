@@ -94,8 +94,13 @@ export function Overlay({
     align,
   });
 
-  // Border radius: mirror first child's radius onto the wrapper.
-  // Only the component needs this — hook consumers have their own radius.
+  // Copies the first child's radius onto the wrapper, so the scrim clips to
+  // the media's rounded corners. This is a layout read of the mounted DOM, and
+  // no user interaction causes it. It runs again when a hidden Activity shows
+  // the wrapper, because the child can change while it is hidden. A ref
+  // callback runs again when a caller's ref changes identity, so it cannot
+  // keep this once-per-show timing. A useOverlay consumer sets the radius on
+  // its own element.
   useIsomorphicLayoutEffect(() => {
     const el = overlay.containerRef.current;
     if (!el) {

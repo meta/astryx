@@ -77,9 +77,10 @@ const styles = stylex.create({
 export interface SideNavCollapseButtonProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
   /**
-   * The same controlled `collapsible` config given to SideNav
-   * (`{isCollapsed, onCollapsedChange}`). Needed only when the button is
-   * rendered outside the sidenav, where collapse context cannot reach it.
+   * The same controlled `collapsible` config given to SideNav, with all its
+   * keys (`isCollapsed` and `onCollapsedChange` are required). Needed only
+   * when the button is rendered outside the sidenav, where collapse context
+   * cannot reach it.
    */
   collapsible?: SideNavControlledCollapsible;
 

@@ -7,7 +7,12 @@
 
 import {describe, expect, it} from 'vitest';
 
-import {publishOnce, registryHas} from './publish-package.mjs';
+import {
+  lookUpPackage,
+  packageExists,
+  publishOnce,
+  registryHas,
+} from './publish-package.mjs';
 
 /**
  * A fake registry and publisher. `publishes` lists each attempt's outcome:
@@ -166,5 +171,82 @@ describe('registryHas', () => {
         throw new TypeError('fetch failed');
       }),
     ).toBe(null);
+  });
+});
+
+describe('packageExists', () => {
+  const respond = status => async () => new Response('{}', {status});
+
+  it("reads the package's latest version document, not its full document", async () => {
+    const urls = [];
+    await packageExists({
+      name: '@astryxdesign/vega',
+      registry: 'https://registry.example/',
+      fetchImpl: async url => {
+        urls.push(url);
+        return new Response('{}', {status: 200});
+      },
+    });
+    expect(urls).toEqual([
+      'https://registry.example/%40astryxdesign%2Fvega/latest',
+    ]);
+  });
+
+  it('answers true for 200, false only for 404, and unknown otherwise, a 401 included', async () => {
+    const name = '@astryxdesign/vega';
+    expect(await packageExists({name, fetchImpl: respond(200)})).toBe(true);
+    expect(await packageExists({name, fetchImpl: respond(404)})).toBe(false);
+    expect(await packageExists({name, fetchImpl: respond(503)})).toBeNull();
+    // npm answers 401 on a missing scoped package's dist-tags; a 401 is
+    // never read as absence.
+    expect(await packageExists({name, fetchImpl: respond(401)})).toBeNull();
+    expect(
+      await packageExists({
+        name,
+        fetchImpl: async () => {
+          throw new Error('timed out');
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('lookUpPackage', () => {
+  function answers(...values) {
+    const calls = {asked: 0, sleeps: []};
+    return {
+      calls,
+      options: {
+        name: '@astryxdesign/vega',
+        intervalMs: 5_000,
+        exists: async () => values[Math.min(calls.asked++, values.length - 1)],
+        sleep: async ms => {
+          calls.sleeps.push(ms);
+        },
+      },
+    };
+  }
+
+  it('takes the first definite answer', async () => {
+    const found = answers(true);
+    expect(await lookUpPackage(found.options)).toBe(true);
+    expect(found.calls.asked).toBe(1);
+
+    const absent = answers(false);
+    expect(await lookUpPackage(absent.options)).toBe(false);
+    expect(absent.calls.asked).toBe(1);
+  });
+
+  it('asks again after an unknown answer, waiting longer each time', async () => {
+    const {calls, options} = answers(null, null, false);
+    expect(await lookUpPackage(options)).toBe(false);
+    expect(calls.asked).toBe(3);
+    expect(calls.sleeps).toEqual([5_000, 10_000]);
+  });
+
+  it('stays unknown after every lookup is unknown, never reporting absence', async () => {
+    const {calls, options} = answers(null);
+    expect(await lookUpPackage(options)).toBeNull();
+    expect(calls.asked).toBe(3);
   });
 });

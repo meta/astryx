@@ -280,6 +280,32 @@ describe('resolveTheme package field', () => {
   });
 });
 
+describe('resolveTheme warnings', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['a file path', './\u001b[2Jmissing.cjs'],
+    ['a scoped package', '@evil/\u001b]0;owned\u0007\npkg'],
+    ['a bare name', 'theme\u202e\r\nnext'],
+  ])(
+    'prints %s from astryx.theme as one line without control or format characters',
+    async (_kind, specifier) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(
+        await resolveTheme(fixture({name: 'app', astryx: {theme: specifier}})),
+      ).toBeNull();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0][0]);
+      expect(message).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+      expect(message).toContain('\uFFFD');
+    },
+  );
+});
+
 describe('resolveTheme source precedence', () => {
   it('uses the generated record default and ignores astryx.theme when a module exists', async () => {
     const dir = fixture({
@@ -410,11 +436,19 @@ describe('resolveTheme source precedence', () => {
       type: 'module',
       dependencies: {'@astryxdesign/core': '*'},
     });
-    fs.symlinkSync(
-      path.join(process.cwd(), 'node_modules'),
-      path.join(dir, 'node_modules'),
-      'dir',
+    // The ejected theme imports what the stone package declares. So the app
+    // links stone's dependencies, not those of the folder the run starts in.
+    const stoneModules = path.resolve(
+      import.meta.dirname,
+      '../../../../themes/stone/node_modules',
     );
+    // Stone's dev install links the workspace Core, which this case builds with.
+    expect(
+      fs.realpathSync(path.join(stoneModules, '@astryxdesign', 'core')),
+    ).toBe(
+      fs.realpathSync(path.resolve(import.meta.dirname, '../../../../core')),
+    );
+    fs.symlinkSync(stoneModules, path.join(dir, 'node_modules'), 'dir');
     fs.mkdirSync(path.join(dir, 'src'));
     fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
 

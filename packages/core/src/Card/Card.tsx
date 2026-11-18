@@ -23,12 +23,14 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import {container} from '../Layout/container.stylex';
+import {containerCornerStyles} from '../Layout/containerCorners.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {spacingStepToToken} from '../Layout/padding.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerScope} from '../Layout/LayoutContainerScope';
 import type {CardVariantMap} from './index';
 
 // =============================================================================
@@ -90,6 +92,11 @@ const styles = stylex.create({
     paddingInlineEnd: `calc(var(--container-padding-inline-end) - ${borderVars['--border-width']})`,
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
+  },
+  // A full-bleed child reaches under the border, so it takes the outer radius.
+  corners: {
+    '--_container-corner-block-start': 'var(--_card-radius)',
+    '--_container-corner-block-end': 'var(--_card-radius)',
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -322,6 +329,8 @@ export function Card({
                   paddingOuterY: paddingToken,
                 },
           ),
+          styles.corners,
+          containerCornerStyles.publish,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.
           variant === 'default' && styles.withBorder,
@@ -331,7 +340,7 @@ export function Card({
         style,
       )}
       {...props}>
-      {children}
+      <LayoutContainerScope container="card">{children}</LayoutContainerScope>
     </div>
   );
 }

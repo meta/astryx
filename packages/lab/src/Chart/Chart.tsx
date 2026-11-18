@@ -134,18 +134,19 @@ export function Chart({
   const svgRef = useRef<SVGSVGElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  useLayoutEffect(() => {
-    if (!containerRef.current) {
-      return;
-    }
+  const attachContainer = useCallback((container: HTMLDivElement) => {
+    containerRef.current = container;
     const observer = new ResizeObserver(entries => {
       const entry = entries[0];
       if (entry) {
         setContainerWidth(entry.contentRect.width);
       }
     });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      containerRef.current = null;
+    };
   }, []);
 
   // Block scroll/zoom on the container when interactive.
@@ -320,7 +321,7 @@ export function Chart({
     data.length * Math.max(yKeys.length, 1) <= MAX_TABLE_POINTS;
 
   return (
-    <div ref={containerRef} style={containerStyle}>
+    <div ref={attachContainer} style={containerStyle}>
       {containerWidth > 0 && (
         <svg
           ref={svgRef}

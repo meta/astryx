@@ -19,17 +19,21 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   busyWindowProof,
   CONTROL_RGB,
+  countBetween,
   inPresentationOrder,
+  releaseAnimations,
   startBusyControl,
+  traceRendering,
   trackMarker,
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
@@ -413,50 +417,60 @@ test('a value change keeps moving while a script holds the main thread', async (
   ).toBeLessThanOrEqual(6);
 });
 
-test('a value change lays out and paints nothing per frame', async ({
-  page,
-  browser,
-}) => {
+test('a value change lays out and paints nothing per frame', async ({page}) => {
   await open(page, 20);
-  // Stretch the theme's duration so the trace sits wholly inside the change.
+  // Stretch the theme's duration so the second judged below sits wholly
+  // inside the change.
   await page.evaluate(() =>
     (
       document.querySelector('.astryx-circular-progress-fill') as HTMLElement
     ).style.setProperty('--duration-medium', '3000ms'),
   );
-  await setArgs(page, {value: 80});
-  await page.waitForTimeout(200);
-  await browser.startTracing(page, {
-    categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline'],
+  // Hold the fill before the story renders. Test-process delays must not
+  // consume the change before its judged second starts.
+  const fill = page.locator('.astryx-circular-progress-fill');
+  const hold = await armHold(page, fill, {
+    count: 4,
+    judges: {
+      target: fill.locator(':scope > span').last(),
+      property: 'transform',
+    },
   });
-  await page.waitForTimeout(1000);
-  const moving = await page.evaluate(() =>
-    document.getAnimations().some(a => a.playState === 'running'),
-  );
-  const trace = JSON.parse((await browser.stopTracing()).toString()) as {
-    traceEvents: {
-      name: string;
-      ph: string;
-      pid: number;
-      tid: number;
-      args?: {name?: string};
-    }[];
-  };
-  const mainThreads = new Set(
-    trace.traceEvents
-      .filter(e => e.ph === 'M' && e.name === 'thread_name')
-      .filter(e => e.args?.name === 'CrRendererMain')
-      .map(e => `${e.pid}:${e.tid}`),
-  );
-  const count = (name: string) =>
-    trace.traceEvents.filter(
-      e => e.name === name && mainThreads.has(`${e.pid}:${e.tid}`),
-    ).length;
+  await setArgs(page, {value: 80});
+  expect(await hold.held()).toHaveLength(4);
+  let from = 0;
+  let to = 0;
+  let moving = false;
+  const trace = await traceRendering(page, async () => {
+    [from, to, moving] = await fill.evaluate(async element => {
+      const animations = element.getAnimations({subtree: true});
+      for (const animation of animations) {
+        animation.currentTime = 200;
+        animation.play();
+      }
+      await Promise.all(animations.map(animation => animation.ready));
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const start = performance.timeOrigin + performance.now();
+      // Keep both marks and the running-state read in the page's task queue.
+      // A delayed response to the test cannot move the read past the end.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return [
+        start,
+        performance.timeOrigin + performance.now(),
+        animations.some(animation => animation.playState === 'running'),
+      ] as const;
+    });
+  });
+  await releaseAnimations(page, {finish: true});
+  const counts = countBetween(trace, from, to);
   // A full second of the change: nothing lays out or paints. A
   // stroke-dashoffset transition repainted every frame (36 paints in 410 ms).
+  expect(to - from).toBeGreaterThanOrEqual(1000);
   expect(moving).toBe(true);
-  expect(count('Layout')).toBe(0);
-  expect(count('Paint')).toBe(0);
+  expect(counts.Layout ?? 0).toBe(0);
+  expect(counts.Paint ?? 0).toBe(0);
 });
 
 test('at rest the ring draws what the stroked circle drew', async ({

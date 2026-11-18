@@ -12,11 +12,11 @@ npm install @astryxdesign/theme-butter
 
 ```tsx
 import {butterTheme} from '@astryxdesign/theme-butter/built';
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import '@astryxdesign/theme-butter/theme.css';
 
 function App() {
-  return <XDSTheme theme={butterTheme}>{/* Your app content */}</XDSTheme>;
+  return <Theme theme={butterTheme}>{/* Your app content */}</Theme>;
 }
 ```
 

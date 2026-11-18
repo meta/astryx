@@ -1125,6 +1125,49 @@ describe('FileInput', () => {
       expect(screen.getByText('Drop files here')).toBeInTheDocument();
     });
 
+    it.each([
+      ['busy', {isLoading: true}],
+      ['disabled', {isDisabled: true}],
+    ])(
+      'refuses the drag with the no-drop effect while %s, and still cancels it',
+      (_state, state) => {
+        render(
+          <FileInput
+            label="Upload"
+            value={null}
+            onChange={vi.fn()}
+            mode="dropzone"
+            {...state}
+          />,
+        );
+        const trigger = screen.getByRole('button', {name: 'Upload'});
+        for (const type of ['dragEnter', 'dragOver'] as const) {
+          const dataTransfer = {dropEffect: 'copy', files: []};
+          const event = createEvent[type](trigger, {dataTransfer});
+          fireEvent(trigger, event);
+          expect(dataTransfer.dropEffect).toBe('none');
+          expect(event.defaultPrevented).toBe(true);
+        }
+      },
+    );
+
+    it('keeps the copy effect for an idle dropzone', () => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={vi.fn()}
+          mode="dropzone"
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      for (const type of ['dragEnter', 'dragOver'] as const) {
+        const dataTransfer = {dropEffect: 'copy', files: []};
+        fireEvent(trigger, createEvent[type](trigger, {dataTransfer}));
+        expect(dataTransfer.dropEffect).toBe('copy');
+      }
+    });
+
     it('blocks a second pick while changeAction is pending and allows picking again after settlement', async () => {
       let finish: () => void = () => {};
       const pending = new Promise<void>(resolve => {
@@ -1538,6 +1581,41 @@ describe('FileInput statusVariant forwarding', () => {
         value={null}
         onChange={() => {}}
         status={{type: 'error', message: 'Something went wrong'}}
+      />,
+    );
+    expect(container.querySelector('.astryx-field-status')).toHaveAttribute(
+      'data-variant',
+      'attached',
+    );
+  });
+
+  // component:FileInput FR6: a dropzone's tall surface cannot carry an
+  // attached message, so its unset placement is detached.
+  it('defaults a dropzone status to detached', () => {
+    const {container} = render(
+      <FileInput
+        label="Upload"
+        mode="dropzone"
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'Something went wrong'}}
+      />,
+    );
+    expect(container.querySelector('.astryx-field-status')).toHaveAttribute(
+      'data-variant',
+      'detached',
+    );
+  });
+
+  it('keeps an explicit attached on a dropzone until the next minor release', () => {
+    const {container} = render(
+      <FileInput
+        label="Upload"
+        mode="dropzone"
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'Something went wrong'}}
+        statusVariant="attached"
       />,
     );
     expect(container.querySelector('.astryx-field-status')).toHaveAttribute(

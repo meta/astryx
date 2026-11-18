@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental render` draws a recharts chart sized by its `ResponsiveContainer` at a set of widths, from a narrow table cell to a wide screen, and the file's CSS shows the drawing nearest the width the reader's browser gives the chart, with no script. Before, such a chart was drawn once at a guessed size and stretched to the page's width: its text was about one and a half times its size on a desktop and half its size on a phone, and a chart that filled a box of fixed height ran out of the box. The widths run from 60 to 1920 pixels, each the square root of two times the one before, so the drawing shown scales by at most the fourth root of two either way. The chart now keeps the height the page gives it (a number, the width over `aspect`, or its share of the height that the box it fills states in its own style) and fits that box whole, so its text stays within a fifth of its own size. A box whose height comes from a stylesheet gives no height to read: the chart is drawn 300 pixels high and fits inside the box, scaled down in a shorter box and with empty space above and below in a taller one. Its legend sits inside its picture, where recharts places it, and keeps the rest of its style. Each such chart carries eleven drawings, whose coordinates keep two decimal places, so it takes several times the room in the file that one drawing takes. A chart of fixed size is drawn as before.
+
+@josephfarina

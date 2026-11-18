@@ -1,10 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import {createRef} from 'react';
+import {createRef, useEffect, useRef} from 'react';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
+import {
+  makeSnapPaging,
+  type HeldRowListener,
+} from '../SnapPaging/snapPagingValue';
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
@@ -252,6 +256,75 @@ describe('Carousel', () => {
     expect(screen.getByLabelText('Scroll right')).toBeInTheDocument();
   });
 
+  it('unmounts while the paging holds the row, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let report: HeldRowListener | undefined;
+    // A stand-in paging: it reports a held row, and hands the row back as it
+    // detaches, as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => {
+      report = onHeld;
+      return {
+        detach: () => {
+          onHeld?.({offset: 0, travel: 400});
+          onHeld?.(null);
+        },
+        move: () => {},
+        moveHeld: () => false,
+      };
+    });
+    const view = render(
+      <Carousel aria-label="Held" hasSnap={paging}>
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Carousel>,
+    );
+    act(() => report?.({offset: 150, travel: 400}));
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    // The detach runs in an effect cleanup, inside React's commit.
+    view.unmount();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('scrolls from an Effect after a slide is added, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A stand-in paging: a move takes the row over and reports it at once,
+    // as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => ({
+      detach: () => {},
+      move: () => {
+        onHeld?.({offset: 150, travel: 400});
+      },
+      moveHeld: () => false,
+    }));
+    function Grows({count}: {count: number}) {
+      const ref = useRef<CarouselHandle>(null);
+      useEffect(() => {
+        if (count > 2) {
+          ref.current?.scrollNext();
+        }
+      }, [count]);
+      return (
+        <Carousel handleRef={ref} aria-label="Grows" hasSnap={paging}>
+          {Array.from({length: count}, (_, i) => (
+            <div key={i}>Item {i + 1}</div>
+          ))}
+        </Carousel>
+      );
+    }
+    const view = render(<Grows count={2} />);
+    view.rerender(<Grows count={3} />);
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it('disables edge scroll buttons instead of removing them from the tab order', () => {
     // In jsdom there is no measurable overflow, so both edges are at rest and
     // the scroll buttons are in their hidden/inert state. They must stay
@@ -268,8 +341,12 @@ describe('Carousel', () => {
     const right = screen.getByLabelText('Scroll right');
     expect(left).toBeInTheDocument();
     expect(right).toBeInTheDocument();
-    expect(left).toBeDisabled();
-    expect(right).toBeDisabled();
+    expect(left).toHaveAttribute('aria-disabled', 'true');
+    expect(right).toHaveAttribute('aria-disabled', 'true');
+    // Disabled buttons stay focusable (spec:AST-085 FR1), so the hidden pill
+    // around each is inert: an invisible button is never a Tab stop.
+    expect(left.closest('[inert]')).not.toBeNull();
+    expect(right.closest('[inert]')).not.toBeNull();
   });
 
   describe('Shift + wheel horizontal scroll', () => {
@@ -300,12 +377,33 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0});
 
       expect(scrollBy).toHaveBeenCalledWith({left: 120, behavior: 'auto'});
+    });
+
+    it("stops the browser's own scroll, so a notch scrolls the row once", () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+
+      // A listener that called preventDefault() makes dispatch return false.
+      expect(
+        fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0}),
+      ).toBe(false);
     });
 
     it('does not translate wheel without Shift held', () => {
@@ -317,6 +415,8 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
@@ -335,12 +435,70 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 40});
 
       expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('reads no style or layout on a wheel over the row, with Shift or without', () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      let reads = 0;
+      for (const [name, value] of [
+        ['scrollWidth', 500],
+        ['clientWidth', 200],
+      ] as const) {
+        Object.defineProperty(scroller, name, {
+          configurable: true,
+          get: () => {
+            reads += 1;
+            return value;
+          },
+        });
+      }
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+      reads = 0;
+      const style = vi.spyOn(window, 'getComputedStyle');
+
+      fireEvent.wheel(scroller, {deltaY: 120});
+      fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120});
+      const styles = style.mock.calls.length;
+      style.mockRestore();
+
+      expect({reads, styles}).toEqual({reads: 0, styles: 0});
+      expect(scroller.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('adds no wheel listener to a row with nothing to scroll', () => {
+      const addEventListener = vi.spyOn(
+        HTMLElement.prototype,
+        'addEventListener',
+      );
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      const wheels = addEventListener.mock.contexts.filter(
+        (element, call) =>
+          element === scroller &&
+          addEventListener.mock.calls[call][0] === 'wheel',
+      );
+      addEventListener.mockRestore();
+
+      expect(wheels).toHaveLength(0);
     });
 
     it('does not intercept when there is no horizontal overflow', () => {
@@ -404,8 +562,12 @@ describe('Carousel', () => {
       // At the start edge: without loop the left button would be disabled.
       makeOverflowing(scroller, 0);
 
-      expect(screen.getByLabelText('Scroll left')).toBeEnabled();
-      expect(screen.getByLabelText('Scroll right')).toBeEnabled();
+      expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+        'aria-disabled',
+      );
+      expect(screen.getByLabelText('Scroll right')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('wraps to the start when pressing next at the end', () => {
@@ -656,7 +818,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
+      expect(next).toHaveAttribute('aria-disabled', 'true');
       expect(document.activeElement).toBe(getScroller());
       expect(document.activeElement).not.toBe(document.body);
     });
@@ -679,7 +841,7 @@ describe('Carousel', () => {
       const previous = screen.getByLabelText('Scroll left');
       await user.click(previous);
 
-      expect(previous).toBeDisabled();
+      expect(previous).toHaveAttribute('aria-disabled', 'true');
       expect(document.activeElement).toBe(getScroller());
     });
 
@@ -723,7 +885,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
+      expect(next).toHaveAttribute('aria-disabled', 'true');
       expect(document.activeElement).toBe(getScroller());
     });
 
@@ -744,7 +906,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
+      expect(next).toHaveAttribute('aria-disabled', 'true');
       expect(document.activeElement).toBe(getScroller());
     });
 
@@ -769,8 +931,14 @@ describe('Carousel', () => {
 
       await user.click(screen.getByLabelText('Scroll right'));
 
-      expect(screen.getByLabelText('Scroll right')).toBeDisabled();
-      expect(screen.getByLabelText('Scroll left')).toBeDisabled();
+      expect(screen.getByLabelText('Scroll right')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(screen.getByLabelText('Scroll left')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(document.activeElement).toBe(scroller);
       expect(document.activeElement).not.toBe(document.body);
     });
@@ -799,7 +967,10 @@ describe('Carousel', () => {
       scroller.scrollLeft = 200;
       fireEvent.scroll(scroller);
 
-      expect(screen.getByLabelText('Scroll right')).toBeDisabled();
+      expect(screen.getByLabelText('Scroll right')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(document.activeElement).toBe(document.body);
     });
 
@@ -837,7 +1008,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeEnabled();
+      expect(next).not.toHaveAttribute('aria-disabled');
       expect(document.activeElement).toBe(next);
     });
 
@@ -854,7 +1025,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeEnabled();
+      expect(next).not.toHaveAttribute('aria-disabled');
       expect(document.activeElement).toBe(next);
     });
 

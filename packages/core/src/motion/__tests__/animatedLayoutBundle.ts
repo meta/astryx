@@ -9,11 +9,15 @@
  */
 
 export {
+  applyLayoutChangeTransition,
   createAnimatedLayout,
   holdLayoutEdge,
   holdLayoutExit,
+  holdLayoutSwap,
+  layoutStartFor,
   playLayoutChange,
   playLayoutEdge,
+  playLayoutSwap,
   releaseLayoutExit,
   reportLayoutChange,
   reportLayoutEdge,

@@ -7,7 +7,7 @@
  * @position Docsite integration tests; run against both latest and canary builds
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page, type Route} from '@playwright/test';
 
 const deployments = [
   {name: 'production', origin: 'https://astryx.atmeta.com'},
@@ -68,18 +68,31 @@ async function servePublicOrigin(
 
 async function serveReachability(page: Page, origin: string) {
   let requests = 0;
-  const sandboxes: (string | null)[] = [];
+  // The page reads each probe frame's sandbox as the frame is inserted. The
+  // probe sets it before it inserts the frame.
+  await page.addInitScript(() => {
+    const sandboxes: (string | null)[] = [];
+    Object.assign(window, {probeSandboxes: sandboxes});
+    new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node instanceof HTMLIFrameElement &&
+            node.title === 'Astryx documentation reachability check'
+          ) {
+            sandboxes.push(node.getAttribute('sandbox'));
+          }
+        }
+      }
+    }).observe(document, {childList: true, subtree: true});
+  });
   await page.route(`${probeOrigin}/embed/access-check?**`, async route => {
     requests++;
     expect(
       new URL(route.request().url()).searchParams.get('parent_origin'),
     ).toBe(origin);
-    // The probe's frame exists while its request waits here: the probe removes
-    // it once it has an answer, or when its four-second timeout fires. Reading
-    // it now cannot race that timeout.
-    const frame = await route.request().frame().frameElement();
-    sandboxes.push(await frame.getAttribute('sandbox'));
-    await frame.dispose();
+    // The probe gives up four seconds after it inserts its frame. Answer at
+    // once: a call back into a busy page before the answer spends that time.
     await route.fulfill({
       contentType: 'text/html; charset=utf-8',
       headers: {
@@ -92,7 +105,27 @@ async function serveReachability(page: Page, origin: string) {
       body: `<!doctype html><html><body><script>window.parent.postMessage({type:'codebunny:access-check:v1',reachable:true},${JSON.stringify(origin)});</script></body></html>`,
     });
   });
-  return {requests: () => requests, sandboxes: () => [...sandboxes]};
+  return {
+    requests: () => requests,
+    sandboxes: () =>
+      page.evaluate(() => [
+        ...(window as unknown as {probeSandboxes: (string | null)[]})
+          .probeSandboxes,
+      ]),
+  };
+}
+
+// Past the probe's four-second deadline.
+const PAST_DEADLINE_MS = 5000;
+
+/**
+ * Holds the page's clock still from now on: no timer fires until the test
+ * advances the clock or resumes it.
+ */
+async function holdClock(page: Page) {
+  await page.clock.install();
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 1000);
 }
 
 for (const {name, origin} of deployments) {
@@ -106,6 +139,10 @@ for (const {name, origin} of deployments) {
         await page.emulateMedia({colorScheme});
         await servePublicOrigin(page, baseURL, origin);
         const probe = await serveReachability(page, origin);
+        // The probe gives up four seconds after it inserts its frame. The
+        // page's clock holds still until the answer is in, so a slow page
+        // cannot reach that deadline first.
+        await holdClock(page);
         const documentResponse = await page.goto(
           `${origin}/docs/getting-started?source=test`,
           {
@@ -138,7 +175,13 @@ for (const {name, origin} of deployments) {
         // failed probe leaves, checked by the failed-reachability case.
         await expect(notice).toHaveCount(1);
         await expect(notice).toContainText('Working on Meta internal tools?');
-        expect(probe.sandboxes()).toEqual(['allow-scripts allow-same-origin']);
+        // Past the deadline, the answer still stands.
+        await page.clock.runFor(PAST_DEADLINE_MS);
+        await expect(notice).toContainText('Working on Meta internal tools?');
+        await page.clock.resume();
+        expect(await probe.sandboxes()).toEqual([
+          'allow-scripts allow-same-origin',
+        ]);
         await expect(notice).not.toContainText("You're viewing Canary docs");
         if (isCanary) {
           await expect(notice).toContainText(
@@ -235,9 +278,13 @@ for (const {name, origin} of deployments) {
         }
         expect(probe.requests()).toBe(1);
         await dismiss.click();
+        await holdClock(page);
         await page.reload();
         await expect(heading).toBeVisible();
         await expect(internal).toBeVisible();
+        await page.clock.runFor(PAST_DEADLINE_MS);
+        await expect(internal).toBeVisible();
+        await page.clock.resume();
         expect(probe.requests()).toBe(2);
         await page.route(`${internalOrigin}/**`, route =>
           route.fulfill({
@@ -257,6 +304,46 @@ for (const {name, origin} of deployments) {
     }
   }
 }
+
+test(`${target}: a probe with no answer by its deadline exposes no internal wording`, async ({
+  page,
+  baseURL,
+}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  const origin = deployments[0].origin;
+  await servePublicOrigin(page, baseURL, origin);
+  // The probe's request is held and never answered.
+  const held: Route[] = [];
+  await page.route(`${probeOrigin}/**`, route => {
+    held.push(route);
+  });
+  await holdClock(page);
+  // The held probe frame keeps the page from firing `load`.
+  await page.goto(`${origin}/docs/getting-started?source=test`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expect(
+    page.getByRole('heading', {name: 'Getting Started', exact: true}),
+  ).toBeVisible();
+  const frame = page.locator(
+    'iframe[title="Astryx documentation reachability check"]',
+  );
+  // The probe inserts its frame as it starts its four seconds.
+  await expect(frame).toHaveCount(1);
+  await page.clock.runFor(3990);
+  await expect(frame).toHaveCount(1);
+  await page.clock.runFor(20);
+  await expect(frame).toHaveCount(0);
+  const notice = page.getByRole('region', {name: noticeName});
+  await expect(notice).toHaveCount(isCanary ? 1 : 0);
+  await expect(
+    page.getByRole('link', {name: 'Meta internal docs', exact: true}),
+  ).toHaveCount(0);
+  if (isCanary) {
+    await expect(notice).toContainText("You're viewing Canary docs");
+  }
+  await Promise.all(held.map(route => route.abort().catch(() => {})));
+});
 
 for (const width of [1440, 390]) {
   for (const colorScheme of ['light', 'dark'] as const) {

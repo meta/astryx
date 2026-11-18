@@ -8,9 +8,12 @@ import path from 'node:path';
 
 import {
   fsGuardTests,
+  readTestList,
   scopedExtraTests,
   specReaderTests,
   uiTestRoots,
+  withReached,
+  withoutAlreadyRun,
 } from './fs-guard-tests.mjs';
 import os from 'node:os';
 import yaml from 'yaml';
@@ -230,6 +233,26 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
     'packages/themes/butter/butter.spec.md',
   ];
   const read = file => sources[file] ?? '';
+
+  it('lists the tests that read the recorded Node test times for a change to them', () => {
+    const timesSources = {
+      'scripts/plan.mjs':
+        "import fs from 'node:fs';\nexport const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');",
+      'scripts/plan.test.mjs': "import {DURATIONS} from './plan.mjs';",
+      'scripts/other.test.mjs':
+        "import fs from 'node:fs';\nfs.readFileSync('scripts/other.json');",
+    };
+    const timesFiles = [
+      ...Object.keys(timesSources),
+      'scripts/vitest-node-durations.json',
+      'scripts/other.json',
+    ];
+    expect(
+      specReaderTests(timesFiles, file => timesSources[file] ?? '', [
+        'scripts/vitest-node-durations.json',
+      ]),
+    ).toEqual(['scripts/plan.test.mjs']);
+  });
 
   it('lists every test whose imports read files and name a spec path in code', () => {
     expect(specReaderTests(files, read)).toEqual([
@@ -471,4 +494,124 @@ describe('spec readers on this repository (contract)', () => {
       );
     },
   );
+});
+
+describe('a test the --changed run already ran runs once', () => {
+  const root = '/repo';
+
+  it('reads Vitest list JSON and plain lines as repository paths', () => {
+    expect(
+      readTestList(
+        JSON.stringify([
+          {file: '/repo/scripts/a.test.mjs', projectName: 'node'},
+          {file: '/repo/packages/cli/b.test.mjs', projectName: 'node'},
+        ]),
+        root,
+      ),
+    ).toEqual(['scripts/a.test.mjs', 'packages/cli/b.test.mjs']);
+    expect(
+      readTestList('./scripts/a.test.mjs\nscripts/c.test.mjs\n', root),
+    ).toEqual(['scripts/a.test.mjs', 'scripts/c.test.mjs']);
+    expect(readTestList('', root)).toEqual([]);
+    expect(readTestList('[]', root)).toEqual([]);
+  });
+
+  it('leaves out only the tests already run', () => {
+    expect(
+      withoutAlreadyRun(
+        ['scripts/a.test.mjs', 'scripts/guard.test.mjs'],
+        ['scripts/a.test.mjs', 'scripts/other.test.mjs'],
+      ),
+    ).toEqual(['scripts/guard.test.mjs']);
+  });
+
+  it('lists the reached tests first, then the other tests, each once', () => {
+    expect(
+      withReached(
+        ['scripts/guard.test.mjs', 'scripts/a.test.mjs'],
+        [
+          'scripts/a.test.mjs',
+          'scripts/changed.test.mjs',
+          'scripts/a.test.mjs',
+        ],
+      ),
+    ).toEqual([
+      'scripts/a.test.mjs',
+      'scripts/changed.test.mjs',
+      'scripts/guard.test.mjs',
+    ]);
+  });
+
+  it('the lister puts the reached tests first and lists each test once', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const guards = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(guards.length).toBeGreaterThan(1);
+    // One test the change reaches that no guard list names, and one guard
+    // that the reached list names too.
+    const reachedOnly = 'scripts/a-reached-test.test.mjs';
+    const both = guards[0];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reached-'));
+    try {
+      const list = path.join(dir, 'reached.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify(
+          [reachedOnly, both].map(file => ({
+            file: path.join(repoRoot, file),
+            projectName: 'node',
+          })),
+        ),
+      );
+      const tests = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--reached', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(tests).toEqual([reachedOnly, both, ...guards.slice(1)]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('the lister drops a guard the changed run listed, and keeps the rest', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const all = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(all.length).toBeGreaterThan(1);
+    const [ran, ...rest] = all;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'already-run-'));
+    try {
+      const list = path.join(dir, 'already-run.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify([{file: path.join(repoRoot, ran), projectName: 'node'}]),
+      );
+      const guards = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--already-run', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(guards).not.toContain(ran);
+      expect(guards).toEqual(rest);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 });

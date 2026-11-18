@@ -27,6 +27,7 @@ import {
   getBottomSheetStackForTests,
   resetBottomSheetStackForTests,
 } from './bottomSheetStack';
+import {isScrollLockActive} from '../hooks/rootScrollStyles';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 let nativeLog: {
@@ -1455,7 +1456,7 @@ describe('BottomSheet replace: non-modal sheets', () => {
       'hidePopover:One',
     ]);
     // The page stayed interactive: no scroll lock, no focus steal.
-    expect(document.body.style.position).not.toBe('fixed');
+    expect(isScrollLockActive()).toBe(false);
   });
 
   it('a non-modal reversal re-shows the returning sheet above the other', () => {

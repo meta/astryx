@@ -14,8 +14,12 @@
  *   is unchanged.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** Whether Escape may dismiss the sheet; `purpose="required"` still blocks it. */
-export const BottomSheetEscapeContext = createContext(true);
+export const BottomSheetEscapeContext = createSharedContext(
+  'BottomSheetEscapeContext',
+  1,
+  true,
+);
 BottomSheetEscapeContext.displayName = 'BottomSheetEscapeContext';
