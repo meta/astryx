@@ -31,6 +31,7 @@
 import {
   coversProperty,
   cssTree,
+  keptCssTreeAnswer,
   longhandsOf,
 } from '../../../foundation/runtime/css-tree.mjs';
 
@@ -286,6 +287,23 @@ export function declarationsOf(rules) {
 }
 
 /**
+ * The declarations of a list of rules (declarationsOf), kept between runs by
+ * the rules' text (keptCssTreeAnswer), so a build of an unchanged theme reads
+ * them back and loads no css-tree. A situation's attributes are kept as their
+ * entries, in order, and read back into a Map.
+ * @param {string[]} rules
+ * @returns {Decl[]}
+ */
+function keptDeclarationsOf(rules) {
+  return keptCssTreeAnswer('theme-rule-declarations', rules, list =>
+    declarationsOf(list).map(d => ({
+      ...d,
+      at: {...d.at, attrs: [...d.at.attrs]},
+    })),
+  ).map(d => ({...d, at: {...d.at, attrs: new Map(d.at.attrs)}}));
+}
+
+/**
  * The style key a situation's attributes name (`base` with none).
  * @param {Situation} at
  */
@@ -464,7 +482,7 @@ const situationText = s =>
  * @returns {SettingEffectIssue[]}
  */
 export function settingEffectIssues(rules, writtenAt, {skip} = {}) {
-  const decls = declarationsOf(rules).filter(
+  const decls = keptDeclarationsOf(rules).filter(
     d => !skip?.(side(d, 'theme')),
   );
   /** @type {Map<Decl, {path: string[], layer: number} | null>} */
@@ -908,7 +926,7 @@ export function blockPaths(components, generate) {
     for (const [key, block] of Object.entries(keys))
       probes[part][key] = probe(block, ['components', part, key], true);
   }
-  const decls = declarationsOf(generate(probes));
+  const decls = keptDeclarationsOf(generate(probes));
   /** @type {Map<number, string[]>} */
   const blockOfRule = new Map();
   for (const d of decls)
