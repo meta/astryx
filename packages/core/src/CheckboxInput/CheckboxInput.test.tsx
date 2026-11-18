@@ -30,7 +30,6 @@ import {defineTheme} from '../theme/defineTheme';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {FOCUS_OUTLINE_PARTS} from '../utils/focusOutline.stylex';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 interface InjectedRule {
   selector: string;
@@ -580,20 +579,14 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = getTooltipDescription();
+      const tooltip = screen.getByRole('tooltip', h);
       expect(tooltip).toHaveTextContent(
         'Terms are managed by your administrator',
       );
       fireEvent.mouseEnter(getRow());
-      await waitFor(() =>
-        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
-      );
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(getRow());
-      await waitFor(() =>
-        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
-          'popover-open',
-        ),
-      );
+      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -607,11 +600,10 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
+      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('checkbox', h)).toHaveFocus();
-      await waitFor(() =>
-        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
-      );
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -641,10 +633,11 @@ describe('CheckboxInput', () => {
         </>,
       );
       const checkbox = screen.getByRole('checkbox');
-      const tooltip = getTooltipDescription();
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toContain('terms-hint');
-      expect(ids).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Required before checkout Terms are managed by your administrator',
+      );
     });
 
     it('does not render a tooltip when disabled without a reason', () => {
@@ -674,7 +667,7 @@ describe('CheckboxInput', () => {
       expect(checkbox).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('links the reason tooltip via aria-describedby', () => {
+    it('describes the checkbox with the reason exactly once', () => {
       render(
         <CheckboxInput
           label="Accept terms"
@@ -685,8 +678,42 @@ describe('CheckboxInput', () => {
         />,
       );
       const checkbox = screen.getByRole('checkbox', h);
-      const tooltip = getTooltipDescription();
-      expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
+    });
+
+    it('renders the reason once, in the tooltip, after mount', async () => {
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Terms are managed by your administrator"
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      const tooltip = screen.getByRole('tooltip', h);
+      await waitFor(() =>
+        expect(
+          screen.getAllByText('Terms are managed by your administrator', {
+            ignore: false,
+          }),
+        ).toHaveLength(1),
+      );
+      const describedBy = checkbox.getAttribute('aria-describedby') ?? '';
+      const reason = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(
+          element =>
+            element?.textContent === 'Terms are managed by your administrator',
+        );
+      expect(tooltip.contains(reason ?? null)).toBe(true);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
     });
 
     it('blocks toggling while focusable-disabled', async () => {
