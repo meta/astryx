@@ -563,10 +563,11 @@ export function detectStylingSystem(targetDir) {
 const BUILT_CHECK_SINCE = '0.7.4';
 
 /**
- * Whether a project on this Core release can run `astryx doctor --built`. A
- * prerelease of the first release is below it: its canaries predate the
- * option.
+ * Whether `version` is release `since` or later. A prerelease of `since`
+ * itself is below it: its canaries predate the feature.
  * @param {string | null | undefined} version
+ * @param {string} since
+ * @returns {boolean}
  */
 function isReleaseSince(version, since) {
   if (typeof version !== 'string' || !isValidSemver(version)) return false;
