@@ -47,11 +47,15 @@ export {componentKeywords} from './_gather-components.mjs';
  * that fails to load has no section. Nothing is kept with the gathered
  * catalog, so a pack installed or removed shows on the next search.
  * @param {string} query
- * @param {{cwd: string, declaredNames: string[], limit: number}} options
- *   `declaredNames`: the names of the components and hooks search reads
+ * @param {{cwd: string, declaredNames: string[], resultDomains: string[], limit: number}} options
+ *   `declaredNames`: the names of the components and hooks search reads;
+ *   `resultDomains`: the domains of its results
  * @returns {Promise<import('./search.type.mjs').SearchIconSection | null>}
  */
-export async function searchIconSection(query, {cwd, declaredNames, limit}) {
+export async function searchIconSection(
+  query,
+  {cwd, declaredNames, resultDomains, limit},
+) {
   let project;
   try {
     project = await Project.load(cwd);
@@ -80,8 +84,7 @@ export async function searchIconSection(query, {cwd, declaredNames, limit}) {
         }
       },
     },
-    declaredNames,
-    limit,
+    {declaredNames, resultDomains, limit},
   );
 }
 
