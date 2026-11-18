@@ -49,7 +49,9 @@
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
- *   session's next command) uses them; doctor never makes it. A run through
+ *   session's next command) uses them. doctor never makes it, nor do
+ *   `component` and `template` in a project with no integration: they keep
+ *   their gathers only once it exists. A run through
  *   the host entry keeps them too, keyed on what the host passed
  *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
