@@ -95,15 +95,14 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 - Capabilities that no Astryx component uses. They are outside the core
   package.
 - Client identity, crash reports, daily metrics, the frame recorder, and
-  image markup. Each is part of the platform package and has its own record.
+  image markup. They are outside the core package; each has its own record.
 - Camera capture. The `camera` capability owns it, the camera source of a
   picker included.
-- Sharing, opening links and Settings, keep-awake, and orientation lock. None
-  is a core module; each one is an opt-in capability of its own when Astryx
-  provides it.
-- The design of the theme's appearance model and its scopes. This record owns
-  the native appearance override, and OQ3 asks how theme colours resolve when
-  the appearance flips.
+- Sharing, opening links and Settings, keep-awake, and orientation lock. No
+  Astryx component uses them, so they are outside the core package.
+- The theme's tokens and how they change between light and dark. This record
+  owns the appearance model of FR4, and OQ3 asks how theme colours resolve
+  when the appearance flips.
 - Haptic intensities per moment. The theme's haptic tokens own them
   (`spec:AST-112/FR9`).
 - Each component's use of these modules beyond what "Who uses it" names; the
@@ -204,8 +203,20 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     app's code runs, so it keeps the system's appearance; on Android 12 and
     later the splash uses the night mode the system stores for the app, which
     is the saved choice.
+  - The appearance is one model with three scopes, from the widest:
+    - preference: the saved choice, kept across launches;
+    - session: the run-only override (`persist: false`, or the launch link),
+      which a new process forgets;
+    - screen: a screen's own light or dark choice, through the router's screen
+      options (`spec:AST-125`), in force while that screen is in front.
+  - The library owns the precedence: a screen's choice wins over the session's,
+    the session's over the preference, and the preference over the system's
+    appearance. The theme provider resolves the scopes in one place and gives
+    every component and the app one resolved read of the appearance in force.
   - FR4 gap: the theme provider follows React Native's colour scheme and does
-    not call `AstryxAppearance`; an app calls `setOverride` itself.
+    not call `AstryxAppearance`; an app calls `setOverride` itself and writes
+    the precedence across the saved choice, the run's override, a screen's
+    option and the system's scheme.
   - `setOverride(value, {persist: false})` (feature `persist-false`) applies the
     choice for this run only and saves nothing. `getOverride()` and the next
     launch keep the saved choice, and `setOverride(getOverride())` restores
@@ -488,26 +499,26 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 ## Verification
 
-| Contract | Verification                                                                                                                         | Representative states                                                                              | Mutation or failure expectation                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | The platform's spec rules check; the contracts list                                                                                  | each module's spec; a platform-only module                                                         | A module read with `getEnforcing`, read outside its wrapper, or missing from the contracts list                                  |
-| FR2      | Unit tests through the `./testing` doubles in absent, older and current shapes                                                       | each synchronous member; each call; a native throw                                                 | A synchronous member throws, a call rejects, or answers a reason outside its set                                                 |
-| FR3      | Unit tests of each store and hook                                                                                                    | first subscriber; last unsubscribe; an event before the resync answer; unmount; foreground         | A listener hears the current value, a repeat, or a change after unsubscribe; a native subscription outlives the last subscriber  |
-| FR4      | Unit tests; Simulator and emulator launches with a saved choice opposite the system; a run-only change and a relaunch; a launch link | saved `dark` under a light system; `persist: false`; launch link cold and warm                     | The first frame shows the system's style, a run-only change survives a relaunch                                                  |
-| FR5      | Unit tests of the snapshot and the fallback; Simulator runs per setting                                                              | each key on and off; Android; module absent                                                        | A key missing, an unchanged snapshot delivered, or the first frame drawn before the snapshot                                     |
-| FR6      | Unit tests of the moment table and the Android chain; a device check of feel                                                         | each kind; an API level without the preferred constant; no hardware; a theme token `'none'`        | A kind plays the wrong constant, plays where unavailable, or a silenced token plays                                              |
-| FR7      | Unit tests; Simulator and emulator copy and paste                                                                                    | write; empty read; non-text read; pattern detection on Android 11 and 12                           | A copy button reads, a detection reads the content, or an unknown key is answered                                                |
-| FR8      | Unit tests; Simulator and emulator reads                                                                                             | constants; `get()`; memory and size                                                                | A constant throws, or a measure answers in another unit                                                                          |
-| FR9      | Unit tests; Simulator and emulator prompts                                                                                           | each state; undeclared permission; a busy prompt; module absent on each platform                   | A mount prompts, a `blocked` permission prompts, or an undeclared permission crashes                                             |
-| FR10     | Unit tests of the back gate; emulator runs on Android 16                                                                             | an open sheet; a navigator that can go back; the root; before the first call                       | The back-to-home animation does not play at the root, or a press with a consumer reaches the system                              |
-| FR11     | Unit tests of the once-per-runtime report and the synchronous link; emulator cold launches                                           | a launch with and without a link; a launch that never reports                                      | An empty root frame shows before the first content, the hold never ends, or a cold deep link draws another screen first          |
-| FR12     | Unit tests through the `./testing` doubles; Simulator and emulator picks                                                             | each source; multiple; cancel; a source the device does not offer; a second pick while one is open | A cancel reads as an error, an empty `ok` list, a camera source in the core picker, or two pickers at once                       |
-| FR13     | Unit tests through the `./testing` doubles; Simulator and emulator runs                                                              | two runtimes; a full disk                                                                          | One runtime reads another runtime's data, or a full disk answers anything but `no-space`                                         |
-| FR14     | Unit tests of each piece that produces files; Simulator and emulator runs                                                            | a picked photo; a camera photo; storage pressure                                                   | A file written outside the cache location, a URI that is not a `file://` URI, or a core piece that deletes files there           |
-| FR15     | UI-thread frame checks during an appearance change; reload tests                                                                     | appearance change while scrolling; a reload with subscribers                                       | JavaScript runs per frame for the change, or a subscription survives a reload                                                    |
-| FR16     | Simulator runs per accessibility setting; announcement tests                                                                         | Reduce Transparency; Show Borders; Reduce Motion; a copy                                           | Drawn chrome ignores a setting, or a copy confirms with haptics alone                                                            |
-| FR17     | The platform's spec rules check; unit tests with a binary that lacks each feature                                                    | each named feature present and absent                                                              | A behaviour runs without its feature, a missing feature answers anything but the revision-1 path or `unsupported`, or no warning |
-| FR18     | Binary symbol and linked-framework check of a core-only build; review of each native change for private API                          | a core-only iOS and Android build                                                                  | WebKit or androidx.webkit linked into a core-only build, or a private API call in the group's native code                        |
+| Contract | Verification                                                                                                                                                                               | Representative states                                                                                                   | Mutation or failure expectation                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | The platform's spec rules check; the contracts list                                                                                                                                        | each module's spec; a platform-only module                                                                              | A module read with `getEnforcing`, read outside its wrapper, or missing from the contracts list                                  |
+| FR2      | Unit tests through the `./testing` doubles in absent, older and current shapes                                                                                                             | each synchronous member; each call; a native throw                                                                      | A synchronous member throws, a call rejects, or answers a reason outside its set                                                 |
+| FR3      | Unit tests of each store and hook                                                                                                                                                          | first subscriber; last unsubscribe; an event before the resync answer; unmount; foreground                              | A listener hears the current value, a repeat, or a change after unsubscribe; a native subscription outlives the last subscriber  |
+| FR4      | Unit tests of the scope precedence; Simulator and emulator launches with a saved choice opposite the system; a run-only change and a relaunch; a launch link; a screen with its own choice | saved `dark` under a light system; `persist: false`; launch link cold and warm; a screen choice over a session override | The first frame shows the system's style, a run-only change survives a relaunch, or a narrower scope loses to a wider one        |
+| FR5      | Unit tests of the snapshot and the fallback; Simulator runs per setting                                                                                                                    | each key on and off; Android; module absent                                                                             | A key missing, an unchanged snapshot delivered, or the first frame drawn before the snapshot                                     |
+| FR6      | Unit tests of the moment table and the Android chain; a device check of feel                                                                                                               | each kind; an API level without the preferred constant; no hardware; a theme token `'none'`                             | A kind plays the wrong constant, plays where unavailable, or a silenced token plays                                              |
+| FR7      | Unit tests; Simulator and emulator copy and paste                                                                                                                                          | write; empty read; non-text read; pattern detection on Android 11 and 12                                                | A copy button reads, a detection reads the content, or an unknown key is answered                                                |
+| FR8      | Unit tests; Simulator and emulator reads                                                                                                                                                   | constants; `get()`; memory and size                                                                                     | A constant throws, or a measure answers in another unit                                                                          |
+| FR9      | Unit tests; Simulator and emulator prompts                                                                                                                                                 | each state; undeclared permission; a busy prompt; module absent on each platform                                        | A mount prompts, a `blocked` permission prompts, or an undeclared permission crashes                                             |
+| FR10     | Unit tests of the back gate; emulator runs on Android 16                                                                                                                                   | an open sheet; a navigator that can go back; the root; before the first call                                            | The back-to-home animation does not play at the root, or a press with a consumer reaches the system                              |
+| FR11     | Unit tests of the once-per-runtime report and the synchronous link; emulator cold launches                                                                                                 | a launch with and without a link; a launch that never reports                                                           | An empty root frame shows before the first content, the hold never ends, or a cold deep link draws another screen first          |
+| FR12     | Unit tests through the `./testing` doubles; Simulator and emulator picks                                                                                                                   | each source; multiple; cancel; a source the device does not offer; a second pick while one is open                      | A cancel reads as an error, an empty `ok` list, a camera source in the core picker, or two pickers at once                       |
+| FR13     | Unit tests through the `./testing` doubles; Simulator and emulator runs                                                                                                                    | two runtimes; a full disk                                                                                               | One runtime reads another runtime's data, or a full disk answers anything but `no-space`                                         |
+| FR14     | Unit tests of each piece that produces files; Simulator and emulator runs                                                                                                                  | a picked photo; a camera photo; storage pressure                                                                        | A file written outside the cache location, a URI that is not a `file://` URI, or a core piece that deletes files there           |
+| FR15     | UI-thread frame checks during an appearance change; reload tests                                                                                                                           | appearance change while scrolling; a reload with subscribers                                                            | JavaScript runs per frame for the change, or a subscription survives a reload                                                    |
+| FR16     | Simulator runs per accessibility setting; announcement tests                                                                                                                               | Reduce Transparency; Show Borders; Reduce Motion; a copy                                                                | Drawn chrome ignores a setting, or a copy confirms with haptics alone                                                            |
+| FR17     | The platform's spec rules check; unit tests with a binary that lacks each feature                                                                                                          | each named feature present and absent                                                                                   | A behaviour runs without its feature, a missing feature answers anything but the revision-1 path or `unsupported`, or no warning |
+| FR18     | Binary symbol and linked-framework check of a core-only build; review of each native change for private API                                                                                | a core-only iOS and Android build                                                                                       | WebKit or androidx.webkit linked into a core-only build, or a private API call in the group's native code                        |
 
 ## Decision log
 
@@ -520,7 +531,9 @@ A choice that JavaScript applies arrives after the first frame, so a saved
 choice opposite the system shows the system's style first and then
 cross-fades. The native shell saves the choice and applies it to the window
 before it shows; run-only changes and the launch link use the same path and
-save nothing.
+save nothing. The preference, session and screen scopes form one model whose
+precedence the library owns, so an app reads one resolved appearance instead
+of combining the inputs itself.
 
 Rejected: applying the choice from JavaScript at start, because the first
 frame cannot follow it.
