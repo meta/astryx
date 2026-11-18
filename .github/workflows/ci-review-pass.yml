@@ -67,6 +67,7 @@ jobs:
         env:
           HEAVY_MODULE: ${{ github.workspace }}/.heavy-turn/.github/scripts/lib/heavy-turn.mjs
         with:
+          retries: 3
           script: |
             const {pathToFileURL} = await import('node:url');
             const turn = await import(pathToFileURL(process.env.HEAVY_MODULE).href);

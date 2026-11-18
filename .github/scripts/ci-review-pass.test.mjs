@@ -446,6 +446,13 @@ describe('the workflow', () => {
     expect(condition).toContain(
       "github.event.workflow_run.name == 'Review signal' && github.event.workflow_run.event == 'pull_request_review'",
     );
+    // For a fork's review the Review signal job is the one with a write
+    // token, so a failed API call is retried rather than lost.
+    expect(
+      workflow.jobs.start.steps.find(step =>
+        step.uses?.startsWith('actions/github-script'),
+      ).with.retries,
+    ).toBe(3);
     // A fork's run lists no pull request, so its head names its group.
     expect(workflow.concurrency.group).toContain(
       "format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch)",
