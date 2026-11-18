@@ -224,6 +224,27 @@ describe('interactionModality', () => {
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
   });
 
+  it("drops a second document's ring override with its last consumer, but not across a release and hold in one commit", async () => {
+    const secondDocument = document.implementation.createHTMLDocument();
+    const tracker = await loadTracker();
+    const ring = () =>
+      secondDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    let release = tracker.__trackInteractionModalityInForTest(secondDocument);
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring()).toBe('0');
+
+    // An object-ref consumer releases and holds again after every commit.
+    release();
+    release = tracker.__trackInteractionModalityInForTest(secondDocument);
+    await Promise.resolve();
+    expect(ring()).toBe('0');
+
+    // The last release drops it, so keyboard focus there still rings.
+    release();
+    await Promise.resolve();
+    expect(ring()).toBe('');
+  });
+
   it("tracks a hook consumer's object-ref document until its last consumer unmounts", async () => {
     const tracker = await loadTracker();
     const secondDocument = document.implementation.createHTMLDocument();

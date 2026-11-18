@@ -298,6 +298,14 @@ function trackInteractionModalityIn(targetDocument: Document): () => void {
     store.consumers = (store.consumers ?? 1) - 1;
     if (store.consumers === 0) {
       setListening(targetDocument, store, false);
+      // With no listener left, nothing could turn the rings back on, so drop
+      // the override. A consumer that releases and holds again in one commit
+      // keeps it.
+      queueMicrotask(() => {
+        if ((store.consumers ?? 0) === 0) {
+          setFocusRings(targetDocument, true);
+        }
+      });
     }
   };
 }
