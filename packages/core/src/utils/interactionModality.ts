@@ -9,7 +9,7 @@
  *   and getInteractionModality, which reads how the user last interacted in a
  *   document, isTextEntrySincePointer, which reads whether every key since
  *   the last pointer press typed into a text-entry field, and
- *   isLastPointerTouch, which reads whether the last pointer was a finger
+ *   getLastPointerType, which reads the last pointer's type
  * @position Internal document-wide singleton; used where `:focus-visible`
  *   alone is too broad
  */
@@ -486,13 +486,17 @@ export function isTextEntrySincePointer(
 }
 
 /**
- * Whether the last pointer in `target`'s document, or the page's, was a
- * finger. A mouse event that arrives then is a tap's compatibility event, not
- * hover: iOS sends `mouseover`, `mouseenter` and `mousemove` after a tap,
- * also to an element that moved under the finger, and no `pointerenter`
- * there. A store that an older bundle made answers `false`.
+ * The `pointerType` of the last pointer that pressed or arrived over an
+ * element in `target`'s document, or the page's: `'touch'`, `'mouse'`,
+ * `'pen'`, or undefined when the store has heard none (or an older bundle
+ * made it). A mouse event that follows a finger is a tap's compatibility
+ * event, not hover: iOS sends `mouseover`, `mouseenter` and `mousemove`
+ * after a tap, also to an element that moved under the finger, and no
+ * `pointerenter` there.
  */
-export function isLastPointerTouch(target?: Document | Node | null): boolean {
+export function getLastPointerType(
+  target?: Document | Node | null,
+): string | undefined {
   const targetDocument =
     target == null
       ? typeof document === 'undefined'
@@ -502,9 +506,9 @@ export function isLastPointerTouch(target?: Document | Node | null): boolean {
         ? (target as Document)
         : target.ownerDocument;
   if (targetDocument == null) {
-    return false;
+    return undefined;
   }
-  return getStore(targetDocument).lastPointerType === 'touch';
+  return getStore(targetDocument).lastPointerType;
 }
 
 /** Test-only: restore the initial state between cases. */

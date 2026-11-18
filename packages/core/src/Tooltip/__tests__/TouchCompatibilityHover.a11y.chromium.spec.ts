@@ -35,8 +35,8 @@ test.afterAll(async () => {
 test.use({viewport: {width: 800, height: 600}, hasTouch: true});
 
 const FIXTURES = [
-  {name: 'Tooltip', story: 'core-tooltip--default'},
-  {name: 'HoverCard', story: 'core-hovercard--default'},
+  {name: 'Tooltip', story: 'core-tooltip--default', text: 'helpful tooltip'},
+  {name: 'HoverCard', story: 'core-hovercard--default', text: 'Jane Doe'},
 ] as const;
 
 // Longer than either story's show delay.
@@ -45,7 +45,8 @@ const SETTLE_MS = 1200;
 /**
  * Put a control at the left edge. When the finger lifts from it, the control
  * goes away and the story moves so that the trigger's center is where the
- * finger was. Returns that point.
+ * finger was. Returns that point. The trigger counts the `mouseover` events
+ * it receives in `data-mouseovers`.
  */
 async function armMoveUnderFinger(page: Page): Promise<{x: number; y: number}> {
   return page.evaluate(() => {
@@ -56,6 +57,11 @@ async function armMoveUnderFinger(page: Page): Promise<{x: number; y: number}> {
     if (trigger == null || root == null) {
       throw new Error('The story did not render its trigger.');
     }
+    let mouseovers = 0;
+    trigger.addEventListener('mouseover', () => {
+      mouseovers += 1;
+      trigger.dataset.mouseovers = String(mouseovers);
+    });
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.textContent = 'Composer pill';
@@ -82,7 +88,7 @@ async function armMoveUnderFinger(page: Page): Promise<{x: number; y: number}> {
   });
 }
 
-for (const {name, story} of FIXTURES) {
+for (const {name, story, text} of FIXTURES) {
   test(`${name}: a tap that moves the trigger under the finger opens nothing, and a mouse and a pen still hover`, async ({
     page,
   }) => {
@@ -91,12 +97,13 @@ for (const {name, story} of FIXTURES) {
     );
     const trigger = page.getByRole('button', {name: 'Hover me'});
     await expect(trigger).toBeVisible();
-    const open = page.locator(':popover-open');
+    // The layer itself: the Storybook preview keeps a popover of its own open.
+    const open = page.locator(':popover-open', {hasText: text});
 
     const point = await armMoveUnderFinger(page);
     await page.touchscreen.tap(point.x, point.y);
     // The tap's compatibility mouse events reached the moved trigger.
-    await expect(trigger).toBeInViewport();
+    await expect(trigger).toHaveAttribute('data-mouseovers', /^[1-9]/);
     await page.waitForTimeout(SETTLE_MS);
     await expect(open).toHaveCount(0);
 

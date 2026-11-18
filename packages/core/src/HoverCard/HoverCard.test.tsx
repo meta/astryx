@@ -1697,6 +1697,8 @@ describe('HoverCard', () => {
       fireEvent.mouseOver(trigger);
       fireEvent.mouseEnter(trigger);
       fireEvent.mouseMove(trigger);
+      // Chromium also focuses a tapped button; that focus is the tap's too.
+      fireEvent.focusIn(trigger);
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(onOpenChange).not.toHaveBeenCalled();
 
@@ -1768,9 +1770,20 @@ describe('HoverCard', () => {
         );
         // No pointer event reached the page: a phone's tap that mounted the
         // trigger under the finger before any Core component tracked input.
-        fireEvent.mouseEnter(screen.getByText('Ruby Cheung'));
+        const trigger = screen.getByText('Ruby Cheung');
+        fireEvent.mouseEnter(trigger);
         await new Promise(resolve => setTimeout(resolve, 50));
         expect(onOpenChange).not.toHaveBeenCalled();
+
+        // A mouse that announces itself still hovers, whatever the media
+        // query says (Chromium reports no hover pointer under touch
+        // emulation).
+        fireEvent.mouseLeave(trigger);
+        fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() => {
+          expect(onOpenChange).toHaveBeenCalledWith(true);
+        });
       } finally {
         if (original == null) {
           Reflect.deleteProperty(window, 'matchMedia');

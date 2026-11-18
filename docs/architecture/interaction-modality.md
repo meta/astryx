@@ -46,7 +46,7 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17, spec:AST-020/DEC-6]
         "useInteractionModalityTrackingFor",
         "trackInteractionModalityIn",
         "getInteractionModality",
-        "isLastPointerTouch"
+        "getLastPointerType"
       ],
       "patterns": [
         "addEventListener\\(\\s*['\"](?:pointerdown|pointerover|keydown)['\"]"

@@ -63,7 +63,7 @@ import {isDisabledControl} from '../utils/pressDisabled';
 import {isElement, isHTMLElement} from '../utils/nodeType';
 import {findTextEntryControl} from '../keyboard/keyboardHeight';
 import {
-  isLastPointerTouch,
+  getLastPointerType,
   isTextEntrySincePointer,
   useInteractionModalityTrackingFor,
 } from '../utils/interactionModality';
@@ -304,8 +304,8 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * Whether a mouse arrival on the trigger now comes from a finger, not a
    * hovering pointer: the trigger's own pointer is a finger, the document's
    * last pointer was a finger (a tap's compatibility mouse events also reach
-   * a trigger that moved under the finger), or the device has no pointer
-   * that can hover. Gate hover-opening on it; a leave keeps the trigger's own
+   * a trigger that moved under the finger), or, before the page has heard
+   * any pointer, the device has no pointer that can hover. Gate hover-opening on it; a leave keeps the trigger's own
    * pointer check, so a mouse-opened layer still closes.
    */
   isTouchHover: () => boolean;
@@ -478,19 +478,27 @@ export function useTouchTriggerInternal(
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
-  const isTouchInteraction = useCallback(
-    () =>
-      isTouchPointerRef.current && isTextEntrySincePointer(triggerRef.current),
-    [triggerRef],
-  );
-
-  const isTouchHover = useCallback(() => {
+  // Focus a finger press gave, on the trigger or elsewhere (a tap whose
+  // control moved the trigger under the finger), with no navigation key since.
+  const isTouchInteraction = useCallback(() => {
     const trigger = triggerRef.current;
     return (
-      isTouchPointerRef.current ||
-      isLastPointerTouch(trigger) ||
-      hasNoHoverPointer(trigger)
+      (isTouchPointerRef.current || getLastPointerType(trigger) === 'touch') &&
+      isTextEntrySincePointer(trigger)
     );
+  }, [triggerRef]);
+
+  const isTouchHover = useCallback(() => {
+    if (isTouchPointerRef.current) {
+      return true;
+    }
+    const trigger = triggerRef.current;
+    const lastPointerType = getLastPointerType(trigger);
+    // A pointer the page has heard decides. Before any, a device with no
+    // pointer that can hover sends only a tap's compatibility events.
+    return lastPointerType == null
+      ? hasNoHoverPointer(trigger)
+      : lastPointerType === 'touch';
   }, [triggerRef]);
 
   const handlePointerEnter = useCallback((event: PointerEvent) => {
