@@ -111,7 +111,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   and `component:FieldStatus`.
 - Loading-indicator presentation — owned by `component:Spinner`; tooltip
   behavior — owned by `useTooltip`.
-- New targets or reflected states for the row, descriptions, or caller content.
+- New targets or reflected states for descriptions or caller content, and
+  row states beyond `selected` and `disabled`.
 
 ## Public concepts
 
@@ -273,7 +274,7 @@ CheckboxList's public theming ownership. The `Option row` target reaches the
 row surface and, on a checked, enabled, editable row, its `selected` state
 (`component:CheckboxListItem` FR15), through the row's own
 `checkbox-list-item` target, which reaches CheckboxList rows and no other
-list's rows (`component:CheckboxListItem` FR16).
+list's rows (`component:CheckboxListItem` FR20).
 
 ## Family and system relationships
 
@@ -310,7 +311,7 @@ list's rows (`component:CheckboxListItem` FR16).
 | FR16                | `CheckboxList.test.tsx` optional-indicator and FormLayout-default cases                                                                                                                   | `isOptional`; unmarked and optional groups under a required default; optional default; toggled with focus                                                                          | Dropping `isOptional` from the Field, showing it under an optional default, a group checkbox with `aria-required` under a required default, or remounting rows when `isOptional` changes, fails. | `audit:CheckboxList/accessibility` |
 | FR17                | `CheckboxList.required.test.tsx`                                                                                                                                                          | Marker; required-default form; no box checked; one checked; last box unchecked; disabled first box; disabled group; read-only group; standalone items; keyed reorder; item removed | A missing marker, a marker under a required default, a submit with no box checked, a blocked submit with one checked, or `required` on more than one box, fails.                                 | `audit:CheckboxList/accessibility` |
 | ORD1–ORD3, PR1      | ORD1 and ORD2 are covered by the FR6 and FR7 rows, ORD3 by the FR9 and FR10 rows. Evidence gap: no test asserts the absence of observers or global listeners                              | —                                                                                                                                                                                  | —                                                                                                                                                                                                | `audit:CheckboxList/behavior`      |
-| Local target source | `themingTargets.test.ts`; `CheckboxList.test.tsx` ref and container case                                                                                                                  | `checkbox-list`                                                                                                                                                                    | A rendered class absent from the documented targets, or a missing `astryx-checkbox-list` on the Field root, fails.                                                                               | `audit:CheckboxList/theming`       |
+| Local target source | `themingTargets.test.ts`; `CheckboxList.test.tsx` ref and container case; `CheckboxListItemTarget.test.tsx` for the row's `checkbox-list-item`                                            | `checkbox-list`                                                                                                                                                                    | A rendered class absent from the documented targets, or a missing `astryx-checkbox-list` on the Field root, fails.                                                                               | `audit:CheckboxList/theming`       |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                             | Canonical anatomy and current local target                                                                                                                                         | Canonical-key drift, invalid dispositions or target spelling, or an unclaimed current local target fails validation.                                                                             | `audit:CheckboxList/theming`       |
 
 Per-option verification is owned by `component:CheckboxListItem`'s

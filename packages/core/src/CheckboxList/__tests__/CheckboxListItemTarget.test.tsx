@@ -8,7 +8,7 @@
  *   target beside `item` and `list-item`, with the selected and disabled
  *   states, and that a theme's entry for it reaches CheckboxList rows only,
  *   never another list's rows
- * @position Regression test for component:CheckboxListItem FR16
+ * @position Regression test for component:CheckboxListItem FR20
  */
 
 import {render} from '@testing-library/react';

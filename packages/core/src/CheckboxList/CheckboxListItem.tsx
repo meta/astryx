@@ -354,10 +354,8 @@ export function CheckboxListItem({
   const isCheckedRow =
     resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
 
-  // The row's own target, on the element Item paints beside `item` and
-  // `list-item`, so a theme restyles CheckboxList rows (their gap, fill,
-  // checked look) without reaching every list's rows, as `radio-list-item`
-  // does for RadioList.
+  // The row's own target. A theme can style CheckboxList rows without
+  // styling every list row, as `radio-list-item` does for RadioList.
   const {className: rowClassName, ...rowState} = themeProps(
     'checkbox-list-item',
     {
