@@ -95,6 +95,16 @@ for (const direction of ['ltr', 'rtl'] as const) {
   });
 }
 
+test('a fractional step keeps the track length from 0 to 1', async ({page}) => {
+  await mount(page, 'core-slider--text-value-widths', 'ltr');
+  const thumb = page.getByRole('slider', {name: 'Opacity'});
+  await thumb.focus();
+  await page.keyboard.press('Home');
+  const widths = await widthsWhilePressing(page, thumb, 'ArrowRight', 10);
+  await expect(thumb).toHaveAttribute('aria-valuenow', '1');
+  expect([...widths]).toHaveLength(1);
+});
+
 test('a value text wider in the middle than at the ends does not clip', async ({
   page,
 }) => {

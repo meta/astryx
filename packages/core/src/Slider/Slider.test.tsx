@@ -2304,3 +2304,16 @@ describe('Slider after a render React discards', () => {
     expect(onChangeEnd).toHaveBeenLastCalledWith(50);
   });
 });
+
+describe('Slider text value', () => {
+  it('renders one copy per distinct text when both ends format alike', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <Slider label="Fixed" min={5} max={5} value={5} valueDisplay="text" />,
+    );
+    expect(
+      error.mock.calls.some(call => String(call[0]).includes('same key')),
+    ).toBe(false);
+    error.mockRestore();
+  });
+});

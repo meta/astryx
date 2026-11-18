@@ -1682,28 +1682,48 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display. Hidden copies of the text at the ends of the range
-  // hold the box at its widest, so the track keeps its length while the value
-  // changes and a dragged thumb stays under the pointer.
+  // Text value display. Hidden copies of the texts at and one step in from
+  // each end of the range hold the box at its widest, so the track keeps its
+  // length while the value changes and a dragged thumb stays under the pointer.
   const textOf = (vs: ReadonlyArray<number>): string =>
     vs.map(displayValue).join(' – ');
-  const reservedTexts = isRange
-    ? [textOf([min, min]), textOf([min, max]), textOf([max, max])]
-    : [textOf([min]), textOf([max])];
   const textDisplay =
-    valueDisplay === 'text' ? (
-      <span {...stylex.props(styles.textValue)}>
-        {reservedTexts.map(text => (
-          <span
-            key={text}
-            aria-hidden="true"
-            {...stylex.props(styles.textValueCopy, styles.textValueReserve)}>
-            {text}
-          </span>
-        ))}
-        <span {...stylex.props(styles.textValueCopy)}>{textOf(values)}</span>
-      </span>
-    ) : null;
+    valueDisplay === 'text'
+      ? (() => {
+          const ends = [
+            min,
+            Math.min(max, min + step),
+            Math.max(min, max - step),
+            max,
+          ];
+          const reserved = [
+            ...new Set(
+              isRange
+                ? ends.flatMap(a => ends.map(b => textOf([a, b])))
+                : ends.map(v => textOf([v])),
+            ),
+          ];
+          return (
+            <span {...stylex.props(styles.textValue)}>
+              {reserved.map(text => (
+                <span
+                  // The copies are deduplicated, so each text is unique.
+                  key={text}
+                  aria-hidden="true"
+                  {...stylex.props(
+                    styles.textValueCopy,
+                    styles.textValueReserve,
+                  )}>
+                  {text}
+                </span>
+              ))}
+              <span {...stylex.props(styles.textValueCopy)}>
+                {textOf(values)}
+              </span>
+            </span>
+          );
+        })()
+      : null;
 
   return (
     <Field
