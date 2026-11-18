@@ -520,5 +520,5 @@ gaps.
   react-native-safe-area-context?** (`human-api`) `spec:AST-112/FR2` and
   `spec:AST-112/FR5` list it as an optional peer of `./navigation-legacy`,
   while the `./safe-area-context` entry needs none. Options: keep the optional
-  peer until `./navigation-legacy` leaves the package; or drop it now and let
+  peer until `./navigation-legacy` leaves the package; or drop it and let
   `./navigation-legacy` resolve the compatibility entry.
