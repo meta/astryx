@@ -57,6 +57,9 @@ async function runSignal({
   // when its live file list has been read.
   changedFiles = 1,
   liveHead = HEAD,
+  // The pull request's changed files, as both the compare and the file list
+  // name them.
+  files = [{filename: 'README.md', status: 'modified'}],
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -119,17 +122,13 @@ async function runSignal({
         })),
         // Like GitHub's list endpoint, the listed PR omits changed_files.
         list: vi.fn(async () => ({data: [{...pr, changed_files: undefined}]})),
-        listFiles: vi.fn(async () => ({
-          data: [{filename: 'README.md', status: 'modified'}],
-        })),
+        listFiles: vi.fn(async () => ({data: files})),
         listReviews: async () => ({data: reviews}),
         requestReviewers: mutations.requestReviewers,
       },
       repos: {
         getContent,
-        compareCommitsWithBasehead: vi.fn(async () => ({
-          data: {files: [{filename: 'README.md', status: 'modified'}]},
-        })),
+        compareCommitsWithBasehead: vi.fn(async () => ({data: {files}})),
         createCommitStatus: mutations.createCommitStatus,
         listCommitStatusesForRef: vi.fn(async () => ({
           data:
@@ -826,9 +825,14 @@ describe('review-signal reads the event head, not the live pull request', () => 
   });
 
   it('reads a larger pull request from its list, and leaves it to the newer run when the head moved', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
     const moved = await runSignal({
       eventName: 'pull_request',
-      changedFiles: 301,
+      changedFiles: files.length,
+      files,
       liveHead: '4'.repeat(40),
     });
     expect(moved.github.rest.pulls.listFiles).toHaveBeenCalled();
@@ -841,8 +845,18 @@ describe('review-signal reads the event head, not the live pull request', () => 
     );
   });
 
-  it('never classifies the diff of a pull request larger than a compare names', async () => {
-    const h = await runSignal({eventName: 'pull_request', changedFiles: 301});
+  it('never classifies the diff of a pull request larger than a compare names, and still posts its status', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
+    const h = await runSignal({
+      eventName: 'pull_request',
+      changedFiles: files.length,
+      files,
+    });
+    expect(h.github.rest.pulls.listFiles).toHaveBeenCalled();
     expect(h.github.request).not.toHaveBeenCalled();
+    expect(h.mutations.createCommitStatus).toHaveBeenCalled();
   });
 });
