@@ -284,6 +284,25 @@ describe('BottomSheet close order for focus', () => {
     expect(sheet()).not.toHaveAttribute('open');
   });
 
+  it('opens again usable after a close that returned focus to the opener', async () => {
+    const opener = openFilters();
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    finishExit();
+    // The hold's focus check, queued as focus left the sheet, runs now.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(opener).toHaveFocus();
+
+    fireEvent.click(opener);
+
+    expect(sheet()).toHaveAttribute('open');
+    expect(sheet()).not.toHaveAttribute('inert');
+    expect(sheet()).not.toHaveAttribute('aria-hidden');
+  });
+
   it('marks a closing sheet inert and hidden at once when focus is elsewhere', () => {
     openFilters();
     const done = screen.getByRole('button', {name: 'Done'});

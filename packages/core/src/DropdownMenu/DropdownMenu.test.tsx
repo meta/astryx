@@ -369,6 +369,91 @@ describe('DropdownMenu', () => {
     expect(group.parentElement).toHaveRole('listitem');
   });
 
+  it('names the sheet after a node-label submenu while its level shows', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            label: (
+              <>
+                <em>Move</em> to project
+              </>
+            ),
+            description: 'Pick a project',
+            items: [{label: 'Apollo launch'}],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Move to project/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Move to project'}),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Back'}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+  });
+
+  it('names the sheet after the node-label submenu that opened, also across sections', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'File actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            type: 'section',
+            title: 'Move',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Move</em> file
+                  </>
+                ),
+                items: [{label: 'Folder A'}],
+              },
+            ],
+          },
+          {
+            type: 'section',
+            title: 'Copy',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Copy</em> folder
+                  </>
+                ),
+                items: [{label: 'Folder B'}],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /File actions/}));
+    await user.click(screen.getByRole('button', {name: /Copy folder/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Copy folder'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items in bottom-sheet presentation', async () => {
     const user = userEvent.setup();
 

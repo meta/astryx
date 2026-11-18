@@ -55,7 +55,8 @@ describe('commandsForArgs', () => {
     const names = full.commands.map(command => command.name());
     expect([...COMMAND_NAMES].sort()).toEqual([...names].sort());
     for (const name of COMMAND_NAMES) {
-      if (name === 'manifest') {
+      // The manifest (with no stored manifest) and mcp read every command.
+      if (name === 'manifest' || name === 'mcp') {
         expect(loads([name])).toBeNull();
         continue;
       }

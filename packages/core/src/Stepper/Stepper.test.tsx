@@ -164,6 +164,21 @@ describe('Stepper', () => {
     expect(list).toHaveAttribute('data-orientation', 'vertical');
   });
 
+  it('keeps a vertical step body within its step, whatever the width of its content', () => {
+    render(
+      <Stepper activeStep={0} orientation="vertical">
+        <Step step={0} label="Step 1">
+          <div data-testid="content">Content</div>
+        </Step>
+      </Stepper>,
+    );
+    // The body is a flex item of the step row: without the reset, its
+    // min-content floor lets wide content push it past the step.
+    const body = screen.getByTestId('content').closest('li > div');
+    expect(body).not.toBeNull();
+    expect(getComputedStyle(body as Element).minWidth).toBe('0');
+  });
+
   it('calls onStepClick when a completed step is clicked', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
@@ -1648,6 +1663,44 @@ describe('Stepper', () => {
       ).not.toBeInTheDocument();
       expect(screen.getByRole('button', {name: 'Previous step'})).toBeEnabled();
       expect(screen.getByRole('button', {name: 'Next step'})).toBeEnabled();
+    });
+
+    it.each(['separated', 'on-track'] as const)(
+      'states a disabled step as unavailable in the compact %s layout',
+      indicatorPosition => {
+        // A compact step has no button to carry aria-disabled, so its list
+        // item says it in words, as the expanded button does.
+        atWidth(
+          320,
+          <Stepper
+            activeStep={0}
+            onStepClick={vi.fn()}
+            indicatorPosition={indicatorPosition}>
+            <Step step={0} label="Shipping" />
+            <Step step={1} label="Delivery" isDisabled />
+            <Step step={2} label="Payment" />
+          </Stepper>,
+        );
+        const [shipping, delivery, payment] = screen.getAllByRole('listitem');
+        expect(within(delivery).getByText('unavailable')).toBeInTheDocument();
+        expect(within(shipping).queryByText('unavailable')).toBeNull();
+        expect(within(payment).queryByText('unavailable')).toBeNull();
+      },
+    );
+
+    it('keeps a disabled step on its aria-disabled button when the layout is not compact', () => {
+      atWidth(
+        900,
+        <Stepper activeStep={0} onStepClick={vi.fn()}>
+          <Step step={0} label="Shipping" />
+          <Step step={1} label="Delivery" isDisabled />
+          <Step step={2} label="Payment" />
+        </Stepper>,
+      );
+      expect(
+        screen.getByRole('button', {name: /^Go to step 2: Delivery/}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByText('unavailable')).toBeNull();
     });
 
     it('drops the controls but keeps the name on request', () => {

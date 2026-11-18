@@ -49,6 +49,7 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {
   AGENTS_MD,
   AGENT_DOC_PATHS,
+  holdsAstryxBlock,
   CLAUDE_MD,
   CLAUDE_DIR_MD,
   CURSOR_RULES,
@@ -94,6 +95,15 @@ export {
 } from './agent-docs-target.mjs';
 
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/**
+ * The block's last line: how an agent removes the block. `--remove-agents`
+ * clears the project root and the working folder (cli-surface INV31); a copy
+ * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
+ */
+export const REMOVE_LINE =
+  'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -383,6 +393,9 @@ export function parseBlockVersion(content) {
  * @param {string} [installedVersion] Defaults to the installed core version.
  * @param {string} [expectedBlock] Fully rendered block for this project. When
  *   present, byte differences are stale even if the Core version is unchanged.
+ * @param {{paths?: string[]}} [options] `paths`: the files to read, relative to
+ *   `targetDir`, in place of the agent docs found there; a named file without
+ *   the block makes the status `stale` (or `missing` when none has one).
  * @returns {{
  *   installedVersion: string,
  *   status: 'missing' | 'stale' | 'current',
@@ -391,27 +404,39 @@ export function parseBlockVersion(content) {
  *   blockVersions: string[],
  * }}
  */
-export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
-  const version = installedVersion ?? getXdsVersion(findCoreDir(targetDir));
+export function inspectAgentDocs(
+  targetDir,
+  installedVersion,
+  expectedBlock,
+  {paths} = {},
+) {
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
+  // Named files (init's --agent-docs-path) are the docs: one without the
+  // block keeps the set from being current.
+  let namedWithoutBlock = 0;
 
-  for (const rel of discoverAgentDocs(targetDir)) {
+  for (const rel of paths ?? discoverAgentDocs(targetDir)) {
     /** @type {string} */
     let content;
     try {
       content = fs.readFileSync(path.join(targetDir, rel), 'utf-8');
     } catch {
+      if (paths) namedWithoutBlock++;
       continue; // Unreadable — treat as absent.
     }
     const hasNew = content.includes(MARKER_START);
     const hasLegacy = content.includes(LEGACY_MARKER_START);
-    if (!hasNew && !hasLegacy) continue; // Not a block we manage.
+    if (!hasNew && !hasLegacy) {
+      if (paths) namedWithoutBlock++;
+      continue; // Not a block we manage.
+    }
     // An import of AGENTS.md names no version and never needs a refresh.
     if (isAgentsImportBlock(rel, content)) continue;
 
     const legacy = !hasNew && hasLegacy;
-    const blockVersion = parseBlockVersion(content);
+    const blockVersion = managedBlockVersion(content);
     let contentMatches = true;
     if (expectedBlock != null) {
       try {
@@ -440,7 +465,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
   /** @type {'missing' | 'stale' | 'current'} */
   let status;
   if (files.length === 0) status = 'missing';
-  else if (staleFiles.length > 0) status = 'stale';
+  else if (staleFiles.length > 0 || namedWithoutBlock > 0) status = 'stale';
   else status = 'current';
 
   return {installedVersion: version, status, files, staleFiles, blockVersions};
@@ -673,7 +698,7 @@ export function generateCompressedIndex(
   } else {
     lines.push("- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.");
   }
-  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
+  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
   // Self-check — post-generation pass. Validated via vibe tests (internal/vibe-tests/
   // prompt-purity-test): on complex multi-step UIs the rules above alone still leave raw
   // CSS in ~11-13% of runs; a re-read-and-fix pass cuts that ~4x at negligible token cost.
@@ -729,6 +754,10 @@ export function generateCompressedIndex(
       }
     }
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes whole agent files or cuts one copy by hand
+  // and leaves the others.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');
@@ -749,7 +778,7 @@ export async function renderAgentDocsBlock(
   {installedVersion, fresh = false} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
-  const version = installedVersion ?? getXdsVersion(coreDir);
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   const project = await Project.load(targetDir, {fresh});
   const failedIntegration = project.loadedIntegrations.find(
     integration => integration.__loadError != null,
@@ -811,6 +840,16 @@ export async function renderAgentDocsBlock(
     topics,
     agentDocs,
   });
+}
+
+/**
+ * The version an agent-docs block names when no caller gives one, as `init`
+ * writes it: the Core the folder reads, else this CLI's own.
+ * @param {string} targetDir
+ * @returns {string}
+ */
+export function agentDocsVersion(targetDir) {
+  return getXdsVersion(findCoreDir(targetDir));
 }
 
 /**
@@ -1566,6 +1605,68 @@ function stripManagedBlock(filePath, compressedIndex) {
     injectXdsBlock(filePath, compressedIndex, {onlyReplace: true});
   }
   return false;
+}
+
+/**
+ * Each agent-doc file's text, or null when it does not exist. Init reads the
+ * files before and after it writes, so its receipt can say what changed.
+ * @param {string} dir
+ * @param {string[]} rels paths relative to `dir`
+ * @returns {Map<string, string | null>}
+ */
+export function readAgentDocTexts(dir, rels) {
+  return new Map(
+    rels.map(rel => {
+      try {
+        return [rel, fs.readFileSync(path.join(dir, rel), 'utf-8')];
+      } catch {
+        return [rel, null];
+      }
+    }),
+  );
+}
+
+/**
+ * The Astryx version the managed block in `content` names. Only the block is
+ * read, so a version that the project's own text mentions never counts. Null
+ * when there is no block, the block is malformed, or it has no version line.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function managedBlockVersion(content) {
+  try {
+    const block = findManagedBlock(content);
+    return block ? parseBlockVersion(content.slice(block.start, block.end)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a write did to one agent-doc file, from its text before and after.
+ * `removed`: its Astryx block is gone. `created`: the file did not exist.
+ * `unchanged`: the text is the same. `updated`: anything else. `from` and
+ * `to` are the versions the block names before and after.
+ * @param {string | null} before
+ * @param {string | null} after
+ * @returns {{change: 'created' | 'updated' | 'unchanged' | 'removed', from: string | null, to: string | null}}
+ */
+export function agentDocChange(before, after) {
+  const had = before != null && holdsAstryxBlock(before);
+  const has = after != null && holdsAstryxBlock(after);
+  const change =
+    had && !has
+      ? 'removed'
+      : before == null
+        ? 'created'
+        : before === after
+          ? 'unchanged'
+          : 'updated';
+  return {
+    change,
+    from: had ? managedBlockVersion(/** @type {string} */ (before)) : null,
+    to: has ? managedBlockVersion(/** @type {string} */ (after)) : null,
+  };
 }
 
 /**

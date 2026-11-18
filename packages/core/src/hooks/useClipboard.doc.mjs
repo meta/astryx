@@ -36,7 +36,7 @@ export const docs = {
       name: 'copy',
       type: '(text: string) => Promise<boolean>',
       description:
-        'Writes text to the clipboard. On success flips isCopied to true, announces the configured message, restarts the reset timer, and resolves true. A clipboard rejection is a silent no-op that leaves the copied state unchanged and resolves false.',
+        'Writes text to the clipboard. On success flips isCopied to true, announces the configured message, restarts the reset timer, and resolves true. Where the frame refuses the async Clipboard API (a sandboxed viewer or an embed whose permissions policy does not allow `clipboard-write`), the text is copied with the browser copy command instead, inside the reader\u2019s click or key press; it resolves true only when the browser copied the text. A failed write is a silent no-op that leaves the copied state unchanged and resolves false.',
     },
     {
       name: 'isCopied',
@@ -47,7 +47,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Copy-to-clipboard behavior: the clipboard write, a transient isCopied flag with its own reset timer, and an optional polite screen-reader announcement. Extracted so every copy affordance is a thin control over one implementation instead of re-deriving the timer and announcement. Rapid re-copies restart the reset timer so the confirmation always lasts the full duration, and the timer is cleaned up on unmount. CodeBlock and Timestamp build their built-in copy buttons on it; reach for it directly when building a copy affordance that is not a plain icon button (a menu item, a labeled text button, a copy-on-click value chip).',
+      'Copy-to-clipboard behavior: the clipboard write, a transient isCopied flag with its own reset timer, and an optional polite screen-reader announcement. Extracted so every copy affordance is a thin control over one implementation instead of re-deriving the timer and announcement. Rapid re-copies restart the reset timer so the confirmation always lasts the full duration, and the timer is cleaned up on unmount. It also copies inside a sandboxed frame that refuses the async Clipboard API, with the browser copy command, inside the reader\u2019s click or key press. CodeBlock and Timestamp build their built-in copy buttons on it; reach for it directly when building a copy affordance that is not a plain icon button (a menu item, a labeled text button, a copy-on-click value chip).',
     bestPractices: [
       { guidance: true, description: 'Drive the copied confirmation (copy → check icon, label swap) off the returned isCopied flag rather than tracking your own state.' },
       { guidance: true, description: 'Pass a localized announce message so the copy is spoken by screen readers; swapping the button aria-label alone is not reliably announced.' },

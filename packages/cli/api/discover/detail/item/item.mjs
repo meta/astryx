@@ -61,6 +61,10 @@ export function item(packages, packageName, itemName, options = {}) {
             },
           };
         }
+        // A doc that adds sections to another package's topic names them,
+        // so a reader can open its own section straight away.
+        const sections =
+          kind === 'doc' ? pkg.docSections?.[itemName] : undefined;
         return {
           type: 'discover.item',
           package: packageName,
@@ -69,6 +73,7 @@ export function item(packages, packageName, itemName, options = {}) {
             ...(pkg.version ? {version: pkg.version} : {}),
             kind,
             name: itemName,
+            ...(sections ? {sections} : {}),
             installed: true,
           },
         };

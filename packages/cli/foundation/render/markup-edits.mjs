@@ -59,7 +59,8 @@ export const clip = text => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT 
 
 /**
  * The runs of text that differ between the markup as rendered and the markup
- * now, paired where one replaced another.
+ * now, paired where one replaced another, whole (a caller that shows them
+ * cuts them with {@link clip}).
  * @param {string[]} before
  * @param {string[]} after
  * @returns {{edits: TextEdit[], more: number}} at most MAX_EDITS changes, and how many more there are
@@ -117,8 +118,8 @@ export function textEdits(before, after) {
     const pairs = Math.max(removed.length, added.length);
     for (let k = 0; k < pairs; k++) {
       all.push({
-        was: k < removed.length ? clip(removed[k]) : null,
-        now: k < added.length ? clip(added[k]) : null,
+        was: k < removed.length ? removed[k] : null,
+        now: k < added.length ? added[k] : null,
       });
     }
   }
@@ -126,21 +127,55 @@ export function textEdits(before, after) {
 }
 
 /**
- * Where a piece of text sits in the restored source: the file and line, when
- * it appears exactly once across the files.
- * @param {string} text
- * @param {{file: string, text: string}[]} files the restored modules
+ * A module's text with its white space collapsed the way a run of text's is,
+ * and the line of the source each of its characters comes from; kept per
+ * module, so every run is found in one pass over each.
+ * @type {WeakMap<{file: string, text: string}, {text: string, lines: number[]}>}
+ */
+const collapsedModules = new WeakMap();
+
+/** @param {{file: string, text: string}} module */
+function collapsedOf(module) {
+  let found = collapsedModules.get(module);
+  if (!found) {
+    let text = '';
+    /** @type {number[]} */
+    const lines = [];
+    let line = 1;
+    for (const part of module.text.split(/(\s+)/)) {
+      if (part === '') continue;
+      const space = /^\s/.test(part);
+      text += space ? ' ' : part;
+      for (let i = 0; i < (space ? 1 : part.length); i++) lines.push(line);
+      line += part.split('\n').length - 1;
+    }
+    found = {text, lines};
+    collapsedModules.set(module, found);
+  }
+  return found;
+}
+
+/**
+ * Where a run of text sits in the restored source: the file and line where
+ * it starts, when it appears exactly once across the files. A run is text
+ * with its white space collapsed, and in source the same text may wrap
+ * across lines (JSX joins them with one space), so the run is found in each
+ * module's text collapsed the same way.
+ * @param {string} text a whole run of text
+ * @param {{file: string, text: string}[]} files the restored modules and JSON files
  * @returns {{file: string, line: number} | null}
  */
 export function locate(text, files) {
+  if (!text) return null;
   /** @type {{file: string, line: number} | null} */
   let found = null;
-  for (const {file, text: source} of files) {
-    let at = source.indexOf(text);
+  for (const module of files) {
+    const collapsed = collapsedOf(module);
+    let at = collapsed.text.indexOf(text);
     while (at >= 0) {
       if (found) return null;
-      found = {file, line: source.slice(0, at).split('\n').length};
-      at = source.indexOf(text, at + 1);
+      found = {file: module.file, line: collapsed.lines[at]};
+      at = collapsed.text.indexOf(text, at + 1);
     }
   }
   return found;

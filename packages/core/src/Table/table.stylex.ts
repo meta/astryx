@@ -69,6 +69,11 @@ export const wrapStyles = stylex.create({
  * Each density variant uses its own paddingInline as the fallback,
  * so standalone tables (where --container-padding-inline-start/end are unset)
  * keep their normal density-based cell padding unchanged.
+ *
+ * The last column's end inset is also exposed as `--_table-edge-inline-end`,
+ * so a header cell can give its content the same room it pads with. Every
+ * other cell resets it, so a Table nested in a last-column cell does not
+ * inherit the outer cell's inset.
  */
 export const containerEdgeStyles = stylex.create({
   compact: {
@@ -76,9 +81,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
   balanced: {
@@ -86,9 +95,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
   spacious: {
@@ -96,9 +109,13 @@ export const containerEdgeStyles = stylex.create({
       default: null,
       ':first-child': `max(var(--container-padding-inline-start, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
     },
+    '--_table-edge-inline-end': {
+      default: 'initial',
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
+    },
     paddingInlineEnd: {
       default: null,
-      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
+      ':last-child': 'var(--_table-edge-inline-end)',
     },
   },
 });

@@ -14,7 +14,7 @@
  * wrote to stderr. Each way the host itself ends without an answer has its own
  * exit code (HOST_EXIT), so none of them reads as a clean exit.
  *
- * @input argv[2]: JSON {entry, root, served, withoutSegmenter, timeoutMs, stateFile}, where stateFile is a file in the CLI's per-run temporary folder
+ * @input argv[2]: JSON {entry, root, scope, served, withoutSegmenter, timeoutMs, stateFile}, where stateFile is a file in the CLI's per-run temporary folder
  * @output one IPC message: the worker's answer, or {hostError, stage}, or
  *   {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}; and its
  *   state in stateFile (stage, time, memory, and whether it sent its answer)
@@ -27,7 +27,7 @@ import {Worker} from 'node:worker_threads';
 import {HOST_EXIT} from './host-exit.mjs';
 import {makeAnswer} from './host-answer.mjs';
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter: boolean, timeoutMs: number, stateFile?: string}} */
+/** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter: boolean, timeoutMs: number, stateFile?: string}} */
 const input = JSON.parse(process.argv[2] ?? '{}');
 const started = Date.now();
 let stage = 'starting';

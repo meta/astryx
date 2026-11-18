@@ -469,3 +469,22 @@ describe('formatBestPractices', () => {
     expect(formatBestPractices(undefined)).toEqual([]);
   });
 });
+
+describe('theming override example', () => {
+  it('prints the override keys on one line', () => {
+    const docs = {
+      name: 'Table',
+      description: 'A table.',
+      theming: {
+        targets: [
+          {className: 'astryx-table', visualProps: ['density']},
+          {className: 'astryx-table-cell', states: ['hover']},
+        ],
+      },
+    };
+
+    expect(formatFull(docs)).toContain(
+      "Override in defineTheme: `components: {'table': {base: {/* CSS properties */}, 'density:value': {/* variant-specific */}}, 'table-cell': {base: {/* CSS properties */}, 'hover': {/* state-specific */}}}`",
+    );
+  });
+});

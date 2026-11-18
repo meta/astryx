@@ -19,6 +19,13 @@ import type {MetadataRoute} from 'next';
 import {cacheLife} from 'next/cache';
 import {SITE_URL} from '../lib/siteConfig';
 import {CHANGELOG_PAGE_TITLE} from '../lib/pageTitles';
+import {changelogEntries} from '../lib/changelogData';
+import {
+  changelogPackages,
+  changelogPageList,
+  changelogPagePath,
+  defaultChangelogSlug,
+} from '../lib/changelogPages';
 import {flattenComponentSidebarEntries} from '../components/componentSidebarData';
 import {docTopics} from '../generated/docsRegistry';
 import {packages} from '../generated/packageRegistry';
@@ -141,12 +148,33 @@ export async function getSitemapPages(): Promise<SitemapPage[]> {
     priority: 0.6,
   }));
 
+  // /changelog itself, the default package's newest releases, is a static
+  // entry above.
+  const changelogDefaultSlug = defaultChangelogSlug(changelogEntries);
+  const changelogNames = new Map(
+    changelogPackages(changelogEntries).map(pkg => [pkg.slug, pkg.name]),
+  );
+  const changelogPageEntries: SitemapPage[] = changelogPageList(
+    changelogEntries,
+  )
+    .filter(({slug, page}) => page > 1 || slug !== changelogDefaultSlug)
+    .map(({slug, page}) => ({
+      url: url(changelogPagePath(slug, page, changelogDefaultSlug)),
+      title:
+        page > 1
+          ? `${CHANGELOG_PAGE_TITLE}: ${changelogNames.get(slug)}, page ${page}`
+          : `${CHANGELOG_PAGE_TITLE}: ${changelogNames.get(slug)}`,
+      changeFrequency: 'weekly',
+      priority: page > 1 ? 0.3 : 0.5,
+    }));
+
   return [
     ...staticEntries,
     ...componentEntries,
     ...docTopicEntries,
     ...templateEntries,
     ...blogEntries,
+    ...changelogPageEntries,
   ];
 }
 

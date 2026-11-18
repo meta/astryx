@@ -22,8 +22,10 @@ import {
   PaperClipIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ChatComposerFullFeatured() {
+  const showToast = useToast();
   const [isStreaming, setIsStreaming] = useState(false);
 
   return (
@@ -53,6 +55,9 @@ export default function ChatComposerFullFeatured() {
         headerActions={
           <>
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: a mention picker would open here'})
+              }
               label="Mention"
               variant="ghost"
               size="sm"
@@ -60,6 +65,9 @@ export default function ChatComposerFullFeatured() {
               isIconOnly
             />
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: a file picker would open here'})
+              }
               label="Attach file"
               variant="ghost"
               size="sm"

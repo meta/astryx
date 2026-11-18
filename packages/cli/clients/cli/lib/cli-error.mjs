@@ -66,6 +66,7 @@ import {
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
 import {doc as experimentalPreviewDoc} from '../commands/experimental-theme-preview.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -157,6 +158,27 @@ export function cliError(message, options = {}) {
 }
 
 /**
+ * End a run with exit 1 after its output is printed, and record the stable
+ * code that output carries, as {@link cliError} records its own. Use it when
+ * a command has already answered or reported: a batch with a row that did not
+ * resolve, a check that found stale outputs, or an error the API printed. The
+ * run's debug event then names the failure instead of an exit that bypassed
+ * the error path. It prints nothing.
+ *
+ * @param {string | undefined} code - the code the output carries, from
+ *   error-codes.mjs
+ * @param {unknown} [error] - the error the output reports, when there is one
+ */
+export function failAfterOutput(code, error) {
+  setOutcome('error', {
+    exitCode: 1,
+    code,
+    ...(error === undefined ? {} : {error}),
+  });
+  process.exitCode = 1;
+}
+
+/**
  * Reject a positional argument the user typed as `""`.
  *
  * @param {string} name the argument as the help spells it, without brackets
@@ -230,7 +252,7 @@ export function unknownSubcommandSuggestions(
   const ranked = [...names].sort(
     (a, b) =>
       levenshteinDistance(typed, a) - levenshteinDistance(typed, b) ||
-      a.localeCompare(b),
+      compareText(a, b),
   );
   return [
     ...elsewhere,

@@ -17,52 +17,68 @@ import {formatZodError} from '../../_shared/errors.mjs';
 /** A definition name: camelCase, starting with a lower-case letter. */
 export const ICON_DEFINITION_NAME_RE = /^[a-z][a-zA-Z0-9]*$/u;
 
-/** @param {string} field */
-const nonBlank = field =>
-  z.string().refine(value => value.trim() !== '', {
-    message: `${field} must not be blank`,
-    abort: true,
-  });
+function buildSchemas() {
+  /** @param {string} field */
+  const nonBlank = field =>
+    z.string().refine(value => value.trim() !== '', {
+      message: `${field} must not be blank`,
+      abort: true,
+    });
 
-const iconDefinitionSchema = z
-  .object({
-    type: z.literal('icon-definition'),
-    name: nonBlank('name').regex(
-      ICON_DEFINITION_NAME_RE,
-      'name must be camelCase starting with a lower-case letter',
-    ),
-    description: nonBlank('description'),
-    words: z
-      .array(
-        nonBlank('word').refine(
-          word => word === word.toLowerCase() && word === word.trim(),
-          {message: 'words must be lower-case and trimmed'},
-        ),
-      )
-      .min(1, 'a definition must have at least one word'),
-    builtIn: z.literal(true).optional(),
-    stability: z.literal('experimental').optional(),
-  })
-  .strict();
+  const iconDefinitionSchema = z
+    .object({
+      type: z.literal('icon-definition'),
+      name: nonBlank('name').regex(
+        ICON_DEFINITION_NAME_RE,
+        'name must be camelCase starting with a lower-case letter',
+      ),
+      description: nonBlank('description'),
+      words: z
+        .array(
+          nonBlank('word').refine(
+            word => word === word.toLowerCase() && word === word.trim(),
+            {message: 'words must be lower-case and trimmed'},
+          ),
+        )
+        .min(1, 'a definition must have at least one word'),
+      builtIn: z.literal(true).optional(),
+      stability: z.literal('experimental').optional(),
+    })
+    .strict();
 
-/** Zod skips `__proto__` when it looks for unknown keys. */
-const PROTO_KEY_ISSUE = {
-  code: /** @type {const} */ ('unrecognized_keys'),
-  keys: ['__proto__'],
-  path: [],
-  message: 'Unrecognized key: "__proto__"',
-};
+  /** Zod skips `__proto__` when it looks for unknown keys. */
+  const PROTO_KEY_ISSUE = {
+    code: /** @type {const} */ ('unrecognized_keys'),
+    keys: ['__proto__'],
+    path: [],
+    message: 'Unrecognized key: "__proto__"',
+  };
+
+  /**
+   * Compile-time drift lock: the sealed schema must infer IconDefinitionDoc.
+   *
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').MutuallyAssignable<
+   *     z.infer<typeof iconDefinitionSchema>,
+   *     IconDefinitionDoc
+   *   >
+   * >} _IconDefinitionDocDriftLock
+   */
+
+  return {nonBlank, iconDefinitionSchema, PROTO_KEY_ISSUE};
+}
+
+/** @type {ReturnType<typeof buildSchemas> | undefined} */
+let builtSchemas;
 
 /**
- * Compile-time drift lock: the sealed schema must infer IconDefinitionDoc.
- *
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').MutuallyAssignable<
- *     z.infer<typeof iconDefinitionSchema>,
- *     IconDefinitionDoc
- *   >
- * >} _IconDefinitionDocDriftLock
+ * This parser's schemas, built when it first parses, not when this module
+ * loads: most runs load the module and never call it.
+ * @returns {ReturnType<typeof buildSchemas>}
  */
+function schemas() {
+  return (builtSchemas ??= buildSchemas());
+}
 
 /**
  * Validate an unknown value as an icon definition, or throw.
@@ -73,7 +89,7 @@ const PROTO_KEY_ISSUE = {
  * @experimental May change or be removed in a patch release.
  */
 export function parseIconDefinition(input, label = 'icon definition') {
-  const result = iconDefinitionSchema.safeParse(input);
+  const result = schemas().iconDefinitionSchema.safeParse(input);
   const protoKey =
     input !== null &&
     typeof input === 'object' &&
@@ -83,7 +99,7 @@ export function parseIconDefinition(input, label = 'icon definition') {
   }
   const issues = [
     ...(result.error?.issues ?? []),
-    ...(protoKey ? [PROTO_KEY_ISSUE] : []),
+    ...(protoKey ? [schemas().PROTO_KEY_ISSUE] : []),
   ];
   throw new Error(formatZodError(label, new z.ZodError(issues)));
 }

@@ -399,8 +399,13 @@ export function readThemeState(cwd = process.cwd()) {
  */
 
 /**
+ * The fields of a resolved theme that the generated module writes.
+ * @typedef {Pick<ResolvedAppTheme, 'slug' | 'owner' | 'exportName' | 'module' | 'stylesheet' | 'fontStylesheet' | 'mode'>} RenderedAppTheme
+ */
+
+/**
  * Render one generated module from final resolved state.
- * @param {ResolvedAppTheme[]} themes
+ * @param {RenderedAppTheme[]} themes
  * @param {string} defaultSlug
  * @param {boolean} typescript
  * @param {{keepModes?: boolean}} [options] `keepModes`: the module has
@@ -475,6 +480,93 @@ export function renderThemeModule(
         } = {${modes.length > 0 ? `\n${modes.join('\n')}\n` : ''}};\n`
       : ''
   }`;
+}
+
+/** A JSON string literal as the renderer writes it. */
+const JSON_STRING_RE = /"(?:[^"\\]|\\.)*"/u;
+const NAMED_IMPORT_RE = new RegExp(
+  `^import \\{([A-Za-z_$][\\w$]*) as _astryxTheme\\d+\\} from (${JSON_STRING_RE.source});$`,
+  'u',
+);
+const BARE_IMPORT_RE = new RegExp(`^import (${JSON_STRING_RE.source});$`, 'u');
+const MODE_ENTRY_RE = new RegExp(
+  `^  (${JSON_STRING_RE.source}): "(light|dark)",$`,
+  'u',
+);
+
+/**
+ * Is `source` exactly the module `renderThemeModule` writes for the record it
+ * carries? Only then may a command delete the module: it holds nothing a
+ * person wrote. The imports come from the module itself, so the check works
+ * when an added theme's package is already uninstalled.
+ * @param {string} source
+ * @param {boolean} typescript
+ */
+export function isUneditedThemeModule(source, typescript) {
+  let record;
+  try {
+    record = parseThemeModuleRecord(source);
+  } catch {
+    return false;
+  }
+  /** @type {Array<{exportName: string, module: string, stylesheet?: string, fontStylesheet?: string}>} */
+  const imported = [];
+  /** @type {Record<string, 'light' | 'dark'>} */
+  const modes = {};
+  for (const line of source.split('\n')) {
+    const named = NAMED_IMPORT_RE.exec(line);
+    if (named) {
+      imported.push({exportName: named[1], module: JSON.parse(named[2])});
+      continue;
+    }
+    const bare = BARE_IMPORT_RE.exec(line);
+    const last = imported.at(-1);
+    if (bare && last) {
+      if (last.stylesheet === undefined) last.stylesheet = JSON.parse(bare[1]);
+      else if (last.fontStylesheet === undefined)
+        last.fontStylesheet = JSON.parse(bare[1]);
+      else return false;
+      continue;
+    }
+    const mode = MODE_ENTRY_RE.exec(line);
+    if (mode)
+      modes[JSON.parse(mode[1])] = /** @type {'light' | 'dark'} */ (mode[2]);
+  }
+  const slugs = Object.keys(record.themes);
+  if (slugs.length !== imported.length) return false;
+  /** @type {RenderedAppTheme[]} */
+  const themes = [];
+  for (const [index, slug] of slugs.entries()) {
+    const {exportName, module, stylesheet, fontStylesheet} = imported[index];
+    if (stylesheet === undefined) return false;
+    const owner = record.themes[slug];
+    // Each import still comes from the theme's recorded owner: a package
+    // theme from its package, a local theme from a relative path.
+    const fromOwner = (/** @type {string} */ specifier) =>
+      isLocalThemeOwner(owner)
+        ? specifier.startsWith('./') || specifier.startsWith('../')
+        : specifier === owner || specifier.startsWith(`${owner}/`);
+    if (![module, stylesheet, fontStylesheet ?? stylesheet].every(fromOwner))
+      return false;
+    themes.push({
+      slug,
+      owner,
+      exportName,
+      module,
+      stylesheet,
+      ...(fontStylesheet === undefined ? {} : {fontStylesheet}),
+      ...(modes[slug] ? {mode: modes[slug]} : {}),
+    });
+  }
+  try {
+    return (
+      renderThemeModule(themes, record.defaultSlug, typescript, {
+        keepModes: /\bexport const themeModes\b/u.test(source),
+      }) === source
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -18,13 +18,51 @@
 
 import {createHash} from 'node:crypto';
 import {isValidSemver} from '../env/semver.mjs';
-import {scanHtml} from './html-reader.mjs';
+import {decode, readTag, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
 
-/** The render format this CLI writes, and the newest one it reads. */
-export const RENDER_FORMAT = 1;
+/** The newest render format this CLI reads, and the newest it writes. */
+export const RENDER_FORMAT = 2;
+
+/**
+ * What a format 1 reader refuses besides the page, as a kind no render
+ * embeds, and format 2 carries: an `.mts`, `.cts` or `.cjs` module; JSON
+ * whose name holds `config`, ends in `rc` or `lock`, or names a manifest;
+ * and a module named `config.*` or with a stem that ends in `rc`. A file
+ * that carries one says format 2, so a CLI that reads render formats names
+ * the CLI that reads it instead of calling the file damaged; every other
+ * file says format 1, which every CLI that reads render files opens. The
+ * rules stay as format 1 readers have them: a kind a later CLI adds needs a
+ * format of its own.
+ */
+const FORMAT_1_REFUSED_MODULE = /\.(?:mts|cts|cjs)$/i;
+const FORMAT_1_CONFIG_JSON =
+  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|config|(^|[._-])rc\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
+const FORMAT_1_CONFIG_MODULE = /(^|\.)config\.[cm]?[jt]sx?$|^[a-z0-9-]+rc\.[cm]?[jt]s$/i;
+
+/**
+ * Whether a format 1 reader refuses a carried file other than the page.
+ * @param {string} p its path in the file, `/`-separated
+ */
+function format1Refuses(p) {
+  const name = p.slice(p.lastIndexOf('/') + 1);
+  return (
+    FORMAT_1_REFUSED_MODULE.test(name) ||
+    (/\.jsonc?$/i.test(name) && FORMAT_1_CONFIG_JSON.test(name)) ||
+    FORMAT_1_CONFIG_MODULE.test(name)
+  );
+}
+
+/**
+ * The render format a file that carries these files says, the page first.
+ * @param {{path: string}[]} files
+ * @returns {number}
+ */
+export function formatFor(files) {
+  return files.slice(1).some(f => format1Refuses(f.path)) ? 2 : 1;
+}
 
 /**
  * @typedef {object} EmbeddedFile
@@ -38,9 +76,10 @@ export const RENDER_FORMAT = 1;
  * optional: files from older CLIs have none of them.
  * @typedef {object} RenderRecord
  * @property {string} [cli] - The version of the CLI that rendered the file.
- * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {string} [page] - The page's path from its project's root, `/`-separated; outside a project, its path among the files it carries.
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
+ * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
@@ -52,6 +91,14 @@ export const RENDER_FORMAT = 1;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /**
+ * Text as a browser's HTML parser reads it: a CR LF pair or a lone CR is a
+ * line feed. A copy whose line ends a mailer, an editor or git changed reads
+ * the same.
+ * @param {string} text
+ */
+export const asParsed = text => text.replace(/\r\n?/g, '\n');
+
+/**
  * The data block for a page's files.
  * @param {string} entry the page's file name
  * @param {{path: string, bytes: Buffer}[]} files the page first
@@ -61,12 +108,13 @@ export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export function sourceBlock(entry, files, record = {}) {
   /** @type {EmbeddedSource} */
   const payload = {
-    version: RENDER_FORMAT,
+    version: formatFor(files),
     entry,
     ...(record.cli ? {cli: record.cli} : {}),
     ...(record.page ? {page: record.page} : {}),
     ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
+    ...(record.aliases ? {aliases: record.aliases} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),
@@ -114,21 +162,44 @@ function pageParts(html) {
 }
 
 /**
- * Every embedded-source block in a file's body, in order, with its index in
- * the whole file. The note in <head> may quote a title or a path with any
- * text, so the search starts at <body>.
+ * Whether a script tag's attributes give it the source type. A MIME type is
+ * matched without regard to letter case.
+ * @param {Array<[string, string]>} attrs
+ */
+const isSourceType = attrs => {
+  const type = attrs.find(([name]) => name === 'type')?.[1];
+  return type !== undefined && decode(type).trim().toLowerCase() === SOURCE_TYPE;
+};
+
+/**
+ * Every embedded-source block in a file's body, in order: each script
+ * element whose type is the source type, its tag read as a browser reads a
+ * tag, with its attributes in any order, quoted or not, in any letter case
+ * (a minifier rewrites it so). Every `<script` from the start of the body on
+ * is read this way, inside a comment or other text too, so a hand edit that
+ * leaves a comment or a textarea open before the block does not hide it. The
+ * note in <head> may quote a title or a path with any text, so the search
+ * starts at <body>.
  * @param {string} html
+ * @returns {{index: number, json: string, closed: boolean}[]} where each
+ *   opening tag starts, the text of the block, and whether its end tag is
+ *   there (a file cut inside the block has none)
  */
 const blocksIn = html => {
-  const start = Math.max(0, pageParts(html).body);
-  return [
-    ...html.slice(start).matchAll(
-      new RegExp(
-        `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
-        'gi',
-      ),
-    ),
-  ].map(m => Object.assign(m, {index: (m.index ?? 0) + start}));
+  /** @type {{index: number, json: string, closed: boolean}[]} */
+  const blocks = [];
+  const opening = /<script(?=[\t\n\f\r />])/gi;
+  opening.lastIndex = Math.max(0, pageParts(html).body);
+  for (let m = opening.exec(html); m; m = opening.exec(html)) {
+    const tag = readTag(html, m.index + 1);
+    if (typeof tag !== 'object' || !isSourceType(tag.attrs)) continue;
+    const closing = /<\/script/gi;
+    closing.lastIndex = tag.end;
+    const end = closing.exec(html)?.index;
+    blocks.push({index: m.index, json: html.slice(tag.end, end ?? html.length), closed: end !== undefined});
+    opening.lastIndex = end ?? html.length;
+  }
+  return blocks;
 };
 
 /**
@@ -139,17 +210,13 @@ const blocksIn = html => {
 export function readSourceBlock(html) {
   // The block is written last in the body; a page's own markup cannot end
   // it, so the last one is the CLI's.
-  const m = blocksIn(html).at(-1);
-  if (!m) {
-    // An opening tag with no block after it: the file ends inside the block.
-    return html.slice(Math.max(0, pageParts(html).body)).includes(`<script type="${SOURCE_TYPE}">`)
-      ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
-      : {found: false};
-  }
+  const block = blocksIn(html).at(-1);
+  if (!block) return {found: false};
+  if (!block.closed) return {found: true, damaged: 'its embedded source is cut short: the file ends inside it'};
   /** @type {any} */
   let payload;
   try {
-    payload = JSON.parse(m[1]);
+    payload = JSON.parse(block.json);
   } catch {
     return {found: true, damaged: 'its embedded source is not valid JSON'};
   }
@@ -162,7 +229,7 @@ export function readSourceBlock(html) {
     return {found: true, newer: {format: payload.version, cli: isValidSemver(payload.cli) ? payload.cli : null}};
   }
   if (
-    payload?.version !== 1 ||
+    !(Number.isInteger(payload?.version) && payload.version >= 1) ||
     typeof payload.entry !== 'string' ||
     !Array.isArray(payload.files) ||
     payload.files.length === 0
@@ -194,7 +261,7 @@ export function readSourceBlock(html) {
  */
 export function renderedMarkupOf(html) {
   const block = blocksIn(html).at(-1);
-  if (!block || block.index === undefined) return null;
+  if (!block) return null;
   const start = pageParts(html).body;
   return start < 0 || start > block.index ? null : html.slice(start, block.index);
 }

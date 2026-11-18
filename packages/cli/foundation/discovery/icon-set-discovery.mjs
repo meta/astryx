@@ -34,11 +34,15 @@ import {
   isIgnoredThemeEntry,
   readStaticDescriptorValue,
 } from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
 
 const SET_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+
+/** The name every icon export has (the icon export contract): `<Name>Icon`. */
+export const ICON_EXPORT_NAME_RE = /^[A-Z][A-Za-z0-9]*Icon$/u;
 
 /** A license or notice file a set ships beside its data (FR15). */
 export const NOTICE_FILE_RE = /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/iu;
@@ -149,7 +153,7 @@ export function discoverIconSetDirectory(root, owner) {
   } catch {
     return {sets, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (isIgnoredThemeEntry(entry.name) || !entry.isDirectory()) continue;
     // Only a lower-kebab directory is a set (FR1).
     if (!SET_NAME_RE.test(entry.name)) continue;
@@ -502,6 +506,45 @@ export function iconSetLook(set, variant) {
   return (set.data.variants ?? []).includes(variant)
     ? variant
     : (set.data.default?.variant ?? null);
+}
+
+/**
+ * The export that draws an icon in a look: the icon's variant of that name
+ * when it has one, else its own export, which draws the set's default look.
+ * Template mapping and `experimental icon <words>` both use it.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{module: string, export: string}}
+ */
+export function iconLookExport(icon, set, variant) {
+  const module = icon.module ?? set.data.module;
+  if (variant && variant !== set.data.default?.variant) {
+    const entry = (icon.variants ?? []).find(each => each.variant === variant);
+    if (entry) {
+      return {module: entry.module ?? module, export: entry.export};
+    }
+  }
+  return {module, export: icon.export};
+}
+
+/**
+ * What an icon draws when it does not have the look asked for: that look,
+ * and the set's default look it draws instead (null for a set with one
+ * look). Undefined when the icon has the look, or when none is asked for.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+export function missingIconLook(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
 }
 
 /**

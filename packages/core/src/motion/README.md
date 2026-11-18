@@ -32,6 +32,7 @@ roles through `resolveMotion`.
 | `uikit/reorder.ts`                               | UITableView edit-mode reorder: the reorder control's claim and the edge autoscroll (the glides play `springs.settle`).                                               |
 | `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
 | `uikit/zoomMedia.ts`                             | UIScrollView zooming for a photo viewer: overshoot past the limits, double-tap and maximum zoom.                                                                     |
+| `uikit/swipeActions.ts`                          | Swipe actions on a list row: the claim and swipe thresholds, the tracking and settle spring, the release rule.                                                       |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
 | `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
 | `resolveMotion.ts`                               | A role's value: its table value, as the per-role tables stay internal (`spec:AST-094` DEC-15).                                                                       |

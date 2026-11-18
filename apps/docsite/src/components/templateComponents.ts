@@ -78,6 +78,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
   'gallery-hero': () =>
     import('../../../../packages/cli/assets/templates/pages/gallery-hero/page'),
   ide: () => import('../../../../packages/cli/assets/templates/pages/ide/page'),
+  'incident-console': () =>
+    import('../../../../packages/cli/assets/templates/pages/incident-console/page'),
   'kanban-board': () =>
     import('../../../../packages/cli/assets/templates/pages/kanban-board/page'),
   library: () =>

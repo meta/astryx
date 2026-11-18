@@ -168,7 +168,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     write('package-lock.json', '{}');
     const r = await runCli(['docs', 'tokens'], tmp);
     expect(r.stderr).toContain(
-      'Next step: run `npm install @astryxdesign/cli@0.0.1`, then `npx astryx init` to finish setup and install the Astryx agent prompt.',
+      'Next step: run `npm install -E @astryxdesign/cli@0.0.1`, then `npx astryx init` to finish setup and install the Astryx agent prompt.',
     );
   });
 

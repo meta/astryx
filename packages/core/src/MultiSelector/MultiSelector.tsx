@@ -82,7 +82,7 @@ import {
   disabledInteractionProps,
   withholdCallerHandlers,
 } from '../utils/disabledInteraction';
-import {devWarn, warnOnce} from '../utils/devWarning';
+import {devPropError, devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -1173,6 +1173,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: MultiSelectorProps<T>) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'MultiSelector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. MultiSelector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -2218,6 +2225,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             themeProps('multi-selector-option', {
               size,
               'select-all': isSelectAll ? 'select-all' : null,
+              highlighted: isHighlighted ? 'highlighted' : null,
               selected: isSelected ? 'selected' : null,
               disabled: item.disabled ? 'disabled' : null,
             }),

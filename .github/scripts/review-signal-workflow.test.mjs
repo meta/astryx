@@ -53,6 +53,13 @@ async function runSignal({
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
   author = {login: 'contributor', type: 'User'},
+  // More files than a compare names, and the head the pull request points at
+  // when its live file list has been read.
+  changedFiles = 1,
+  liveHead = HEAD,
+  // The pull request's changed files, as both the compare and the file list
+  // name them.
+  files = [{filename: 'README.md', status: 'modified'}],
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -68,7 +75,7 @@ async function runSignal({
     user: author,
     base: {sha: baseSha, ref: 'main'},
     head: {sha: HEAD, ref: 'feature'},
-    changed_files: 1,
+    changed_files: changedFiles,
     draft,
     labels: [{name: 'needs:code-review'}, {name: 'community'}],
   };
@@ -106,21 +113,22 @@ async function runSignal({
   });
   const github = {
     paginate: async (method, options) => (await method(options)).data,
-    request: async () => ({data: ''}),
+    request: vi.fn(async () => ({data: ''})),
     graphql: mutations.graphql,
     rest: {
       pulls: {
-        get: vi.fn(async () => ({data: pr})),
+        get: vi.fn(async () => ({
+          data: {...pr, head: {...pr.head, sha: liveHead}},
+        })),
         // Like GitHub's list endpoint, the listed PR omits changed_files.
         list: vi.fn(async () => ({data: [{...pr, changed_files: undefined}]})),
-        listFiles: vi.fn(async () => ({
-          data: [{filename: 'README.md', status: 'modified'}],
-        })),
+        listFiles: vi.fn(async () => ({data: files})),
         listReviews: async () => ({data: reviews}),
         requestReviewers: mutations.requestReviewers,
       },
       repos: {
         getContent,
+        compareCommitsWithBasehead: vi.fn(async () => ({data: {files}})),
         createCommitStatus: mutations.createCommitStatus,
         listCommitStatusesForRef: vi.fn(async () => ({
           data:
@@ -456,7 +464,8 @@ describe('review-signal appearance-only contract', () => {
     expect(workflow).toContain(
       'sources[file.filename] = {base: baseSource, head: headSource}',
     );
-    expect(workflow).toContain('if (coreChange || designReasons.length === 0)');
+    expect(workflow).toContain('(coreChange || designReasons.length === 0) &&');
+    expect(workflow).toContain('pr.changed_files <= COMPARE_FILES');
     expect(workflow).toContain(
       "throw new Error('classify-visual.js must stay dependency-free')",
     );
@@ -786,5 +795,68 @@ describe("a fork's held review run blocks nothing the owner command and a dispat
       'Only the review-clear reconcile waits on the held review run',
     );
     expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});
+
+describe('review-signal reads the event head, not the live pull request', () => {
+  it("reads the files and the diff from a compare of the event's base and head", async () => {
+    const h = await runSignal({eventName: 'pull_request'});
+    expect(h.github.rest.repos.compareCommitsWithBasehead).toHaveBeenCalledWith(
+      {owner: 'meta', repo: 'astryx', basehead: `${OLD_BASE}...${HEAD}`},
+    );
+    expect(h.github.rest.pulls.listFiles).not.toHaveBeenCalled();
+    expect(h.github.request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/compare/{basehead}',
+      expect.objectContaining({
+        basehead: `${OLD_BASE}...${HEAD}`,
+        headers: {accept: 'application/vnd.github.diff'},
+      }),
+    );
+    for (const [route] of h.github.request.mock.calls) {
+      expect(route).not.toMatch(/\/pulls\/\{pull_number\}/);
+    }
+  });
+
+  it("never asks for the pull request's live diff", () => {
+    expect(script).not.toMatch(
+      /['"]GET \/repos\/\{owner\}\/\{repo\}\/pulls\/\{pull_number\}['"]/,
+    );
+    expect(script.match(/application\/vnd\.github\.diff/g)).toHaveLength(1);
+  });
+
+  it('reads a larger pull request from its list, and leaves it to the newer run when the head moved', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
+    const moved = await runSignal({
+      eventName: 'pull_request',
+      changedFiles: files.length,
+      files,
+      liveHead: '4'.repeat(40),
+    });
+    expect(moved.github.rest.pulls.listFiles).toHaveBeenCalled();
+    expect(
+      moved.github.rest.repos.compareCommitsWithBasehead,
+    ).not.toHaveBeenCalled();
+    expect(moved.mutations.createCommitStatus).not.toHaveBeenCalled();
+    expect(moved.core.info).toHaveBeenCalledWith(
+      expect.stringContaining('the run for the newer head decides'),
+    );
+  });
+
+  it('never classifies the diff of a pull request larger than a compare names, and still posts its status', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
+    const h = await runSignal({
+      eventName: 'pull_request',
+      changedFiles: files.length,
+      files,
+    });
+    expect(h.github.rest.pulls.listFiles).toHaveBeenCalled();
+    expect(h.github.request).not.toHaveBeenCalled();
+    expect(h.mutations.createCommitStatus).toHaveBeenCalled();
   });
 });

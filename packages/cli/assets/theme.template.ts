@@ -154,8 +154,9 @@ export const myTheme = defineTheme({
    *   scale.base   body size in px; scale.ratio  step between sizes
    *                (1.125 tight/dense · 1.2 default · 1.333 dramatic)
    *   body / heading / code: {family, fallbacks, weight, weights}
-   *   heading inherits family and fallbacks from body when omitted; `weights`
-   *   sets per-level weight for headings 1–6.
+   *   heading without a family of its own uses body's full list; given a
+   *   family, it keeps just its own fallbacks (fallbacks alone do nothing).
+   *   `weights` sets per-level weight for headings 1–6.
    *
    * See §2 above — naming a family here does not load it.
    *
@@ -281,6 +282,10 @@ export const myTheme = defineTheme({
   //   'variant:ghost+size:sm'   intersection of two
   //   'checked'                 a state the component reflects
   //   ':hover' / ':focus-visible' / ':disabled' — nested inside any of the above
+  //   '@light' / '@dark'        a block inside any of the above that applies
+  //                             only in that color mode (properties and
+  //                             ':hover' etc. as above); the other mode is
+  //                             left as written
   //
   // Write ordinary CSS properties: `borderRadius` and `padding` expand into
   // the component's internal vars for you, concentric radius math included.
@@ -300,6 +305,8 @@ export const myTheme = defineTheme({
         // Interaction states live inside the same block.
         ':hover': {transform: 'translateY(-1px)'},
         ':active': {transform: 'translateY(0)'},
+        // A value for one color mode only — any property, not just a colour:
+        // '@dark': {fontWeight: 'var(--font-weight-medium)'},
       },
       'variant:ghost': {borderWidth: '1px', borderStyle: 'solid'},
       'variant:destructive+size:sm': {letterSpacing: '0.02em'},
