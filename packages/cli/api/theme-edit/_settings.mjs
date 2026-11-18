@@ -6412,10 +6412,20 @@ export function compileTheme(ctx, data, base) {
         .map(x => x.trim())
         .filter(Boolean)
         .map(layerParts);
-      for (const k of ['background', 'image', 'position', 'size', 'repeat']) {
-        delete mb[k === 'background' ? k : `background-${k}`];
-        delete mb[camel(`background-${k}`)];
-      }
+      // The gradient replaces the image there. A position, size or repeat
+      // set in the same scope stays (a layer's own replaces it), and a
+      // plain background color set there stays as the color under the
+      // image.
+      const under = mb.background;
+      delete mb.background;
+      delete mb['background-image'];
+      delete mb.backgroundImage;
+      if (
+        typeof under === 'string' &&
+        !/gradient\(|url\(/i.test(under) &&
+        mb.backgroundColor == null
+      )
+        mb.backgroundColor = under;
       mb.backgroundImage = parts.map(x => x.image).join(', ');
       // (Only the longhands a layer gives: one it leaves out keeps what the
       // part has, a whole-part repeat included.)
@@ -6482,10 +6492,14 @@ export function compileTheme(ctx, data, base) {
           ...(css === 'background-color' ? ['background'] : []),
         ];
         // A variant whose own background is an image (a gradient) keeps
-        // it: one mode's color is not written there, and the result says so.
-        // (Its image is written as background-image, or in a background
-        // shorthand.)
-        const image = [...family, 'background-image']
+        // it: one mode's background color is not written there, as the
+        // image covers it, and the result says so. (Its image is written as
+        // background-image, or in a background shorthand.) A text or
+        // border color is not under the image, so it is written as usual.
+        const image = [
+          ...family,
+          ...(css === 'background-color' ? ['background-image'] : []),
+        ]
           .map(k => vb[camel(k)])
           .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y));
         if (image) {
