@@ -124,9 +124,12 @@ describe('the corners an ask names', () => {
     expect(await writes('tooltips 4px corners except the top left')).toEqual([
       "border-radius '0 4px 4px 4px' --on tooltip",
     ]);
-    // Rounded with no size keeps the radius the part reads (the corners
-    // dial still moves it) and squares the other side.
-    expect(await writes('tabs rounded on top')).toEqual([
+    // Rounded with no size names only the corners it rounds: tabs already
+    // rounded there need nothing, and the other corners are never
+    // rewritten. "Only" said of rounding squares the rest, keeping the
+    // radius the part reads (the corners dial still moves it).
+    expect(await writes('tabs rounded on top')).toEqual([]);
+    expect(await writes('rounded top corners only on tabs')).toEqual([
       "border-radius 'var(--radius-element) var(--radius-element) 0 0' --on tab",
     ]);
     // A part that is square and reads no corner token takes the round rung
@@ -136,7 +139,8 @@ describe('the corners an ask names', () => {
       on: 'heading',
     });
     expect(await writes('heading rounded top corners')).toEqual([
-      "border-radius '16px 16px 0 0' --on heading",
+      'border-start-start-radius 16px --on heading',
+      'border-start-end-radius 16px --on heading',
     ]);
     // Square on a side squares those corners only.
     expect(await writes('inputs square on the right side')).toEqual([
@@ -154,7 +158,10 @@ describe('the corners an ask names', () => {
       (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
         c.replace(/^.*? editor set z /, ''),
       ),
-    ).toEqual(["border-radius '16px 16px 0 0' --on tab"]);
+    ).toEqual([
+      'border-start-start-radius 16px --on tab',
+      'border-start-end-radius 16px --on tab',
+    ]);
   }, 240_000);
 
   it('squares the corners a negative corner ask names', async ctx => {
@@ -183,11 +190,63 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('never rewrites the corners an ask does not name', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('n', {cwd, like: 'neutral'});
+    const ask = async (/** @type {string} */ q) =>
+      (
+        (await themeEditHow(q, {cwd, theme: 'n'})).data.results?.[0]
+          ?.commands ?? []
+      ).map((/** @type {string} */ c) => c.replace(/^.*? editor set n /, ''));
+    // (An elliptical radius already rounded on top: nothing to change.)
+    await themeEditSet('n', 'border-radius', '12px / 6px', {cwd, on: 'card'});
+    expect(await ask('cards rounded on top')).toEqual([]);
+    // (Elliptical corners square at the bottom: each one rounded as an
+    // elliptical longhand, the top untouched.)
+    await themeEditSet('n', 'border-radius', '12px 12px 0 0 / 6px 6px 0 0', {
+      cwd,
+      on: 'card',
+    });
+    const w = await ask('cards rounded on the bottom');
+    expect(w).toEqual([
+      "border-end-start-radius '12px 6px' --on card",
+      "border-end-end-radius '12px 6px' --on card",
+    ]);
+    for (const line of w) {
+      const m = /^(\S+) '([^']+)' --on (\S+)$/.exec(line);
+      await themeEditSet('n', String(m?.[1]), String(m?.[2]), {
+        cwd,
+        on: String(m?.[3]),
+      });
+    }
+  }, 240_000);
+
+  it('reads a corner written as calc() as one corner', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('e', {cwd, like: 'neutral'});
+    const calc = 'max(0px, calc(var(--radius-container) + 4px))';
+    await themeEditSet('e', 'border-radius', calc, {cwd, on: 'card'});
+    const {data} = await themeEditHow('cards rounded on top only', {
+      cwd,
+      theme: 'e',
+    });
+    const [w] = (data.results?.[0]?.commands ?? []).map(
+      (/** @type {string} */ c) => c.replace(/^.*? editor set e /, ''),
+    );
+    expect(w).toBe(`border-radius '${calc} ${calc} 0 0' --on card`);
+    await themeEditSet(
+      'e',
+      'border-radius',
+      String(/'([^']+)'/.exec(String(w))?.[1]),
+      {cwd, on: 'card'},
+    );
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
       'menus only rounded at the bottom',
-      'tabs rounded on top',
+      'rounded top corners only on tabs',
     ]) {
       const [w] = await writes(q);
       const m = /^border-radius '([^']+)' --on (\S+)$/.exec(String(w));
