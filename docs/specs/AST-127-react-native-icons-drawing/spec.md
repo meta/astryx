@@ -29,8 +29,8 @@ theme's own image icons in a menu, a chart's lines and bars. A developer writes
 the right size in the view's first frame, mirrored in right-to-left layouts,
 named or hidden for screen readers, enlarged in the iOS Large Content Viewer
 where a fixed-size control needs it, and the same in Astryx Stage. On iOS an app
-may choose SF Symbols, with their effects, in place of the drawn glyphs. No
-icon font, SVG library, or image library is installed for any of it.
+may choose SF Symbols, with their effects, in place of the drawn glyphs. No icon
+font, SVG library, or image library is installed for any of it.
 
 This record details the icon and drawing pieces of the platform layer of
 `spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the result
@@ -41,11 +41,11 @@ build against (`spec:AST-112/FR12`). Icon names follow `spec:AST-082/FR17`.
 
 ## Why this exists
 
-| Piece                                  | What the ecosystem offers                                                                                                                                                                                                                   | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxVectorView`, `AstryxVectorInfo` | react-native-svg is mature and complete: the SVG element set, text, filters, touch handling, and animation with react-native-reanimated.                                                                                                    | Astryx draws a small, closed set (paths, paints, groups) that three renderers (iOS, Android, Astryx Stage) must read identically against one set of conformance cases. A scene is data in one prop on one native view, versioned and additive, with stroke rules a chart needs, a Large Content Viewer image, and no third-party native dependency in the package (`spec:AST-112/FR2`).         |
-| `AstryxIconView`, `AstryxIcons`        | React Native's `Image` tints a mask and caches decoded images. expo-image adds disk and memory caches, prefetch, tint, and transitions. react-native-vector-icons and @expo/vector-icons draw icon fonts as text, synchronously and tinted. | `Image` and expo-image load every source asynchronously, so a menu's image icons land one by one after the rows. An icon font fixes the stroke weight and the glyph set at build time. Astryx needs a theme's registered image masks set in the view's first frame, one shared fetch per mask, a prefetch that resolves a result, and no request a previewed project can route through the app. |
-| `AstryxSymbolView`                     | expo-symbols draws SF Symbols with weights, scales, rendering modes, and symbol effects.                                                                                                                                                    | The functional gap is small. expo-symbols needs the Expo modules runtime, which no package of the set requires (`spec:AST-112/FR11`); Astryx also needs its icon-name mapping, the Bold Text weight step, Reduce Motion, and a matching implementation in Astryx Stage.                                                                                                                         |
+| Piece                                  | What the ecosystem offers                                                                                                                                                                                                                   | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxVectorView`, `AstryxVectorInfo` | react-native-svg is mature and complete: the SVG element set, text, filters, touch handling, and animation with react-native-reanimated.                                                                                                    | Astryx draws a small, closed set (paths, paints, groups) that three renderers (iOS, Android, Astryx Stage) must read identically against one set of conformance cases. A scene is data in one prop on one native view, versioned and additive, with stroke rules a chart needs, a Large Content Viewer image, and no third-party native dependency in the package (`spec:AST-112/FR2`).                    |
+| `AstryxIconView`, `AstryxIcons`        | React Native's `Image` tints a mask and caches decoded images. expo-image adds disk and memory caches, prefetch, tint, and transitions. react-native-vector-icons and @expo/vector-icons draw icon fonts as text, synchronously and tinted. | `Image` and expo-image load each source asynchronously, so a menu can appear with empty icon slots that fill in separately. An icon font fixes the stroke weight and the glyph set at build time. Astryx needs a theme's registered image masks set in the view's first frame, one shared fetch per mask, a prefetch that resolves a result, and no request a previewed project can route through the app. |
+| `AstryxSymbolView`                     | expo-symbols draws SF Symbols with weights, scales, rendering modes, and symbol effects.                                                                                                                                                    | The functional gap is small. expo-symbols needs the Expo modules runtime, which no package of the set requires (`spec:AST-112/FR11`); Astryx also needs its icon-name mapping, the Bold Text weight step, Reduce Motion, and a matching implementation in Astryx Stage.                                                                                                                                    |
 
 ## Who uses it
 
@@ -60,8 +60,8 @@ build against (`spec:AST-112/FR12`). Icon names follow `spec:AST-082/FR17`.
 ## Non-goals
 
 - The `Icon`, `Vector`, and chart component contracts. Their own records and
-  `spec:AST-082/FR3` own them; this record owns the native pieces they draw
-  with and the behavior those pieces guarantee.
+  `spec:AST-082/FR3` own them; this record owns the native pieces they draw with
+  and the behavior those pieces guarantee.
 - Icon set integrations and theme icon variants (`spec:AST-084`,
   `spec:AST-087`): which names exist and which artwork a theme selects. This
   record draws a resolved glyph, image, or symbol.
@@ -73,11 +73,11 @@ build against (`spec:AST-112/FR12`). Icon names follow `spec:AST-082/FR17`.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. The vector scene format is such a protocol: three renderers and the
-  library's writer depend on it (FR6).
+  layouts, manifests, journals, locks, transaction protocols, and CI
+  job/workflow topology belong in architecture or implementation unless callers
+  or interoperating systems intentionally depend on that exact mechanism as a
+  public protocol. The vector scene format is such a protocol: three renderers
+  and the library's writer depend on it (FR6).
 
 ## Requirements
 
@@ -104,64 +104,65 @@ no app opts them in (`spec:AST-112/FR3`).
   `Image.resolveAssetSource(source)`), `tint`, `mirrored` (default false),
   `style`, the view accessibility props, and a ref to the rendered view, and the
   probe `isNativeIconViewAvailable()`.
-  - The mask's alpha is the shape; `tint` colors it. The mask fills the view's
-    frame with aspect fit.
+  - The view paints `tint` wherever the mask is opaque and scales the mask to
+    fit inside its frame without distortion.
   - A mask in the process-wide cache, in the app bundle, on disk, or in a
     `data:` URI is decoded and set on the UI thread while the props apply,
-    before the first frame. An `http(s)` mask is fetched once off the UI thread,
-    kept, and set when it arrives; every view waiting for one URI shares one
-    fetch.
+    before the first frame. The view fetches an `http(s)` mask off the UI
+    thread, stores it, and shows it on arrival. Views that ask for the same URI
+    at the same time cause one download.
   - The cache keys a mask by URI and scale. It is bounded by the device's
     memory, not by a count: the system evicts the least recently used masks
     under its limit, and an evicted mask loads again on its next use.
-  - Where the view is absent (Jest, a binary without it), `NativeIconView`
-    renders React Native's `Image` of the same mask with aspect fit, the same
-    tint and mirroring, and no fade-in, so the icon still draws, after an
-    asynchronous load.
-- **FR2 — A previewed project never fetches through an icon.** In a project
-  that runs inside the Astryx app's preview host, `AstryxIconView` draws a
-  bundled mask, a `data:` URI, and a file the project may read, and nothing else.
-  `NativeIconView` sends a remote mask to the native view only where the runtime
-  is the app's own; elsewhere it renders `Image`, whose load goes through the
-  project's own image loader and network rules. The app's cached masks are never
-  served to a project.
+  - Where the view is absent (Jest, a binary without it), `NativeIconView` falls
+    back to React Native's `Image` with the same mask, fit, tint, and mirroring
+    and no fade-in. The icon then appears when that asynchronous load completes.
+- **FR2 — A previewed project never fetches through an icon.** In a project that
+  runs inside the Astryx app's preview host, `AstryxIconView` draws a bundled
+  mask, a `data:` URI, and a file the project may read, and nothing else.
+  `NativeIconView` gives a remote mask to the native view only when it knows the
+  runtime belongs to the app. In any other runtime it uses `Image`, so the
+  project's own image loading and network rules apply. A project never receives
+  a mask that the app's runtime cached.
 - **FR3 — `AstryxIcons.prefetch` warms the cache and resolves a result.**
   `AstryxIcons` has the capability shape (`spec:AST-112/FR7`) and
   `prefetch({uris, scale})`.
-  - It loads every remote mask the cache lacks. A local mask is never
-    prefetched, so nothing decodes on the UI thread at startup. A mask already in the
-    cache or already loading costs nothing.
-  - It resolves `{ok: true, loaded, failed}` once the last mask has landed or
-    failed, with `failed` counting the masks that did not load while others
-    did. It never rejects. Its reasons are `no-module`, `unsupported` (a binary
-    without `prefetch`), `unavailable` (`isSupported()` answers false),
-    `fetch-failed` (no missing mask loaded), `not-allowed` (a previewed
-    project's runtime), and `error`. An empty list resolves `ok` with zero
-    counts and calls nothing.
+  - It loads every remote mask the cache lacks. It skips local masks, which the
+    view decodes itself, so startup puts no decoding on the UI thread. It also
+    skips masks that are cached or loading.
+  - It resolves `{ok: true, loaded, failed}` after every requested load ends.
+    `loaded` is the number of new masks in the cache; `failed` is the number of
+    masks that could not load when at least one other mask did. It never
+    rejects. Its reasons are `no-module`, `unsupported` (a binary without
+    `prefetch`), `unavailable` (`isSupported()` answers false), `fetch-failed`
+    (no missing mask loaded), `not-allowed` (a previewed project's runtime), and
+    `error`. An empty list resolves `ok` with zero counts and calls nothing.
   - `isAvailable()` is true only where the module has `prefetch` and
     `isSupported()` does not answer false.
   - `AstryxProvider` prefetches the active theme's registered image icons each
-    time the set changes, where the icon view and the module are present and
-    the platform is on. Nested providers each ask; the cache loads misses only.
+    time the set changes, where the icon view and the module are present and the
+    platform is on. A nested provider prefetches its own set, and the cache
+    downloads only the masks it lacks.
   - The native `cacheInfo()` answers how many masks the cache holds. The
     `AstryxIcons` object does not expose it (OQ3).
 - **FR4 — `SymbolView` draws an SF Symbol (iOS).** The `.` entry exports
   `SymbolView` with `symbolName`, `size`, `color`, `weight` (`ultraLight`
   through `black`, default `regular`), `mirrored`, `effect`, `fallback`, and
   `onError`, and the probe `isSymbolViewAvailable()`, which is false off iOS.
-  - The view draws the symbol monochrome in `color`, inset by one twelfth of its
-    side on each edge with aspect fit, at a point size equal to its side, so the
-    stroke follows the size as SF Symbols do beside text.
+  - The view draws the symbol monochrome in `color`, with a margin of 1/12 of
+    the view's side on each edge and aspect fit. The symbol's point size equals
+    the view's side, so its line weight matches text of that size.
   - `effect` is `{kind, trigger?, repeat?}`. Kinds: `bounce`, `pulse`,
     `variableColor`, `scale` (iOS 17), `wiggle`, `rotate`, `breathe` (iOS 18),
-    `drawOn`, `drawOff` (iOS 26). A discrete effect plays once each time
-    `trigger` changes; a trigger set at mount does not play. `repeat` runs the
-    effect periodically while mounted. An effect the running iOS lacks is
-    skipped. UIKit runs every effect on the UI thread, with no JavaScript per
-    frame.
-  - A name UIKit cannot resolve draws nothing and is logged once.
-  - Where the view is absent (Android, Jest, any binary without it), `SymbolView`
-    renders `fallback` (nothing by default) and reports
+    `drawOn`, `drawOff` (iOS 26). A one-shot effect runs on every change of
+    `trigger`, and not for the value the view mounts with. With `repeat`, the
+    effect runs again and again until the view unmounts or the prop changes. On
+    an iOS version without the effect, the view shows the symbol with no effect.
+    UIKit runs every effect on the UI thread, with no JavaScript per frame.
+  - For a name that UIKit does not know, the view stays empty and writes one log
+    line.
+  - Where the view is absent (Android, Jest, any binary without it),
+    `SymbolView` renders `fallback` (nothing by default) and reports
     `onError({reason: 'no-native-view'})` once per mount.
 - **FR5 — The library maps Astryx icon names and settings onto the views.**
   `Icon` resolves a name in this order (`spec:AST-112/FR9`):
@@ -169,7 +170,7 @@ no app opts them in (`spec:AST-112/FR3`).
     `platform` icon source on iOS with the symbol view present and an iOS at or
     above that symbol's minimum, draws `SymbolView`. The table gives each
     built-in name an SF Symbol with its minimum iOS, and a Material Symbols
-    name, or none where no faithful system glyph exists; a name without one
+    name, or no entry when the system has no close match; a name without one
     keeps the drawn glyph. `PlatformSymbol` draws a name the same way and
     renders its `fallback` wherever no symbol draws it.
   - Otherwise a built-in glyph draws as a vector scene (FR6), one scene per
@@ -181,12 +182,12 @@ no app opts them in (`spec:AST-112/FR3`).
     `reply`, `undo`, and `arrowRight` mirror in a right-to-left layout; vertical
     arrows, `check`, `close`, and media playback glyphs do not. Each view flips
     the drawing horizontally when told.
-  - Under Bold Text the symbol weight steps up one; under Reduce Motion the
-    library drops `effect` before it reaches the view.
+  - When Bold Text is on, the library sends the next heavier symbol weight. When
+    Reduce Motion is on, the library sends no `effect` to the view.
   - Colors come from the theme for the current color scheme. A scene carries
     concrete colors, so a scheme change draws a new scene. A color with no
-    concrete value, such as a `PlatformColor`, draws no glyph, and a
-    development warning names it.
+    concrete value, such as a `PlatformColor`, draws no glyph, and a development
+    warning names it.
 
 ### Drawing
 
@@ -195,81 +196,88 @@ no app opts them in (`spec:AST-112/FR3`).
   (`[x, y, width, height]` or null for the view's own points), `fit` (`meet`,
   `slice`, `none`), `alignX` and `alignY` (as SVG's `preserveAspectRatio`), and
   `shapes`, back to front.
-  - A shape has a `path` (absolute move, line, cubic, quadratic, and close
-    commands in one flat number array), `fill` and `stroke` (`#RRGGBBAA`, or a
-    linear or radial gradient in box or user units), `fillRule`, `strokeWidth`,
-    caps, joins, miter limit, dashes, `opacity`, `transform`, and
-    `nonScalingStroke`. A group (`version: 2`) draws its `children` together,
-    clipped to a path, masked by alpha or luminance, faded as one, and moved.
-  - Strokes scale with the viewBox mapping only. Shape and group transforms move
-    geometry and never scale strokes, so a chart's line keeps its width whatever
-    its data transform. Opacity below 1 applies to a shape as a group.
-  - A renderer never crashes on any input. It skips a node of an unknown type
-    and a node with a non-number where a number belongs, and gives a malformed
-    optional scalar its default. A scene it cannot read draws nothing and is
-    reported once per scene: `unreadable`, `unsupported-version`, or `too-deep`
-    (JSON nested deeper than 100 levels, a stack bound below every reader's
-    own parser).
-  - Fields are only added, each with a default that keeps the existing drawing.
-    A change that draws an existing scene differently takes a new `version`.
+  - A shape has a `path` (a flat list of numbers that encodes move, line, cubic,
+    quadratic, and close commands in absolute coordinates), `fill` and `stroke`
+    (`#RRGGBBAA`, or a linear or radial gradient in box or user units),
+    `fillRule`, `strokeWidth`, caps, joins, miter limit, dashes, `opacity`,
+    `transform`, and `nonScalingStroke`. A group (`version: 2`) composites its
+    `children` as one layer, with an optional clip path, an alpha or luminance
+    mask, a group `opacity`, and a `transform`.
+  - Only the viewBox mapping changes a stroke's width. A `transform` on a shape
+    or group changes positions, not stroke widths, so a chart's data scaling
+    does not thicken its lines. A shape with `opacity` below 1 fades its fill
+    and stroke together, so the fill does not show through the stroke.
+  - Any input is safe: a renderer does not crash on it. A renderer ignores a
+    node whose type it does not know or whose required numbers are not finite
+    numbers. An optional number that is not finite falls back to its default. A
+    scene it cannot read draws nothing and is reported once per scene:
+    `unreadable`, `unsupported-version`, or `too-deep` (JSON nested deeper than
+    100 levels; this limit protects each reader's stack and is lower than any
+    reader's parser limit).
+  - The format grows only by new optional fields whose defaults leave every
+    existing scene unchanged. A rule that would change how an existing scene
+    looks gets a new `version` number.
   - One set of shared conformance cases fixes what every reader (iOS, Android,
     Astryx Stage, and the JavaScript reference reader) draws and reports.
-- **FR7 — `NativeVectorView` draws one scene on one native view.** The `.`
-  entry exports `NativeVectorView` with `scene`, `isLargeContentImage`,
-  `fallback`, `onError`, the view props, and a ref, the scene types, and the
-  probe `isNativeVectorViewAvailable()`.
-  - The JavaScript serializes a scene once per scene object. The native view
-    reads it on the UI thread when the prop changes, builds its paths once, and
-    draws them in the system's draw pass (CoreGraphics on iOS, Canvas on
-    Android). Drawing runs no JavaScript.
-  - The view takes no touches (`pointerEvents` defaults to `none`). It is hidden
-    from screen readers unless given an `accessibilityLabel`; then it is one
-    image. Accessibility props given win over these defaults.
-  - `onError` delivers one `AstryxFailure`: `unreadable`,
-    `unsupported-version`, or `too-deep` from the native side, `error` for a
-    reason the JavaScript does not know, and `no-native-view` once per mount
-    where the view is absent.
-  - Where the view is absent, it renders `fallback`, by default a plain view
-    with the same style, accessibility props, and ref, so the layout holds.
+- **FR7 — `NativeVectorView` draws one scene on one native view.** The `.` entry
+  exports `NativeVectorView` with `scene`, `isLargeContentImage`, `fallback`,
+  `onError`, the view props, and a ref, the scene types, and the probe
+  `isNativeVectorViewAvailable()`.
+  - `NativeVectorView` turns a scene object into JSON one time; passing the same
+    object again sends nothing new. The native view reads it on the UI thread
+    when the prop changes, builds its paths once, and draws them in the system's
+    draw pass (CoreGraphics on iOS, Canvas on Android). Drawing runs no
+    JavaScript.
+  - Touches pass through the view (`pointerEvents` defaults to `none`). Without
+    an `accessibilityLabel`, screen readers skip it; with one, they read it as a
+    single image. Accessibility props that the caller sets override these
+    defaults.
+  - `onError` delivers one `AstryxFailure`: `unreadable`, `unsupported-version`,
+    or `too-deep` from the native side, `error` for a reason the JavaScript does
+    not know, and `no-native-view` once per mount where the view is absent.
+  - Where the view is absent, it renders `fallback`. The default fallback is an
+    empty React Native view that takes the same style, accessibility props, and
+    ref, so surrounding layout does not move.
   - `Icon` treats an absent vector view as a broken install: the glyph draws
     nothing, and a development warning names the view. `Vector` draws nothing
     and keeps its size.
 - **FR8 — `AstryxVectorInfo` reports the scene versions a binary reads.**
   `AstryxVectorInfo` has the capability shape and no methods. `version()`
   answers the highest scene version the binary's vector view reads, 2 for this
-  contract set, and null without the module; a binary without the module has no
-  vector view.
+  contract set, and null when the module is missing. A binary that lacks the
+  module also lacks the vector view.
   - `Vector` writes version 2 only when a drawing uses a group, and version 1
-    otherwise. It reads the report once per mount. Where the view is present but
-    the report gives no version, it writes version 1 and a development warning
-    names the inconsistency.
-- **FR9 — The glyph is the Large Content Viewer image (iOS).** With
-  `isLargeContentImage`, the vector view draws its scene again as a template
-  image and sets it, with `scalesLargeContentImage`, on the nearest React
-  Native ancestor in the same surface that shows the Large Content Viewer
-  (`accessibilityShowsLargeContentViewer`). The system's viewer tints it.
-  - The image follows the scene (a play glyph that turns into pause changes the
-    image), flips with `mirrored`, and draws again on a new display scale. It is
-    cleared when the view leaves the window, the prop turns off, or the view is
-    recycled, where the control still holds this view's image.
-  - The view writes only to a React Native view and stops at its surface's root,
-    so a previewed project cannot reach the app's chrome.
-  - The library marks one glyph per control: `Button`, `BarButton`, the bar
-    title capsule, and the `DropdownMenu` trigger mark their glyph when they are
-    fixed-size controls with a large-content title. The viewer shows the title
-    alone for an icon drawn as a symbol or a registered image.
+    otherwise. It reads the report once per mount. If the view exists but the
+    report has no usable number, `Vector` writes version 1 and warns once in
+    development that the two disagree.
+- **FR9 — The glyph is the Large Content Viewer image (iOS).** When
+  `isLargeContentImage` is true, the vector view renders its scene into a
+  template image. It gives that image, with `scalesLargeContentImage`, to the
+  closest enclosing React Native view in its surface that has
+  `accessibilityShowsLargeContentViewer`. The system viewer applies its own
+  tint.
+  - A new scene replaces the image, for example when a play button becomes a
+    pause button. The image is flipped when the view is mirrored and rendered
+    again when the display scale changes. When the view leaves the window, is
+    recycled, or the prop becomes false, the view removes the image, unless
+    another glyph has replaced it on that control.
+  - The search for that enclosing view never leaves the view's own surface and
+    changes only React Native views, so a previewed project cannot change the
+    app's own bars.
+  - The library marks at most one glyph per control. For an icon drawn as a
+    symbol or a registered image, the viewer shows only the control's title.
   - Android has no Large Content Viewer and ignores the prop.
 
 ### Behaviour across binaries
 
 - **FR10 — Every contract in the group is at revision 1 on every platform it
   lists.** The iOS and Android binaries report revision 1 for each contract,
-  `isLargeContentImage` included. A behavior added
-  after revision 1 is a named feature (`<Contract>.<feature>`) that the binary
-  lists and the JavaScript checks with `hasContractFeature` before it uses it.
-  Without the feature the JavaScript keeps the revision-1 behavior or answers
-  `unsupported`, and a warning names the missing feature; it never takes a
-  silent weaker path. A scene version after 2 is such a named feature (OQ2).
+  `isLargeContentImage` included. A behavior added after revision 1 is a named
+  feature (`<Contract>.<feature>`) that the binary lists and the JavaScript
+  checks with `hasContractFeature` before it uses it. Without the feature the
+  JavaScript keeps the revision-1 behavior or answers `unsupported`, and a
+  warning names the missing feature; it never takes a silent weaker path. A
+  scene version after 2 is such a named feature (OQ2).
 - **FR11 — Astryx Stage pairs through the version floor.** The package names the
   oldest Astryx Stage that implements its contract set. An older Stage refuses
   the project and lists the gaps.
@@ -299,9 +307,8 @@ no app opts them in (`spec:AST-112/FR3`).
   animate it, and off macOS it draws the library glyph in place of the SF
   Symbol.
 - Supported feature/engine floor: `spec:AST-112` Platform support (iOS at React
-  Native's minimum, Android API level 24, New Architecture only); symbol
-  effects need iOS 17, 18, or 26 by kind (FR4); the Astryx Stage version floor
-  (FR11).
+  Native's minimum, Android API level 24, New Architecture only); symbol effects
+  need iOS 17, 18, or 26 by kind (FR4); the Astryx Stage version floor (FR11).
 - Unsupported behavior: an absent view draws its fallback and reports
   `no-native-view`; an absent module answers `no-module`; a binary without a
   named feature answers `unsupported` or keeps the revision-1 behavior with a
@@ -314,9 +321,9 @@ no app opts them in (`spec:AST-112/FR3`).
 - Details `spec:AST-112/FR1` (system symbols in the core, here with the icon,
   vector, and cache pieces), FR6 and FR7 for these contracts, FR8 for their
   evolution, FR9 for the icon-name mapping, and FR12 for their Stage behavior.
-- `spec:AST-112/FR8` counts a behavior revision per module and a version
-  history per component. For this group's contracts, FR10 replaces that count
-  with revision 1 plus named features.
+- `spec:AST-112/FR8` counts a behavior revision per module and a version history
+  per component. For this group's contracts, FR10 replaces that count with
+  revision 1 plus named features.
 - The group's contracts are core in `spec:AST-112/FR1` and stay core; the
   capability model changes nothing here.
 - `spec:AST-082/FR17` is unchanged. OQ1 asks how the drawn-glyph default meets
@@ -344,8 +351,7 @@ no app opts them in (`spec:AST-112/FR3`).
 
 ### DEC-1 — Built-in icons are drawn vector glyphs; platform symbols are opt-in
 
-**Reference:** `spec:AST-127/DEC-1`
-**Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-1` **Decider:** imdreamrunner, 2026-11-17
 
 A built-in glyph draws from path data on the platform's vector view, so it has
 the same shape on iOS, on Android, and in Astryx Stage, follows the theme's
@@ -358,8 +364,7 @@ at build time.
 
 ### DEC-2 — One data-only scene format on one native view
 
-**Reference:** `spec:AST-127/DEC-2`
-**Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-2` **Decider:** imdreamrunner, 2026-11-17
 
 A drawing is one versioned scene in one prop, read by every renderer against
 shared conformance cases, so Astryx Stage draws what the device draws, an older
@@ -370,8 +375,7 @@ native view with its own props to keep in step across three renderers.
 
 ### DEC-3 — Image icons draw from a process cache in their first frame
 
-**Reference:** `spec:AST-127/DEC-3`
-**Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-3` **Decider:** imdreamrunner, 2026-11-17
 
 A menu or list shows its icons with its rows, not one by one. The icon view sets
 a cached or local mask while its props apply, and the provider prefetches a
@@ -382,8 +386,7 @@ asynchronously.
 
 ### DEC-4 — The library decides; the views draw
 
-**Reference:** `spec:AST-127/DEC-4`
-**Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-4` **Decider:** imdreamrunner, 2026-11-17
 
 Which icons mirror, the Bold Text weight step, and dropping effects under Reduce
 Motion are Astryx's rules, so the library applies them and the views take plain
@@ -391,28 +394,27 @@ flags. The views stay small and the same in every renderer.
 
 ### DEC-5 — The glyph's own vector view supplies the Large Content Viewer image
 
-**Reference:** `spec:AST-127/DEC-5`
-**Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-5` **Decider:** imdreamrunner, 2026-11-17
 
-React Native core has no large-content image prop. The glyph is already a native
-drawing, so it draws itself again as the control's image, and a glyph change
-changes the image with no image data through JavaScript.
+React Native's views have no prop for a large-content image. The vector view
+already holds the glyph's paths, so it renders them a second time for the
+viewer. When the glyph changes, the image changes too, and JavaScript never
+handles image data.
 
-Rejected: an image or icon-name prop on the press, because it needs a second
-host that draws the same glyph and can disagree with it.
+Rejected: an image or icon-name prop on the press, because a second native view
+would render the glyph again and the two could differ.
 
 ## Open questions
 
 - **OQ1 — How does the drawn-glyph default meet `spec:AST-082/FR17`, which
   defaults native icons to platform symbols?** (`human-design`) Options: keep
-  drawn glyphs as the default and amend FR17 for this platform; or default to
-  SF Symbols on iOS and Material Symbols on Android, which needs an Android
-  symbol view and a faithful system glyph for every built-in name.
+  drawn glyphs as the default and amend FR17 for this platform; or default to SF
+  Symbols on iOS and Material Symbols on Android, which needs an Android symbol
+  view and a faithful system glyph for every built-in name.
 - **OQ2 — Does `AstryxVectorInfo` fold into the platform info's named
   features?** (`human-api`) Options: keep `AstryxVectorInfo` and its reported
   scene version; or list each scene version after 1 as a named feature of
-  `AstryxVectorView` in the platform info's list and retire
-  `AstryxVectorInfo`.
-- **OQ3 — Is `cacheInfo` part of the `AstryxIcons` API?** (`checkable`)
-  Options: expose it on `AstryxIcons` for an app's status page; or keep it a
-  native diagnostic that only tests read.
+  `AstryxVectorView` in the platform info's list and retire `AstryxVectorInfo`.
+- **OQ3 — Is `cacheInfo` part of the `AstryxIcons` API?** (`checkable`) Options:
+  expose it on `AstryxIcons` for an app's status page; or keep it a native
+  diagnostic that only tests read.
