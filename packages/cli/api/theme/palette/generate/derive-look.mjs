@@ -421,7 +421,7 @@ export function deriveLookColors({
             token: `--color-background-${h}`,
             mode: m,
             stop: s0,
-            ratio: Math.round(worst * 100) / 100,
+            ratio: Math.floor(worst * 100 + 1e-9) / 100,
             needs: TEXT,
           });
           return at(id, m, s0);
