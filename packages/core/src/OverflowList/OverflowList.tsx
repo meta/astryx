@@ -75,12 +75,19 @@ const styles = stylex.create({
 // unfolded items. In a flex row, where its width would follow its folded
 // content, its width is its unfolded items at most the row's width: the row
 // shrinks it toward its minimum, it folds to the width it gets, and it grows
-// back when room returns. Elsewhere its width stays automatic (the full line
-// in a block parent). A caller's width, max-width, or flex basis replaces
-// these.
+// back when room returns, folding before any sibling shrinks. Elsewhere its
+// width stays automatic (the full line in a block parent). A caller's width,
+// max-width, or flex basis replaces these.
 const inlineSizes = stylex.create({
   floor: (minWidth: number) => ({minWidth: `${minWidth}px`}),
-  preferred: (width: number) => ({width: `${width}px`, maxWidth: '100%'}),
+  preferred: (width: number) => ({
+    width: `${width}px`,
+    maxWidth: '100%',
+    // The list gives up its width before its siblings give up any: its
+    // shrink factor dwarfs theirs, so a sibling shrinks by less than a
+    // layout unit until the list reaches its minimum.
+    flexShrink: 1_000_000,
+  }),
 });
 
 const multiRowHeight = stylex.create({

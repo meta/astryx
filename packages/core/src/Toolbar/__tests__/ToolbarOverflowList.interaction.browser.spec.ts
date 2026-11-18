@@ -157,6 +157,36 @@ test.describe("a start lane's own OverflowList", () => {
     expect(row.clipsTrigger).toBe(false);
   });
 
+  test('folds before the content beside it in the start lane truncates (#8804, 380 px)', async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      'core-toolbar--overflow-actions',
+      'overflow-actions-frame',
+    );
+    await rowAt(page, 'overflow-actions-frame', 380);
+    const cut = await page.evaluate(() => {
+      const list = document.querySelector<HTMLElement>(
+        '[data-testid="overflow-actions-frame"] .astryx-overflow-list',
+      );
+      const lane = list?.parentElement;
+      if (list == null || lane == null) {
+        throw new Error('missing story parts');
+      }
+      // Text the lane shows outside the list, cut by its own box.
+      return [...lane.querySelectorAll<HTMLElement>('*')]
+        .filter(
+          element =>
+            !list.contains(element) &&
+            element.closest('[aria-hidden="true"]') == null &&
+            element.scrollWidth > element.clientWidth + 0.5,
+        )
+        .map(element => element.textContent?.trim() ?? '');
+    });
+    expect(cut).toEqual([]);
+  });
+
   test('keeps the lanes apart at 320 px, the smallest supported width', async ({
     page,
   }) => {
@@ -659,6 +689,9 @@ test.describe('a single row’s minimum width', () => {
           listRight: listBox.right,
           afterLeft: afterBox.left,
           afterRight: afterBox.right,
+          afterCut: [after, ...after.querySelectorAll<HTMLElement>('*')].some(
+            element => element.scrollWidth > element.clientWidth + 0.5,
+          ),
           frameRight: frameBox.right,
         };
       });
@@ -678,6 +711,8 @@ test.describe('a single row’s minimum width', () => {
     for (const step of steps) {
       expect(step.afterLeft).toBeGreaterThanOrEqual(step.listRight);
       expect(step.afterRight).toBeLessThanOrEqual(step.frameRight);
+      // The button's label is whole: the list folds first.
+      expect(step.afterCut).toBe(false);
     }
   });
 
