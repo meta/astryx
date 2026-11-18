@@ -161,11 +161,11 @@ function mockVisualViewport(height: number, offsetTop = 0) {
   return viewport;
 }
 
-// The layout viewport — `100svh`, the small viewport used by height budgets —
-// and `window.innerHeight`, which is what the
-// sheet's height budget and its detents are measured against. Deliberately
-// separate from the visual viewport above: the mobile keyboard shrinks that
-// one and leaves this one alone, and the sheet has to tell them apart.
+// The small viewport — `100svh`, which height budgets and touch-sheet detents
+// use — is separate from the live layout viewport used by caller-sized and
+// fine-pointer detents. Both are deliberately separate from the visual
+// viewport above: the mobile keyboard shrinks that one and leaves the layout
+// viewport alone, and the sheet has to tell them apart.
 function mockWindowHeight(height: number) {
   vi.stubGlobal('innerHeight', height);
 }

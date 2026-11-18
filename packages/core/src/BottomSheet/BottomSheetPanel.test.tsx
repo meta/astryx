@@ -135,6 +135,37 @@ function countViewportHeightReads() {
   return reads;
 }
 
+function mockSmallViewportHeight(initialHeight: number) {
+  let height = initialHeight;
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  const spy = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      if (this.style.blockSize === '100svh') {
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 0,
+          bottom: height,
+          left: 0,
+          width: 0,
+          height,
+          toJSON: () => ({}),
+        };
+      }
+      return original.call(this);
+    });
+  return {
+    set(nextHeight: number) {
+      height = nextHeight;
+    },
+    restore() {
+      spy.mockRestore();
+    },
+  };
+}
+
 // Tracks the `resize` listeners on `window` until `restore`. `attached` is
 // the number added and not yet removed.
 function trackResizeListeners() {
@@ -316,6 +347,7 @@ describe('BottomSheetPanel', () => {
 
   it('does not change its reserve when the mobile toolbar changes the height', () => {
     const viewportHeight = window.innerHeight;
+    const smallViewport = mockSmallViewportHeight(viewportHeight);
     stubTouchPointer();
     renderPanel({kind: 'open', entering: false});
     const initialReserve =
@@ -330,18 +362,19 @@ describe('BottomSheetPanel', () => {
       );
     } finally {
       window.innerHeight = viewportHeight;
+      smallViewport.restore();
     }
   });
 
   it('follows the viewport with its reserve after a real layout resize', () => {
     const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
+    const smallViewport = mockSmallViewportHeight(viewportHeight);
     stubTouchPointer();
     renderPanel({kind: 'open', entering: false});
     try {
       act(() => {
         window.innerHeight = 1000;
-        window.innerWidth = viewportWidth + 1;
+        smallViewport.set(1000);
         window.dispatchEvent(new Event('resize'));
       });
       expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
@@ -349,7 +382,7 @@ describe('BottomSheetPanel', () => {
       );
     } finally {
       window.innerHeight = viewportHeight;
-      window.innerWidth = viewportWidth;
+      smallViewport.restore();
     }
   });
 
@@ -378,7 +411,7 @@ describe('BottomSheetPanel', () => {
 
   it('shares one viewport height among open sheets, and forgets it when the last one closes', () => {
     const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
+    const smallViewport = mockSmallViewportHeight(viewportHeight);
     const listeners = trackResizeListeners();
     stubTouchPointer();
     try {
@@ -386,7 +419,7 @@ describe('BottomSheetPanel', () => {
       const second = renderNamedPanel('Second sheet');
       act(() => {
         window.innerHeight = 1000;
-        window.innerWidth = viewportWidth + 1;
+        smallViewport.set(1000);
         window.dispatchEvent(new Event('resize'));
       });
       expect(
@@ -401,7 +434,7 @@ describe('BottomSheetPanel', () => {
       first.unmount();
       act(() => {
         window.innerHeight = 900;
-        window.innerWidth = viewportWidth + 2;
+        smallViewport.set(900);
         window.dispatchEvent(new Event('resize'));
       });
       expect(
@@ -453,7 +486,7 @@ describe('BottomSheetPanel', () => {
     } finally {
       listeners.restore();
       window.innerHeight = viewportHeight;
-      window.innerWidth = viewportWidth;
+      smallViewport.restore();
     }
   });
 
