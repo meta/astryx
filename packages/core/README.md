@@ -9,7 +9,7 @@ Core UI components, theme system, and utilities for the Astryx design system. Fo
 > npx @astryxdesign/cli init         # asks no questions
 > ```
 >
-> `init` prints the setup steps this app still needs (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project, the one running `init` included, builds with Astryx instead of guessing. Need a single command without installing? The same scoped command works: `npx @astryxdesign/cli <cmd>`. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [XDS CLI](#xds-cli).
+> `init` prints the getting-started steps (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project builds with Astryx instead of guessing. Read it before you write UI. Need a single command without installing? The same scoped command works: `npx @astryxdesign/cli <cmd>`. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [XDS CLI](#xds-cli).
 
 ## Component Docs
 
@@ -82,10 +82,10 @@ Install Astryx, a theme, and the CLI, then run `init` once:
 ```bash
 npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 npm install -D @astryxdesign/cli
-npx @astryxdesign/cli init   # prints the setup steps this app still needs; saves the Astryx guide to AGENTS.md
+npx @astryxdesign/cli init   # prints the getting-started steps; saves the Astryx guide to AGENTS.md
 ```
 
-Then pick your setup below based on your framework and styling approach.
+Then pick your setup below based on your framework and styling approach. The setup you pick wires the theme, so it replaces the theme step `init` prints.
 
 ### Next.js (simplest)
 
