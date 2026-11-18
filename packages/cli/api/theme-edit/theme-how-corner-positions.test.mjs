@@ -299,6 +299,30 @@ describe('the corners an ask names', () => {
     ).toEqual(['start-start', 'start-end', 'end-start', 'end-end']);
     expect(await writes('tabs rounded on top and bottom')).toEqual([]);
     expect(await writes('tabs rounded on the left and right')).toEqual([]);
+    // (A part name that starts with a side word is a part, never a side:
+    // "top nav darker" is its own ask.)
+    expect(
+      cornersNamed('tabs rounded on top and top nav darker', 'tab')?.corners,
+    ).toEqual(['start-start', 'start-end']);
+    {
+      const {data} = await themeEditHow(
+        'tabs rounded on top and top nav darker',
+        {
+          cwd,
+          theme: 'k',
+        },
+      );
+      const all = /** @type {Array<{commands: string[]}>} */ (
+        data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set k /, ''));
+      expect(all.some(c => / --on top-nav\b/.test(c))).toBe(true);
+      expect(all).toContain(
+        "border-radius 'var(--radius-element) var(--radius-element) 0 0' --on tab",
+      );
+    }
     expect(await writes('4px corners on top and bottom of cards')).toEqual([
       'border-radius 4px --on card',
     ]);
