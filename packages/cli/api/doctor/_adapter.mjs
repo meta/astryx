@@ -345,6 +345,23 @@ const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
  */
 const HASH_ROUTING_IMPORT = /\bimport\s*(?:type\s+)?\{[^}]*\b(?:HashRouter|createHashRouter|createHashHistory)\b[^}]*\}\s*from\s*['"][^'"]+['"]/;
 
+/** A namespace import (`import * as RR from 'react-router-dom'`), whose name is the capture. */
+const NAMESPACE_IMPORT = /\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*['"][^'"]+['"]/g;
+
+/**
+ * Whether a module's text routes by the URL hash: it imports a hash router or
+ * a hash history by name, or reads one from a namespace it imports
+ * (`<RR.HashRouter>` from `import * as RR from 'react-router-dom'`).
+ * @param {string} text
+ */
+function routesByHash(text) {
+  if (HASH_ROUTING_IMPORT.test(text)) return true;
+  for (const [, name] of text.matchAll(NAMESPACE_IMPORT)) {
+    if (new RegExp(`\\b${escapeRegExp(name)}\\.(?:HashRouter|createHashRouter|createHashHistory)\\b`).test(text)) return true;
+  }
+  return false;
+}
+
 
 /**
  * The name another module imports a module by: its file name without the
@@ -409,7 +426,7 @@ export function findButtonsWithoutAction(projectDir) {
   };
   // An app that routes by the URL hash opens its first page from a `#` link:
   // one that imports a hash router or a hash history.
-  const hashRouting = files.some(file => HASH_ROUTING_IMPORT.test(textOf(file) ?? ''));
+  const hashRouting = files.some(file => routesByHash(textOf(file) ?? ''));
   /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
   const scans = new Map();
   const scan = (/** @type {string} */ file) => {

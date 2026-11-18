@@ -150,6 +150,12 @@ describe('the button-actions check', () => {
         'src/App.tsx': app('<Button label="Home" href="#" />'),
       });
       expect(history?.status).toBe('pass');
+      const namespace = await buttonCheck({
+        // The router is read from a namespace import, and nothing wraps App in it.
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\nimport * as RR from 'react-router-dom';\nexport const router = RR.createHashRouter([]);"),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(namespace?.status).toBe('pass');
       // A name in a comment is not an import of a hash router.
       const comment = await buttonCheck({
         'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\n// No HashRouter here."),
