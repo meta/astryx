@@ -21771,11 +21771,14 @@ export function draftAnswer(ctx, env, question) {
                     ? String(ownNow).trim()
                     : null
                 : null;
+            // (A token that resolves to 0 rounds nothing: the round rung.)
+            const tokRounds =
+              tok != null && parseFloat(String(current(tok))) > 0;
             const each = rounded
               ? (nowOne ??
                 (roundNow
                   ? null
-                  : tok
+                  : tokRounds
                     ? `var(${tok})`
                     : roundRung != null
                       ? `${roundRung}px`
@@ -21814,7 +21817,7 @@ export function draftAnswer(ctx, env, question) {
                   ];
             if (steps.length)
               return {
-                text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tok ?? `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
+                text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tokRounds ? tok : `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
                 options: [steps],
                 sequence: steps.length > 1,
             };

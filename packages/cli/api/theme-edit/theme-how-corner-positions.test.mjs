@@ -145,6 +145,18 @@ describe('the corners an ask names', () => {
     ]);
   }, 240_000);
 
+  it('rounds a corner whose token is 0 with the round corners, never with that token', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('z', {cwd, like: 'neutral'});
+    await themeEditSet('z', '--radius-element', '0px', {cwd});
+    const {data} = await themeEditHow('tabs rounded on top', {cwd, theme: 'z'});
+    expect(
+      (data.results?.[0]?.commands ?? []).map((/** @type {string} */ c) =>
+        c.replace(/^.*? editor set z /, ''),
+      ),
+    ).toEqual(["border-radius '16px 16px 0 0' --on tab"]);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
