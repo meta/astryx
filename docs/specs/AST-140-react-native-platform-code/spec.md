@@ -77,8 +77,13 @@ the rules above. Which pieces link in every app and which an app opts in is
   record owns them.
 - The JavaScript API an app calls, its entries, and its capability shape:
   `spec:AST-112/FR5` and `spec:AST-112/FR7`.
-- Which capabilities link by default and which an app opts in:
-  `spec:AST-112/FR3`.
+- Which capabilities link by default and which an app opts in, and that
+  linking never changes the JavaScript engine or how React Native's core is
+  built: `spec:AST-112/FR3`.
+- Which packages outside the core carry native code, their roles, the host
+  interface, and the version pin: `spec:AST-112/FR4`.
+- How a host that runs other projects checks what a project requires:
+  `spec:AST-139/FR7` and `spec:AST-141/FR7`.
 - Astryx Stage's behavior. Astryx Stage conforms to these contracts
   (`spec:AST-139`).
 - A second JavaScript engine or binding. This record keeps the contracts
@@ -144,7 +149,8 @@ the rules above. Which pieces link in every app and which an app opts in is
     and shows no error.
   - `message` is platform text for logs. It never carries a URL's query, a
     cookie, a key, or a token.
-  - At the binding, a native method takes one request object and resolves one
+  - At the binding, a native method takes one request object, followed by one
+    `ArrayBuffer` argument when it receives bytes (FR4), and resolves one
     result object with `status` (`ok`, `cancelled`, or `error`), `reason`, and
     `message`. A domain outcome, such as "not found", is a field of an `ok`
     result. The platform maps that object onto `AstryxResult`. Every host of
@@ -166,9 +172,10 @@ the rules above. Which pieces link in every app and which an app opts in is
 - **FR4 — Only plain values cross the boundary.**
   - A request, a result, a prop, and an event carry the values codegen types:
     strings, numbers, booleans, arrays, and plain objects of those, with
-    closed sets as string unions, and in a request the `ArrayBuffer` below.
+    closed sets as string unions, and the `ArrayBuffer` argument below.
   - Bytes that JavaScript already holds may cross to native as an
-    `ArrayBuffer` in a request, such as bytes an app hands over for analysis.
+    `ArrayBuffer`, the method's own argument after its request object (FR3),
+    such as bytes an app hands over for analysis.
   - Bytes that native code produces cross as a `file:` URI to a file in the
     core's cache. A short, fixed-size value, such as a block of random bytes,
     may cross as a base64 string.
@@ -314,15 +321,6 @@ the rules above. Which pieces link in every app and which an app opts in is
     binding, would not allow.
   - No contract name, member, reason, or app-facing type names a
     binding-layer concept.
-  - The contracts a project needs form its contract manifest, which every
-    host that runs the project reads. The manifest is forward compatible: it
-    carries a top-level `requires` list, and a host that meets a requirement
-    it does not know refuses the project and names the host version that
-    knows it. The host checks this itself, not only the package's commands.
-  - Listing what an app links (`spec:AST-112/FR3`) never changes the app's
-    JavaScript engine or how React Native's core is built. Those are
-    separate settings: a generated app states them, and an app that keeps
-    its own native projects sets them itself, with no default chosen for it.
 
 - **FR9 — Astryx's native code coexists with the native code an app adds.**
   - The platform takes no third-party native dependency
@@ -349,21 +347,6 @@ the rules above. Which pieces link in every app and which an app opts in is
     a group record names an exception, the binary reports a self-check for it
     through the platform info module, and the piece falls back to its public
     path when the check fails.
-
-- **FR10 — Native code outside the package plugs in through a declared role.**
-  - A package with native code that works with the platform declares one
-    role: an extension, which adds native pieces under the rules of this
-    record, or a host, which embeds the platform in an app's lifecycle or
-    runs other projects, such as the Expo wrapper (`spec:AST-112/FR11`).
-  - A host implements a named, versioned host interface, and the app's
-    native build checks that implementation at compile time on iOS and on
-    Android, so a host that does not match fails to build instead of failing
-    at run time.
-  - A host package depends on `@astryxdesign/react-native` at one exact
-    version.
-  - Native code goes in a separate package only for a different audience,
-    for binaries with their own release cadence, or for a native dependency
-    the core must not carry; otherwise it is part of the platform.
 
 ### Platform support
 
@@ -394,13 +377,12 @@ the rules above. Which pieces link in every app and which an app opts in is
 | FR1      | Spec rules check over every codegen spec; package-boundary check of the public types; a Debug and a Release iOS build's module tables                                                                                                                                                                               | a module; a view; a platform-only member; a name React Native uses; a Release binary                                                                                                                          | A name without the prefix, one name of two kinds, an unmarked platform-only member, an app-facing type that carries a handle or a binding-layer type, a build that needs a manual native edit to link the platform, or a frame recorder in a Release binary                                                                                                                                                                               |
 | FR2      | Unit tests through `./testing` doubles of an absent module; an app that does not opt a capability in                                                                                                                                                                                                                | every entry imported with no native side; an opted-out capability; a missing view                                                                                                                             | An import that throws, a call that answers a reason other than `not-linked` or `no-module`, or a missing view that mounts                                                                                                                                                                                                                                                                                                                 |
 | FR3      | Unit tests of every asynchronous call through `./testing` doubles; native tests that throw inside a method                                                                                                                                                                                                          | absent, older, and current module; a missing option; a native throw; a cancel; an unmount that resolves `cancelled`; a time bound                                                                             | A call rejects, resolves twice, answers a reason outside its set, a native throw crosses the binding, or a `message` carries a query, cookie, key, or token                                                                                                                                                                                                                                                                               |
-| FR4      | Spec rules check of value types; conformance cases of bytes, ids, and subscriptions                                                                                                                                                                                                                                 | bytes sent from JavaScript as an `ArrayBuffer`; a byte result; a large byte value in each direction; a released id; an unknown id; a removed subscription                                                     | A non-plain value in a spec, an `ArrayBuffer` outside a request, bytes native code produces that cross other than as a file URI or a short base64 value, a size limit that refuses or cuts bytes, a crash on an unknown id, or an event after removal                                                                                                                                                                                     |
+| FR4      | Spec rules check of value types; conformance cases of bytes, ids, and subscriptions                                                                                                                                                                                                                                 | bytes sent from JavaScript as an `ArrayBuffer`; a byte result; a large byte value in each direction; a released id; an unknown id; a removed subscription                                                     | A non-plain value in a spec, an `ArrayBuffer` anywhere but a method's own argument after its request object, bytes native code produces that cross other than as a file URI or a short base64 value, a size limit that refuses or cuts bytes, a crash on an unknown id, or an event after removal                                                                                                                                         |
 | FR5      | An interface check of each contract against the interface every earlier release carries; a check that every spec change states its added features or no behavior change; type checks of feature names; unit tests of each named feature with an older double; the current JavaScript on the oldest supported binary | a new method; a new prop; a new union value; a binary without a feature; a misspelt feature name; a canary build                                                                                              | A changed or removed shipped member, a new member without a named feature, a revision counter, a second feature list, a feature name that type-checks without being in the list, a spec change that states neither, JavaScript that uses a feature or value the binary does not report, or a crash on an older binary                                                                                                                     |
 | FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                                                                                                                                     | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                    | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                    |
 | FR7      | The conformance suites on iOS, Android, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                                                                                                                                            | each contract; a binary with and without each feature; a push; a large title's collapse; a missing `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order |
-| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types; a host run of a manifest with an unknown requirement; builds of a generated app and of an app with its own projects with and without opt-in capabilities                                               | each contract; a manifest with a requirement the host does not know; a change to the linked capabilities                                                                                                      | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, a binding-layer name in a contract or an app-facing type, a host that runs a manifest with an unknown requirement or refuses it without naming the version, or a change to the linked list that changes the JavaScript engine or how React Native's core is built                             |
+| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types                                                                                                                                                                                                         | each contract                                                                                                                                                                                                 | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                   |
 | FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                                                                                                                                    | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                         | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public fallback                                                                                                                                                                                                                                                       |
-| FR10     | Builds of each host package on iOS and Android against its host interface; dependency check of host packages                                                                                                                                                                                                        | a host that matches its interface; a host that does not; a host package's dependency range                                                                                                                    | A mismatched host that builds, a package with native code that declares no role, or a host package that depends on a range instead of one exact version                                                                                                                                                                                                                                                                                   |
 
 ## Decision log
 
