@@ -1976,7 +1976,7 @@ export async function addSharedThemeToApp(source, options) {
         written: [
           ...files.map(file => relFrom(cwd, path.join(target, file))),
           relFrom(cwd, path.join(target, SHARED_RECEIPT)),
-          result.data.modulePath,
+          relFrom(cwd, path.join(projectDir, result.data.modulePath)),
           ...lockfiles.map(file => relFrom(cwd, file)),
         ],
         config: {
@@ -2003,8 +2003,12 @@ export async function addSharedThemeToApp(source, options) {
       fs.rmSync(target, {recursive: true, force: true});
       if (aside) fs.renameSync(aside, target);
       if (madeRoot) removeEmptyFolders(root);
-      if (newlyInstalled.length > 0)
-        runPackageManager(projectDir, 'remove', newlyInstalled);
+      // (An uninstall that fails is said with the error, never hidden.)
+      if (newlyInstalled.length > 0) {
+        const undone = runPackageManager(projectDir, 'remove', newlyInstalled);
+        if (!undone.ok && error instanceof Error)
+          error.message += ` ${newlyInstalled.join(', ')}, which this add installed, is still installed: ${undone.command} failed (${undone.why}); run it to finish.`;
+      }
       throw error;
     }
   } finally {
@@ -2081,7 +2085,7 @@ function runPackageManager(projectDir, action, specs) {
         : [pm, 'remove'];
   const done = spawnSync(
     verb[0],
-    [...verb.slice(1), ...specs, '--ignore-scripts'],
+    [...verb.slice(1), ...specs, ...scriptsOff(pm, action, projectDir)],
     {
       cwd: projectDir,
       encoding: 'utf8',
@@ -2101,6 +2105,47 @@ function runPackageManager(projectDir, action, specs) {
 
 /** How long one package manager run may take, in milliseconds. */
 const PACKAGE_MANAGER_MS = 5 * 60 * 1000;
+
+/**
+ * Install scripts off, in the form the package manager's verb accepts:
+ * `pnpm remove` takes no `--ignore-scripts` but takes the setting, and Yarn
+ * 2 and later takes `--mode=skip-build` on both verbs.
+ * @param {string} pm
+ * @param {'add' | 'remove'} action
+ * @param {string} projectDir
+ * @returns {string[]}
+ */
+function scriptsOff(pm, action, projectDir) {
+  if (pm === 'pnpm')
+    return action === 'remove'
+      ? ['--config.ignore-scripts=true']
+      : ['--ignore-scripts'];
+  if (pm === 'yarn' && yarnBerry(projectDir)) return ['--mode=skip-build'];
+  return ['--ignore-scripts'];
+}
+
+/**
+ * Whether the project's Yarn is 2 or later: a `packageManager` of
+ * `yarn@2` and up, or a `.yarnrc.yml`, in the project or a folder above it
+ * up to its workspace root.
+ * @param {string} projectDir
+ */
+function yarnBerry(projectDir) {
+  const top = findWorkspaceRoot(projectDir);
+  for (let dir = path.resolve(projectDir); ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.yarnrc.yml'))) return true;
+    try {
+      const declared = JSON.parse(
+        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+      ).packageManager;
+      if (typeof declared === 'string' && /^yarn@/.test(declared))
+        return !/^yarn@1\./.test(declared);
+    } catch {
+      // No package.json here.
+    }
+    if (dir === top || path.dirname(dir) === dir) return false;
+  }
+}
 
 /** @param {string} dir */
 function removeEmptyFolders(dir) {

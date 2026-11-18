@@ -437,6 +437,20 @@ describe('theme add with a shared theme', () => {
       expect(result.data.copy?.written).toEqual(
         expect.arrayContaining(['package.json', '../../pnpm-lock.yaml']),
       );
+      // (pnpm remove takes the scripts-off setting, not --ignore-scripts.)
+      runs.length = 0;
+      await themeRemove('ocean', {cwd: wsApp});
+      expect(runs).toEqual([
+        {
+          cmd: 'pnpm',
+          args: [
+            'remove',
+            '@astryxdesign/theme-neutral',
+            '--config.ignore-scripts=true',
+          ],
+          cwd: wsApp,
+        },
+      ]);
     } finally {
       fs.rmSync(ws, {recursive: true, force: true});
     }
@@ -457,6 +471,66 @@ describe('theme add with a shared theme', () => {
     expect(removed.data.undo?.uninstalled).toEqual([]);
     expect(runs).toEqual([]);
     expect(fs.existsSync(path.join(app, 'src/themes/ocean'))).toBe(false);
+  });
+
+  it('turns install scripts off on Yarn 2 and later in the form it takes', async () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(app, 'package.json'), 'utf8'),
+    );
+    fs.writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({...pkg, packageManager: 'yarn@4.5.0'}),
+    );
+    fs.rmSync(path.join(app, 'package-lock.json'));
+    fs.writeFileSync(
+      path.join(app, 'yarn.lock'),
+      '__metadata:\n  version: 8\n',
+    );
+    writeTheme(path.join(shared, 'ocean'), 'ocean', {
+      imports: ['@astryxdesign/theme-neutral/built'],
+    });
+    await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    await themeRemove('ocean', {cwd: app});
+    expect(runs).toEqual([
+      {
+        cmd: 'yarn',
+        args: [
+          'add',
+          `@astryxdesign/theme-neutral@${CLI_VERSION}`,
+          '--mode=skip-build',
+        ],
+        cwd: app,
+      },
+      {
+        cmd: 'yarn',
+        args: ['remove', '@astryxdesign/theme-neutral', '--mode=skip-build'],
+        cwd: app,
+      },
+    ]);
+  });
+
+  it('installs nothing for a base the app has installed without declaring it', async () => {
+    const base = path.join(
+      app,
+      'node_modules',
+      '@astryxdesign',
+      'theme-neutral',
+    );
+    fs.mkdirSync(base, {recursive: true});
+    fs.writeFileSync(
+      path.join(base, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-neutral',
+        version: CLI_VERSION,
+        exports: {'./built': './built.js'},
+      }),
+    );
+    writeTheme(path.join(shared, 'ocean'), 'ocean', {
+      imports: ['@astryxdesign/theme-neutral/built'],
+    });
+    const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(runs).toEqual([]);
+    expect(result.data.copy?.installed).toEqual([]);
   });
 
   it('keeps a failed Astryx install apart from the packages it never installs', async () => {
