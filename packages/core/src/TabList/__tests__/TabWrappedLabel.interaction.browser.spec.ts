@@ -27,9 +27,9 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function openStory(page: Page): Promise<void> {
+async function openStory(page: Page, story = 'wrapped-label'): Promise<void> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-tablist--wrapped-label&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-tablist--${story}&viewMode=story`,
   );
   await page.locator('.astryx-tab').first().waitFor();
   await page.evaluate(async () => {
@@ -126,5 +126,27 @@ for (const width of [320, 390]) {
     expect(Math.abs(selected.centerY - wrapped.centerY)).toBeLessThan(1);
     expect(selected.tabWidth).toBeCloseTo(wrapped.tabWidth, 0);
     expect(selected.tabHeight).toBeCloseTo(wrapped.tabHeight, 0);
+  });
+}
+
+for (const story of ['link-tabs', 'default']) {
+  test(`a one-line label in the ${story} story sits at its tab's center, selected or not`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 1280, height: 700});
+    await openStory(page, story);
+    const boxes = await labelBoxes(page);
+    expect(boxes.length).toBeGreaterThan(1);
+    for (const box of boxes) {
+      const tabCenterX = box.tabWidth / 2;
+      const tabCenterY = box.tabHeight / 2;
+      // Half a pixel: a tab of odd height cannot center a whole-pixel line.
+      expect(Math.abs(box.centerX - tabCenterX), box.label).toBeLessThanOrEqual(
+        0.5,
+      );
+      expect(Math.abs(box.centerY - tabCenterY), box.label).toBeLessThanOrEqual(
+        0.5,
+      );
+    }
   });
 }
