@@ -29,7 +29,7 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-/** Each field's outer height, inner height and its input's line height. */
+/** Each field's outer height, the room inside its borders, and its input's line height. */
 async function readFields(page: Page, rootFontSize: string) {
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-textinput--size-variants&viewMode=story`,
@@ -48,9 +48,7 @@ async function readFields(page: Page, rootFontSize: string) {
         inner:
           height -
           parseFloat(style.borderTopWidth) -
-          parseFloat(style.borderBottomWidth) -
-          parseFloat(style.paddingTop) -
-          parseFloat(style.paddingBottom),
+          parseFloat(style.borderBottomWidth),
         line: parseFloat(getComputedStyle(input).lineHeight),
       };
     });

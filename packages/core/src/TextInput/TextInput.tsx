@@ -35,7 +35,6 @@ import {InputClearButton} from '../Field/InputClearButton';
 import {
   inputWrapperStyles,
   inputRowSizeStyles,
-  inputRowPadStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
@@ -495,7 +494,6 @@ export function TextInput({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
-          inputRowPadStyles.pad,
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
           status && inputStatusBorderStyles[status.type],
