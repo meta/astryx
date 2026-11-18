@@ -22,6 +22,7 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
+import {screenScale, type ScreenScaleTolerance} from '../utils/hitArea';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -136,38 +137,11 @@ function exactWidth(element: HTMLElement, scale: number): number {
 }
 
 /**
- * How far the transforms around `element` scale its width on screen: its
- * client width over its exact layout width from the computed style. The
- * exact ratio counts, since a whole-pixel offsetWidth can be most of a pixel
- * short. A box with no computed pixel width reads as unscaled.
- *
- * SYNC: `screenScale` in utils/hitArea.ts reads the same ratio with a
- * one-pixel shortcut; keep the two reads alike.
+ * The list counts any scale beyond the computed width's rounding (six
+ * significant digits), however close to 1: the last frames of a layer
+ * scaling in still shorten its measured items.
  */
-function inlineScale(element: HTMLElement): number {
-  const onScreen = element.getBoundingClientRect().width;
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (!(onScreen > 0) || style == null || !style.width.endsWith('px')) {
-    return 1;
-  }
-  const px = (value: string) => Number.parseFloat(value) || 0;
-  const layout =
-    px(style.width) +
-    (style.boxSizing === 'border-box'
-      ? 0
-      : px(style.paddingLeft) +
-        px(style.paddingRight) +
-        px(style.borderLeftWidth) +
-        px(style.borderRightWidth));
-  // The computed width is serialized to a thousandth of a pixel, so a
-  // difference within that is no scale. Any larger one counts, however close
-  // to 1 the ratio is: the last frames of a layer scaling in still shorten
-  // the list's measured items.
-  if (!(layout > 0) || Math.abs(onScreen - layout) <= 0.0005) {
-    return 1;
-  }
-  return onScreen / layout;
-}
+const INLINE_SCALE_TOLERANCE: ScreenScaleTolerance = {pixels: 0, ratio: 6e-6};
 
 /** The bounds of a single-row set, from sub-pixel widths. */
 function inlineBoundsOf(
@@ -630,7 +604,13 @@ export function useOverflowInternal(
       }
       // The visible list shares the measure copy's scale and, unlike the
       // zero-height copy, has a box to read it from.
-      const scale = tracksInlineBounds ? inlineScale(container) : 1;
+      const scale = tracksInlineBounds
+        ? screenScale(
+            container,
+            container.getBoundingClientRect(),
+            INLINE_SCALE_TOLERANCE,
+          ).x
+        : 1;
       const exact = (element: HTMLElement) => exactWidth(element, scale);
       if (tracksInlineBounds && !observeParent) {
         // The list publishes its unfolded width as its own width. It fits

@@ -1041,6 +1041,63 @@ test.describe('a single row’s minimum width', () => {
     expect(read.after).toBe(6);
   });
 
+  test('a list wider than 1000 px holds its width across frames, whatever fraction of a pixel that width has', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--wide-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="wide-row"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const style = await page.addStyleTag({content: '/* spacing */'});
+    const changes: Record<string, number> = {};
+    for (let step = 0; step < 12; step += 1) {
+      await style.evaluate((element, spacing) => {
+        element.textContent = `[data-testid="wide-row"] button { letter-spacing: ${spacing}px; }`;
+      }, step / 40);
+      await page.waitForTimeout(250);
+      // Count changes to the list's own attributes over half a second: a list
+      // that re-measures every frame republishes its sizes each time.
+      changes[String(step)] = await page.evaluate(
+        async () =>
+          new Promise<number>(resolve => {
+            const list = document.querySelector<HTMLElement>(
+              '[data-testid="wide-row"] .astryx-overflow-list',
+            );
+            if (list == null) {
+              resolve(-1);
+              return;
+            }
+            let count = 0;
+            const observer = new MutationObserver(records => {
+              count += records.length;
+            });
+            observer.observe(list, {attributes: true});
+            setTimeout(() => {
+              observer.disconnect();
+              resolve(count);
+            }, 500);
+          }),
+      );
+    }
+    const width = await page.evaluate(
+      () =>
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="wide-row"] .astryx-overflow-list',
+          )
+          ?.getBoundingClientRect().width ?? 0,
+    );
+    test.info().annotations.push({
+      type: 'wide-row',
+      description: JSON.stringify({width, changes}),
+    });
+    expect(width).toBeGreaterThan(1000);
+    expect(Object.values(changes).every(count => count === 0)).toBe(true);
+  });
+
   test('a list capped with calc() holds one fold across frames', async ({
     page,
   }) => {

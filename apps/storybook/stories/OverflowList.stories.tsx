@@ -681,3 +681,29 @@ export const ScaledRow: Story = {
     );
   },
 };
+
+/** A list wider than 1000 px in a flex row with room: it shows every item and holds its width across frames. */
+export const WideRow: Story = {
+  render: () => {
+    const items = Array.from({length: 14}, (_, index) => `Action ${index + 1}`);
+    return (
+      <div data-testid="wide-frame" style={{width: 1400, padding: 8}}>
+        <div data-testid="wide-row" style={{display: 'flex'}}>
+          <OverflowList
+            gap={2}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
+        </div>
+      </div>
+    );
+  },
+};
