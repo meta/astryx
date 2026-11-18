@@ -125,6 +125,19 @@ describe('a component a block uses', () => {
     );
   });
 
+  it('keeps its own answer when a used component wins on a synonym', () => {
+    const Gallery = component('Gallery');
+    const strip = block('ZorbStrip', ['Gallery'], 'A zorb strip of photos.');
+    const view = rankLexical(
+      'photos zorb',
+      {},
+      searchView(catalog([Gallery, strip])),
+    );
+    expect(scoreOf(view, 'ZorbStrip')).toBeGreaterThanOrEqual(
+      FULL_COVERAGE_SCORE,
+    );
+  });
+
   it('keeps matching: the block still answers the words it uses', () => {
     const view = rankLexical('quiver', {}, searchView(catalog(all)));
     expect(view.data.results.map(r => r.name)).toContain('SpoolRack');

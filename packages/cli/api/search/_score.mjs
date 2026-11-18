@@ -40,13 +40,17 @@ const MIN_TOKEN_SCORE = 50;
  * @param {string} tok
  * @param {Candidate} candidate
  * @param {{fuzzy?: boolean, part?: boolean, ownEvidence?: boolean}} [opts] - see scoreCandidate
- * @param {{score: number, reason: string} | null} [direct] - scoreCandidate(tok,
+ * @param {{score: number, reason: string, used?: true, own?: number} | null} [direct] - scoreCandidate(tok,
  *   candidate, opts), when the caller already holds it
  * @returns {{score: number, reason: string, used?: true, own?: number} | null}
  */
 export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
   let best =
     direct !== undefined ? direct : scoreCandidate(tok, candidate, opts);
+  // The best hit on the candidate's own text, over the direct hit and every
+  // synonym hit: a used component winning on one reading leaves the own
+  // answer another reading gave (see STRONG_TOKEN_SCORE).
+  let own = best ? (best.used ? (best.own ?? 0) : best.score) : 0;
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
     for (const s of syns) {
@@ -54,18 +58,18 @@ export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
       const h = scoreCandidate(s, candidate, {...opts, synonym: true});
       if (h) {
         const score = Math.round(h.score * 0.85);
+        const hOwn = Math.round((h.used ? (h.own ?? 0) : h.score) * 0.85);
+        if (hOwn > own) own = hOwn;
         if (!best || score > best.score)
           best = {
             score,
             reason: `${h.reason} (~${tok})`,
-            ...(h.used
-              ? {used: h.used, own: Math.round((h.own ?? 0) * 0.85)}
-              : {}),
+            ...(h.used ? {used: h.used} : {}),
           };
       }
     }
   }
-  return best;
+  return best?.used ? {...best, own} : best;
 }
 
 /**
