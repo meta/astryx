@@ -1889,28 +1889,28 @@ try {
       `${describeFile(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Share this page with your app's own build instead; nothing was written.`,
     );
   } else {
-  parentPort?.postMessage({
-    ok: true,
-    markup,
-    css,
-    importedCss,
-    packages: [...packages],
-    packageCss,
-    skippedCss,
-    fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
-    chartsFailed,
-    chartsAlone,
-    assets: [...assetsInlined],
-    files: localFiles,
-    uncarried: outsideFiles,
-    aliasImports,
-    texts,
-    fnTexts,
-    screenQueries,
-    logs,
-    script: script?.code ?? null,
-    scriptModules: script?.modules ?? 0,
-  });
+    parentPort?.postMessage({
+      ok: true,
+      markup,
+      css,
+      importedCss,
+      packages: [...packages],
+      packageCss,
+      skippedCss,
+      fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
+      chartsFailed,
+      chartsAlone,
+      assets: [...assetsInlined],
+      files: localFiles,
+      uncarried: outsideFiles,
+      aliasImports,
+      texts,
+      fnTexts,
+      screenQueries,
+      logs,
+      script: script?.code ?? null,
+      scriptModules: script?.modules ?? 0,
+    });
   }
 } catch (e) {
   if (e !== null) classify(e);
