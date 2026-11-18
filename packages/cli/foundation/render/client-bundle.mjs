@@ -36,7 +36,11 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * event: the file cancels the browser's own submission and fires the event
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
- * site's address submits as the browser submits it. Enter in a form's only text field
+ * site's address submits as the browser submits it. A link to a place in the
+ * page (`#id`) stays in the file: in a frame whose document is given inline
+ * (`srcdoc`), the address resolves against the viewer's own page, so the
+ * click would navigate the frame away; the file moves to the place instead,
+ * which also sets `:target` and fires `hashchange`, as in a browser tab. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
  */
@@ -55,7 +59,8 @@ document.addEventListener('click', event => {
   if (event.defaultPrevented || !(event.target instanceof Element)) return;
   const link = event.target.closest('a[href]');
   if (link) {
-    if (!link.hasAttribute('target') && out.test(link.getAttribute('href').trim())) {
+    const href = link.getAttribute('href').trim();
+    if (!link.hasAttribute('target') && out.test(href)) {
       link.target = '_blank';
       link.rel = [...new Set([...link.rel.split(/\\s+/).filter(Boolean), 'noopener', 'noreferrer'])].join(' ');
     }
@@ -67,6 +72,116 @@ document.addEventListener('click', event => {
   event.preventDefault();
   submit(button.form, button);
 });
+// The move to a place is decided after every click listener the page has,
+// on the document or the window, even one it adds later: a capture listener
+// on the window, which runs first, adds a one-time listener for this click
+// that runs last, so a page that handles the link itself cancels the move.
+// Whether a click on this link is one the file moves itself: a link to a
+// place in the page, in a frame whose address is not the document's own.
+const movesInFile = (event, link) => {
+  const href = link.getAttribute('href').trim();
+  return (
+    href.startsWith('#') &&
+    !link.hasAttribute('target') &&
+    !link.hasAttribute('download') &&
+    event.button === 0 &&
+    !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) &&
+    document.baseURI.split('#')[0] !== location.href.split('#')[0]
+  );
+};
+// The browser moves to the place against the frame's own address, so it
+// scrolls, sets :target, fires hashchange, moves focus and adds a history
+// entry as in a tab. The same address again is replaced, which a browser also
+// treats as a move to the place, never a load of the file again.
+const moveTo = link => {
+  const place = new URL(link.getAttribute('href').trim(), location.href).href;
+  if (place !== location.href) location.href = place;
+  else location.replace(place);
+};
+// The move is decided after every click listener the page has, even one it
+// adds later: a capture listener on the window, which runs first, waits for
+// this click to reach the window. A page that stops the click on its way (a
+// card's handler that calls stopPropagation) has the browser's own move held
+// at that point, and the file decides once every handler has run: it moves
+// unless the page cancelled the click, by preventDefault, \`returnValue =
+// false\` or an onclick handler that returns false.
+window.addEventListener('click', event => {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!link || !movesInFile(event, link)) return;
+  const cancel = Event.prototype.preventDefault;
+  let cancelled = false;
+  let held = false;
+  let decided = false;
+  // An onclick handler's \`return false\` cancels without calling
+  // preventDefault, so each one on the click's way is read as it returns.
+  const onclicks = event.composedPath().flatMap(node => {
+    const handler = node.onclick;
+    if (typeof handler !== 'function') return [];
+    const read = function (...args) {
+      const result = handler.apply(this, args);
+      if (result === false) cancelled = true;
+      return result;
+    };
+    node.onclick = read;
+    return [[node, handler, read]];
+  });
+  const restore = () => {
+    for (const [node, handler, read] of onclicks) if (node.onclick === read) node.onclick = handler;
+  };
+  const decide = () => {
+    if (decided) return;
+    decided = true;
+    window.removeEventListener('click', last);
+    restore();
+    if (cancelled || (event.defaultPrevented && !held)) return;
+    cancel.call(event);
+    moveTo(link);
+  };
+  event.preventDefault = function () {
+    cancelled = true;
+    return cancel.call(this);
+  };
+  const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
+  Object.defineProperty(event, 'returnValue', {
+    get() {
+      return returnValue.get.call(this);
+    },
+    set(value) {
+      if (value === false) this.preventDefault();
+    },
+  });
+  for (const name of ['stopPropagation', 'stopImmediatePropagation']) {
+    const stop = Event.prototype[name];
+    event[name] = function () {
+      stop.call(this);
+      if (decided || held) return;
+      held = true;
+      cancel.call(event);
+      setTimeout(decide);
+    };
+  }
+  // The old way to stop a click, \`cancelBubble = true\`, stops it the same way.
+  const bubble = Object.getOwnPropertyDescriptor(Event.prototype, 'cancelBubble');
+  Object.defineProperty(event, 'cancelBubble', {
+    get() {
+      return bubble.get.call(this);
+    },
+    set(value) {
+      if (value) this.stopPropagation();
+    },
+  });
+  const last = later => {
+    // A click the page dispatches while this one is still on its way (a
+    // handler that clicks another element first) leaves it waiting.
+    if (later === event) decide();
+    else if (event.eventPhase === Event.NONE && !decided) {
+      decided = true;
+      window.removeEventListener('click', last);
+      restore();
+    }
+  };
+  window.addEventListener('click', last);
+}, true);
 document.addEventListener('keydown', event => {
   const field = event.target;
   if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing) return;
