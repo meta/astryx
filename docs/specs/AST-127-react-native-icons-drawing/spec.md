@@ -100,9 +100,9 @@ All five contracts belong to the platform's core: every binary has them.
 - **FR1 — The icon view shows an image mask in its first frame.** `Icon` draws
   an image icon through `AstryxIconView`, an internal native view behind the
   component (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes `uri` and
-  `scale` (a resolved asset: `Image.resolveAssetSource(source)`), a tint, and
-  `mirrored` (default false).
-  - The view paints `tint` wherever the mask is opaque and scales the mask to
+  `scale` (a resolved asset: `Image.resolveAssetSource(source)`), `tintColor`,
+  and `mirrored` (default false).
+  - The view paints `tintColor` wherever the mask is opaque and scales the mask to
     fit inside its frame without distortion.
   - A mask from the app bundle, from disk, from a `data:` URI, or one already
     shown in this process appears in the view's first frame. A remote
@@ -136,17 +136,18 @@ All five contracts belong to the platform's core: every binary has them.
     (OQ3).
 - **FR3 — The symbol view shows an SF Symbol (iOS).** `Icon` draws a system
   symbol through `AstryxSymbolView`, an internal native view behind the
-  component (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes the
-  symbol's name, a point size, a color, `weight` (`ultraLight` through `black`,
-  default `regular`), `mirrored`, and `effect`.
-  - The view draws the symbol in one color, `color`, with a margin of 1/12 of
+  component (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes
+  `systemName`, `pointSize`, `symbolColor`, `weight` (`ultraLight` through
+  `black`, default `regular`), `mirrored`, and the effect props `effect`,
+  `effectTrigger`, and `effectRepeat`.
+  - The view draws the symbol in one color, `symbolColor`, with a margin of 1/12 of
     the view's side on each edge and aspect fit. The symbol's point size equals
     the view's side, so its line weight matches text of that size.
-  - `effect` is `{kind, trigger?, repeat?}`. Kinds: `bounce`, `pulse`,
+  - `effect` names the kind: `bounce`, `pulse`,
     `variableColor`, `scale` (iOS 17), `wiggle`, `rotate`, `breathe` (iOS 18),
     `drawOn`, `drawOff` (iOS 26). A one-shot effect runs on each change of
-    `trigger` after the view mounts. With `repeat`, the effect runs again and
-    again until the view unmounts or the prop changes. On an iOS version that
+    `effectTrigger` after the view mounts. With `effectRepeat`, the effect runs
+    again and again until the view unmounts or the prop changes. On an iOS version that
     predates the effect, the view shows the still symbol. Effects run on the UI
     thread, independent of JavaScript.
   - For a name the system does not know, the view stays empty and writes one log
@@ -263,7 +264,7 @@ All five contracts belong to the platform's core: every binary has them.
     another glyph has replaced it on that control.
   - The search for that enclosing view stays within the view's own surface and
     changes React Native views alone.
-  - The library marks one glyph per control. For an icon shown as a
+  - The library marks at most one glyph per control. For an icon shown as a
     symbol or an image, the viewer shows only the control's title; under the
     default icon source on iOS, that is every built-in name with an SF Symbol.
   - Android ignores the prop.
