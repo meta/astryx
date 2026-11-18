@@ -15,7 +15,7 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {copyTree, stageSharedTheme} from './_shared-source.mjs';
-import {APP_COPY_MARK} from '../theme-edit/_marks.mjs';
+import {appCopyMark} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
@@ -75,6 +75,7 @@ import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
 import {
+  FOLDER_JUNK,
   folderIsEmpty,
   removeEmptyFolder,
 } from '../../foundation/fs/empty-folder.mjs';
@@ -2093,7 +2094,10 @@ export async function addSharedThemeToApp(source, options) {
       else if (
         previousEditor &&
         changedSharedFiles(editorDir, {files: previousEditor}).length === 0 &&
-        filesUnder(editorDir).every(file => file in previousEditor)
+        filesUnder(editorDir).every(
+          file =>
+            file in previousEditor || FOLDER_JUNK.has(path.basename(file)),
+        )
       )
         editorPlan = 'replace';
       else
@@ -2105,6 +2109,9 @@ export async function addSharedThemeToApp(source, options) {
     /** @type {string | null} */
     let editorAside = null;
     let editorWriting = false;
+    // (A folder of only system files that is there before the add stays;
+    // a failed add takes out only what it copied into it.)
+    const editorDirWasThere = fs.existsSync(editorDir);
     /** @type {string[]} */
     let editorFiles = [];
     /** @type {string[]} */
@@ -2128,25 +2135,15 @@ export async function addSharedThemeToApp(source, options) {
         targetPath: relFrom(cwd, target),
         takenSlugs: new Set(),
       });
-      // With the editor's state beside it, the copy stays the editor's:
-      // the shared descriptor keeps the mark the editor writes, so the
-      // editor's later builds update this copy.
-      // (The descriptor written is eject's, maintained: false, under the
-      // editor's own first line.)
+      // With the editor's state beside it, the copy stays the editor's: its
+      // descriptor is eject's (maintained: false) under the line the editor
+      // writes on its app copy, so the editor's next builds update it.
       if (editorFiles.length) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
-        const shared = doc ? path.join(staged.root, name, doc) : null;
-        const markLine =
-          shared && fs.existsSync(shared)
-            ? fs
-                .readFileSync(shared, 'utf-8')
-                .split('\n')
-                .find(line => line.includes(APP_COPY_MARK))
-            : undefined;
-        if (doc && markLine && /^\s*(?:\/\/|\/\*)/.test(markLine))
+        if (doc)
           fs.writeFileSync(
             path.join(target, doc),
-            `${markLine}\n\n${localThemeDescriptor(theme)}`,
+            `// ${appCopyMark(name)} after every build of themes/${name}/; do not edit it here. Change the theme with the editor.\n\n${localThemeDescriptor(theme)}`,
           );
       }
       const install = installSharedThemeNeeds(
@@ -2267,7 +2264,18 @@ export async function addSharedThemeToApp(source, options) {
         }
         fs.rmSync(aside, {recursive: true, force: true});
       }
-      if (editorAside) fs.rmSync(editorAside, {recursive: true, force: true});
+      if (editorAside) {
+        // The system files beside the earlier copy (.DS_Store) stay.
+        for (const file of filesUnder(editorAside).filter(f =>
+          FOLDER_JUNK.has(path.basename(f)),
+        )) {
+          const to = path.join(editorDir, file);
+          if (fs.existsSync(to)) continue;
+          fs.mkdirSync(path.dirname(to), {recursive: true});
+          fs.renameSync(path.join(editorAside, file), to);
+        }
+        fs.rmSync(editorAside, {recursive: true, force: true});
+      }
       return result;
     } catch (error) {
       // The folder was made by this add (a taken one is refused above, and
@@ -2276,10 +2284,18 @@ export async function addSharedThemeToApp(source, options) {
       fs.rmSync(target, {recursive: true, force: true});
       if (aside) fs.renameSync(aside, target);
       if (madeRoot) removeEmptyFolder(root, {deep: true});
-      if (editorWriting || editorAside) {
+      if (editorAside) {
         fs.rmSync(editorDir, {recursive: true, force: true});
-        if (editorAside) fs.renameSync(editorAside, editorDir);
-        else if (editorMadeRoot) removeEmptyFolder(editorRoot);
+        fs.renameSync(editorAside, editorDir);
+      } else if (editorWriting && editorDirWasThere && staged.editor?.dir) {
+        for (const file of filesUnder(staged.editor.dir))
+          fs.rmSync(path.join(editorDir, file), {force: true});
+        for (const entry of fs.readdirSync(editorDir, {withFileTypes: true}))
+          if (entry.isDirectory())
+            removeEmptyFolder(path.join(editorDir, entry.name), {deep: true});
+      } else if (editorWriting) {
+        fs.rmSync(editorDir, {recursive: true, force: true});
+        if (editorMadeRoot) removeEmptyFolder(editorRoot);
       }
       // (An uninstall that fails is said with the error, never hidden.)
       if (newlyInstalled.length > 0) {
