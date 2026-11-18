@@ -2020,6 +2020,9 @@ export async function addSharedThemeToApp(source, options) {
         files,
         installed: install.installed,
         installCommand: install.installCommand,
+        ...(install.installGuidance
+          ? {installGuidance: install.installGuidance}
+          : {}),
         ...(install.installError
           ? {
               installError: install.installError,
@@ -2283,12 +2286,18 @@ function relFrom(cwd, file) {
  * app's installed Core, as every Astryx package of one release shares it,
  * with install scripts off. A package from anywhere else is never installed
  * for the theme: the result names the command that installs it.
- * @param {{missingAstryx: string[], missingPackages: string[], installCommand: string | null}} needs
+ * @param {{missingAstryx: string[], missingPackages: string[], installCommand: string | null, installGuidance: string | null}} needs
  * @param {string} projectDir
- * @returns {{installed: string[], installCommand: string | null, installError?: string, installRetryCommand?: string}}
+ * @returns {{installed: string[], installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string}}
  */
 function installSharedThemeNeeds(needs, projectDir) {
-  const others = {installCommand: needs.installCommand};
+  // (An integration that says how this project adds packages is followed
+  // instead of the package manager: its line names the others, and the
+  // Astryx packages are left for the builder to add that way.)
+  const others = {
+    installCommand: needs.installCommand,
+    ...(needs.installGuidance ? {installGuidance: needs.installGuidance} : {}),
+  };
   if (needs.missingAstryx.length === 0) return {installed: [], ...others};
   const coreDir = installedProjectCoreDir(projectDir);
   /** @type {string | null} */
@@ -2302,10 +2311,19 @@ function installSharedThemeNeeds(needs, projectDir) {
     // An unreadable Core names no version.
   }
   const specs = needs.missingAstryx.map(p => (core ? `${p}@${core}` : p));
-  const base = installCommandFor(
-    needs.missingAstryx,
+  const {installCommand: base, installGuidance: guided} = installCommandFor(
+    specs,
     projectDir,
-  ).installCommand;
+  );
+  if (guided) {
+    return {
+      installed: [],
+      ...others,
+      installError:
+        "this project's integrations say how it adds packages, so theme add does not install them itself",
+      installRetryCommand: guided,
+    };
+  }
   if (base == null) {
     return {
       installed: [],
