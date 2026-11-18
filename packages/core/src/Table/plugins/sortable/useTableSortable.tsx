@@ -28,7 +28,7 @@ import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useDevWarning} from '../../../hooks/useDevWarning';
+import {createDevWarnings} from '../../../utils/devWarning';
 import {INTERACTIVE_SELECTORS} from '../../../hooks/useClickableContainer';
 import type {
   TablePlugin,
@@ -236,7 +236,9 @@ function getNextDirection(
 // Sort Header Button Component
 // =============================================================================
 
-/** A control nested in the label: Core's interactive elements, or a tab stop. */
+/** A control nested in the label: Core's interactive elements, or a positive tab stop. */
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 const HEADER_CONTROL_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex]:not([tabindex="-1"])`;
 
 function SortHeaderButton<T extends Record<string, unknown>>({
@@ -270,19 +272,23 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   // button, which no assistive technology can operate (WCAG 4.1.2). Table has
   // no place outside the Sort control for a caller's header control, so the
   // column warns, from the label it first renders.
-  const [holdsControl, setHoldsControl] = useState(false);
-  const labelRef = useCallback((label: HTMLSpanElement | null) => {
-    if (label?.querySelector(HEADER_CONTROL_SELECTOR) != null) {
-      setHoldsControl(true);
-    }
-  }, []);
-  useDevWarning(
-    'useTableSortable',
-    `the header of sortable column "${sortKey}" holds its own control. ` +
-      'Its control nests in the Sort button, which assistive technology ' +
-      'cannot operate; this column cannot hold a header control while it is ' +
-      'sortable.',
-    holdsControl,
+  const [warn] = useState(createDevWarnings);
+  const labelRef = useCallback(
+    (label: HTMLSpanElement | null) => {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        label?.querySelector(HEADER_CONTROL_SELECTOR) != null
+      ) {
+        warn(
+          'useTableSortable',
+          `the header of sortable column "${sortKey}" holds its own control. ` +
+            'Its control nests in the Sort button, which assistive technology ' +
+            'cannot operate; this column cannot hold a header control while it ' +
+            'is sortable.',
+        );
+      }
+    },
+    [warn, sortKey],
   );
 
   // The button is named by its column's text, so the column header keeps

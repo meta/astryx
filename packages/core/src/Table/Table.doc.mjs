@@ -415,6 +415,11 @@ export const docsDense = {
       {
         guidance: false,
         description:
+          'Put a control (button, link, input) in a sortable column header: the Sort control wraps the header, so the nested control is inoperable for assistive technology. Keep header controls on unsortable columns.',
+      },
+      {
+        guidance: false,
+        description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
       },
       {
