@@ -271,8 +271,7 @@ All five contracts belong to the platform's core: every binary has them.
 
 ### Behaviour across binaries
 
-- **FR10 — The group grows by named features.** Each contract's baseline is its
-  first release's shape (`spec:AST-140/FR5`), on iOS and Android,
+- **FR10 — The group grows by named features.** Each contract keeps the baseline that `spec:AST-140/FR5` sets, on iOS and Android,
   `isLargeContentImage` included. The vector scene's named feature is `groups`
   (FR6, FR8).
 - **FR11 — An absent piece falls back.** Every probe answers false, every call
@@ -315,8 +314,7 @@ All five contracts belong to the platform's core: every binary has them.
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces link
   by default, so these five core contracts are in every binary.
-- Relies on `spec:AST-140/FR5`: each contract's baseline is its first release's
-  shape, and later behavior is a named feature the binary reports.
+- Relies on `spec:AST-140/FR5`: each contract keeps the baseline that `spec:AST-140/FR5` sets, and later behavior is a named feature the binary reports.
 - Changes `spec:AST-112/FR1`: the core's list gains `AstryxIconView`,
   `AstryxIcons`, `AstryxVectorView`, and `AstryxVectorInfo` beside system
   symbols.
