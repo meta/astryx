@@ -826,10 +826,10 @@ function printThemeApp(result) {
           `[!] Not installed: ${copy.installError}.${copy.installRetryCommand ? ` Install it with: ${copy.installRetryCommand}` : ''}`,
         ),
       );
-    if (copy.installCommand)
+    if (copy.installGuidance ?? copy.installCommand)
       emit(
         text(
-          `The theme also imports packages the app lacks, which theme add does not install for it; check them, then install them: ${copy.installCommand}`,
+          `The theme also imports packages the app lacks, which theme add does not install for it; check them, then install them: ${copy.installGuidance ?? copy.installCommand}`,
         ),
       );
     emit(

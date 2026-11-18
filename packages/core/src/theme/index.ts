@@ -16,8 +16,8 @@
 export {Theme} from './Theme';
 export {MediaTheme} from './MediaTheme';
 export type {MediaThemeProps, MediaThemeMode} from './MediaTheme';
+export {defineTheme, isDefinedTheme, tokenDefaults} from './defineTheme';
 export {
-  defineTheme,
   generateThemeCSS,
   generateOnMediaCSS,
   generateAdaptationCSS,
@@ -26,9 +26,7 @@ export {
   THEME_SUB_LAYER_ORDER,
   type ThemeCSSOutput,
   type ThemeRulesSplit,
-  isDefinedTheme,
-  tokenDefaults,
-} from './defineTheme';
+} from './generateThemeRules';
 export {
   registerTheme,
   getRegisteredTheme,

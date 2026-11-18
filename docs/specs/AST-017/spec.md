@@ -429,7 +429,9 @@ one removal merged ahead of the decision to allow it.
   codemod is supplied when a mechanical migration would materially reduce caller
   work. This exception never covers a change to stable defaults, stable runtime or
   accessibility behavior, ordinary import paths, non-experimental props, or stable
-  CLI commands and machine schemas; those changes follow FR1–FR8. A released stable
+  CLI commands and machine schemas; those changes follow FR1–FR8. The discover
+  listing of experimental icon-set packages that FR27 names is part of the
+  experimental surface: a change to it uses `[experimental]`. A released stable
   surface cannot be retroactively demoted to experimental.
 - **FR23 — Promotion creates a stable contract deliberately.** Promotion is an
   owner-approved change that removes the experimental marker, exposes the settled
@@ -504,6 +506,17 @@ one removal merged ahead of the decision to allow it.
   unknown top-level word that asks for it (`import`, `back`, `restore`,
   `unrender`, `reverse`) MAY suggest `experimental import`, labeled
   experimental, and never runs it; it ends when the export exception ends.
+  A further named exception: `astryx discover` may list experimental icon-set
+  packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
+  text, the install line, the opt-in command
+  (`astryx experimental icon use <package>/<set>`), and, when the catalog lists
+  the set's definitions, how many of the CLI's icon definitions it maps
+  (`definitions: N/M`, in text only); it is marked `[experimental]` in text
+  and `experimental: true` in JSON (on a package entry, `experimentalFields`
+  names its icon-set field). The set's icons and definitions themselves, and
+  every other command, `astryx search` and its discover line included, stay
+  behind the icon feature gate. This exception ends when icon
+  sets graduate or are removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

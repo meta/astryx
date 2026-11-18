@@ -1115,21 +1115,6 @@ function readThemeIconNodes(
 }
 
 // =============================================================================
-// CSS generation — re-exported from ./generateThemeRules.ts
-// =============================================================================
-
-export {
-  generateThemeRules,
-  generateThemeRulesSplit,
-  generateOnMediaCSS,
-  generateAdaptationCSS,
-  generateThemeCSS,
-  THEME_SUB_LAYER_ORDER,
-  type ThemeRulesSplit,
-  type ThemeCSSOutput,
-} from './generateThemeRules';
-
-// =============================================================================
 // Type guard
 // =============================================================================
 

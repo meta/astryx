@@ -112,6 +112,7 @@ import {
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
+import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
 import {
   keyPathIndex,
   keyPathLine,
@@ -2812,13 +2813,14 @@ function resolveThemeModule(specifier, fromFile) {
  * The sources of the themes a theme source extends, nearest first: the
  * module each `extends: name` imports `name` from, when it is a relative
  * import, then the one that module extends, a few hops at most. Empty when
- * the source extends nothing it imports.
+ * the source extends nothing it imports. Each with the export of that
+ * module the theme is built from (the name it is imported by).
  * @param {string} filePath
  * @param {string} source
- * @returns {Array<{file: string, source: string}>}
+ * @returns {Array<{file: string, source: string, exportName: string}>}
  */
 function extendedThemeSources(filePath, source) {
-  /** @type {Array<{file: string, source: string}>} */
+  /** @type {Array<{file: string, source: string, exportName: string}>} */
   const chain = [];
   let file = filePath;
   let text = source;
@@ -2861,13 +2863,21 @@ function extendedThemeSources(filePath, source) {
         st.specifiers.some((/** @type {any} */ x) => x.local?.name === base),
     );
     if (!from) return chain;
+    // The name the file is imported by: the export it builds the base from.
+    const spec = from.specifiers.find(
+      (/** @type {any} */ x) => x.local?.name === base,
+    );
+    const exportName =
+      spec?.type === 'ImportSpecifier'
+        ? (spec.imported.name ?? spec.imported.value)
+        : 'default';
     try {
       file = resolveThemeModule(String(from.source.value), file);
       text = fs.readFileSync(file, 'utf8');
     } catch {
       return chain;
     }
-    chain.push({file, source: text});
+    chain.push({file, source: text, exportName});
   }
   return chain;
 }
@@ -5720,11 +5730,23 @@ async function themeBuildInternal(
     // the rules just generated; a declaration is the theme's when its
     // source, or a local theme it extends, writes it. Warned at its line,
     // with the change that makes it show; the output is the same.
+    // Where a setting is written, nearest first: the theme's own objects in
+    // its file (never a base theme it extends that the file also defines),
+    // then such a base, then each local theme it extends in its own file.
+    // Each key path is read from the root of the object.
+    // Each file read twice: at its theme's own objects, then at the themes
+    // that theme extends inside the file.
     const writtenIn = [
-      {file: filePath, source: themeSource},
+      {file: filePath, source: themeSource, exportName: themeExportName},
       ...extendedSources,
-    ].map(s => ({file: s.file, lineOf: keyPathIndex(s.source, s.file)}));
-    // The rules of the theme it extends, generated once when first asked.
+    ].flatMap(s => {
+      const index = keyPathIndex(s.source, s.file, {exportName: s.exportName});
+      return [false, true].map(bases => ({
+        file: s.file,
+        lineOf: (/** @type {string[]} */ k) =>
+          index(k, {fromRoot: true, bases}),
+      }));
+    });
     const blocks = blockPaths(
       resolvedTheme.components,
       components =>
@@ -5742,7 +5764,7 @@ async function themeBuildInternal(
         at => {
           for (const [layer, {lineOf}] of writtenIn.entries())
             for (const keys of declarationPaths(at, blocks))
-              if (lineOf(keys, {fromRoot: true}) != null)
+              if (lineOf(keys) != null)
                 return {path: keys, layer};
           return null;
         },
@@ -5757,9 +5779,9 @@ async function themeBuildInternal(
       // At its line in the theme's file, or in the local theme it extends
       // that writes it (a family member's included).
       const writer = writtenIn.find(
-        w => w.lineOf(entry.path, {fromRoot: true}) != null,
+        w => w.lineOf(entry.path) != null,
       );
-      const line = writer?.lineOf(entry.path, {fromRoot: true}) ?? null;
+      const line = writer?.lineOf(entry.path) ?? null;
       const file =
         writer && writer.file !== filePath
           ? path.relative(cwd, writer.file) || writer.file
@@ -7357,76 +7379,10 @@ function themeBaseBinding(filePath, exportName) {
   } catch {
     return null;
   }
-  /** @type {Map<string, {source: string, imported: string}>} */
-  const imports = new Map();
-  /** @type {Map<string, any>} */
-  const consts = new Map();
-  /** @type {Map<string, any>} the node each export gives */
-  const exported = new Map();
-  /** @param {any} declaration */
-  const addDeclaration = declaration => {
-    if (declaration?.type !== 'VariableDeclaration') return;
-    for (const d of declaration.declarations)
-      if (d.id?.type === 'Identifier' && d.init) consts.set(d.id.name, d.init);
-  };
-  for (const node of ast.program.body) {
-    if (node.type === 'ImportDeclaration' && node.importKind !== 'type')
-      for (const spec of node.specifiers)
-        if (spec.type === 'ImportSpecifier')
-          imports.set(spec.local.name, {
-            source: node.source.value,
-            imported: spec.imported.name ?? spec.imported.value,
-          });
-        else if (spec.type === 'ImportDefaultSpecifier')
-          imports.set(spec.local.name, {
-            source: node.source.value,
-            imported: 'default',
-          });
-    addDeclaration(node);
-    if (node.type === 'ExportNamedDeclaration') {
-      addDeclaration(node.declaration);
-      if (node.declaration?.type === 'VariableDeclaration')
-        for (const d of node.declaration.declarations)
-          if (d.id?.type === 'Identifier') exported.set(d.id.name, d.id);
-      if (!node.source)
-        for (const spec of node.specifiers ?? [])
-          if (spec.type === 'ExportSpecifier')
-            exported.set(spec.exported.name ?? spec.exported.value, spec.local);
-    }
-    if (node.type === 'ExportDefaultDeclaration')
-      exported.set('default', node.declaration);
-  }
-  /** @param {any} node @returns {any} */
-  const unwrap = node => {
-    while (
-      node &&
-      /^(?:TSAsExpression|TSSatisfiesExpression|TSNonNullExpression|TSTypeAssertion|ParenthesizedExpression)$/.test(
-        node.type,
-      )
-    )
-      node = node.expression;
-    return node;
-  };
-  /** @param {any} node @param {number} depth @returns {any} the theme object literal */
-  const themeObject = (node, depth = 0) => {
-    node = unwrap(node);
-    if (!node || depth > 8) return null;
-    if (node.type === 'Identifier')
-      return consts.has(node.name)
-        ? themeObject(consts.get(node.name), depth + 1)
-        : null;
-    if (node.type === 'CallExpression')
-      return themeObject(node.arguments?.[0], depth + 1);
-    return node.type === 'ObjectExpression' ? node : null;
-  };
-  const object = themeObject(exported.get(exportName ?? 'default'));
-  const field = object?.properties.find(
-    (/** @type {any} */ p) =>
-      p.type === 'ObjectProperty' &&
-      !p.computed &&
-      (p.key.name ?? p.key.value) === 'extends',
+  const {imports, consts, exported} = moduleBindings(ast);
+  const value = extendsOf(
+    themeObjectOf(exported.get(exportName ?? 'default'), consts),
   );
-  const value = unwrap(field?.value);
   if (value?.type !== 'Identifier') return null;
   const imported = imports.get(value.name);
   if (imported)
