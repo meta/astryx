@@ -355,8 +355,9 @@ shared icon names under FR17.
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
   never silently wrong. A contract has no revision number: its baseline is its
-  shape in the first release that carries it, release candidates included, and
-  later behavior is a named feature (DEC-14). `spec:AST-140/FR5` owns the rules
+  shape in the first release after the package leaves the canary channel that
+  carries it, release candidates included, and later behavior is a named
+  feature (DEC-14). `spec:AST-140/FR5` owns the rules
   and the check that enforces them.
   - FR6, FR7, and FR8 are internal conventions while the package is
     canary-only, and they may change in any canary; the public promise is
@@ -622,7 +623,7 @@ shared icon names under FR17.
   - **In a module package of its own**, when Astryx owns a native module that
     no component uses but several apps share. It follows this record's
     platform-layer rules (FR2 to FR8, FR15) and releases with the package
-    (FR14). None is specified now.
+    (FR14).
   - **Outside Astryx**, otherwise: an app uses its host platform's
     implementation or the libraries it chooses, and Astryx components work
     beside them (FR2).
@@ -696,7 +697,7 @@ record depends on an ask whose owner has not agreed to it.
 | Ask                                         | Owner             | Status        | What it unblocks                                                                 | Astryx's interim                                                  | Exit plan                                                                                                     |
 | ------------------------------------------- | ----------------- | ------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | Native gesture arbitration across libraries | React Native core | not discussed | One arbitration that Astryx's recognizers and other libraries' recognizers share | The gesture module's per-recognizer handles (FR18)                | Astryx registers its recognizers through the platform's arbitration and keeps its handles as a thin layer     |
-| Haptics                                     | React Native core | not discussed | Feedback moments without a module of Astryx's own                                | The core's haptics capability (FR3, FR9)                          | The capability calls the platform's haptics API; no shape is frozen at 0.x, so its API follows the platform's |
+| Haptics                                     | React Native core | not discussed | Feedback moments without a module of Astryx's own                                | The core's haptics capability (`spec:AST-130`, FR9)               | The capability calls the platform's haptics API; no shape is frozen at 0.x, so its API follows the platform's |
 | One source of safe-area insets              | React Native core | not discussed | Insets that every library reads the same way                                     | The core's safe-area insets (FR2, FR3)                            | The core reads the platform's insets; no shape is frozen at 0.x, so its API follows the platform's            |
 | Keyboard tracking                           | React Native core | not discussed | Layouts that follow the keyboard frame by frame on the UI thread                 | The keyboard pieces of the layout, text, and keyboard group (FR7) | The group reads the platform's keyboard frames; no shape is frozen at 0.x, so its API follows the platform's  |
 
@@ -710,6 +711,10 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-114` reads the package as a base. Its FR4 list gains the
   `setup.checks` step, and its FR5 table gains `doctor`'s `--platform` and
   `--dev-server-port`, each requiring that step (FR13).
+- `spec:AST-114` FR2's resolution order gains one rule for the reserved `rn`
+  group: `astryx rn` reads `@astryxdesign/react-native` as its base as if
+  `--base` named it, in a project that also installs Core. Its DEC-5 gains
+  that exception to "another base only through `--base`" (FR13).
 - `spec:AST-114` FR6's check, FR7's help and manifest, and FR8's refusal also
   cover the reserved `rn` group: `ERR_BASE_COMMAND`, checked after
   `ERR_BASE_NOT_FOUND` and `ERR_BASE_AMBIGUOUS` and before any `requires`.
@@ -748,8 +753,7 @@ record depends on an ask whose owner has not agreed to it.
   look of a surface stays the native theme's `material` member (FR21).
 - `spec:AST-082` DEC-7's existing sentence on where the React Native
   candidate's native code lives gains the Expo exception: that code lives in
-  the platform layer of `@astryxdesign/react-native`, apart from the Expo host
-  hooks of `@astryxdesign/react-native-expo` (`spec:AST-112`
+  the platform layer of `@astryxdesign/react-native`, apart from the Expo lifecycle adapters of `@astryxdesign/react-native-expo` (`spec:AST-112`
   FR1, FR4), and `@astryxdesign/native` stays the single cross-platform
   contracts package.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
@@ -968,8 +972,8 @@ app would have to know which component needs which capability.
 **Reference:** `spec:AST-112/DEC-14`
 **Decider:** imdreamrunner, 2026-11-17
 
-A contract's baseline is its shape in the first release that carries it,
-release candidates included. Behavior added after that baseline is a named
+A contract's baseline is its shape in the first release after the package
+leaves the canary channel that carries it, release candidates included. Behavior added after that baseline is a named
 feature. A named feature says which behavior a binary has, so JavaScript asks
 for the behavior it is about to use and an older binary answers with a fallback
 or a loud refusal. No contract carries a revision number. A canary release is not
@@ -996,8 +1000,9 @@ exception names it and the reason, so each one is visible and reviewed.
 No Astryx component needs a third-party library, so the package ships every
 native piece that Astryx's components and `create` templates use, and nothing
 else. A capability no Astryx component uses stays outside the core package, so
-no app carries its native code, and an app uses its host platform's
-implementation or an open-source library for it.
+no app carries its native code: Astryx may own it in a module package of its
+own when several apps share it, and otherwise an app uses its host platform's
+implementation or an open-source library for it (FR20).
 
 Rejected: every app-level module in the package, because every app would carry
 native code and size that no Astryx component needs.
