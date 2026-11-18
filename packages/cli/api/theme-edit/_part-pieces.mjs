@@ -12,12 +12,11 @@
  * display-1 to display-3): the values its prop takes, as its component's
  * doc types them, and any more Core's data saw it drawn in. Sorted.
  * @param {string} family the value without its number, "display"
- * @param {string} propType the prop's documented type
+ * @param {string[]} typed the values the prop's documented type lists
  * @param {string[]} drawn the values Core's data saw
  * @returns {string[]}
  */
-export function numberedLookValues(family, propType, drawn) {
-  const typed = [...propType.matchAll(/'([\w-]+)'/g)].map(x => x[1]);
+export function numberedLookValues(family, typed, drawn) {
   return [...new Set([...typed, ...drawn])]
     .filter(v => v.startsWith(`${family}-`) && /-\d+$/.test(v))
     .sort();
@@ -26,7 +25,10 @@ export function numberedLookValues(family, propType, drawn) {
 /**
  * A clause on a plural family ("heavy display headings", and "make them
  * blue" after it) is one answer: its drafts, one per look, become the
- * first one, which runs every look's steps in order and names each look.
+ * first one. Each of its options runs that option of every look, in order,
+ * with repeated steps said once; the text names each look. A size said for
+ * the family is the largest look's: the others scale by the steps between
+ * their sizes now (`sizeOf`), so the type scale keeps its shape.
  * Changes `drafts` in place.
  * @template {{text: string, options: object[][], sequence?: boolean}} D
  * @template {{parts: Array<{on: string, when?: string}>}} C
@@ -34,8 +36,9 @@ export function numberedLookValues(family, propType, drawn) {
  * @param {(d: D) => C | undefined} clauseOf
  * @param {C[]} clauses
  * @param {Array<{on: string, whens: string[]}>} families
+ * @param {(when: string) => number | null} sizeOf a look's size now, in px
  */
-export function oneAnswerPerFamily(drafts, clauseOf, clauses, families) {
+export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) {
   for (const c of clauses) {
     const fam = families.find(
       f => c.parts.filter(p => p.on === f.on && f.whens.includes(p.when ?? '')).length > 1,
@@ -43,13 +46,62 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families) {
     const mine = fam ? drafts.filter(d => clauseOf(d) === c && d.options.length) : [];
     if (!fam || mine.length < 2) continue;
     const [head, ...rest] = mine;
-    head.options = [mine.flatMap(d => d.options[0]), ...head.options.slice(1)];
+    const scaled = scaleFamilySizes(mine, fam.whens, sizeOf);
+    head.options = Array.from(
+      {length: Math.max(...mine.map(d => d.options.length))},
+      (_, i) => {
+        const seen = new Set();
+        return mine
+          .flatMap(d => d.options[i] ?? [])
+          .filter(st => !seen.has(JSON.stringify(st)) && seen.add(JSON.stringify(st)));
+      },
+    );
     head.sequence = true;
     const [attr] = fam.whens[0].split(':');
     head.text = head.text.replace(
       `(${fam.whens[0].replace(':', ' ')})`,
       `(${attr} ${fam.whens.map(w => w.split(':')[1]).join(', ')})`,
     );
+    if (scaled) head.text += `; ${scaled}`;
     drafts.splice(0, drafts.length, ...drafts.filter(d => !rest.includes(d)));
   }
+}
+
+/** A step's size in px, or null. @param {unknown} v */
+const pxOf = v => {
+  const m = /^(-?\d*\.?\d+)(px|rem)$/.exec(String(v).trim());
+  return m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
+};
+
+/**
+ * Scale the size steps of a family's drafts, one draft per look in the
+ * order of `whens`: the size said is the largest look's, and every other
+ * look's size is that size times the ratio of its size now to the largest
+ * look's size now, in the unit said. Says what it wrote, or null when no
+ * size is said or a look's size now is unknown.
+ * @param {Array<{options: object[][]}>} drafts
+ * @param {string[]} whens
+ * @param {(when: string) => number | null} sizeOf
+ * @returns {string | null}
+ */
+function scaleFamilySizes(drafts, whens, sizeOf) {
+  const isSize = (/** @type {any} */ st) =>
+    (st.thing === 'font-size' || /^--text-[\w-]+-size$/.test(st.thing)) && pxOf(st.value) != null;
+  const now = whens.map(w => sizeOf(w));
+  if (!drafts.some(d => d.options.flat().some(isSize)) || now.some(n => !n)) return null;
+  const top = now.indexOf(Math.max(.../** @type {number[]} */ (now)));
+  const said = drafts[top]?.options.flat().find(isSize);
+  if (!said) return null;
+  const px = /** @type {number} */ (pxOf(/** @type {any} */ (said).value));
+  const rem = /rem$/.test(String(/** @type {any} */ (said).value));
+  const sizes = now.map(n => (px * /** @type {number} */ (n)) / /** @type {number} */ (now[top]));
+  const written = sizes.map(v => (rem ? `${Number((v / 16).toFixed(3))}rem` : `${Math.round(v)}px`));
+  drafts.forEach((d, i) => {
+    for (const o of d.options) for (const st of o) if (isSize(st)) /** @type {any} */ (st).value = written[i];
+  });
+  const level = (/** @type {string} */ w) => w.split(':')[1];
+  return `${level(whens[top])} ${written[top]}, the others scaled to keep the steps between them (${whens
+    .map((w, i) => (i === top ? '' : `${level(w)} ${written[i]}`))
+    .filter(Boolean)
+    .join(', ')})`;
 }
