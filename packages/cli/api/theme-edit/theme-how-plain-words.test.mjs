@@ -96,6 +96,18 @@ describe('color names', () => {
       `set q0 warning '#f59e0b'`,
     );
   }, 240_000);
+  it("a color on a status part is that part's, in its status look; a role's color said alone is the role's", async () => {
+    // (Only the info banner's text: never a role color, never every
+    // banner status.)
+    const banner = writes(await how('q0', 'red text on the info banner'));
+    expect(banner[0]).toBe(
+      `set q0 color '#dc2626' --on banner --when status:info`,
+    );
+    expect(banner.some(c => /^set q0 info /.test(c))).toBe(false);
+    expect(writes(await how('q0', 'info red'))[0]).toBe(
+      `set q0 info '#dc2626'`,
+    );
+  }, 240_000);
 });
 
 describe('plain words for looks', () => {
