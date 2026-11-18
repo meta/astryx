@@ -1110,6 +1110,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [onOpenChange, dismiss, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
+    surfaceTarget: 'typeahead-popup',
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the

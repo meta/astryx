@@ -93,6 +93,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
@@ -1278,9 +1279,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1415,6 +1416,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         inside: {},
         attrs: {},
         contains: new Set(),
+        repeats: new Set(),
         tags: new Set(),
         innerCorners: new Set(),
         media: false,
@@ -1525,6 +1527,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         } else if (attr('placeholder') && !attr('value'))
           addPair(target, fg, bg, attr('placeholder'));
       }
+    }
+    // (A part held more than once by the nearest part around it, side by
+    // side: a shortcut's keys, a button group's buttons.)
+    if (ownsTarget) {
+      const nearest = [...stack]
+        .reverse()
+        .find(anc => (anc.all ?? (anc.target ? [anc.target] : [])).length);
+      if (nearest)
+        for (const t of named.map(c => c.slice(7))) {
+          const seen = (nearest.seenParts ??= {});
+          seen[t] = (seen[t] ?? 0) + 1;
+          if (seen[t] === 2)
+            for (const at of nearest.all ??
+              (nearest.target ? [nearest.target] : []))
+              if (at !== t) map[at].repeats.add(t);
+        }
     }
     // (Each part an element carries holds what is inside it: a checkbox
     // list's root is a field too.)
@@ -1637,6 +1655,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
