@@ -31,9 +31,12 @@ describe('playground.mobile', () => {
       ).href
     );
     const playground = (mod.default ?? mod.docs).playground;
-    expect(playground.mobile).toEqual({
-      mobileNav: {defaultIsMobile: true, isOpen: true},
+    expect(playground.mobile.mobileNav).toEqual({
+      defaultIsMobile: true,
+      isOpen: true,
     });
+    // The open menu draws the top bar's links as its own rows.
+    expect(playground.mobile.topNav.props.startContent).toHaveLength(2);
     // (The docsite playground's own defaults stay as they are.)
     expect(playground.defaults).not.toHaveProperty('mobileNav');
   });

@@ -32,8 +32,9 @@ afterAll(() => {
 describe('the census of a mobile layout', () => {
   it("renders AppShell's mobile props over its demo as one more item", async () => {
     const project = await openProject(cwd);
-    expect(project.components.AppShell?.mobile).toEqual({
-      mobileNav: {defaultIsMobile: true, isOpen: true},
+    expect(project.components.AppShell?.mobile?.mobileNav).toEqual({
+      defaultIsMobile: true,
+      isOpen: true,
     });
     const {items} = catalogItems(project);
     const mobile = items.filter(
@@ -42,8 +43,12 @@ describe('the census of a mobile layout', () => {
     expect(mobile).toHaveLength(1);
     const props = /** @type {any} */ (mobile[0].tree).props;
     expect(props.mobileNav).toEqual({defaultIsMobile: true, isOpen: true});
-    // (Over its demo: the top nav it shows on every layout is still there.)
-    expect(props.topNav).toBeTruthy();
+    // The phone menu draws the top bar's links as its own rows.
+    expect(
+      props.topNav.props.startContent.map(
+        (/** @type {any} */ x) => x.props.label,
+      ),
+    ).toEqual(['Inbox', 'Reports']);
   });
 
   it('adds no item for a component that declares no mobile layout', async () => {
