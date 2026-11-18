@@ -1371,15 +1371,6 @@ describe('input reader shapes several', () => {
         [/ --on card$/, / --on dialog$/],
         null,
       ],
-      // Words that name one part stay that part.
-      [
-        'padding',
-        '8px',
-        {on: 'text inputs'},
-        [/ set b padding 8px --on text-input$/],
-        /--on inputs/,
-      ],
-      ['padding', '8px', {on: 'dialog header'}, [/ --on dialog-header$/], null],
       // A flag's label after the value.
       [
         'background',
@@ -1968,12 +1959,15 @@ describe('bare number length px', () => {
       expect(r.run[0]).toMatch(/ padding '4px 8px' --on button --state hover$/);
     });
 
-    it('2: a part named by its class or component names the part', async () => {
+    it('2: a part named by its class or component is read as the part', async () => {
       for (const on of ['.astryx-card', 'astryx-card', '<Card>', 'Card']) {
-        const r = await refusal(() =>
-          themeEditSet('b', 'background', 'red', {cwd, on}),
+        const r = /** @type {any} */ (
+          await themeEditSet('b', 'background', 'red', {cwd, on})
         );
-        expect(r.run[0], on).toMatch(/ background red --on card$/);
+        expect(r.data.setting.on, on).toBe('card');
+        expect(JSON.stringify(r.data.notes), on).toContain(
+          `read \`${on}\` as \`card\``,
+        );
       }
     });
 

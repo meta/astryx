@@ -167,6 +167,7 @@ import {
   unknownVarRef,
   STATE_WORDS,
   partNamed,
+  partNamedByForm,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
@@ -5795,13 +5796,31 @@ async function changeOnce(
       code,
     );
   };
+  // A part typed by a form of its own name (another case, spaces for its
+  // dashes, its plural): the setting is made on that part, and the result
+  // says what was read. (Only a typed set: a saved entry is read as it is
+  // written, and its repair is offered.)
+  const readOn = sub === 'set' ? partNamedByForm(ctx, flags.on) : null;
+  const typedOn = flags.on;
   /** @type {import('./_settings.mjs').Setting} */
   let s;
   try {
     s =
       sub === 'undo' && rawIdx >= 0
         ? data.settings[rawIdx]
-        : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+        : checkSetting(
+            ctx,
+            slug,
+            data,
+            thing,
+            value,
+            readOn ? {...flags, on: readOn} : flags,
+            sub === 'undo',
+          );
+    if (readOn)
+      s.note = [`read \`${typedOn}\` as \`${readOn}\``, s.note]
+        .filter(Boolean)
+        .join('; ');
   } catch (e) {
     // A stored setting this Core no longer knows (a renamed part or
     // property, or a hand edit) can still be removed.
@@ -6358,6 +6377,9 @@ async function changeOnce(
                 `no change: ${s.thing} is already ${s.value}, so nothing was built and no undo step was added`,
               ]
             : []),
+          // (What set read the typed value as: "read mode `light` as
+          // `light-only`".)
+          ...(s.note ? [s.note] : []),
           ...fieldNotes,
           ...r.notes,
           ...(data.settings.length
