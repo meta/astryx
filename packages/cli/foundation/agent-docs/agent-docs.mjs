@@ -105,6 +105,14 @@ const MAX_PROJECT_AGENT_DOC_LINES = 32;
 export const REMOVE_LINE =
   'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
 
+/**
+ * How to share a page as one file, for a share ask only. Agents asked to share
+ * a page otherwise hand-build their own single HTML file, whose controls do
+ * not work.
+ */
+const SHARE_LINE =
+  'When asked to share a page as one file, run `astryx experimental export <page.tsx>`: the file opens anywhere and its controls work; `--reverse` gets the source back.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -560,11 +568,11 @@ const BUILT_CHECK_SINCE = '0.7.4';
  * option.
  * @param {string | null | undefined} version
  */
-function hasBuiltCheck(version) {
+function isReleaseSince(version, since) {
   if (typeof version !== 'string' || !isValidSemver(version)) return false;
   const [release, prerelease] = version.split('-', 2);
-  if (prerelease !== undefined && release === BUILT_CHECK_SINCE) return false;
-  return semverGte(release, BUILT_CHECK_SINCE);
+  if (prerelease !== undefined && release === since) return false;
+  return semverGte(release, since);
 }
 
 /**
@@ -578,13 +586,39 @@ function hasBuiltCheck(version) {
  * @returns {boolean}
  */
 export function projectHasBuiltCheck(dir) {
+  return installedCliHas(dir, BUILT_CHECK_SINCE);
+}
+
+/** The first release whose CLI has `experimental export`. */
+const EXPORT_SINCE = '0.7.17';
+
+/**
+ * Whether the project at `dir` can run `astryx experimental export`, read from
+ * the CLI it installs, as {@link projectHasBuiltCheck} reads `doctor --built`.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+export function projectHasExport(dir) {
+  return installedCliHas(dir, EXPORT_SINCE);
+}
+
+/**
+ * Whether the CLI the project at `dir` installs is release `since` or later.
+ * A canary of `since` itself is not: it may predate the feature.
+ *
+ * @param {string} dir
+ * @param {string} since
+ * @returns {boolean}
+ */
+function installedCliHas(dir, since) {
   const installed = findInstalledPackage(dir, '@astryxdesign/cli');
   if (!installed) return false;
   try {
     const {version} = JSON.parse(
       fs.readFileSync(path.join(installed, 'package.json'), 'utf8'),
     );
-    return hasBuiltCheck(version);
+    return isReleaseSince(version, since);
   } catch {
     return false;
   }
@@ -625,7 +659,7 @@ export const ICON_FINDER_LINE =
  * one; where it is off, the block has no icon line.
  *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean, iconFeatures?: boolean, exportCheck?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -638,6 +672,7 @@ export function generateCompressedIndex(
     agentDocs = [],
     builtCheck = false,
     iconFeatures = false,
+    exportCheck = false,
   } = {},
 ) {
   const run = invocation;
@@ -695,6 +730,9 @@ export function generateCompressedIndex(
   if (builtCheck) {
     lines.push("Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.");
   }
+  // Only for a project whose installed CLI has the command, as for the
+  // doctor line above.
+  if (exportCheck) lines.push(SHARE_LINE);
   lines.push('');
 
   // Rules — the top error-preventers.
@@ -849,6 +887,7 @@ export async function renderAgentDocsBlock(
   return generateCompressedIndex(version, {
     coreDir,
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     invocation: getCliInvocation(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
     topics,
@@ -949,6 +988,7 @@ export function injectAgentsMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   injectXdsBlock(agentsPath, compressedIndex, {
@@ -970,6 +1010,7 @@ export function injectClaudeMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   return injectXdsBlock(claudePath, compressedIndex);
@@ -1757,6 +1798,7 @@ export function installAgentDocs(
     generateCompressedIndex(version, {
       coreDir,
       builtCheck: projectHasBuiltCheck(targetDir),
+      exportCheck: projectHasExport(targetDir),
       zh,
       lang,
       invocation,
