@@ -208,6 +208,7 @@ import {
   seedsInEffect,
   isEditorTemp,
   isLookToken,
+  exactTokens,
   lookCollapsed,
   categoryNotes,
   derivedStatusWords,
@@ -6155,7 +6156,11 @@ async function changeOnce(
         was: before,
         parts: [],
         group: null,
-        changedTokens: lookCollapsed(r.changed, derivedStatusWords(data)).lines,
+        changedTokens: lookCollapsed(
+          r.changed,
+          derivedStatusWords(data),
+          exactTokens(data),
+        ).lines,
         changedPartTokens: r.changedParts ?? [],
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
@@ -7512,7 +7517,8 @@ async function changeOnce(
   // base theme's when the look would draw two hues alike (an accent change
   // says it with the accent's notes).
   if (
-    lookCollapsed(r.changed, derivedStatusWords(data)).look.length &&
+    lookCollapsed(r.changed, derivedStatusWords(data), exactTokens(data)).look
+      .length &&
     dialOfToken !== 'accent'
   ) {
     const look = paletteMapping(
@@ -7607,7 +7613,11 @@ async function changeOnce(
             onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
-      changedTokens: lookCollapsed(r.changed, derivedStatusWords(data)).lines,
+      changedTokens: lookCollapsed(
+        r.changed,
+        derivedStatusWords(data),
+        exactTokens(data),
+      ).lines,
       changedPartTokens: r.changedParts ?? [],
       styled,
       kept,
@@ -10071,8 +10081,11 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      changedTokens: lookCollapsed(committed.changed, derivedStatusWords(prev))
-        .lines,
+      changedTokens: lookCollapsed(
+        committed.changed,
+        derivedStatusWords(prev),
+        exactTokens(prev),
+      ).lines,
       changedPartTokens: committed.changedParts ?? [],
       problems: committed.problems,
       newProblems: [
