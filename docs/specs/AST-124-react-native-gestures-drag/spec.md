@@ -70,8 +70,8 @@ build against (`spec:AST-112/FR12`) to eight native components.
   `DropZone`, `ReorderableList`, `Lightbox`, and the others under "Who uses
   it"), including their gesture numbers (detents, thresholds, springs,
   durations); each component's own record owns them.
-- `AstryxTouchShieldView`: Preview and inspector tooling that belongs to the
-  Preview host package, outside this record.
+- `AstryxTouchShieldView`: Preview and inspector tooling, part of the Astryx
+  app's Preview host (`spec:AST-139`), outside this record.
 - The native stack's back gesture itself, the menu hosts, and the presentation
   hosts, which the Navigation hosts and the Menus and presentation records own.
   This record owns only how a drag yields to them.
