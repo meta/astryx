@@ -140,17 +140,24 @@ describe("a bar's height", () => {
       expect(said(r)).not.toMatch(/saved without it/);
       expect(said(r)).not.toMatch(/reaches top-nav/);
       expect(built('top-nav')).not.toMatch(/calc\(48px/);
+      // (The saved --only is read back: show and a later set still run.)
+      await themeEditShow('b', {cwd});
+      await themeEditSet('b', 'color', '#222222', {cwd, on: 'top-nav-item'});
+      await themeEditUndo('b', {cwd});
       await themeEditUndo('b', {cwd});
     },
     T,
   );
 
   it(
-    'never reaches the items of a list: a menu or a side nav is no bar',
+    'reaches only a bar: never a list\'s items, a menu\'s divider, a trigger or an avatar',
     async () => {
       for (const [prop, value, on] of [
         ['padding', '12px', 'dropdown-menu'],
         ['height', '600px', 'side-nav'],
+        ['height', '300px', 'context-menu'],
+        ['height', '200px', 'collapsible'],
+        ['height', '64px', 'avatar'],
       ]) {
         const r = /** @type {any} */ (
           await themeEditSet('b', prop, value, {cwd, on})
@@ -172,6 +179,22 @@ describe("a bar's height", () => {
     },
     T,
   );
+
+  it(
+    'is no padding with no vertical side',
+    async () => {
+      const r = /** @type {any} */ (
+        await themeEditSet('b', 'padding', '0 24px', {
+          cwd,
+          on: 'app-shell-header',
+        })
+      ).data;
+      expect(said(r)).not.toMatch(/the row inside it/);
+      expect(built('top-nav')).not.toMatch(/"paddingBlock": "0"/);
+      await themeEditUndo('b', {cwd});
+    },
+    T,
+  );
 });
 
 describe("the part map's bar facts", () => {
@@ -185,19 +208,23 @@ describe("the part map's bar facts", () => {
     });
   const row = {display: 'flex', 'align-items': 'center', width: '100%'};
 
-  it('finds a row through a frame, never through a part with a size of its own or one that repeats, and names every row a holder has', () => {
+  it('finds a row through a frame, never through a part with a size of its own or one listed in it, and names every row a holder has', () => {
     const map = {
       bar: rec({height: '40px'}, ['frame', 'nav', 'item', 'card', 'inner']),
       frame: rec({'border-bottom-width': '1px'}, ['nav', 'item']),
-      nav: rec(row, ['item']),
+      nav: rec(row, ['item', 'heading']),
       item: rec({'padding-block': '6px', 'line-height': '20px'}),
       card: rec({padding: '12px'}, ['inner']),
-      inner: rec(row),
+      inner: rec(row, ['icon', 'text']),
       two: rec({}, ['nav', 'inner']),
       menu: {...rec({padding: '4px'}, ['nav']), listed: ['nav']},
+      trigger: {...rec(row, ['icon', 'text']), tags: ['button']},
+      lone: rec(row, ['icon']),
+      holds: rec({}, ['trigger', 'lone']),
     };
     expect(barRows(map, 'bar')).toEqual(['nav']);
     expect(barRows(map, 'menu')).toEqual([]);
+    expect(barRows(map, 'holds')).toEqual([]);
     expect(barRows(map, 'two')).toEqual(['nav', 'inner']);
   });
 
