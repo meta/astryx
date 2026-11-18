@@ -62,7 +62,7 @@ happens between pages.
   development, and the later step is ignored.
 - **FR2 — A step left out does not exist.** The step count ("2 of 3"), Back and
   Next count only the steps in the array. The app makes a step conditional by
-  leaving it out, for example when a gatekeeper hides the control it describes.
+  leaving it out, for example when a feature flag hides the control it describes.
 - **FR3 — The list may change while the tour runs.** A step added or removed
   takes its place at once. When the active step is removed, the step that now
   follows its old position becomes active and Tour reports it through
@@ -74,7 +74,7 @@ happens between pages.
   backdrop. An `activeId` that
   matches no step renders nothing and warns in development.
 - **FR5 — Every end reports why.** `onEnd(reason)` reports `'complete'` (the
-  last step's Done), `'skip'` (Skip), `'close'` (the close control), `'escape'`
+  last step's Done, or an end that FR3 or FR8 makes), `'skip'` (Skip), `'close'` (the close control), `'escape'`
   (FR14) or `'backdrop'` (`component:Tour` FR1). The app sets `activeId`
   to `null` in response.
 
@@ -122,7 +122,8 @@ happens between pages.
 ### Focus and keyboard
 
 - **FR14 — A step is non-modal.** Each callout is a non-modal popover
-  (`spec:AST-116` FR12; `component:Tour` AR1). Tab moves from the callout
+  (`spec:AST-116` FR12; `component:Tour` AR1 covers a step without a
+  backdrop). Tab moves from the callout
   through the page in the browser's order, and the anchor stays operable by
   keyboard, and by pointer when the step has no backdrop (with a backdrop, a
   press on the anchor ends the tour, `component:Tour` FR1). Escape ends the tour with `'escape'` only while focus is
@@ -152,16 +153,26 @@ happens between pages.
 - `component:Tour`: Public concepts gains Steps, Active step, Anchor and
   Missing anchor rows; its Ownership boundary takes placement, step focus and
   controls from FR6–FR17; AR1 points to FR14. DEC-1 and FR1 are unchanged.
+- `family:overlay-dismissal`: its Tour row says Escape ends the tour only
+  while focus is in the callout or on its anchor (FR14).
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
 - Lab `Tour` and `TourStep` take `<TourStep>` children. Core `Tour` takes a
-  `steps` array; the lab doc carries a migration example.
+  `steps` array; its doc carries a migration example from the lab.
 
 FR1 gap: lab steps are `<TourStep>` children, ordered by mount order.
-FR8 gap: a lab anchor that is not in the document when its step starts never
-shows, and nothing reports it.
+FR6 gap: a lab step takes only a ref; it has no lookup function and no
+centered step without an anchor.
+FR7 gap: the lab does not scroll an anchor into view.
+FR8 gap: when a lab anchor is not in the document as its step starts, the
+callout shows unanchored, the ring never appears, and nothing reports it.
 FR11 gap: lab control labels are English only.
-FR5 gap: lab never reports `'skip'`.
+FR12 gap: the lab has no Skip control.
+FR14 gap: lab Escape ends the tour wherever focus is.
+FR15 gap: the lab moves focus into the callout on every step, wherever focus
+was.
+FR17 gap: the lab callout is a labeled section with no dialog role and no
+description.
 
 ## Verification
 
