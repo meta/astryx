@@ -41,6 +41,7 @@ import {
   SAMPLE_SOURCE,
   elementNames,
   pageSource,
+  OPEN_SCENES,
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 import {
@@ -997,6 +998,63 @@ function addInlineStatePaint(project, map) {
 }
 
 /**
+ * The text a part shows only once mounted, in a state Core sets as it runs
+ * (a table's selected row), read on the fill it shows there: each open
+ * scene drawn mounted is rendered on a page of its own and walked, and the
+ * text pairs it adds join the census. The parts it holds keep the records
+ * the catalog gave them (what a part reads at rest is the catalog's); a
+ * part only such a scene draws is added whole. A scene a Core without one
+ * of its parts or hooks cannot draw is left out.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, string>} imports
+ * @param {ReturnType<typeof declarations>} decls
+ * @param {Set<string>} tokens
+ * @param {{map: Record<string, PartRecord>, pairs: TextPair[]}} result
+ */
+async function addMountedPairs(project, imports, decls, tokens, result) {
+  const scenes = OPEN_SCENES.filter(
+    s =>
+      s.mounted &&
+      [...elementNames(s.tree)].every(n => importPathOf(project, n)),
+  );
+  if (!scenes.length) return;
+  const sceneImports = {...imports};
+  for (const n of elementNames(scenes.map(s => s.tree)))
+    sceneImports[n] ??= /** @type {string} */ (importPathOf(project, n));
+  /** @type {string} */
+  let markup;
+  try {
+    ({markup} = await renderGenerated(
+      project,
+      'catalog-mounted.mjs',
+      pageSource({
+        items: [...scenes],
+        imports: sceneImports,
+        theme: null,
+        layout: 'catalog',
+      }),
+      [],
+      {openLayers: true},
+    ));
+  } catch {
+    // (A scene that does not draw adds nothing.)
+    return;
+  }
+  const drawn = walkMarkup(markup, decls, tokens, project.target);
+  for (const [k, rec] of Object.entries(drawn.map))
+    if (!(k in result.map)) result.map[k] = rec;
+  /** @param {TextPair} x */
+  const keyOf = x =>
+    `${x.text}|${x.fg.target}:${x.fg.tokens.join('+') || x.fg.raw}|${x.bg.target}:${x.bg.tokens.join('+') || x.bg.raw}`;
+  const seen = new Set(result.pairs.map(keyOf));
+  for (const x of drawn.pairs)
+    if (!seen.has(keyOf(x))) {
+      seen.add(keyOf(x));
+      result.pairs.push(x);
+    }
+}
+
+/**
  * Build the part data: render the catalog, then walk its markup.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
@@ -1062,6 +1120,7 @@ async function buildPartData(project) {
       )
         result.pairs.push(x);
   }
+  await addMountedPairs(project, imports, decls, tokens, result);
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
@@ -1369,7 +1428,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
   /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>, readerOnly?: boolean}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1403,7 +1462,14 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     if (text !== undefined) {
       const top = stack[stack.length - 1];
       const t = text.trim();
-      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
+      if (
+        t &&
+        top.target &&
+        top.fg &&
+        top.bg &&
+        !top.readerOnly &&
+        !/^skip to/i.test(t)
+      )
         addPair(top.target, top.fg, top.bg, t);
       continue;
     }
@@ -1479,14 +1545,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     // (An element that holds text a reader sees: never an empty one, an
     // icon's box, or text hidden for screen readers alone.)
     const after = html.slice((m.index ?? 0) + m[0].length);
-    const holdsText =
-      !empty &&
-      !/^\s*<svg\b/i.test(after) &&
-      !own.some(
+    // (Hidden for screen readers alone: clipped away, or a box of one
+    // pixel that hides what overflows it, laid out of the flow.)
+    const at = (/** @type {string} */ prop) =>
+      own.find(d => !d.cond && d.prop === prop)?.value.trim();
+    const readerOnly =
+      own.some(
         d =>
           (d.prop === 'clip' && d.value !== 'auto') ||
           (d.prop === 'clip-path' && /inset\(\s*50%/.test(d.value)),
-      );
+      ) ||
+      (/^(absolute|fixed)$/.test(at('position') ?? '') &&
+        at('overflow') === 'hidden' &&
+        [at('width'), at('height')].some(v => /^(0|1px)$/.test(v ?? '')));
+    const holdsText = !empty && !/^\s*<svg\b/i.test(after) && !readerOnly;
     const paints = (
       /** @type {{prop: string, value: string, cond: string}} */ d,
     ) =>
@@ -1619,6 +1691,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           bg = {target, tokens: t, raw: t.length ? null : d.value};
       }
     }
+    // (A state Core paints as the element mounts, as an inline style, a
+    // selected table row's fill: what the element draws, so the ground its
+    // text sits on.)
+    // (Only on a part's own element: a page's own wrapper style is no
+    // state Core paints.)
+    const inline = ownsTarget
+      ? (/\bstyle="([^"]*)"/.exec(attrs)?.[1] ?? '')
+      : '';
+    for (const [, prop, value] of inline.matchAll(
+      /(?:^|;)\s*(color|background-color)\s*:\s*([^;]+)/g,
+    )) {
+      const t = [...expand(value.trim(), env, tokens)];
+      if (!t.length) continue;
+      if (prop === 'color') fg = {target, tokens: t, raw: null};
+      else bg = {target, tokens: t, raw: null};
+    }
     // An input's text is its value, and its placeholder where it has none:
     // attributes, not text nodes, drawn in the input's text color (the
     // placeholder in its own ::placeholder color) on the ground it sits on.
@@ -1736,6 +1824,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         bg,
         cond: condHere,
         owns: ownsTarget,
+        readerOnly: parent.readerOnly || readerOnly,
       });
   }
   // A part that holds other parts (a layout, an outline, a slider's
@@ -1991,7 +2080,14 @@ export const BAR_REACH_THINGS =
   /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/;
 
 /** The elements a control is drawn as: never a bar, nor a bar's row. */
-const CONTROL_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label']);
+const CONTROL_TAGS = new Set([
+  'button',
+  'a',
+  'input',
+  'select',
+  'textarea',
+  'label',
+]);
 
 /**
  * The value a part draws a property with as the census saw it: the one it
@@ -2027,7 +2123,8 @@ export function drawnValue(rec, prop) {
 export function barRows(map, holder) {
   const inside = map[holder]?.contains ?? [];
   /** @param {string} p */
-  const frame = p => !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  const frame = p =>
+    !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
   /** A part drawn as a control (a button, a link, a field). @param {string} p */
   const control = p =>
     (map[p]?.tags ?? []).some(t => CONTROL_TAGS.has(t.toLowerCase()));

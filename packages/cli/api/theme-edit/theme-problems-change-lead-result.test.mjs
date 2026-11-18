@@ -223,7 +223,18 @@ describe('problems a change makes', () => {
           },
         ]),
       );
-      expect(r.data.newProblems).toHaveLength(3);
+      // (The yellow accent's dark wash under a selected row leaves the
+      // row's secondary text faint: a fourth problem, named.)
+      expect(r.data.newProblems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            problem: expect.stringMatching(
+              /^text in text \(.*\) is [\d.]+:1 in dark \(--color-text-secondary on table-row's #[0-9a-f]{6}\)/,
+            ),
+          }),
+        ]),
+      );
+      expect(r.data.newProblems).toHaveLength(4);
       const out = (await text([...ED, 'show', 't'])).trimEnd().split('\n');
       const at = out.findIndex(l => l.startsWith('openProblems:'));
       expect(at).toBeGreaterThan(0);

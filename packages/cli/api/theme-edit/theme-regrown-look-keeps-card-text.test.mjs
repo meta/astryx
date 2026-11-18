@@ -29,7 +29,11 @@ const open = async slug =>
   /** @type {Array<{problem: string}>} */ (
     /** @type {any} */ (await themeEditShow(slug, {cwd})).data.openProblems ??
       []
-  ).map(p => p.problem);
+  )
+    .map(p => p.problem)
+    // (Card text only: a selected table row's wash is measured on its
+    // own, and a regrown look can leave its secondary text faint.)
+    .filter(p => !/ on table-row's /.test(p));
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-regrow-card-text-', FIXTURE_PACKAGES);
