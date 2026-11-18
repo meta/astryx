@@ -106,6 +106,20 @@ describe('Tokenizer status icon', () => {
     });
   });
 
+  it('lands Shift+Tab from after the field on the info-tip, as TextInput does', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Field statusVariant="tooltip" />
+        <button type="button">After</button>
+      </>,
+    );
+    const button = await screen.findByRole('button', {name: 'Error details'});
+    screen.getByRole('button', {name: 'After'}).focus();
+    await user.tab({shift: true});
+    expect(button).toHaveFocus();
+  });
+
   it('keeps focus on the info-tip when it is clicked', async () => {
     const user = userEvent.setup();
     render(<Field statusVariant="tooltip" />);
