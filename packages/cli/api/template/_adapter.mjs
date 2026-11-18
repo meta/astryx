@@ -94,7 +94,7 @@ export async function loadComponentOwners(cwd) {
       const known = (listed ? owners : looked).get(name);
       if (known) return known;
       /** @type {string[]} */
-      let found = [];
+      let found;
       try {
         found = adapter
           .resolveOwners(coreDir, name, integrations)
