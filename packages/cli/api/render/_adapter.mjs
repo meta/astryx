@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
 import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -53,6 +52,7 @@ import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved, servingRootPackages} from '../../foundation/runtime/package-root.mjs';
+import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -408,30 +408,55 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/** @param {unknown} e @param {string} [cwd] the project the page belongs to */
-function asAstryxError(e, cwd = process.cwd()) {
+/**
+ * @param {unknown} e
+ * @param {string} pageDir the folder of the page the render read
+ * @param {string} [cwd] the folder the render runs from
+ */
+function asAstryxError(e, pageDir, cwd = process.cwd()) {
   if (e instanceof RenderError) {
     const code = /** @type {import('../../foundation/response/error-codes.mjs').ErrorCode} */ (e.code);
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
+    let message = e.message;
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
       // The integration's install guidance first, then the install command
-      // the render named in the project's package manager, else the
-      // project's install step for every package it found.
+      // the render named, then one line for every package in the page's
+      // project's package manager.
       const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
       const guidance = installGuidanceFor(packages, cwd);
       const needs = `install ${packages.join(', ')}, which this render needs`;
+      const what = packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports';
+      const pageRoot = findPackageRoot(pageDir);
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
+      } else if (pageRoot == null) {
+        // In a folder no package.json holds, an install would make the folder
+        // a project, so the message names the packages for the project that
+        // uses the page instead, as template and build do.
+        message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        const {line, note} = installStepFor(packages, cwd);
-        const what = packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports';
-        suggestions.push({name: line, reason: note ? `${what} (${note})` : what});
+        // With the CLI's version ranges, as template and build give it; none
+        // when the project's lockfiles disagree.
+        const step = installCommandFor(packages, pageDir, cwd);
+        const line = step.installGuidance ?? step.installCommand;
+        const runRoot = findPackageRoot(cwd);
+        if (line && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot)) {
+          suggestions.push({name: line, reason: what});
+        } else if (line) {
+          // Run from here, the line would add the packages to this folder's
+          // package.json, not to the page's, so the message names the page's
+          // package and the line to run there.
+          const where = path.relative(cwd, pageRoot) || '.';
+          message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in ${where}, the package that holds this page: from there, run ${line}`;
+        } else if (step.noCommandReason) {
+          message = `${message}. ${step.noCommandReason}`;
+        }
       }
     }
-    return new AstryxError(e.message, suggestions, code);
+    return new AstryxError(message, suggestions, code);
   }
   const err = /** @type {any} */ (e);
   if (typeof err?.code === 'string' && err.code.startsWith('ERR_RENDER_')) {
@@ -504,7 +529,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
       throw e;
     }
   } catch (e) {
-    throw asAstryxError(e, cwd);
+    throw asAstryxError(e, path.dirname(input), cwd);
   }
   for (const {name, dir} of page.fromSet) {
     let version = null;
