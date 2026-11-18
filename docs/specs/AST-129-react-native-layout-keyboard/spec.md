@@ -132,7 +132,7 @@ owns the keyboard on native React Native.
     initial layout is already padded; the provider's live insets win from then
     on.
 - **FR4 — The window's metrics are a synchronous read.** `AstryxSafeArea` has
-  `isAvailable()`, `version()` and `windowMetrics()`: the key window's insets
+  `isAvailable()` and `windowMetrics()`: the key window's insets
   and frame read from the native side on each call, or `null` without the
   module or a window. `initialWindowMetrics` is the same read once, when the
   package loads. A malformed answer reads as `null`; nothing throws.
@@ -335,9 +335,9 @@ owns the keyboard on native React Native.
 | `AstryxWindowStatusBar`  | native component (Fabric Native Component) | `barStyle`, `barVisibility`                                                                             | none           | none                                                                                                | Android      |
 | `AstryxSelectableText`   | native component (Fabric Native Component) | `allowFontScaling`, `colorScheme`, `content`, `isSelectable`, `maxFontSizeMultiplier`, `selectionColor` | `setSelection` | `onSelectableTextContentSizeChange`, `onSelectableTextLinkPress`, `onSelectableTextSelectionChange` | iOS, Android |
 
-| Contract         | Kind                                | Methods                                                                               | Platforms    |
-| ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------- | ------------ |
-| `AstryxSafeArea` | native module (Turbo Native Module) | `getConstants` (`version`, `initialWindowMetrics`: the key window's insets and frame) | iOS, Android |
+| Contract         | Kind                                | Methods                                                                    | Platforms    |
+| ---------------- | ----------------------------------- | -------------------------------------------------------------------------- | ------------ |
+| `AstryxSafeArea` | native module (Turbo Native Module) | `getConstants` (`initialWindowMetrics`: the key window's insets and frame) | iOS, Android |
 
 `Intl` is a requirement on the JavaScript engine (FR15), not a native
 contract. `AstryxSelectableText`'s `content` is the blocks as JSON, with sizes in dp
@@ -380,6 +380,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
 - Details `spec:AST-140/FR2`, `spec:AST-140/FR3`, `spec:AST-112/FR7` and
   `spec:AST-112/FR9` for
   this group's probes, fallbacks and app root.
+- Adds the `./safe-area-context` entry to the entries `spec:AST-112/FR5`
+  lists.
 - `spec:AST-099` is unchanged; it keeps the keyboard in browsers.
 - The package's `Intl` engine requirement is owned here; FR16's plural rules
   follow `spec:AST-112/DEC-10` (no global installed by an import).
