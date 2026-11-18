@@ -81,10 +81,11 @@ async function labelBoxes(page: Page): Promise<LabelBox[]> {
         label: text.textContent ?? '',
         lines: Math.round(textBox.height / lineHeight),
         sizerLines: Math.round(sizerBox.height / lineHeight),
-        centerX: textBox.left + textBox.width / 2,
-        centerY: textBox.top + textBox.height / 2,
-        cellCenterX: cellBox.left + cellBox.width / 2,
-        cellCenterY: cellBox.top + cellBox.height / 2,
+        // Measured from the tab's own box: selection can scroll the strip.
+        centerX: textBox.left + textBox.width / 2 - tabBox.left,
+        centerY: textBox.top + textBox.height / 2 - tabBox.top,
+        cellCenterX: cellBox.left + cellBox.width / 2 - tabBox.left,
+        cellCenterY: cellBox.top + cellBox.height / 2 - tabBox.top,
         tabWidth: tabBox.width,
         tabHeight: tabBox.height,
       };

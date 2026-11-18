@@ -1249,3 +1249,25 @@ export const WrappedLabel: Story = {
     );
   },
 };
+
+export const LinkTabs: Story = {
+  name: 'Link tabs',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Tabs that navigate render as links when given `href`. The label sits centered in the width its selected (semibold) weight reserves, as in a button tab.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('overview');
+    return (
+      <TabList value={value} onChange={setValue}>
+        <Tab value="overview" label="Overview" href="#overview" />
+        <Tab value="activity" label="Activity" href="#activity" />
+        <Tab value="settings" label="Settings" href="#settings" />
+      </TabList>
+    );
+  },
+};
