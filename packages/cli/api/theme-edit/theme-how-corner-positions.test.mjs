@@ -121,8 +121,13 @@ describe('the corners an ask names', () => {
     expect(await writes('round only the bottom corners of menus 6px')).toEqual([
       "border-radius '0 0 6px 6px' --on menus",
     ]);
+    // (Three corners named: logical longhands, as a right-to-left page
+    // mirrors them.)
     expect(await writes('tooltips 4px corners except the top left')).toEqual([
-      "border-radius '0 4px 4px 4px' --on tooltip",
+      'border-start-start-radius 0 --on tooltip',
+      'border-start-end-radius 4px --on tooltip',
+      'border-end-start-radius 4px --on tooltip',
+      'border-end-end-radius 4px --on tooltip',
     ]);
     // Rounded with no size names only the corners it rounds: tabs already
     // rounded there need nothing, and the other corners are never
@@ -294,6 +299,9 @@ describe('the corners an ask names', () => {
     ).toEqual(['start-start', 'start-end', 'end-start', 'end-end']);
     expect(await writes('tabs rounded on top and bottom')).toEqual([]);
     expect(await writes('tabs rounded on the left and right')).toEqual([]);
+    expect(await writes('4px corners on top and bottom of cards')).toEqual([
+      'border-radius 4px --on card',
+    ]);
     // (An except after "on <part>" is the corners' except, never a part.)
     expect(await writes('4px corners on tabs except the bottom')).toEqual([
       "border-radius '4px 4px 0 0' --on tab",
@@ -304,6 +312,22 @@ describe('the corners an ask names', () => {
     expect(await writes('square corners on inputs except the top')).toEqual([
       'border-end-start-radius 0 --on inputs',
       'border-end-end-radius 0 --on inputs',
+    ]);
+  }, 240_000);
+
+  it('writes a radius of four only for the top, the bottom or every corner', async ctx => {
+    if (needBases(ctx)) return;
+    // (Left and right corners swap in a right-to-left page: their logical
+    // longhands, never a physical radius of four.)
+    expect(await writes('round only the left corners of tabs 6px')).toEqual([
+      'border-start-start-radius 6px --on tab',
+      'border-start-end-radius 0 --on tab',
+      'border-end-start-radius 6px --on tab',
+      'border-end-end-radius 0 --on tab',
+    ]);
+    expect(await writes('4px left corners on tabs')).toEqual([
+      'border-start-start-radius 4px --on tab',
+      'border-end-start-radius 4px --on tab',
     ]);
   }, 240_000);
 
