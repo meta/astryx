@@ -106,7 +106,7 @@ export const docs = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
+        'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected). On a row with onClick or href, the marker sits on the row\'s button or link, which takes focus.',
       default: 'false',
     },
     {
@@ -210,7 +210,7 @@ export const docsZh = {
       name: 'isSelected',
       type: 'boolean',
       description:
-        '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
+        '选中状态；设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。带 onClick 或 href 的行把它放在获得焦点的按钮或链接上。',
       default: 'false',
     },
     {
@@ -263,7 +263,8 @@ export const docsDense = {
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
     isDisabled:
       'Disabled state; interactive rows stay keyboard-reachable and cannot activate.',
-    isSelected: 'Selected state; sets aria-current="true".',
+    isSelected:
+      'Selected state; sets aria-current="true" (on the button or link of an onClick or href row).',
     itemKey: "The row's identity for List animatedLayout and the key a reorderable List's onReorder reports; a row without one changes at once and has no reorder handle.",
   },
 };

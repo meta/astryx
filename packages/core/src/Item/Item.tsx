@@ -61,6 +61,7 @@ import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
@@ -265,7 +266,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * the state is exposed as `aria-selected`; otherwise (e.g. a listitem or a
    * bare div, where `aria-selected` is invalid ARIA) it falls back to
    * `aria-current="true"` so assistive tech is still told which item is
-   * selected. A consumer-provided `aria-current` always wins.
+   * selected. A consumer-provided `aria-current` always wins. On an
+   * interactive row (`onClick`, `href` or `interactiveRef`) the marker sits on
+   * the element that takes focus, so a screen reader announces it there.
    * @default false
    */
   isSelected?: boolean;
@@ -774,6 +777,35 @@ export function Item({
   // (axe: aria-allowed-attr), so selection stays visual-only there — callers
   // that need selection semantics pass a permitted role.
   const allowsAriaSelected = role != null && ARIA_SELECTED_ROLES.has(role);
+  // The current marker: the caller's, or the selection fallback above.
+  const ariaCurrent =
+    restProps['aria-current'] ??
+    (isSelected && !allowsAriaSelected ? true : undefined);
+  // A screen reader announces the marker on the element that takes focus. On
+  // an interactive row that is the row's own button or link, or the control
+  // it delegates to. A row whose root takes focus (a parent role, a link
+  // root) keeps the marker on the root.
+  const currentOnFocusTarget =
+    !hasParentRole &&
+    !isLinkRoot &&
+    (isDelegate || href != null || onClick != null);
+  // A delegated control is the caller's element, so the row marks it while
+  // the row is current, unless the caller marks it already.
+  const controlCurrent =
+    ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
+  useIsomorphicLayoutEffect(() => {
+    const control = interactiveRef?.current;
+    if (
+      !isDelegate ||
+      control == null ||
+      controlCurrent === undefined ||
+      control.hasAttribute('aria-current')
+    ) {
+      return;
+    }
+    control.setAttribute('aria-current', String(controlCurrent));
+    return () => control.removeAttribute('aria-current');
+  }, [isDelegate, interactiveRef, controlCurrent]);
 
   // The description element's id, published through ItemDescriptionContext so a
   // control Item renders in a slot can point at it with `aria-describedby`.
@@ -913,6 +945,7 @@ export function Item({
           {...(isDisabled
             ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
             : {href, target, rel})}
+          aria-current={ariaCurrent}
           {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -926,6 +959,7 @@ export function Item({
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
+          aria-current={ariaCurrent}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled
             ? disabledInteractionProps<HTMLButtonElement>()
@@ -1015,10 +1049,8 @@ export function Item({
       // bare div, etc.). For those, convey selection via aria-current — valid
       // on any element — so the state still reaches AT. Written after
       // {...restProps} so it must defer to a consumer-provided aria-current.
-      aria-current={
-        restProps['aria-current'] ??
-        (isSelected && !allowsAriaSelected ? true : undefined)
-      }
+      // On an interactive row the marker moves to the focusable element.
+      aria-current={currentOnFocusTarget ? undefined : ariaCurrent}
       aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}
       {...mergeProps(

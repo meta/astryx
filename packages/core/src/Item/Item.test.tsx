@@ -817,6 +817,138 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-current', 'step');
   });
 
+  describe('current marker on an interactive row', () => {
+    it('puts the marker on the button of an onClick row, not the root', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('puts the marker on the link of an href row, not the root', () => {
+      render(
+        <Item label="Billing" isSelected href="/billing" data-testid="row" />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('moves a caller-provided marker to the focusable element', () => {
+      render(
+        <Item
+          label="Billing"
+          href="/billing"
+          aria-current="page"
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('marks the control a delegated row hands focus to', () => {
+      function Row({isSelected}: {isSelected: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+      rerender(<Row isSelected={false} />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('keeps a delegated control’s own marker', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current="page">
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('keeps the marker on the root of a row with a parent role', () => {
+      render(
+        <Item
+          label="Billing"
+          role="menuitem"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps the marker on a link root', () => {
+      const RootLink = ({ref, ...props}: React.ComponentProps<'a'>) => (
+        <a ref={ref} {...props} />
+      );
+      render(
+        <Item
+          as={RootLink}
+          label="Billing"
+          href="/billing"
+          isSelected
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps data-selected on the root for styling', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+    });
+  });
+
   // ===========================================================================
   // Highlighted state
   // ===========================================================================

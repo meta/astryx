@@ -787,7 +787,11 @@ describe('List', () => {
     );
     const item = container.querySelector('.astryx-item');
     expect(item).not.toHaveAttribute('aria-selected');
-    expect(item).toHaveAttribute('aria-current', 'true');
+    // The marker sits on the row's button, the element that takes focus.
+    expect(item).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+      'Selected',
+    );
   });
 
   it('applies neither aria-selected nor aria-current when not selected', () => {
