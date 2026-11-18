@@ -262,6 +262,13 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   its own and names both looks as `look`. With no set installed, the answer
   says so (`reason`), names the Astryx definitions that match
   (`definitions`), built-in ones first, and says how to get a set (`next`).
+  `astryx search` with no `--type` answers an icon ask the same way: when a
+  set is installed and one word of the query as typed is `icon`, `icons`, a
+  set's name, or an icon export name (`SearchIcon`), and is not a component
+  or hook name (`Icon`, `IconButton`), the matches that answer
+  follow `results` as a trailing `icons` section, `{matchCount, results}`, of
+  at most 3 (fewer when `--limit` is smaller), each with its `set`, `id`,
+  `import` line and command. Every other search does no icon work.
 - **FR7 — One icon and the installed sets.** `<set>/<id>` answers
   `icon.detail` with every variant's import line; `--list` answers `icon.list`
   with each set's coverage of built-in, Astryx, and its own definitions, the

@@ -38,6 +38,28 @@
  */
 
 /**
+ * One installed icon that answers a search that asks for an icon, as the icon
+ * finder (`astryx experimental icon <words>`) ranks it.
+ * @typedef {object} IconSearchEntry
+ * @property {'icon'} domain
+ * @property {string} name - `<set>/<id>`.
+ * @property {string} set - The icon set's name.
+ * @property {string} id - The icon's id in its set.
+ * @property {string} package - The npm package that ships the set.
+ * @property {number} score - The icon finder's score (higher is stronger).
+ * @property {string} reason - Why the icon matched (e.g. `word "delete"`).
+ * @property {string} import - The import line for the icon.
+ * @property {string} command - Follow-up command that reads the icon and its variants (`astryx experimental icon <set>/<id>`).
+ */
+
+/**
+ * The icons that answer a search that asks for an icon.
+ * @typedef {object} SearchIconSection
+ * @property {number} matchCount - How many installed icons answer, before the cap.
+ * @property {IconSearchEntry[]} results - The best of them, at most 3 (fewer when `limit` is smaller).
+ */
+
+/**
  * astryx --json search <query>
  * @typedef {object} SearchResponse
  * @property {'search'} type
@@ -45,6 +67,11 @@
  * @property {string} data.query
  * @property {number} data.matchCount - How many candidates matched the query in total, before `limit` was applied. `results` is the bounded slice of that set, so `matchCount > results.length` means the answer was capped.
  * @property {SearchResultEntry[]} data.results
+ * @property {SearchIconSection} [data.icons] - Present only when an icon set
+ *   is installed, the search has no `type`, the query asks for an icon (one
+ *   word as typed is `icon` or `icons`, an installed set's name, or an icon
+ *   export name such as `SearchIcon`, and is not a component or hook name),
+ *   and an icon answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,

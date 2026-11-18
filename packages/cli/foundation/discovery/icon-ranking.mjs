@@ -239,6 +239,9 @@ function sameWord(a, b) {
   return short.length >= 2 && (long === `${short}s` || long === `${short}es`);
 }
 
+/** Words that ask for an icon outright. */
+const ICON_WORDS = new Set(['icon', 'icons']);
+
 /**
  * Words that phrase a query without naming anything: left out of a query of
  * several words that nothing answers as typed (`go home` asks for `home`).
@@ -252,9 +255,36 @@ const FILLER_WORDS = new Set([
   'my',
   'of',
   'for',
-  'icon',
-  'icons',
+  ...ICON_WORDS,
 ]);
+
+/** A word written as an icon export name: `SearchIcon`, `ChevronDownIcon`. */
+const ICON_EXPORT_NAME = /^[A-Z][A-Za-z0-9]*Icon$/u;
+
+/**
+ * Whether a query asks for an icon: one word as typed is `icon` or `icons` in
+ * any case, names a set in `setNames`, or is written as an icon export name
+ * (`SearchIcon`). A word that is the exact name of a component or hook in
+ * `declaredNames` asks for that entry, not an icon, so `Icon`, `NavIcon` and
+ * `IconButton` stay lookups.
+ * @param {string} query
+ * @param {{setNames: string[], declaredNames: string[]}} names the installed
+ *   sets' names, and the names of the components and hooks search reads
+ */
+export function asksForIcon(query, {setNames, declaredNames}) {
+  const sets = new Set(setNames.map(name => name.toLowerCase()));
+  const declared = new Set(declaredNames);
+  return query
+    .trim()
+    .split(/\s+/u)
+    .some(word => {
+      if (declared.has(word)) return false;
+      const lower = word.toLowerCase();
+      return (
+        ICON_WORDS.has(lower) || sets.has(lower) || ICON_EXPORT_NAME.test(word)
+      );
+    });
+}
 
 /**
  * A query as typed: trimmed and lower-case, one space between words.
