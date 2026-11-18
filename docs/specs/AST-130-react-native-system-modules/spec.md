@@ -108,8 +108,9 @@ small, OQ1 keeps the scope open.
 - Sharing, opening links and Settings, keep-awake, and orientation lock. None
   is a core module; each one is an opt-in capability of its own when Astryx
   provides it.
-- The design of the theme's appearance model and its scopes; this record owns
-  only the native appearance override.
+- The design of the theme's appearance model and its scopes. This record owns
+  the native appearance override, and OQ5 asks how theme colours resolve when
+  the appearance flips.
 - Haptic intensities per moment. The theme's haptic tokens own them
   (`spec:AST-112/FR9`).
 - Each component's use of these modules beyond what "Who uses it" names; the
@@ -152,7 +153,7 @@ small, OQ1 keeps the scope open.
     accessibility snapshot, the app's version, build, identifier and install
     time, the linked capabilities, the component revisions, the named contract
     features, and the process start. Synchronous members (`isAvailable()`,
-    `version()`, `getOverride()`, `getRunOverride()`, `current()`, `app`,
+    `getOverride()`, `getRunOverride()`, `current()`, `app`,
     `capabilities`, `launch`, `componentRevision(name)`) never throw; they
     answer `null`, `'system'`, or all-false where the module or the constant is
     absent.
@@ -649,7 +650,8 @@ bytes and network state are small wrappers
 where the ecosystem has good libraries. They stay in the core because the
 package takes no runtime dependency outside React and React Native
 (`spec:AST-112/FR2`), and because each needs the result vocabulary, the
-Preview policy and an Astryx Stage simulation. OQ1 keeps the scope open.
+Preview policy and an Astryx Stage simulation. DEC-5 holds until OQ1 is
+answered.
 
 ## Open questions
 
