@@ -239,7 +239,8 @@ isPossible})`.
     `{ok: true, photo}` (`uri`, a JPEG in the app's temporary or cache folder;
     `width` and `height` in pixels with the orientation applied; `facing`;
     `takenAt`; `isSimulated`) or a failure with `not-ready`, `timeout`
-    (`timeoutMs`), `unmounted`, or `capture-failed`.
+    (`timeoutMs`), `cancelled` (the view went away, `spec:AST-140/FR3`), or
+    `capture-failed`.
   - The view reads `AstryxPermissions.get('camera')` (`spec:AST-130/FR9`) and
     mounts the native
     camera only when it is `granted`. `undetermined` reports
@@ -349,7 +350,10 @@ isPossible})`.
 
 ## Current-state impact
 
-- None beyond `spec:AST-112` and `spec:AST-140`. This record details
+- One departure from `spec:AST-140/FR4`: FR6 sends in-memory bytes across
+  the native boundary in slices that are never written to a file, where
+  `spec:AST-140/FR4` passes bytes as a `file:` URI. DEC-3 decides it.
+- Otherwise none beyond `spec:AST-112` and `spec:AST-140`. This record details
   `spec:AST-112`'s FR3 (`media` and `camera` stay opt-in) and FR7 (the probes
   and a camera view that never prompts), and `spec:AST-140`'s FR3 (the
   group's closed reasons) and FR5 (the group's revision-1 baseline).
