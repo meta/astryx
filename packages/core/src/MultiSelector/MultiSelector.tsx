@@ -1940,6 +1940,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const {
     isKeyboardHighlight,
     hoveredIndex,
+    setHoveredIndex,
     noteHighlightMove,
     onKeyDown,
     onItemMouseEnter,
@@ -2246,6 +2247,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           // In a grid the option cell is the click target, so a press on the
           // action cell never toggles (spec:AST-058 FR4).
           onClick={isGrid ? undefined : toggle}
+          // A press is pointer input, so the pressed option draws no ring,
+          // even when a key moved the highlight there.
+          onPointerDown={isGrid ? undefined : () => setHoveredIndex(flatIndex)}
           onMouseEnter={
             isGrid ? undefined : () => onItemMouseEnter(item, flatIndex)
           }
@@ -2283,6 +2287,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                 role="gridcell"
                 id={`${getItemId(flatIndex)}-option`}
                 onClick={toggle}
+                onPointerDown={() => setHoveredIndex(flatIndex)}
                 onMouseEnter={() => onItemMouseEnter(item, flatIndex, 'option')}
                 {...stylex.props(styles.optionCell)}>
                 {content}
@@ -2317,6 +2322,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       highlightedCell,
       isKeyboardHighlight,
       hoveredIndex,
+      setHoveredIndex,
       getActionCellId,
       renderOption,
       indicatorPosition,

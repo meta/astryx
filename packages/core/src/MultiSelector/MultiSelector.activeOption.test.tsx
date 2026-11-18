@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MultiSelector} from './MultiSelector';
@@ -13,13 +13,13 @@ const OPTIONS = [
   {value: 'Cherry', label: 'Cherry'},
 ];
 
-function renderField() {
+function renderField(onChange: (value: string[]) => void = () => {}) {
   render(
     <MultiSelector
       label="Fruit"
       options={OPTIONS}
       value={[]}
-      onChange={() => {}}
+      onChange={onChange}
     />,
   );
   return screen.getByRole('combobox', {name: 'Fruit'});
@@ -100,6 +100,24 @@ describe('MultiSelector active option indicator', () => {
     fireEvent.mouseEnter(row);
     expect(activeOption(field)).toBe(row);
     expect(hasRing(row)).toBe(true);
+  });
+
+  it('keeps the fill alone when a press toggles the option a key made active', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const field = renderField(onChange);
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    const row = activeOption(field);
+    expect(hasRing(row)).toBe(true);
+    // A press on the row under a resting pointer: no pointer move happens.
+    fireEvent.pointerDown(row);
+    fireEvent.click(row);
+    expect(onChange).toHaveBeenCalledWith(['Banana']);
+    const pressed = activeOption(field);
+    expect(pressed).toHaveTextContent('Banana');
+    expect(hasRing(pressed)).toBe(false);
   });
 
   it('draws no ring on the opening highlight when a pointer press opens the list after keyboard input', async () => {

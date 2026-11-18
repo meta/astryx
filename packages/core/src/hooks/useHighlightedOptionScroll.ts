@@ -43,6 +43,13 @@ interface WaitingHover {
   onHighlight?: () => void;
 }
 
+/** What useHighlightedOptionHover returns. */
+export interface HighlightedOptionHover {
+  highlightFromHover: HighlightFromHover;
+  /** Hold the highlight after a key that keeps it on the same option. */
+  holdHighlight: () => void;
+}
+
 /**
  * Keep the highlighted option visible during keyboard navigation — but not for
  * hover highlights. Hover must highlight only: scrollIntoView moves the next
@@ -55,12 +62,6 @@ interface WaitingHover {
  * under a still mouse, and the browser reports the row under it as entered;
  * that row takes the highlight only once the pointer moves or presses.
  */
-export interface HighlightedOptionHover {
-  highlightFromHover: HighlightFromHover;
-  /** Hold the highlight after a key that keeps it on the same option. */
-  holdHighlight: () => void;
-}
-
 export function useHighlightedOptionHover({
   isOpen,
   highlightedIndex,
