@@ -1018,10 +1018,10 @@ describe('rows and columns windowing together', () => {
     expect(cell).not.toBeNull();
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
-    // The scroll owner drops a scroll event while a measurement frame is
-    // pending (focusing the cell can schedule one), and the window then
-    // follows that frame's measurement. A second scroll report and two more
-    // frames let every scheduled measurement land before the rows are read.
+    // CI once read the first window here with the focused row still mounted,
+    // and the failure did not reproduce locally. A second scroll report
+    // publishes the scroll position again, and two more frames let it land,
+    // before the rows are read.
     await viewport.landWrites();
     const rows = mountedRows(container);
     // Row 1 stays as the island before the window from row 47.
