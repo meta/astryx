@@ -8300,7 +8300,7 @@ function styleKeyOf(key) {
  */
 function withoutWhere(text) {
   let out = '';
-  for (let i = 0; i < text.length; ) {
+  for (let i = 0; i < text.length;) {
     if (text.startsWith(':where(', i)) {
       let depth = 0;
       let j = i + ':where'.length;
@@ -8403,11 +8403,19 @@ export function findOverrides(cssText, theme) {
       const last = props.filter(
         (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
       );
+      // Core writes a rule once per place a mode is decided (the root, the
+      // system, each media surface): one copy per variant and property.
+      const seenResting = new Set();
       for (const r of rules.filter(x => x.state == null))
         for (const prop of last) {
           // The override may set the property or one of its longhands.
           if (ownChoice(kebab(prop), r.attrs)) continue;
-          if (r.declared.some(d => sameProperty(d, kebab(prop))))
+          const key = keyOf(r.attrs);
+          if (
+            !seenResting.has(`${key} ${prop}`) &&
+            r.declared.some(d => sameProperty(d, kebab(prop)))
+          ) {
+            seenResting.add(`${key} ${prop}`);
             extra.push({
               target,
               key: keyOf(r.attrs),
@@ -8415,6 +8423,7 @@ export function findOverrides(cssText, theme) {
               value: decls[prop],
               ...(mode ? {mode} : {}),
             });
+          }
         }
       // A state setting on the plain part (a whole-part hover) loses the
       // same way to a variant's own rule in that state, and to its resting
@@ -9441,11 +9450,28 @@ async function buildThemeSteps(ctx, slug, data) {
         (() => {
           // The variant's own declarations where the copy would go: in the
           // setting's mode block when it has one, and in its state.
+          // A setting for both modes counts the variant's mode blocks too,
+          // where both modes set the property: a copy before them, at the
+          // same weight, would show in neither.
           const rule = ownRule(x.target, x.key);
-          const scoped = x.mode
-            ? {...rule, ...(rule[`@${x.mode}`] ?? {})}
-            : rule;
-          return (x.state ? scoped[x.state] : scoped) ?? {};
+          /** @param {Record<string, any> | undefined} r */
+          const at = r => (x.state ? r?.[x.state] : r) ?? {};
+          if (x.mode) return {...at(rule), ...at(rule[`@${x.mode}`])};
+          const light = at(rule['@light']);
+          const dark = at(rule['@dark']);
+          return {
+            ...at(rule),
+            ...Object.fromEntries(
+              Object.entries(light).filter(([k]) =>
+                Object.keys(dark).some(
+                  d =>
+                    d === k ||
+                    coversProperty(kebab(d), kebab(k)) ||
+                    coversProperty(kebab(k), kebab(d)),
+                ),
+              ),
+            ),
+          };
         })(),
       ).some(([k, v]) => {
         if (k.startsWith(':')) return false;
