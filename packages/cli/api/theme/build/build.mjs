@@ -5705,9 +5705,10 @@ async function themeBuildInternal(
         ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`
         : '';
 
-    // #3658: also emit attribute-specific rules so <Theme mode> can override
-    // color-scheme. Inspect root and rule-owned values, not generated CSS, which
-    // also carries theme-independent data-token defaults with light-dark().
+    // A theme with light-dark() values pins the scheme where html forces a
+    // mode (a Theme's mode, or the host's data-theme). Inspect root and
+    // rule-owned values, not generated CSS, which also carries
+    // theme-independent data-token defaults with light-dark().
     const themeOwnValues = JSON.stringify(
       [
         resolvedTheme.tokens ?? {},
