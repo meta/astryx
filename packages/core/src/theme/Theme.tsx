@@ -44,18 +44,19 @@ import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
-import {colorVars, typographyVars} from './tokens.stylex';
+import {colorVars, typeScaleVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {SystemSchemeContext, ThemeContext} from './useTheme';
+import {SystemSchemeContext, ThemeContext, useRootScheme} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
 } from '../privateAttributes/reducedMotion.stylex';
+import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
 
 /**
@@ -81,6 +82,9 @@ const wrapperStyles = stylex.create({
     display: 'contents',
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
+    // Text that only inherits its size takes this theme's body size, a
+    // nested theme's own included.
+    fontSize: typeScaleVars['--text-body-size'],
   },
   light: {
     colorScheme: 'light',
@@ -273,15 +277,19 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  * Hook to sync theme attributes to document.documentElement for the root provider.
  * Skipped for nested Theme instances.
  *
- * Syncs two attributes:
+ * Syncs three attributes:
  * - `data-theme` (light/dark) — reset.css maps this to color-scheme, controlling
  *   browser chrome (scrollbars, native form controls, date pickers).
  * - `data-astryx-theme` (theme name) — enables @scope'd theme CSS to reach elements
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
+ * - the scheme the root Theme draws in, when its mode forces one or the page
+ *   draws in one (`privateAttributes/scheme.ts`), so a theme's color-mode
+ *   blocks under a system root follow the page; with neither, none is named
+ *   and the reader's preference decides.
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (Core's stylesheet and reset.css default the
- *   root to color-scheme: light dark)
+ * - 'system' → removes data-theme (reset.css defaults the root to
+ *   color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -292,6 +300,7 @@ function useRootThemeSync(
   mode: ThemeMode,
   themeName: string,
   reducesMotion: boolean,
+  scheme: 'light' | 'dark' | null,
 ): void {
   // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
@@ -311,6 +320,7 @@ function useRootThemeSync(
 
     // Sync theme name so @scope rules reach portals/fallback viewports.
     document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    setRootScheme(document.documentElement, scheme);
     setRootReducedMotionMark(document.documentElement, reducesMotion);
     if (reducesMotion) {
       document.documentElement.style.setProperty(REDUCED_MOTION_PROPERTY, '1');
@@ -321,10 +331,11 @@ function useRootThemeSync(
     return () => {
       document.documentElement.removeAttribute('data-theme');
       document.documentElement.removeAttribute(dataAttr('theme'));
+      setRootScheme(document.documentElement, null);
       setRootReducedMotionMark(document.documentElement, false);
       document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
     };
-  }, [isNested, mode, themeName, reducesMotion]);
+  }, [isNested, mode, themeName, reducesMotion, scheme]);
 }
 
 /**
@@ -376,12 +387,20 @@ export function Theme({
   // marks its root.
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
-  useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+  const forcesScheme = mode === 'light' || mode === 'dark';
+  const pageScheme = useRootScheme(!isNested && !forcesScheme);
+  useRootThemeSync(
+    isNested,
+    mode,
+    theme.name,
+    reducesMotion,
+    forcesScheme ? mode : pageScheme,
+  );
   useRootTextSizeSync(isNested);
 
   // A system Theme takes the scheme around it. That is the page root's, or a
-  // system Theme's above it. Core's stylesheet and reset.css make the root
-  // follow the reader's preference, and a host can set its own. Under a Theme
+  // system Theme's above it. reset.css makes the root follow the reader's
+  // preference, and a host can set its own; with neither, the page is light. Under a Theme
   // that forces light or dark, a system Theme declares `light dark`. Then it
   // follows the reader's preference again.
   const colorSchemeStyle =

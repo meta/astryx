@@ -35,10 +35,33 @@ import {
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
+import {CACHE_LIMIT_BYTES} from '../foundation/fs/cache-eviction.mjs';
 
 usePackedCli();
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+  it.skipIf(!hasModuleHooks)(
+    'leaves its folder within the limit when the command that kept it fails',
+    () => {
+      const tmp = keptTmp('failed-command-trim');
+      const dir = path.join(tmp, CACHE_NAME);
+      // An entry made long ago that alone holds more than the limit (a
+      // sparse file, so it takes no space).
+      const left = path.join(dir, 'gather-left-over-limit.json');
+      fs.writeFileSync(left, '');
+      fs.truncateSync(left, CACHE_LIMIT_BYTES + 1024 * 1024);
+      const old = new Date(Date.now() - 3600_000);
+      fs.utimesSync(left, old, old);
+      // A lookup that finds nothing keeps its name index, then fails
+      // through process.exit.
+      const failed = run(['component', 'NoSuchWidgetAnywhere'], {tmp});
+      expect(failed.status).toBe(1);
+      expect(fs.readdirSync(dir).length).toBeGreaterThan(1);
+      expect(fs.existsSync(left)).toBe(false);
+    },
+    120_000,
+  );
+
   it.skipIf(!hasModuleHooks)(
     'is not used after an integration is installed or removed',
     async () => {

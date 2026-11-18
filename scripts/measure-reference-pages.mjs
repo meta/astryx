@@ -293,6 +293,29 @@ async function measurePages(distDir, pages) {
   return sizes;
 }
 
+/** What `--help` prints. */
+export const USAGE = `Usage: pnpm size:pages --base <ref|dist> [options]
+
+Prints the first-load JavaScript of the reference pages that
+docs/architecture/component-import-boundaries.md INV10 names (docs, form,
+menu, table), base against head: minified and gzip bytes, and the change.
+Each side is Core built as its build:esm script builds it, bundled as a
+production app.
+
+Options:
+  --base <ref|dist>     Git ref or built dist directory to compare from (required)
+  --head <ref|dist>     Git ref or built dist directory to compare (default: the working tree)
+  --unused-on <pages>   Comma-separated pages that render the changed component
+                        without its optional feature. Prints PASS or FAIL per page
+                        against INV10's limit of 0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B),
+                        and exits 1 on a failure
+  --page <name=A,B>     Adds a page that imports components A and B
+  --json                Prints the comparison as JSON
+  -h, --help            Prints this help
+
+Example:
+  pnpm size:pages --base origin/main --unused-on table,menu`;
+
 export function parseArgs(argv) {
   const args = {
     base: null,
@@ -300,7 +323,11 @@ export function parseArgs(argv) {
     unusedOn: [],
     extraPages: {},
     json: false,
+    help: false,
   };
+  if (argv.includes('--help') || argv.includes('-h')) {
+    return {...args, help: true};
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === '--base') args.base = argv[++index];
@@ -314,15 +341,17 @@ export function parseArgs(argv) {
     else throw new Error(`Unknown argument: ${flag}`);
   }
   if (args.base == null) {
-    throw new Error(
-      'Usage: pnpm size:pages --base <ref|dist> [--head <ref|dist>] [--unused-on <page,…>] [--page name=A,B] [--json]',
-    );
+    throw new Error(USAGE);
   }
   return args;
 }
 
 async function main(argv) {
   const args = parseArgs(argv);
+  if (args.help) {
+    console.log(USAGE);
+    return 0;
+  }
   const pages = {
     ...parseReferencePages(fs.readFileSync(path.join(REPO, RECORD), 'utf8')),
     ...args.extraPages,

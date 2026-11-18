@@ -2324,7 +2324,8 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
  * first. Otherwise it suggests the docs whose own name it is, or whose route
  * it spells with hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
- * none shares a word with the argument). When the argument matches a component, hook or template
+ * none shares a word with the argument, with the names a slip or two from it
+ * first). When the argument matches a component, hook or template
  * (exact, folded or last segment), the command that reads that entry joins the list as
  * foundation/suggest/other-command.mjs places it, and the list keeps its
  * length; when no suggested doc
@@ -2394,7 +2395,13 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       orderDocPages(tree, topic, suggestions, false),
     );
   } else if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions, {closest: true});
+    // Every topic and namespace is listed, so a near name (`tokns` for
+    // tokens, `colr` for color) only moves to the front, from four letters.
+    suggestions = orderRouteSuggestions(
+      topic,
+      suggestions,
+      everyDoc ? {closest: true, typos: true, slipFrom: 4} : {closest: true},
+    );
   }
   // In place of the every-doc list: the docs a typed word names by their
   // route, title or keywords.

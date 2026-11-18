@@ -1,15 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render`, forward: one page module to ONE
+ * @file `astryx experimental export`, forward: one page module to ONE
  * self-contained static HTML file. The page renders on the server with the
  * project's own React and Astryx components; its own StyleX compiles in
  * memory; Core's stylesheets are cut to the rules the markup uses; local
  * images become data: URIs; and the page's source rides along so
  * `--reverse` can give it back exactly.
  *
- * The file needs no network and runs no script, so it works inside a
- * sandboxed frame with a strict content security policy. Its colors follow
+ * The file needs no network, and it carries the page's script, which draws
+ * the live page over the markup, so it works inside a sandboxed frame that
+ * allows scripts under a strict content security policy. Its colors follow
  * `color-scheme` (and a `data-theme` of `light` or `dark` on the root), since
  * Astryx tokens use light-dark().
  *
@@ -21,8 +22,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import postcss from 'postcss';
+import {importUrl} from '../fs/import-url.mjs';
 import {
   assetDataUri,
   isAssetBytes,
@@ -32,7 +34,9 @@ import {
 } from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
-import {embeddedPathProblem} from './embedded-files.mjs';
+import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
+import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
@@ -50,7 +54,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -64,7 +68,10 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
+ * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
+ * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
  */
 
 /** An error carrying a render error code. */
@@ -135,6 +142,29 @@ function carryScopeOf(dir, cwd) {
   return cwd && (dir === cwd || isInside(dir, cwd)) ? cwd : dir;
 }
 
+/**
+ * The folder whose `public/` holds the files a `/` path names: the page's
+ * project, when it holds `public/`. Else the nearest folder at or above the
+ * page's that holds `public/`, inside the folder whose files the page
+ * carries (a site that shares its project with others). Else the project's
+ * folder, else the page's.
+ * @param {string} dir the page's folder
+ * @param {string} scope the folder whose files the page carries
+ */
+function siteRootOf(dir, scope) {
+  /** @param {string} d */
+  const holdsPublic = d =>
+    fs.statSync(path.join(d, 'public'), {throwIfNoEntry: false})?.isDirectory() === true;
+  const project = projectOf(dir);
+  if (project && holdsPublic(project)) return project;
+  for (let d = dir; d === scope || isInside(d, scope); d = path.dirname(d)) {
+    if (holdsPublic(d)) return d;
+    // The walk ends at the scope; at the filesystem root, dirname is the root.
+    if (d === scope || path.dirname(d) === d) break;
+  }
+  return project ?? dir;
+}
+
 /** @param {string} s */
 const escapeHtml = s =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -151,7 +181,7 @@ const escapeHtml = s =>
 function rootThemeAttrs(markup) {
   for (const t of scanHtml(markup)) {
     if (t.kind !== 'start') continue;
-    const attrs = new Map(t.attrs);
+    const attrs = new Map(t.attrs.map(([name, value]) => /** @type {[string, string]} */ ([name, value])));
     if (!attrs.has('data-astryx-theme')) continue;
     return ['data-astryx-theme', 'data-theme']
       .filter(a => attrs.has(a))
@@ -670,7 +700,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean, buildScript?: boolean, esbuild?: string}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -688,6 +718,104 @@ async function runPage(input, timeoutMs, warnings) {
     throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
   warnings.push(segmenterWarning());
   return again;
+}
+
+/**
+ * The markup with each link out of the file opening in a new tab, as the
+ * file's script opens it once it runs (client-bundle.mjs): a viewer's frame
+ * cannot follow a link out. A link that names its own target keeps it.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function linksOpenNewTabs(markup) {
+  return markup.replace(/<a\b([^>]*)>/g, (tag, /** @type {string} */ attrs) => {
+    const href = /\shref="([^"]*)"/.exec(attrs)?.[1];
+    if (href === undefined || /\starget="/.test(attrs) || !LINK_OUT.test(href.trim())) return tag;
+    const rel = /\srel="([^"]*)"/.exec(attrs);
+    const rels = new Set([...(rel ? rel[1].split(/\s+/).filter(Boolean) : []), 'noopener', 'noreferrer']);
+    return `<a${rel ? attrs.replace(rel[0], '') : attrs} target="_blank" rel="${[...rels].join(' ')}">`;
+  });
+}
+
+/**
+ * The markup without `autofocus`. The file's script owns focus once it draws
+ * the page, as the app does. A viewer's cross-origin frame blocks focus that
+ * markup asks for, and logs an error.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function withoutAutofocus(markup) {
+  let out = '';
+  let at = 0;
+  for (const token of scanHtml(markup)) {
+    if (token.kind !== 'start') continue;
+    for (const [name, , start, end] of token.attrs) {
+      if (name !== 'autofocus') continue;
+      // The attribute goes with the spaces before it; the reader names
+      // where its text starts and ends, so every other attribute stays as
+      // written.
+      // Not when a `/` follows: `<input title=x/>` would read as title="x/".
+      let from = start;
+      if (markup[end] !== '/') {
+        while (from > token.start && /[\t\n\f\r ]/.test(markup[from - 1])) from--;
+      }
+      out += markup.slice(at, from);
+      at = end;
+    }
+  }
+  return at === 0 ? markup : out + markup.slice(at);
+}
+
+/**
+ * The page's script with each string the markup's rewrite replaced (an
+ * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
+ * same carried data, so the page the script draws shows what the first paint
+ * showed. Only a quoted string that is exactly that value changes, never a
+ * longer string that holds it.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @returns {string}
+ */
+export function withCarriedPaths(script, rewrites) {
+  let out = script;
+  for (const [was, now] of rewrites) {
+    if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
+    for (const quote of ['"', "'", '`']) {
+      const literal = `${quote}${was}${quote}`;
+      // Text the page shows (`children: "./photo.png"`) stays as written.
+      out = out
+        .split(literal)
+        .map((part, i, parts) =>
+          i === parts.length - 1 ? part : /\bchildren:\s*$/.test(part) ? `${part}${literal}` : `${part}${quote}${now}${quote}`,
+        )
+        .join('');
+    }
+  }
+  return out;
+}
+
+/**
+ * A call of the script's `carried(sha256, prefix)`, which reads an image from
+ * the embedded source. It starts only where a name starts, so a long run of
+ * name characters (a large string in the page) is read once, not once per
+ * character.
+ */
+const CARRIED_CALL = /(?<![\w$])[A-Za-z_$][\w$]*\((["'])([0-9a-f]{64})\1,\s*(["'])(data:[^"']*;base64)\3\)/g;
+
+/**
+ * The script with each image the embedded source does not carry written in
+ * as its data: URI (`uriOf` gives it), so the image still shows once the
+ * script draws the page.
+ * @param {string} script
+ * @param {Set<string>} carried the SHA-256 of each file the source carries
+ * @param {(sha256: string, prefix: string) => string | null} uriOf
+ */
+export function withUncarriedImages(script, carried, uriOf) {
+  return script.replace(CARRIED_CALL, (call, _q, sha, _p, prefix) => {
+    if (carried.has(sha)) return call;
+    const uri = uriOf(sha, prefix);
+    return uri === null ? call : JSON.stringify(uri);
+  });
 }
 
 /**
@@ -726,7 +854,7 @@ export function cssUrlRef(m) {
  * and for callers that say what a page will not show.
  * @param {string} ref as written in src, poster or url()
  * @param {{dir: string, root: string}} at the folder it is relative to,
- *   and the project root (for `/` paths, `public/` first)
+ *   and the site's root, whose `public/` holds the files `/` paths name
  * A reference is URL text: it names the file its percent-escapes decode to
  * (`a%20b.png` is "a b.png"), as a browser and the app's bundler read it.
  * A file that cannot be read (no permission) is `unreadable`.
@@ -747,11 +875,15 @@ export function assetRef(ref, at) {
     named = clean;
   }
   if (!isAssetPath(named)) return null;
-  const candidates = named.startsWith('/')
-    ? [path.join(at.root, 'public', named), path.join(at.root, named)]
-    : [path.resolve(at.dir, named)];
-  const found = candidates.find(c => fs.existsSync(c));
-  if (!found) return {kind: 'missing', ref: clean};
+  const publicDir = path.join(at.root, 'public');
+  const found = named.startsWith('/')
+    ? path.join(publicDir, named)
+    : path.resolve(at.dir, named);
+  // A `/` path is served from public/ only; one that climbs out of it names
+  // no file of the site.
+  if (named.startsWith('/') && !isInside(found, publicDir))
+    return {kind: 'missing', ref: clean};
+  if (!fs.existsSync(found)) return {kind: 'missing', ref: clean};
   /** @type {fs.Stats | undefined} */
   let st;
   try {
@@ -769,13 +901,26 @@ export function assetRef(ref, at) {
 }
 
 /**
+ * The public/ folder a `/` path is read from, as a path from the page's
+ * folder (`public/`, `../../public/`), whichever file names it: the page or
+ * a stylesheet in another folder.
+ * @param {{dir: string, root: string, pageDir?: string}} at
+ */
+function publicFolderOf(at) {
+  const rel = path.relative(at.pageDir ?? at.dir, path.join(at.root, 'public')).split(path.sep).join('/');
+  return `${rel}/`;
+}
+
+/**
  * Inline local images (src, srcset, poster and CSS url()) as data: URIs. A
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean}} ctx
+ * @param {{dir: string, pageDir?: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>}} ctx
  *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
- *   as it is and named, as a missing one is, rather than refused
+ *   as it is and named, as a missing one is, rather than refused;
+ *   `rewrites`: each attribute value the markup's rewrite replaced, as the
+ *   page wrote it, with what it became
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
@@ -802,7 +947,9 @@ function inlineAssets(text, kind, ctx) {
           code: 'missing-asset',
           message:
             named.kind === 'missing'
-              ? `${clean} was not found next to the page, so it is left as is and will not show.`
+              ? clean.startsWith('/')
+                ? `${clean} was not found in ${publicFolderOf(ctx)}, where a path from the site's root is read, so it is left as is and will not show.`
+                : `${clean} was not found next to the page, so it is left as is and will not show.`
               : named.kind === 'unreadable'
                 ? `${clean} cannot be read (no permission), so it is left as is and will not show.`
                 : `${clean} is not a regular file (a pipe, a device or a folder), so it is not read and will not show.`,
@@ -830,8 +977,7 @@ function inlineAssets(text, kind, ctx) {
       return null;
     }
     ctx.counted.add(`file:${found}`);
-    // A relative path names a file that is part of the page: carry it.
-    if (!clean.startsWith('/')) ctx.localAssets.add(found);
+    ctx.localAssets.add(found);
     return assetDataUri(found);
   };
   /** @param {string} value */
@@ -844,11 +990,14 @@ function inlineAssets(text, kind, ctx) {
     });
   if (kind === 'css') return urls(text);
   return text
-    .replace(/\s(src|poster)="([^"]*)"/g, (whole, attr, ref) => {
+    // React writes `srcSet` as it is spelled in JSX; HTML reads attribute
+    // names in any case.
+    .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
       const uri = resolveRef(ref);
+      if (uri) ctx.rewrites?.set(decodeAttr(ref), uri);
       return uri ? ` ${attr}="${uri}"` : whole;
     })
-    .replace(/\ssrcset="([^"]*)"/g, (whole, set) => {
+    .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
       const parts = decodeAttr(set)
         .split(',')
         .map(part => {
@@ -856,7 +1005,9 @@ function inlineAssets(text, kind, ctx) {
           const uri = ref ? resolveRef(ref) : null;
           return [uri ?? ref, ...rest].join(' ');
         });
-      return ` srcset="${parts.join(', ').replace(/"/g, '&quot;')}"`;
+      const rewritten = parts.join(', ');
+      if (rewritten !== decodeAttr(set)) ctx.rewrites?.set(decodeAttr(set), rewritten);
+      return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
     })
     .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
       // The attribute holds escaped text: rewrite the CSS it means, then
@@ -864,6 +1015,26 @@ function inlineAssets(text, kind, ctx) {
       const css = urls(decodeAttr(style));
       return ` style="${css.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
     });
+}
+
+/**
+ * The function Core's naming module builds a part's class with, from the Core
+ * the page uses, so the namespace comes from Core and not from the CLI. Null
+ * when the page has no Core, or its Core has no naming module that loads.
+ * @param {string} entry
+ * @param {ServedSet | null} served
+ * @returns {Promise<((part: string) => string) | null>}
+ */
+async function coreClassNamer(entry, served) {
+  const file = resolveServed('@astryxdesign/core/naming', entry, served);
+  if (!file) return null;
+  try {
+    const {stableClassName} = await importUrl(pathToFileURL(file).href);
+    return typeof stableClassName === 'function' ? stableClassName : null;
+  } catch {
+    // A Core whose naming module does not load keeps the cut as before.
+    return null;
+  }
 }
 
 /**
@@ -898,7 +1069,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -909,20 +1080,41 @@ const SCHEME_CSS =
  *   names such files itself). With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
- *   the page rendered with, and the markup as rendered.
+ *   the page rendered with, and the markup as rendered. The file also
+ *   carries the page's script (client-bundle.mjs): it draws the page over
+ *   its markup in the browser, so the page's controls work. The markup sits
+ *   in one element the script draws into, and the stylesheet keeps the rules
+ *   any of the page's modules can use, not only the markup's. esbuild, a
+ *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
+ *   resolves from); a page whose script cannot be built fails the render.
+ *   `markupOnly` renders the markup and its styles without the script, for a
+ *   caller that shows the markup itself (the theme editor); it writes no file.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
-  // The project's folder, else the page's: where its tsconfig.json and
-  // public/ images are read.
+  // The project's folder, else the page's: where its tsconfig.json is read
+  // and paths in messages start.
   const root = projectOf(dir) ?? dir;
   const scope = carryScopeOf(dir, options.cwd);
+  // Where a `/` path's public/ folder is.
+  const site = siteRootOf(dir, scope);
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
+  /** @type {string | undefined} */
+  let esbuild;
+  if (!options.markupOnly) {
+    esbuild = findEsbuild(options.esbuildFrom) ?? undefined;
+    if (!esbuild) {
+      throw new RenderError(
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
+      );
+    }
+  }
   const message = await runPage(
-    {entry, root, scope, served, openLayers: options.openLayers === true},
+    {entry, root, scope, served, openLayers: options.openLayers === true, buildScript: esbuild !== undefined, esbuild},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );
@@ -934,7 +1126,7 @@ export async function renderPage(entry, options = {}) {
     );
   }
   /** @type {string} */
-  let markup = message.markup;
+  let markup = withoutAutofocus(linksOpenNewTabs(message.markup));
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
@@ -994,11 +1186,15 @@ export async function renderPage(entry, options = {}) {
 
   const ctx = {
     dir,
-    root,
+    // A stylesheet's own folder replaces `dir` for its url()s; a warning
+    // still names folders from the page's.
+    pageDir: dir,
+    root: site,
     warnings,
     counted: new Set(),
     localAssets: /** @type {Set<string>} */ (new Set()),
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
+    rewrites: /** @type {Map<string, string>} */ (new Map()),
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
@@ -1032,6 +1228,18 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
+  /** The page's script; none in a markup-only render. @type {string | null} */
+  const script = typeof message.script === 'string' ? message.script : null;
+  // The script draws what the markup does not show yet (a menu as it opens,
+  // the next tab), so the rules every class name it holds needs stay too.
+  // Core builds a part's class at run time from the part's name
+  // (`banner-icon` -> `astryx-banner-icon`), so each name also keeps the
+  // class Core's naming module makes from it.
+  const tokens = script?.match(/[A-Za-z_][\w-]*/g) ?? [];
+  const coreClass = script ? await coreClassNamer(entry, served) : null;
+  const kept = script
+    ? new Set([...used, ...tokens, ...(coreClass ? tokens.map(coreClass) : [])])
+    : used;
   // A page that draws elements in a state (hovered, focused, pressed) marks
   // them; its stylesheet then applies those states' rules to them too.
   const states = markup.includes(' data-astryx-state="');
@@ -1053,7 +1261,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, used, {states}), 'css', {
+        return inlineAssets(cutCss(own, kept, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1114,8 +1322,10 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
-  // The file runs no script, so a media query the page asks in JavaScript
-  // keeps the answer it got on the server, whatever the reader's screen.
+  // A media query the page asks in JavaScript gets its server answer in the
+  // markup. The file paints that answer first and asks again when its script
+  // runs; a viewer that blocks scripts keeps the server answer, and so does
+  // a markup-only render.
   const screenQueries = [
     ...new Set(
       /** @type {{call: string}[]} */ (message.screenQueries ?? []).map(
@@ -1126,11 +1336,14 @@ export async function renderPage(entry, options = {}) {
   if (screenQueries.length > 0) {
     warnings.push({
       code: 'screen-query',
-      message: `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
+      message: script
+        ? `The page asks ${screenQueries.join(', ')} in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`
+        : `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
     });
   }
   // A chart the render did not draw is an empty box: a ResponsiveContainer
-  // holds only its sizing box, and a chart of fixed size an empty wrapper.
+  // holds only its sizing box, and a chart of fixed size an empty wrapper. The
+  // file's script draws it when it runs.
   const blankCharts =
     (
       markup.match(
@@ -1143,7 +1356,9 @@ export async function renderPage(entry, options = {}) {
   if (blankCharts > 0) {
     warnings.push({
       code: 'chart-size',
-      message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+      message: script
+        ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
+        : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
     });
   }
   if (message.chartsAlone) {
@@ -1158,7 +1373,9 @@ export async function renderPage(entry, options = {}) {
     const why = causes[message.chartsAlone] ?? causes.error;
     warnings.push({
       code: 'chart-size',
-      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
+      message: script
+        ? `${why}, so each chart was drawn by itself for the first paint, as the first render gave it: until the file's script draws the page again, a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`
+        : `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
     });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
@@ -1181,12 +1398,21 @@ export async function renderPage(entry, options = {}) {
   // Images and fonts the page or a stylesheet names by a relative path
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
+  /**
+   * Local files the page uses that the file cannot carry: a module, a
+   * stylesheet or an image from outside the folder it carries from, which no
+   * reverse writes, and a Sass or Less stylesheet. A package's own files
+   * are not the page's.
+   * @type {string[]}
+   */
+  const uncarried = [...(/** @type {string[]} */ (message.uncarried ?? []))];
   for (const sheet of carriedCss) {
-    if (
-      !isInside(sheet, scope) ||
-      path.relative(scope, sheet).split(path.sep).includes('node_modules')
-    )
+    if (path.relative(scope, sheet).split(path.sep).includes('node_modules'))
       continue;
+    if (!isInside(sheet, scope)) {
+      if (!uncarried.includes(sheet)) uncarried.push(sheet);
+      continue;
+    }
     if (!files.includes(sheet)) files.push(sheet);
   }
   /** Assets named in a warning already, so each is named once. @type {Set<string>} */
@@ -1199,18 +1425,19 @@ export async function renderPage(entry, options = {}) {
    * @param {string} how how the page uses it, for the warning
    */
   const carryAsset = (asset, how) => {
-    if (
-      !isInside(asset, scope) ||
-      path.relative(scope, asset).split(path.sep).includes('node_modules')
-    )
+    if (path.relative(scope, asset).split(path.sep).includes('node_modules'))
       return;
+    if (!isInside(asset, scope)) {
+      if (isFileAt(asset) && !uncarried.includes(asset)) uncarried.push(asset);
+      return;
+    }
     if (files.includes(asset) || notCarried.has(asset)) return;
     /** @param {string} why */
     const leaveOut = why => {
       notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so experimental import cannot give it back.`,
       });
     };
     /** @type {Buffer} */
@@ -1261,16 +1488,39 @@ export async function renderPage(entry, options = {}) {
       continue;
     }
     for (const ref of assetRefsOf(text, file)) {
-      const asset = path.resolve(path.dirname(file), ref);
-      if (!isInside(asset, named)) continue;
-      if (isFileAt(asset)) {
-        carryAsset(
-          asset,
-          `named in ${path.relative(dir, file).split(path.sep).join('/')}`,
-        );
+      const how = `named in ${path.relative(dir, file).split(path.sep).join('/')}`;
+      /** @param {string} f */
+      const local = f => isInside(f, named) && isFileAt(f);
+      /** The file the string names in the browser: a path from the site's root, or, for a relative string, from the page's folder (the file's address), not the module's. @type {string | null} */
+      let shown;
+      if (ref.startsWith('/')) {
+        const found = assetRef(ref, {dir, root: site});
+        shown = found?.kind === 'file' ? found.file : null;
+      } else {
+        // The file the module names beside it, which a restore lays out
+        // where the module's own folder finds it.
+        const beside = path.resolve(path.dirname(file), ref);
+        if (local(beside)) carryAsset(beside, how);
+        // A stylesheet's url() is its own folder's file, which its inlined
+        // rules already carry; only a module's string reaches the script.
+        if (/\.css$/i.test(file)) continue;
+        shown = path.resolve(dir, ref);
+        if (!local(shown)) shown = null;
+      }
+      if (!shown) continue;
+      carryAsset(shown, how);
+      // An image the page draws only later (the next view, a row below the
+      // fold) shows from that file's carried data once the script draws it,
+      // as the first paint shows the images it draws. The same string in two
+      // folders names one file in the browser, so it gets one file's data.
+      if (files.includes(shown) && !ctx.rewrites.has(ref)) {
+        ctx.rewrites.set(ref, assetDataUri(shown));
       }
     }
   }
+  // The script draws the page again with the paths the page wrote, so each
+  // carried image keeps showing, the first paint's and the ones drawn later.
+  const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
   // Paths are kept relative to the folder that holds every file: the page's
   // folder, or an ancestor when the page imports from above it, but never one
   // from which the page's own path holds a name a reverse refuses (a
@@ -1295,16 +1545,57 @@ export async function renderPage(entry, options = {}) {
   const ordered = [entry, ...files.filter(f => f !== entry)];
   /** @type {{path: string, bytes: Buffer}[]} */
   const embedded = [];
+  /**
+   * Files the page uses that the file does not carry, so --reverse cannot
+   * give them back: the note and the result name each one.
+   * @type {string[]}
+   */
+  const leftOut = [];
   for (const f of ordered) {
     const rel = path.relative(base, f).split(path.sep).join('/');
-    if (f !== entry && embeddedPathProblem(rel)) {
+    const problem = f === entry ? null : embeddedPathProblem(rel);
+    if (problem) leftOut.push(rel);
+    if (problem?.toolConfig) {
+      const fix = carriedNameFor(rel);
+      warnings.push({
+        code: 'not-carried',
+        message:
+          fix.action === 'rename'
+            ? `${rel} is not carried: its name reads as a tool's configuration, which experimental import never writes. The page shows it, but experimental import cannot give it back. If it holds the page's data, rename it, such as ${fix.name}, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.`
+            : `${rel} is not carried: it is a tool's configuration, which experimental import never writes. The page shows what it reads from it, but experimental import cannot give it back. Move the values the page reads into a file of its own, such as ${fix.name}, to carry them.`,
+      });
+      continue;
+    }
+    if (problem) {
       warnings.push({
         code: 'not-embedded',
-        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so --reverse cannot give it back.`,
+        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so experimental import cannot give it back.`,
       });
       continue;
     }
     embedded.push({path: rel, bytes: fs.readFileSync(f)});
+  }
+  for (const asset of notCarried) {
+    leftOut.push(path.relative(base, asset).split(path.sep).join('/'));
+  }
+  // In a project, a render carries from the project's folder wherever it
+  // runs, so only moving the file inside it carries it.
+  const inProject = projectOf(dir) !== null;
+  for (const f of uncarried) {
+    // A file the render carries (a JSON file, stylesheet or image from above
+    // the page's folder widens the folder it carries from) is not left out.
+    if (files.includes(f)) continue;
+    const rel = path.relative(base, f).split(path.sep).join('/');
+    if (leftOut.includes(rel)) continue;
+    leftOut.push(rel);
+    // A Sass or Less stylesheet already has its missing-asset warning.
+    if (/\.(scss|sass|less)$/i.test(f)) continue;
+    warnings.push({
+      code: 'not-embedded',
+      message: inProject
+        ? `${rel} is not carried: it is outside the project's folder, which a render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Move it inside the project's folder.`
+        : `${rel} is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
+    });
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
     .exec(markup)?.[1]
@@ -1316,7 +1607,32 @@ export async function renderPage(entry, options = {}) {
       ? decodeAttr(heading)
       : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
-  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const style = `<style>${SCHEME_CSS}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  // With a script, the markup sits in the one element the script draws into,
+  // which takes no box of its own.
+  const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
+  // An image the embedded source leaves out (under a dot-folder, say) keeps
+  // its own data: URI in the script.
+  const carriedSha = new Set(embedded.map(e => sha256(e.bytes)));
+  /** @type {Map<string, Buffer>} */
+  const imageBytes = new Map();
+  for (const f of files) {
+    if (!isAssetPath(f)) continue;
+    try {
+      const bytes = fs.readFileSync(f);
+      imageBytes.set(sha256(bytes), bytes);
+    } catch {
+      // A file that went away since the page imported it stays as written.
+    }
+  }
+  const pageScript =
+    drawn === null
+      ? null
+      : withUncarriedImages(drawn, carriedSha, (sha, prefix) => {
+          const bytes = imageBytes.get(sha);
+          return bytes ? `${prefix},${bytes.toString('base64')}` : null;
+        });
+  const scriptTag = pageScript ? `<script>${pageScript}</script>\n` : '';
   let html;
   if (options.output) {
     // The charset and generator metas come first: a browser reads the
@@ -1351,6 +1667,7 @@ export async function renderPage(entry, options = {}) {
         : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
+      notCarried: leftOut,
       packages,
       install: Object.entries(packages)
         .filter(([name]) => !isServedPackage(name, []))
@@ -1373,17 +1690,28 @@ export async function renderPage(entry, options = {}) {
       const rel = carried.get(path.resolve(named));
       if (rel && aliasOnly(spec)) aliases[spec] = rel;
     }
+    // The public/ folder the render read `/` paths from, when the file
+    // carries files from it, so a reverse expects them there and not in
+    // another public/ the tree holds.
+    const publicRel = path.relative(base, path.join(site, 'public')).split(path.sep).join('/');
+    const publicDir =
+      publicRel && !publicRel.startsWith('..') && !path.isAbsolute(publicRel) &&
+      embedded.some(f => f.path.startsWith(`${publicRel}/`))
+        ? publicRel
+        : null;
     const record = {
       ...(facts.cli ? {cli: facts.cli} : {}),
       page: facts.page,
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
+      ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
+      ...(publicDir ? {publicDir} : {}),
       markup: {
-        sha256: sha256(asParsed(markup)),
+        sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),
         text: Buffer.from(
-          JSON.stringify({title, runs: textRuns(markup)}),
+          JSON.stringify({title, runs: textRuns(body)}),
         ).toString('base64'),
       },
     };
@@ -1391,15 +1719,15 @@ export async function renderPage(entry, options = {}) {
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n${scriptTag}</body></html>\n`;
   } else {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded)}${scriptTag}</body></html>\n`;
   }
   return {
     html,
@@ -1415,6 +1743,8 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
+    ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     fromSet: message.fromSet ?? [],
+    ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
   };
 }
