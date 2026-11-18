@@ -18,6 +18,7 @@ import {
   moduleExportSource,
   moduleExportVerdict,
   moduleExportsName,
+  resolveLocalModule,
   staticExportObject,
 } from './module-exports.mjs';
 import {recordReads} from '../fs/read-record.mjs';
@@ -613,5 +614,19 @@ describe('a re-export of the package itself', () => {
       reason:
         'set.js re-exports Star from "@acme/icons", another package this check does not read.',
     });
+  });
+});
+
+describe('resolveLocalModule for a bundler', () => {
+  it('reads a .js-family specifier as the TypeScript file of its stem, as TypeScript does', () => {
+    const from = write('page.ts', '');
+    const ts = write('helper.ts', '');
+    const tsx = write('view.tsx', '');
+    const viaJsx = write('widget.ts', '');
+    expect(resolveLocalModule('./helper.js', from, {bundler: true})).toBe(ts);
+    expect(resolveLocalModule('./view.js', from, {bundler: true})).toBe(tsx);
+    expect(resolveLocalModule('./view.jsx', from, {bundler: true})).toBe(tsx);
+    // A .jsx name also stands for a .ts file when no .tsx file is there.
+    expect(resolveLocalModule('./widget.jsx', from, {bundler: true})).toBe(viaJsx);
   });
 });

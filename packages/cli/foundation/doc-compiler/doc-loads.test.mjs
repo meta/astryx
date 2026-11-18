@@ -61,8 +61,8 @@ const RUNNERS = {
     sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
-    runs: 'recorded built theme modules through the shared app-theme loader',
-    sites: ['importThemeArtifact'],
+    runs: "recorded built theme modules through the shared app-theme loader, and the app's package manager to install the Astryx packages a shared theme imports",
+    sites: ['child_process.spawnSync', 'importThemeArtifact'],
   },
   'api/theme-edit/_context.mjs': {
     runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
@@ -197,11 +197,18 @@ const RUNNERS = {
       'import ../experimental-theme.doc.mjs',
     ],
   },
-  'clients/cli/commands/experimental/render.mjs': {
+  'clients/cli/commands/experimental/export.mjs': {
     runs: SELF_DOCS,
     sites: [
       'import ../../../../api/render/render.doc.mjs',
-      'import ../experimental-render.doc.mjs',
+      'import ../experimental-export.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/import.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-import.doc.mjs',
     ],
   },
   'clients/cli/commands/manifest.mjs': {
@@ -450,7 +457,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
+    runs: "the page `astryx experimental export` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
     sites: [
       '.import() ×12',
       'createJiti ×2',
@@ -479,8 +486,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
-    sites: ['child_process.fork', 'child_process.spawnSync'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',

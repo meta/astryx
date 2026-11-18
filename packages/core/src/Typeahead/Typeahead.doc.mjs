@@ -286,8 +286,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'SVG icon component displayed at the start of the input.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',

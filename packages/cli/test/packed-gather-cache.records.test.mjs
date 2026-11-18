@@ -37,9 +37,15 @@ import {
   templatesEntries,
   allInodes,
   expectWarmHit,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
+
+/** @param {string} text */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * What each kept entry in a temp folder's cache folder holds, by kind, once
@@ -121,6 +127,25 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       `the transpile cache in ${path.join(tmp, 'astryx', 'transpiled')} keeps its copies in 256 subfolders, each holding at most 1/256 of that, and drops the copies made longest ago first.`,
     );
+    // Text prints only the brief: the folder, its entries and size, the
+    // command that prints the whole message, and the command that clears the
+    // kept folders. The transpile folder is named once it exists.
+    const catalogs = path.join(tmp, CACHE_NAME);
+    const transpiled = path.join(tmp, 'astryx', 'transpiled');
+    const brief = new RegExp(
+      `^\\d+ (entry|entries) \\(\\d+\\.\\d MB\\) in ${escapeRegExp(catalogs)}\\. \`[^\`]* doctor --json\` lists every kept item and the size limits\\. To clear the caches, run: rm -rf ${escapeRegExp(catalogs)}( ${escapeRegExp(transpiled)})?\\.$`,
+    );
+    expect(row().brief).toMatch(brief);
+    fs.mkdirSync(transpiled, {recursive: true});
+    expect(row().brief).toContain(`rm -rf ${catalogs} ${transpiled}.`);
+    const shown = run(['doctor'], {tmp, json: false}).stdout;
+    expect(shown).toContain(
+      'Each check: status, id, label, message (or brief), fix',
+    );
+    expect(shown.replace(/\s+/g, ' ')).toContain(
+      `To clear the caches, run: rm -rf ${catalogs} ${transpiled}.`,
+    );
+    expect(shown).not.toContain('keep what they gather');
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -613,10 +638,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             stderr: r.stderr,
             // The cache row counts what the folder holds, which a write
             // earlier in the run adds to: the rest must match exactly.
-            stdout: r.stdout
-              .split(tmp)
-              .join('<tmp>')
-              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+            stdout: maskCacheCount(r.stdout.split(tmp).join('<tmp>')),
           };
         } finally {
           fs.chmodSync(path.dirname(catalogs), 0o700);

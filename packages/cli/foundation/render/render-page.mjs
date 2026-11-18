@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render`, forward: one page module to ONE
+ * @file `astryx experimental export`, forward: one page module to ONE
  * self-contained static HTML file. The page renders on the server with the
  * project's own React and Astryx components; its own StyleX compiles in
  * memory; Core's stylesheets are cut to the rules the markup uses; local
@@ -22,8 +22,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import postcss from 'postcss';
+import {importUrl} from '../fs/import-url.mjs';
 import {
   assetDataUri,
   isAssetBytes,
@@ -67,7 +68,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
- * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back (each also has a warning); present only when there are some.
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -157,7 +158,7 @@ const escapeHtml = s =>
 function rootThemeAttrs(markup) {
   for (const t of scanHtml(markup)) {
     if (t.kind !== 'start') continue;
-    const attrs = new Map(t.attrs);
+    const attrs = new Map(t.attrs.map(([name, value]) => /** @type {[string, string]} */ ([name, value])));
     if (!attrs.has('data-astryx-theme')) continue;
     return ['data-astryx-theme', 'data-theme']
       .filter(a => attrs.has(a))
@@ -714,6 +715,35 @@ export function linksOpenNewTabs(markup) {
 }
 
 /**
+ * The markup without `autofocus`. The file's script owns focus once it draws
+ * the page, as the app does. A viewer's cross-origin frame blocks focus that
+ * markup asks for, and logs an error.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function withoutAutofocus(markup) {
+  let out = '';
+  let at = 0;
+  for (const token of scanHtml(markup)) {
+    if (token.kind !== 'start') continue;
+    for (const [name, , start, end] of token.attrs) {
+      if (name !== 'autofocus') continue;
+      // The attribute goes with the spaces before it; the reader names
+      // where its text starts and ends, so every other attribute stays as
+      // written.
+      // Not when a `/` follows: `<input title=x/>` would read as title="x/".
+      let from = start;
+      if (markup[end] !== '/') {
+        while (from > token.start && /[\t\n\f\r ]/.test(markup[from - 1])) from--;
+      }
+      out += markup.slice(at, from);
+      at = end;
+    }
+  }
+  return at === 0 ? markup : out + markup.slice(at);
+}
+
+/**
  * The page's script with each string the markup's rewrite replaced (an
  * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
  * same carried data, so the page the script draws shows what the first paint
@@ -949,6 +979,26 @@ function inlineAssets(text, kind, ctx) {
 }
 
 /**
+ * The function Core's naming module builds a part's class with, from the Core
+ * the page uses, so the namespace comes from Core and not from the CLI. Null
+ * when the page has no Core, or its Core has no naming module that loads.
+ * @param {string} entry
+ * @param {ServedSet | null} served
+ * @returns {Promise<((part: string) => string) | null>}
+ */
+async function coreClassNamer(entry, served) {
+  const file = resolveServed('@astryxdesign/core/naming', entry, served);
+  if (!file) return null;
+  try {
+    const {stableClassName} = await importUrl(pathToFileURL(file).href);
+    return typeof stableClassName === 'function' ? stableClassName : null;
+  } catch {
+    // A Core whose naming module does not load keeps the cut as before.
+    return null;
+  }
+}
+
+/**
  * The version of a package the page rendered with: the package set's copy
  * when the page took it from there, else the copy Node's resolver finds from
  * the page's folder.
@@ -1035,7 +1085,7 @@ export async function renderPage(entry, options = {}) {
     );
   }
   /** @type {string} */
-  let markup = linksOpenNewTabs(message.markup);
+  let markup = withoutAutofocus(linksOpenNewTabs(message.markup));
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
@@ -1141,7 +1191,14 @@ export async function renderPage(entry, options = {}) {
   const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
   // The script draws what the markup does not show yet (a menu as it opens,
   // the next tab), so the rules every class name it holds needs stay too.
-  const kept = script ? new Set([...used, ...(script.match(/[A-Za-z_][\w-]*/g) ?? [])]) : used;
+  // Core builds a part's class at run time from the part's name
+  // (`banner-icon` -> `astryx-banner-icon`), so each name also keeps the
+  // class Core's naming module makes from it.
+  const tokens = script?.match(/[A-Za-z_][\w-]*/g) ?? [];
+  const coreClass = script ? await coreClassNamer(entry, served) : null;
+  const kept = script
+    ? new Set([...used, ...tokens, ...(coreClass ? tokens.map(coreClass) : [])])
+    : used;
   // A page that draws elements in a state (hovered, focused, pressed) marks
   // them; its stylesheet then applies those states' rules to them too.
   const states = markup.includes(' data-astryx-state="');
@@ -1339,7 +1396,7 @@ export async function renderPage(entry, options = {}) {
       notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so experimental import cannot give it back.`,
       });
     };
     /** @type {Buffer} */
@@ -1440,15 +1497,15 @@ export async function renderPage(entry, options = {}) {
         code: 'not-carried',
         message:
           fix.action === 'rename'
-            ? `${rel} is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as ${fix.name}, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.`
-            : `${rel} is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as ${fix.name}, to carry them.`,
+            ? `${rel} is not carried: its name reads as a tool's configuration, which experimental import never writes. The page shows it, but experimental import cannot give it back. If it holds the page's data, rename it, such as ${fix.name}, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.`
+            : `${rel} is not carried: it is a tool's configuration, which experimental import never writes. The page shows what it reads from it, but experimental import cannot give it back. Move the values the page reads into a file of its own, such as ${fix.name}, to carry them.`,
       });
       continue;
     }
     if (problem) {
       warnings.push({
         code: 'not-embedded',
-        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so --reverse cannot give it back.`,
+        message: `${rel} is not carried in the file (a rendered page carries the page and the local modules, stylesheets, JSON files and images it imports, but never project or tool configuration, or a file a test, story or benchmark runner would run), so experimental import cannot give it back.`,
       });
       continue;
     }
@@ -1472,8 +1529,8 @@ export async function renderPage(entry, options = {}) {
     warnings.push({
       code: 'not-embedded',
       message: inProject
-        ? `${rel} is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.`
-        : `${rel} is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
+        ? `${rel} is not carried: it is outside the project's folder, which a render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Move it inside the project's folder.`
+        : `${rel} is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
     });
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
@@ -1575,6 +1632,7 @@ export async function renderPage(entry, options = {}) {
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
+      ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
       markup: {
         sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),

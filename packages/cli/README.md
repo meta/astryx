@@ -98,25 +98,25 @@ Every run reads one base: Core, or an installed integration whose manifest decla
 
 <!-- BEGIN GENERATED: commands -->
 
-| Command        | Description                                                                                                      | Outside a project |
-| -------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `blog`         | Read the Astryx blog from the published feed                                                                     | `same`            |
-| `build`        | Build a page: the template to start from, or the workflow playbook (no query)                                    | `same`            |
-| `component`    | List components or print component docs                                                                          | `same`            |
-| `discover`     | Browse and search integrations: the ones you have and the ones you could add                                     | `same`            |
-| `docs`         | Print reference docs                                                                                             | `same`            |
-| `doctor`       | Diagnose Astryx projects and integration packages                                                                | `own`             |
-| `experimental` | [experimental] Try features that may change in a patch release: icon sets, page rendering, checked theme editing | by subcommand     |
-| `gap-report`   | Report a missing component or feature to the package that owns it                                                | `same`            |
-| `hook`         | List hooks or print hook docs                                                                                    | `same`            |
-| `init`         | Initialize the design system in your project                                                                     | `own`             |
-| `integration`  | Author and verify an Astryx integration package                                                                  | by subcommand     |
-| `mcp`          | For AI tools that cannot run commands: serve every astryx command as an MCP tool, over stdio                     | `same`            |
-| `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                         | `same`            |
-| `swizzle`      | Copy component source for customization                                                                          | `refuse`          |
-| `template`     | List, show, or scaffold page and block templates                                                                 | `same`            |
-| `theme`        | Add, switch, build, and author themes (to make or change one, use experimental theme editor)                     | by subcommand     |
-| `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                    | `own`             |
+| Command        | Description                                                                                                                                                                                   | Outside a project |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `blog`         | Read the Astryx blog from the published feed                                                                                                                                                  | `same`            |
+| `build`        | Build a page: the template to start from, or the workflow playbook (no query)                                                                                                                 | `same`            |
+| `component`    | List components or print component docs                                                                                                                                                       | `same`            |
+| `discover`     | Browse and search integrations: the ones you have and the ones you could add                                                                                                                  | `same`            |
+| `docs`         | Print reference docs                                                                                                                                                                          | `same`            |
+| `doctor`       | Diagnose Astryx projects and integration packages                                                                                                                                             | `own`             |
+| `experimental` | [experimental] Try features that may change in a patch release: icon sets, one self-contained HTML file from a page built with Astryx components (not for other pages), checked theme editing | by subcommand     |
+| `gap-report`   | Report a missing component or feature to the package that owns it                                                                                                                             | `same`            |
+| `hook`         | List hooks or print hook docs                                                                                                                                                                 | `same`            |
+| `init`         | Initialize the design system in your project                                                                                                                                                  | `own`             |
+| `integration`  | Author and verify an Astryx integration package                                                                                                                                               | by subcommand     |
+| `mcp`          | For AI tools that cannot run commands: serve every astryx command as an MCP tool, over stdio                                                                                                  | `same`            |
+| `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                                                                                                      | `same`            |
+| `swizzle`      | Copy component source for customization                                                                                                                                                       | `refuse`          |
+| `template`     | List, show, or scaffold page and block templates                                                                                                                                              | `same`            |
+| `theme`        | Add, switch, build, and author themes (to make or change one, use experimental theme editor)                                                                                                  | by subcommand     |
+| `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                                                                                                 | `own`             |
 
 <!-- END GENERATED: commands -->
 <!-- Generated by scripts/generate-cli-readme.mjs from `astryx manifest`. Run `pnpm -F @astryxdesign/cli readme`. -->
@@ -126,7 +126,7 @@ Every run reads one base: Core, or an installed integration whose manifest decla
 `--json` works with every command listed in `jsonSupported` (`astryx manifest --json`), which is every command except the bare groups such as `astryx theme`. The other four change only the reads named here; other commands ignore them:
 
 - `--json`: Output as typed JSON envelope: `{ apiVersion, type, package?, data, meta? }` (errors: `{ apiVersion, error, code, suggestions? }`)
-- `--detail <level>`: Detail level for `component`, `hook`, and docs tree reads (such as `astryx docs cli/commands/build`), increasing in size: `brief` (names only, default for lists) < `compact` (names + 1-line descriptions) < `full` (full docs per entry). Single-item views default to `full`.
+- `--detail <level>`: Detail level for `component`, `hook`, and docs tree reads (such as `astryx docs cli/commands/build`), increasing in size: `brief` (names only, default for lists) < `compact` (names + 1-line descriptions) < `full` (full docs per entry). A component read (`astryx component <Name>`) defaults to `compact`, a short answer that ends with the `--detail full` command; hook and docs reads default to `full`.
 - `--zh`: Simplified Chinese for component reads and for docs topics that have a translation (English otherwise)
 - `--dense`: Token-efficient dense text for `astryx component <Name>` and `astryx docs <topic>`
 - `--lang <locale>`: Language or format for component and docs reads: `en` (default), `zh` (as `--zh`), or `dense` (as `--dense`)

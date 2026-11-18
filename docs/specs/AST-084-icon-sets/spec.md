@@ -21,6 +21,7 @@ verified_by:
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
     packages/cli/api/search/search.icons.test.mjs,
+    packages/cli/foundation/agent-docs/agent-docs.test.mjs,
   ]
 ---
 
@@ -127,6 +128,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   added by the package that ships that set, that says how to find its icons
   with `astryx experimental icon <words>`; search never returns that
   section.
+  Where icon features are on, the agent docs block that `astryx init` and
+  `astryx upgrade` write carries one more line, right under its runner line:
+  "Need an icon? Run `astryx experimental icon <what it means>` and paste the
+  import it prints, instead of copying one from a template or other code."
+  Where they are off, the block has no such line.
 
   With no such package loaded and no `experimental.iconSet`, help (apart from
   the marked `experimental` group line), `astryx manifest` (apart from that group: its command, and its
@@ -269,7 +275,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component
-  or hook name (`Icon`, `IconButton`), the matches that answer
+  or hook name (`Icon`, `IconButton`), and the word is not a feature of a
+  component or template search answers (FR11), the matches that answer
   follow `results` as a trailing `icons` section, `{matchCount, results}`, of
   at most 3 (fewer when `--limit` is smaller), each with its `set`, `id`,
   `import` line and command (FR11).
@@ -399,8 +406,12 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   `--type icon`, and returns no experimental doc, with or without the opt-in.
   Its `results` and `matchCount` never hold an icon. It reads icon sets only
   where icon features are on and the query asks for an icon (FR6), and then
-  appends at most three icons in its own `icons` block. Promotion decides
-  every other stable listing of icons.
+  appends at most three icons in its own `icons` block. An `icon` or `icons`
+  that comes right after `with`, with only `a`, `an` or `the` between, and is
+  not followed by `of` or `for`, names a feature: when search's results hold
+  a component or a template, that word asks for no icon (`card with an icon`
+  asks for a card; `card with an icon of a star` asks for an icon). Promotion
+  decides every other stable listing of icons.
 - **FR12 — The theme map.** A set exports the map `themeMap` names: one entry
   per built-in definition in `map`, each its icon's artwork, so a theme sets
   `icons: themeIcons`. Each entry is sized to the theme's icon box by CSS
