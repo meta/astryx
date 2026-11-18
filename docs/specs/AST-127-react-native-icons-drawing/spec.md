@@ -42,7 +42,7 @@ symbols (`spec:AST-112/FR9`). It follows the shared platform rules of
 `spec:AST-140`: the missing piece (FR2), the result vocabulary (FR3), additive
 evolution (FR5), threading (FR6), conformance suites (FR7), and coexistence with
 other libraries (FR9). Icon names and theme icons follow `spec:AST-082/FR17`,
-apart from the Android departure listed under Current-state impact.
+apart from the departures listed under Current-state impact.
 
 ## Why this exists
 
@@ -184,9 +184,8 @@ All five contracts belong to the platform's core: every binary has them.
     nothing.
   - The icon source is `platform` or `theme`. The `iconSource` preference of
     `AstryxCapabilitiesProvider`, a value or a function of the theme's name,
-    decides; without it, the theme's own setting decides; without either, the
-    source is `platform`. The theme's setting is `native.iconSource` in its
-    definition. Under `theme`, built-in names skip system symbols.
+    decides; without it, the source is `platform`. Under `theme`, built-in names
+    skip system symbols.
 - **FR5 — The library applies Astryx's display rules before the views draw.**
   - Right-to-left: `chevronLeft`, `chevronRight`, `chevronsLeft`,
     `chevronsRight`, and `externalLink` mirror; `chevronDown`, `arrowUp`,
