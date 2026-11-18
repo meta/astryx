@@ -344,7 +344,7 @@ function parsedSource(file) {
   if (!stat?.isFile()) return null;
   const kept = sourceCache.get(file);
   if (kept && kept.mtime === stat.mtimeMs) return kept.ast;
-  let ast = null;
+  let ast;
   try {
     ast = babelParse(fs.readFileSync(file, 'utf8'), {
       sourceType: 'module',
