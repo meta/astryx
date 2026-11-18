@@ -856,14 +856,21 @@ test.describe('a single row’s minimum width', () => {
         if (list == null) {
           throw new Error(`No list in ${id}`);
         }
-        const last = list.lastElementChild?.getBoundingClientRect();
+        const lastChild = list.lastElementChild;
+        const last = lastChild?.getBoundingClientRect();
         return {
           labels: [...list.children].map(child =>
             (child as HTMLElement).innerText.trim(),
           ),
+          // Cut by the list's edge, or its label cut short inside it (more
+          // than the pixel that rounding a sub-pixel box can show).
           clipped:
-            last != null &&
-            last.right > list.getBoundingClientRect().right + 0.5,
+            (last != null &&
+              last.right > list.getBoundingClientRect().right + 0.5) ||
+            (lastChild != null &&
+              [...lastChild.querySelectorAll('*')].some(
+                element => element.scrollWidth > element.clientWidth + 1,
+              )),
         };
       }),
     );
