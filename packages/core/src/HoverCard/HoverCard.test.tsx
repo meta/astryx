@@ -1711,6 +1711,33 @@ describe('HoverCard', () => {
       });
     });
 
+    it('opens on keyboard focus after an earlier tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+
+      // A navigation key since the tap makes the next focus a keyboard one.
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      fireEvent.focusIn(screen.getByText('Ruby Cheung'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
     it('closes a mouse-opened card on the compatibility mouseleave of a tap elsewhere', async () => {
       const onOpenChange = vi.fn();
       render(
