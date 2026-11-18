@@ -3028,6 +3028,27 @@ function namedLists(q, partWords, isVariant) {
   );
 }
 
+/** A mark the clause split reads as no word, taken out of each clause. */
+const JOINED = '\u2060';
+
+/**
+ * A question whose fill word is followed by its color before a "with": that
+ * "with" starts an ask of its own ("cards tinted blue with a navy header":
+ * the header's navy). The clause split keeps a "with" after a fill word in the
+ * fill's ask ("rows tinted with the accent"); a mark after the color lets this
+ * one split.
+ * @param {string} q lower-case
+ */
+function markFillColorWith(q) {
+  return q.replace(
+    /\b((?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3})(\s+with\b)/gi,
+    (m, head, rest) =>
+      colorsIn(head.replace(/^\S+/, '').toLowerCase()).length
+        ? `${head}${JOINED}${rest}`
+        : m,
+  );
+}
+
 /**
  * Read a question into clauses.
  * @param {string} q lower-case, translated, corrected
@@ -3042,6 +3063,7 @@ function namedLists(q, partWords, isVariant) {
  * @returns {Clause[]}
  */
 function clausesOf(q, partWords, words = null) {
+  q = markFillColorWith(q);
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
@@ -3110,7 +3132,7 @@ function clausesOf(q, partWords, words = null) {
         joint += piece;
         continue;
       }
-      const text = piece.trim();
+      const text = piece.replaceAll(JOINED, '').trim();
       if (!text) continue;
       pieces.push({text, joint});
       joint = '';

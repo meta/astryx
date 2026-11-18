@@ -91,9 +91,18 @@ describe('a tint word', () => {
       expect(cards.length).toBeGreaterThan(0);
       for (const c of cards)
         expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%, transparent\)/);
-      // (The header the tint does not name is never tinted.)
-      for (const c of fills.filter(c => / --on app-shell-header\b/.test(c)))
-        expect(c).not.toMatch(/color-mix/);
+      // (The header the tint does not name is its own navy, never tinted.)
+      const header = fills.filter(c => / --on app-shell-header\b/.test(c));
+      expect(header.length).toBeGreaterThan(0);
+      for (const c of header)
+        expect(c).toBe("background-color '#1e3a8a' --on app-shell-header");
+      // (Said without the tint, the header is navy too.)
+      const plain = (await sets('cards blue with a navy header')).filter(c =>
+        / --on app-shell-header\b/.test(c),
+      );
+      expect(plain.length).toBeGreaterThan(0);
+      for (const c of plain)
+        expect(c).toBe("background-color '#1e3a8a' --on app-shell-header");
     },
     T,
   );
