@@ -392,7 +392,7 @@ function installImageSinks(carried, parse, format) {
     const written = node.getAttribute?.('style');
     // A style that names only data: URIs needs no swap; the test reads no
     // further than each `url(`.
-    if (!written || !/url\(\s*["']?(?!data:)/i.test(written)) return;
+    if (!written || !/url\(\s*(?!["']?data:)/i.test(written)) return;
     const swapped = css(written);
     if (swapped !== written) setAttribute.call(node, 'style', swapped);
   };

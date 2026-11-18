@@ -1672,12 +1672,14 @@ export async function renderPage(entry, options = {}) {
   /** @type {Map<string, string>} */
   const localRewrites = new Map();
   for (const [was, now] of ctx.rewrites) {
-    if (!/\s/.test(was.trim())) {
+    // A value is read as a `srcset` only when it lists a remote candidate:
+    // a local name may hold a comma and a space (`./Logo, dark.png`).
+    const written = /\s/.test(was.trim()) ? parseSrcset(was) : null;
+    if (!written?.some(candidate => remoteAddress(candidate.url))) {
       if (!remoteAddress(was)) localRewrites.set(was, now);
       continue;
     }
     // A `srcset` keeps its remote candidates as written.
-    const written = parseSrcset(was);
     const carried = parseSrcset(now);
     if (written.length !== carried.length) continue;
     const mixed = written.map((candidate, i) => (remoteAddress(candidate.url) ? candidate : carried[i]));

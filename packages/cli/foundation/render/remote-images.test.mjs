@@ -1055,6 +1055,47 @@ describe('a render with images from the web', () => {
     }
   }, 120_000);
 
+  it('keeps the data of a local image whose name holds a comma and a space when the script draws it', async () => {
+    const dir = makeLinkedFixture('astryx-render-comma-name-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      fs.writeFileSync(path.join(dir, 'Logo, dark.png'), PNG);
+      const file = path.join(dir, 'page.jsx');
+      fs.writeFileSync(
+        file,
+        [
+          "import {useState} from 'react';",
+          'export default function Page() {',
+          '  const [count, setCount] = useState(0);',
+          '  return (',
+          '    <main>',
+          '      <img src="./Logo, dark.png" alt="Logo" />',
+          '      <button onClick={() => setCount(count + 1)}>Clicked {count}</button>',
+          '    </main>',
+          '  );',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const {fetch} = fetchFrom({});
+      const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
+      const data = `data:image/png;base64,${PNG.toString('base64')}`;
+      const {doc, click, close} = await opened(page.html);
+      await click('button');
+      expect(doc.querySelector(`#${ROOT_ID} button`)?.textContent).toBe(
+        'Clicked 1',
+      );
+      expect(doc.querySelector(`#${ROOT_ID} img`)?.getAttribute('src')).toBe(
+        data,
+      );
+      close();
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+
   it('names the whole address of first-paint images that differ only by their query', async () => {
     const dir = makeLinkedFixture('astryx-render-query-two-', [
       'react',
