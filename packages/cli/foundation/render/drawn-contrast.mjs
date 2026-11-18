@@ -199,8 +199,6 @@ export function lowContrastText() {
   };
   /** @type {Map<string, {part: string, text: string, ratio: number, fg: string, bg: string}>} */
   const found = new Map();
-  /** @type {Set<string>} */
-  const seen = new Set();
   for (const el of document.querySelectorAll('body *')) {
     const text = [...el.childNodes]
       .filter(n => n.nodeType === 3)
@@ -220,10 +218,11 @@ export function lowContrastText() {
     const size = parseFloat(cs.fontSize);
     const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
     if (r >= (large ? 3 : 4.5)) continue;
-    // (The same text in the same colors is measured once.)
+    // (The same text in the same colors is reported once. A copy left out,
+    // one over a picture or in a disabled color, says nothing of a later
+    // copy drawn faint on a plain ground: only a reported one is skipped.)
     const key = `${part}\u0000${text}\u0000${hex(shown)}\u0000${hex(bg)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (found.has(key)) continue;
     if (exempt(el, fg) || overImage(el)) continue;
     found.set(key, {
       part,

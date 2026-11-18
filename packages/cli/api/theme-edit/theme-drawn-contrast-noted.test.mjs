@@ -79,6 +79,51 @@ describe('text a picture draws too faint to read', () => {
     },
     120_000,
   );
+
+  it.skipIf(!chrome)(
+    'reports a faint copy of a text drawn earlier over a picture',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-faint-'));
+      try {
+        const html = path.join(dir, 'p.html');
+        // The same badge text in the same colors twice: first over a
+        // picture beside it (left out: no one color is behind it), then on
+        // the plain white page, where it is too faint to read.
+        fs.writeFileSync(
+          html,
+          `<html><body style="margin:0;background:#ffffff">
+  <div style="position:relative;width:200px;height:60px">
+    <div style="position:absolute;inset:0;background:linear-gradient(135deg,#172554,#67e8f9)"></div>
+    <span class="astryx-badge" style="position:relative;color:#9ca3af">Draft</span>
+  </div>
+  <span class="astryx-badge" style="color:#9ca3af">Draft</span>
+</body></html>`,
+        );
+        const r = /** @type {any} */ (
+          await screenshot(
+            {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+            html,
+            path.join(dir, 'p.png'),
+            'light',
+          )
+        );
+        expect(r.ok, r.reason).toBe(true);
+        expect(r.lowContrast).toEqual([
+          {
+            part: 'badge',
+            text: 'Draft',
+            ratio: expect.any(Number),
+            fg: '#9ca3af',
+            bg: '#ffffff',
+          },
+        ]);
+        expect(r.lowContrast[0].ratio).toBeLessThan(4.5);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
 });
 
 describe('show', () => {
