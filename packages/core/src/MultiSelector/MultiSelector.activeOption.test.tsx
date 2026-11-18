@@ -175,6 +175,38 @@ describe('MultiSelector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 
+  it('keeps the action cell’s ring when a hover that waited through ArrowRight lands on the next pointer move', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={[
+          {
+            value: 'bug',
+            label: 'Bug',
+            action: <button type="button">Edit Bug</button>,
+          },
+          {value: 'feature', label: 'Feature'},
+        ]}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const field = screen.getByRole('combobox', {name: 'Labels'});
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    const row = screen.getByRole('row', {name: 'Bug', hidden: true});
+    // The key scrolled the row's option cell under a still pointer.
+    fireEvent.mouseEnter(row.children[0]);
+    await user.keyboard('{ArrowRight}');
+    expect(activeOption(field)).toBe(row.children[1]);
+    // The pointer moves: the hover that waited through the key is dropped.
+    fireEvent.pointerMove(document, {screenX: 10, screenY: 10});
+    fireEvent.pointerMove(document, {screenX: 20, screenY: 20});
+    expect(activeOption(field)).toBe(row.children[1]);
+    expect(hasRing(row)).toBe(false);
+  });
+
   it('keeps the fill alone when the mouse moves from a grid row’s action cell back onto its option cell', async () => {
     const user = userEvent.setup();
     render(

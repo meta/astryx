@@ -26,6 +26,12 @@ interface UseHighlightedOptionScrollOptions {
    * min/max-clamped lists). A count change runs the scroll again.
    */
   itemCount?: number;
+  /**
+   * Changes when a key moves the highlight without moving it to another
+   * option, such as between a grid row's cells. Each change holds the
+   * highlight again and drops a hover that was waiting.
+   */
+  holdKey?: unknown;
 }
 
 /**
@@ -61,6 +67,7 @@ export function useHighlightedOptionScroll({
   setHighlightedIndex,
   getOptionId,
   itemCount,
+  holdKey,
 }: UseHighlightedOptionScrollOptions): HighlightFromHover {
   // The callback reads no render state, so memoized rows keep one function.
   const hoveredIndexRef = useRef<number | null>(null);
@@ -173,7 +180,15 @@ export function useHighlightedOptionScroll({
     }
     startHold();
     option.scrollIntoView?.({block: 'nearest'});
-  }, [isOpen, highlightedIndex, getOptionId, itemCount, endHold, startHold]);
+  }, [
+    isOpen,
+    highlightedIndex,
+    getOptionId,
+    itemCount,
+    holdKey,
+    endHold,
+    startHold,
+  ]);
 
   return highlightFromHover;
 }
