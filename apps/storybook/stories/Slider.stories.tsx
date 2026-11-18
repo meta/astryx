@@ -113,6 +113,38 @@ export const CustomStep: Story = {
   },
 };
 
+export const TextValueWidths: Story = {
+  render: () => {
+    const [range, setRange] = useState<[number, number]>([20, 80]);
+    const [rating, setRating] = useState(3);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        <Slider
+          label="Price range"
+          min={0}
+          max={1000}
+          step={10}
+          value={range}
+          onChange={setRange}
+          valueDisplay="text"
+        />
+        <Slider
+          label="Rating"
+          min={1}
+          max={5}
+          value={rating}
+          onChange={setRating}
+          valueDisplay="text"
+          formatValue={value =>
+            ['Bad', 'Not good', 'Okay', 'Good', 'Great'][value - 1] ?? ''
+          }
+        />
+      </div>
+    );
+  },
+  name: 'Text Value Widths',
+};
+
 export const WithFormatValue: Story = {
   render: args => {
     const [value, setValue] = useState(72);

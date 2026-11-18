@@ -506,11 +506,21 @@ const styles = stylex.create({
     cursor: 'default',
   },
   textValue: {
+    display: 'inline-grid',
+    justifyItems: 'end',
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    fontVariantNumeric: 'tabular-nums',
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
+  },
+  // Every copy sits in one grid cell, so the cell is as wide as the widest.
+  textValueCopy: {
+    gridArea: '1 / 1',
+  },
+  textValueReserve: {
+    visibility: 'hidden',
   },
   marksContainer: {
     position: 'absolute',
@@ -1672,13 +1682,26 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display
+  // Text value display. Hidden copies of the text at the ends of the range
+  // hold the box at its widest, so the track keeps its length while the value
+  // changes and a dragged thumb stays under the pointer.
+  const textOf = (vs: ReadonlyArray<number>): string =>
+    vs.map(displayValue).join(' – ');
+  const reservedTexts = isRange
+    ? [textOf([min, min]), textOf([min, max]), textOf([max, max])]
+    : [textOf([min]), textOf([max])];
   const textDisplay =
     valueDisplay === 'text' ? (
       <span {...stylex.props(styles.textValue)}>
-        {isRange
-          ? `${displayValue(values[0])} – ${displayValue(values[1])}`
-          : displayValue(values[0])}
+        {reservedTexts.map(text => (
+          <span
+            key={text}
+            aria-hidden="true"
+            {...stylex.props(styles.textValueCopy, styles.textValueReserve)}>
+            {text}
+          </span>
+        ))}
+        <span {...stylex.props(styles.textValueCopy)}>{textOf(values)}</span>
       </span>
     ) : null;
 
