@@ -323,11 +323,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     /** @type {{path: string, tail: string}[]} */
     const hits = [];
     for (const p of byPath.keys()) {
-      for (const tail of [
-        rest,
-        ...RESOLVE_EXTENSIONS.map(e => rest + e),
-        ...RESOLVE_EXTENSIONS.map(e => `${rest}/index${e}`),
-      ]) {
+      for (const tail of resolutionCandidates(rest)) {
         if (p === tail || p.endsWith(`/${tail}`)) {
           hits.push({path: p, tail});
           break;
