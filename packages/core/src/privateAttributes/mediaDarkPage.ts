@@ -4,12 +4,12 @@
  * @file privateAttributes/mediaDarkPage.ts
  * @input The media side a surface takes on a dark page, when it differs from
  *   the side it takes on a light page.
- * @output The attribute a surface writes inside its MediaTheme for it, and
- *   the selector text the theme engine scopes that side's on-media rules to.
+ * @output The attribute a surface's MediaTheme writes for it, and the selector
+ *   text the theme engine scopes that side's on-media rules to.
  * @position Owner module of the private dark-page media attribute.
- *   theme/MediaDarkPage.tsx writes it (Toast renders that until it measures
- *   its card); the theme engine (theme/) reads it. No package entry exports
- *   it.
+ *   theme/MediaDarkPage.tsx gives it to MediaTheme, which writes it (Toast
+ *   provides it until it measures its card); the theme engine (theme/) reads
+ *   it. No package entry exports it.
  */
 
 const MEDIA_DARK_PAGE = 'data-astryx-media-dark-page';

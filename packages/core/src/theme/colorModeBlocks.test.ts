@@ -16,7 +16,7 @@ const css = (components: Parameters<typeof defineTheme>[0]['components']) =>
   generateThemeCSS(defineTheme({name: 'modes', components})).component;
 
 describe('color-mode blocks', () => {
-  it('writes a theme without them exactly as before', () => {
+  it("writes no mode rules for a theme without them, beyond a flipped surface's dark-page rules", () => {
     const plain = css({button: {base: {backgroundColor: 'red'}}});
     // Only a flipping media surface's dark-page copy reads the page's mode.
     const rules = plain

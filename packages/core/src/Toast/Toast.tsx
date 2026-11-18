@@ -500,8 +500,8 @@ export function ToastSurface({
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
-        <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
+      <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
+        <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
           {renderContent ? (
             renderContent({
               body,
@@ -532,8 +532,8 @@ export function ToastSurface({
               </div>
             </div>
           )}
-        </MediaDarkPage>
-      </MediaTheme>
+        </MediaTheme>
+      </MediaDarkPage>
     </div>
   );
 }

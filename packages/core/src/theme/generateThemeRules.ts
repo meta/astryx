@@ -1658,6 +1658,77 @@ function resolvedAdaptationRules(
 }
 
 /**
+ * The style values that undo, on a surface of one side, what the other
+ * side's component overrides set and this side's do not: each such property
+ * takes the theme root's value for the same style key and state, else
+ * `revert-layer` (the base style). Null when there is nothing to undo.
+ */
+function undoneComponentStyles(
+  from: ComponentStyleMap,
+  own: ComponentStyleMap | undefined,
+  root: ComponentStyleMap | undefined,
+): Record<string, Record<string, StyleOverrides>> | null {
+  /** A style block's own properties and its pseudo-class blocks. */
+  const undo = (
+    theirs: Record<string, unknown>,
+    mine: Record<string, unknown> | undefined,
+    rooted: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | null => {
+    const out: Record<string, unknown> = {};
+    for (const [prop, value] of Object.entries(theirs)) {
+      if (prop.startsWith('@')) {
+        continue;
+      }
+      if (prop.startsWith(':')) {
+        if (value == null || typeof value !== 'object') {
+          continue;
+        }
+        const nested = undo(
+          value as Record<string, unknown>,
+          mine?.[prop] as Record<string, unknown> | undefined,
+          rooted?.[prop] as Record<string, unknown> | undefined,
+        );
+        if (nested) {
+          out[prop] = nested;
+        }
+        continue;
+      }
+      if (mine != null && prop in mine) {
+        continue;
+      }
+      const kept = rooted?.[prop];
+      out[prop] =
+        typeof kept === 'string' || typeof kept === 'number'
+          ? kept
+          : 'revert-layer';
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  };
+  const result: Record<string, Record<string, StyleOverrides>> = {};
+  for (const [component, keys] of Object.entries(from)) {
+    if (keys == null) {
+      continue;
+    }
+    for (const [key, block] of Object.entries(keys)) {
+      if (block == null || typeof block !== 'object') {
+        continue;
+      }
+      const ownKeys = own?.[component] as Record<string, unknown> | undefined;
+      const rootKeys = root?.[component] as Record<string, unknown> | undefined;
+      const undone = undo(
+        block,
+        ownKeys?.[key] as Record<string, unknown> | undefined,
+        rootKeys?.[key] as Record<string, unknown> | undefined,
+      );
+      if (undone) {
+        (result[component] ??= {})[key] = undone as StyleOverrides;
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
  * Generate CSS for on-media token and component overrides.
  *
  * Emitted in an unbounded @scope (no `to` limit) so the rules can reach
@@ -1705,15 +1776,46 @@ export function generateOnMediaCSS(
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
     ];
-    if (tokenEntries.length > 0) {
+    // A dark-page copy sits on a surface that still names its light-page
+    // side, whose rules match it too: what that side sets and this one does
+    // not goes back to what the surface would have without it. A token
+    // inherits again; a component property takes the theme root's value for
+    // the same style key, else the base style.
+    const flippedFrom = surface.includes('@dark-page')
+      ? side === 'dark'
+        ? theme.__onLight
+        : theme.__onDark
+      : undefined;
+    const tokenResets: [string, string][] = flippedFrom
+      ? Object.keys(flippedFrom.tokens)
+          .filter(token => !tokenEntries.some(([own]) => own === token))
+          .map(token => [token, 'revert-layer'])
+      : [];
+    if (tokenEntries.length > 0 || tokenResets.length > 0) {
       // The surface re-declares font sizes the way a theme's root does, so they
       // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        readerTextSizeEntries(tokenEntries),
+        [...readerTextSizeEntries(tokenEntries), ...tokenResets],
         `${location}tokens`,
         surfaceSink,
       );
       out.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+    }
+
+    const componentResets = flippedFrom?.components
+      ? undoneComponentStyles(
+          flippedFrom.components,
+          onMedia.components,
+          theme.components,
+        )
+      : null;
+    if (componentResets) {
+      generateComponentRules(componentResets, out, {
+        resetInheritedPaddingSpecificity: true,
+        surface,
+        sink: surfaceSink,
+        location,
+      });
     }
 
     // Component overrides use the same lowering as root and adaptations so a
@@ -1737,9 +1839,6 @@ export function generateOnMediaCSS(
       });
     }
   };
-  for (const side of ['dark', 'light'] as const) {
-    emitSurface(side, parts);
-  }
   // A surface that takes another side on a dark page (a toast's card, whose
   // fill flips with the page) carries that side as a second attribute, so
   // its first paint is right before any script measures it. Its rules come
@@ -1747,6 +1846,9 @@ export function generateOnMediaCSS(
   const flipped = darkPageSides(
     resolveModes({...theme.localTokens, ...theme.tokens}),
   );
+  for (const side of ['dark', 'light'] as const) {
+    emitSurface(side, parts);
+  }
   for (const side of flipped) {
     emitSurface(`${side}@dark-page`, parts);
     const byPreference: string[] = [];

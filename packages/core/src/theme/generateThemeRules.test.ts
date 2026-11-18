@@ -878,7 +878,11 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const css = generateOnMediaCSS(themed);
+    const all = generateOnMediaCSS(themed);
+    // The surfaces' own rules, before the dark-page copy of the light side
+    // (which undoes the dark side's weight with the root's).
+    const copyAt = all.indexOf('data-astryx-media-dark-page');
+    const css = copyAt === -1 ? all : all.slice(0, copyAt);
     const typeIndex = css.indexOf('.astryx-heading[data-type="hero"]');
     const boldIndex = css.lastIndexOf('.astryx-heading[data-weight="bold"]');
 
@@ -903,7 +907,11 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const css = generateOnMediaCSS(themed);
+    const all = generateOnMediaCSS(themed);
+    // The surfaces' own rules, before the dark-page copy of the light side
+    // (which undoes the dark side's weight with the root's).
+    const copyAt = all.indexOf('data-astryx-media-dark-page');
+    const css = copyAt === -1 ? all : all.slice(0, copyAt);
     const typeIndex = css.indexOf('.astryx-heading[data-type="hero"]');
     const boldIndex = css.lastIndexOf('.astryx-heading[data-weight="bold"]');
 
@@ -2330,6 +2338,31 @@ describe('a media surface that flips with the page', () => {
           rule.includes('color: #fafafa'),
       ),
     ).toBe(true);
+  });
+
+  it("undoes, on the dark-page copy, what only the light-page side's overrides set", () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'flip-undo',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        components: {button: {base: {color: '#222222'}}},
+        onDark: {
+          tokens: {'--color-border': '#000000'},
+          components: {
+            button: {base: {backgroundColor: '#000000', color: '#eeeeee'}},
+          },
+        },
+      }),
+    );
+    const copy = css.slice(css.indexOf('data-astryx-media-dark-page'));
+    expect(copy).toContain('--color-border: revert-layer');
+    expect(copy).toMatch(/background-color: revert-layer/);
+    // A property the theme root sets for the same key takes the root's value.
+    expect(copy).toMatch(/color: #222222/);
   });
 
   it('writes no dark-page rules when every inverted surface keeps its side', () => {
