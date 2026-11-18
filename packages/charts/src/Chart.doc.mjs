@@ -135,6 +135,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'xLabel',
+      type: 'string',
+      description:
+        'Display name for the x field in the chart accessible name and the hidden data-table header. Defaults to the xKey.',
+    },
+    {
       name: 'series',
       type: 'SeriesDef[]',
       description:

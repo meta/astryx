@@ -59,6 +59,11 @@ export interface ChartProps extends BaseProps<HTMLDivElement> {
   data: Record<string, unknown>[];
   /** Field name read from each data row for the shared x scale. */
   xKey: string;
+  /**
+   * Display name for the x dimension in the accessible name and the hidden
+   * data table. Defaults to the xKey.
+   */
+  xLabel?: string;
   /** Mark definitions rendered against the chart's shared scales. */
   series: SeriesDef[];
   /** Chart height in CSS pixels. Non-finite and negative values resolve to 0. @default 300 */
@@ -140,6 +145,7 @@ const styles = stylex.create({
 export function Chart({
   data,
   xKey,
+  xLabel,
   series,
   height = 300,
   margin: marginOverride,
@@ -331,10 +337,12 @@ export function Chart({
             primarySeries.map(s => s.label ?? s.key),
             locale,
           ),
-          xKey,
+          xKey: xLabel ?? xKey,
         })
       : t('@astryx.chart.label'));
   const tableKeys = Array.from(new Set(primarySeries.flatMap(s => s.dataKeys)));
+  const tableHeaderFor = (key: string): string =>
+    primarySeries.find(s => s.dataKeys.includes(key))?.label ?? key;
   const showDataTable =
     data.length > 0 &&
     tableKeys.length > 0 &&
@@ -486,10 +494,10 @@ export function Chart({
           </caption>
           <thead>
             <tr>
-              <th scope="col">{xKey}</th>
+              <th scope="col">{xLabel ?? xKey}</th>
               {tableKeys.map(key => (
                 <th key={key} scope="col">
-                  {key}
+                  {tableHeaderFor(key)}
                 </th>
               ))}
             </tr>
