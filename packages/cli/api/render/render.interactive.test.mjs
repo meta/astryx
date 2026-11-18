@@ -136,7 +136,7 @@ describe("a render, which carries the page's script", () => {
     );
     expect(note).not.toContain('It runs no script');
     expect(note).toMatch(
-      /experimental render counter-restored\/counter\.tsx --out counter\.html\n/,
+      /experimental export counter-restored\/counter\.tsx --out counter\.html\n/,
     );
     expect(note).toContain("before the page's script");
   });
@@ -177,7 +177,7 @@ describe("a render, which carries the page's script", () => {
     const {stdout, status} = await runCli(
       [
         'experimental',
-        'render',
+        'export',
         '--reverse',
         'counter.html',
         '--out',
@@ -187,7 +187,7 @@ describe("a render, which carries the page's script", () => {
     );
     expect(status).toBe(0);
     expect(stdout).not.toMatch(/^interactive:/m);
-    expect(stdout).toMatch(/^Render it again: .* --out counter\.html$/m);
+    expect(stdout).toMatch(/^Export it again: .* --out counter\.html$/m);
   }, 120_000);
 
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
@@ -215,6 +215,60 @@ describe("a render, which carries the page's script", () => {
     await settle();
     expect(root.textContent).toContain('Clicked 2 times');
     expect(errors).toEqual([]);
+    dom.window.close();
+  });
+
+  it('asks for no focus in its first paint, and the drawn page focuses as the app does', async () => {
+    put(
+      'src/focus.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <input aria-label="Search" autoFocus data-note="no autofocus here" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/focus.tsx', {cwd: dir, out: 'focus.html'});
+    const file = read('focus.html');
+    const markup = renderedMarkupOf(file) ?? '';
+    expect(markup).toContain('aria-label="Search"');
+    expect(markup).toContain('data-note="no autofocus here"');
+    // Raw HTML can quote a value with single quotes or none: its text stays.
+    const {withoutAutofocus} =
+      await import('../../foundation/render/render-page.mjs');
+    expect(
+      withoutAutofocus(
+        `<span title='press autofocus now' data-x=autofocus autofocus>x</span>`,
+      ),
+    ).toBe(`<span title='press autofocus now' data-x=autofocus>x</span>`);
+    // It reads tags as the render's HTML reader does: spaces around `=` and a
+    // `>` inside a quoted value are part of the attribute.
+    expect(
+      withoutAutofocus(
+        `<span title = "press autofocus now" autofocus>x</span>`,
+      ),
+    ).toBe(`<span title = "press autofocus now">x</span>`);
+    expect(withoutAutofocus(`<input title="a>b" autofocus>`)).toBe(
+      `<input title="a>b">`,
+    );
+    // An unquoted value keeps a space before a `/` that follows the cut, so
+    // it never reads as part of the value.
+    expect(withoutAutofocus(`<input title=x autofocus/>`)).toBe(
+      `<input title=x />`,
+    );
+    const painted = new JSDOM(markup).window.document.querySelector('input');
+    expect(painted?.hasAttribute('autofocus')).toBe(false);
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const input = dom.window.document.querySelector(
+      'input[aria-label="Search"]',
+    );
+    expect(dom.window.document.activeElement).toBe(input);
     dom.window.close();
   });
 
@@ -799,7 +853,7 @@ export default function Page() {
 
   it('shows the script in the CLI output, and has no option to leave it out', async () => {
     const page = await runCli(
-      ['experimental', 'render', 'src/counter.tsx', '--out', 'cli.html'],
+      ['experimental', 'export', 'src/counter.tsx', '--out', 'cli.html'],
       dir,
     );
     expect(page.status).toBe(0);
@@ -807,7 +861,7 @@ export default function Page() {
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(
-        ['--json', 'experimental', 'render', 'src/counter.tsx', flag],
+        ['--json', 'experimental', 'export', 'src/counter.tsx', flag],
         dir,
       );
       expect(refused.status, flag).toBe(1);
@@ -816,7 +870,7 @@ export default function Page() {
       expect(error.error, flag).toBe(
         `${flag} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
       );
-      const help = await runCli(['experimental', 'render', '--help'], dir);
+      const help = await runCli(['experimental', 'export', '--help'], dir);
       expect(help.stdout).not.toContain(flag);
     }
   }, 120_000);
@@ -882,7 +936,7 @@ export default function Page() {
     const {stdout} = await runCli(
       [
         'experimental',
-        'render',
+        'export',
         '--reverse',
         'titled.html',
         '--out',

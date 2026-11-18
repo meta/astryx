@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render` — a page to one self-contained HTML
+ * @file `astryx experimental export` — a page to one self-contained HTML
  * file, and back. Experimental (spec:AST-017 FR27): it is registered only
  * under the `experimental` group.
  *
@@ -9,8 +9,8 @@
  * `defineCommand`; this file reads flags, calls `render()`, and prints.
  *
  * Usage:
- *   astryx experimental render page.tsx --out page.html
- *   astryx experimental render --reverse page.html --out page.tsx
+ *   astryx experimental export page.tsx --out page.html
+ *   astryx experimental export --reverse page.html --out page.tsx
  */
 
 import * as path from 'node:path';
@@ -23,11 +23,46 @@ import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
 import {freeRestoreFolder} from '../../../../foundation/render/restore-folder.mjs';
-import {doc as renderCommand} from '../experimental-render.doc.mjs';
+import {doc as renderCommand} from '../experimental-export.doc.mjs';
 import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 
 /** @param {number} n */
 const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+
+/** The text answer names this many files at most. The JSON answer keeps every file. */
+const LISTED_FILES = 10;
+
+/**
+ * Names the first files, then counts the rest. The rest are named by the
+ * folder they share, when they share one.
+ * @param {string[]} files
+ */
+function fileList(files) {
+  if (files.length <= LISTED_FILES) return files.join(', ');
+  const rest = files.slice(LISTED_FILES);
+  const folder = sharedFolder(rest);
+  return `${files.slice(0, LISTED_FILES).join(', ')}, ... and ${rest.length} more${folder ? ` in ${folder}/` : ''}`;
+}
+
+/**
+ * @param {string[]} files
+ * @returns {string} the deepest folder that holds every file, or '' at the top
+ */
+function sharedFolder(files) {
+  /** @type {string[] | undefined} */
+  let shared;
+  for (const file of files) {
+    const parts = file.replaceAll('\\', '/').split('/').slice(0, -1);
+    if (shared === undefined) {
+      shared = parts;
+      continue;
+    }
+    let same = 0;
+    while (same < shared.length && same < parts.length && shared[same] === parts[same]) same++;
+    shared = shared.slice(0, same);
+  }
+  return (shared ?? []).join('/');
+}
 
 /**
  * A file rendered outside the current folder comes back into it: --reverse
@@ -41,11 +76,11 @@ const restoreHere = d =>
     : '';
 
 /**
- * Register `render` under the `experimental` group.
+ * Register `export` under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
  */
-export function registerExperimentalRender(group, program) {
+export function registerExperimentalExport(group, program) {
   defineCommand(group, renderCommand, {
     fn: renderFn,
     action: async (
@@ -84,7 +119,8 @@ export function registerExperimentalRender(group, program) {
             cssBytes: kb(d.cssBytes),
             classes: d.classes,
             images: d.images,
-            files: d.files.join(', '),
+            files: fileList(d.files),
+            ...(d.notCarried?.length ? {notCarried: fileList(d.notCarried)} : {}),
             stylesheets: d.stylesheets.join(', ') || 'none',
             scriptBytes: kb(d.scriptBytes),
             scriptModules: d.scriptModules,
@@ -92,7 +128,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),
-          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}${restoreHere(d)}`),
+          text(`Give it back: ${run} experimental export --reverse ${shellArg(d.output)}${restoreHere(d)}`),
         );
         return answered;
       }
@@ -105,7 +141,7 @@ export function registerExperimentalRender(group, program) {
           mode: d.mode,
           exact: d.exact,
           output: d.output,
-          files: d.files.join(', '),
+          files: fileList(d.files),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
           ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'
@@ -158,7 +194,7 @@ export function registerExperimentalRender(group, program) {
         ...(d.mode === 'embedded'
           ? [
               text(
-                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
+                `Export it again: ${run} experimental export ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
               ),
             ]
           : []),

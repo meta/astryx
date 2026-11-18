@@ -61,8 +61,8 @@ const RUNNERS = {
     sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
-    runs: 'recorded built theme modules through the shared app-theme loader',
-    sites: ['importThemeArtifact'],
+    runs: "recorded built theme modules through the shared app-theme loader, and the app's package manager to install the Astryx packages a shared theme imports",
+    sites: ['child_process.spawnSync', 'importThemeArtifact'],
   },
   'api/theme-edit/_context.mjs': {
     runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
@@ -197,11 +197,11 @@ const RUNNERS = {
       'import ../experimental-theme.doc.mjs',
     ],
   },
-  'clients/cli/commands/experimental/render.mjs': {
+  'clients/cli/commands/experimental/export.mjs': {
     runs: SELF_DOCS,
     sites: [
       'import ../../../../api/render/render.doc.mjs',
-      'import ../experimental-render.doc.mjs',
+      'import ../experimental-export.doc.mjs',
     ],
   },
   'clients/cli/commands/manifest.mjs': {
@@ -450,7 +450,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
+    runs: "the page `astryx experimental export` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
     sites: [
       '.import() ×12',
       'createJiti ×2',
@@ -493,6 +493,10 @@ const RUNNERS = {
   'foundation/fs/loaded-files.mjs': {
     runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
     sites: ['createRequire'],
+  },
+  'foundation/fs/jiti-cache.mjs': {
+    runs: "jiti's own transform, on a transpile no kept copy holds, and jiti's version, part of each copy's name",
+    sites: ['require(jiti)', 'require(jiti/package.json)'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',

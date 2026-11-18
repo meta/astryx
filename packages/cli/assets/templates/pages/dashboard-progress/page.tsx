@@ -892,7 +892,7 @@ function BurndownChart() {
             cursor={{stroke: CHART_GRID}}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="ideal"
             name="Ideal"
             stroke={IDEAL_COLOR}
@@ -902,7 +902,7 @@ function BurndownChart() {
             isAnimationActive={false}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="actual"
             name="Actual"
             stroke={ACTUAL_COLOR}

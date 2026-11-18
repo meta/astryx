@@ -141,7 +141,7 @@ describe("a tab's underline", () => {
 });
 
 describe("an input's focus ring", () => {
-  it('is its box-shadow ring for a color, a width or a removal, and status fields keep none', async ctx => {
+  it('is its box-shadow ring for a color, a width or a removal, on every field', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('f', {cwd, like: 'neutral'});
     const dark = await top(
@@ -150,9 +150,6 @@ describe("an input's focus ring", () => {
     );
     expect(dark.commands).toEqual([
       "set f box-shadow 'inset 0 0 0 2px light-dark(var(--color-accent-muted), #dc2626)' --on inputs --state focus-within",
-      'set f box-shadow none --on inputs --when status:error --state focus-within',
-      'set f box-shadow none --on inputs --when status:warning --state focus-within',
-      'set f box-shadow none --on inputs --when status:success --state focus-within',
     ]);
     expect(
       (await top('make the input focus ring thicker', 'f')).commands[0],
@@ -166,12 +163,12 @@ describe("an input's focus ring", () => {
 });
 
 describe('a resting shadow on inputs', () => {
-  it('keeps every status selector at none while focused, and composes a status-scoped write for that status only', async ctx => {
+  it("keeps every status selector's focus ring while focused, and composes a status-scoped write for that status only", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('n', {cwd, like: 'neutral'});
     await themeEditSet('n', 'box-shadow', 'none', {cwd, on: 'inputs'});
     expect(cssOf('n')).toMatch(
-      /\.astryx-selector\[data-size="md"\]\[data-status="error"\]\[data-variant="input"\]:focus-within \{\s*box-shadow: none;/,
+      /\.astryx-selector\[data-size="md"\]\[data-status="error"\]\[data-variant="input"\]:focus-within \{\s*box-shadow: inset 0 0 0 2px var\(--color-accent-muted\);/,
     );
     await themeEditNew('e', {cwd, like: 'neutral'});
     await themeEditSet('e', 'box-shadow', '0 2px 6px #0000004d', {
@@ -181,14 +178,14 @@ describe('a resting shadow on inputs', () => {
     });
     const css = cssOf('e');
     expect(css).toMatch(
-      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: 0 2px 6px #0000004d;/,
+      /\.astryx-text-input\[data-status="error"\]:focus-within \{\s*box-shadow: 0 2px 6px #0000004d, inset 0 0 0 2px var\(--color-accent-muted\);/,
     );
     // The plain field is not written at all.
     expect(css).not.toMatch(/\.astryx-text-input:focus-within/);
   }, 240_000);
 
   it.runIf(BROWSER_STEP)(
-    'draws, while focused, the ring a plain field shows and none on status fields, in every case',
+    'draws, while focused, the ring a plain field shows on status fields too, in every case',
     async () => {
       if (unbuilt)
         throw new Error(`the base themes could not be built: ${unbuilt}`);
@@ -305,11 +302,11 @@ describe('a resting shadow on inputs', () => {
         };
         for (const mode of ['light', 'dark']) {
           const core = await focused('b0', mode);
-          expect(core.error, mode).toBe('none');
-          expect(core.select, mode).toBe('none');
-          // No shadow: the plain ring stays, status fields keep none.
+          expect(core.error, mode).toBe(core.plain);
+          expect(core.select, mode).toBe(core.plain);
+          // No shadow: every field keeps its ring.
           expect(await focused('b1', mode), mode).toEqual(core);
-          // No shadow on error fields: they stay none while focused.
+          // No shadow on error fields: they keep their ring while focused.
           expect(await focused('b2', mode), mode).toEqual(core);
         }
         // The dark-mode ring: light is as Core draws it, every field.
@@ -318,8 +315,8 @@ describe('a resting shadow on inputs', () => {
         );
         const dark = await focused('b3', 'dark');
         expect(dark.plain).toMatch(/rgb\(220, 38, 38\)/);
-        expect(dark.error).toBe('none');
-        expect(dark.select).toBe('none');
+        expect(dark.error).toBe(dark.plain);
+        expect(dark.select).toBe(dark.plain);
       } finally {
         await browser.close();
       }
