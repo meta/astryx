@@ -160,7 +160,7 @@ define, so Astryx React Native itself stays the same with or without it.
     | Layout, text, and keyboard (`spec:AST-129`)                                                                                  | Safe areas, the keyboard dock, and selectable text in both looks (word selection by long press or double tap, Copy, Select All); the window status bar in the Android look. The same `Intl` set as the device; a run reports at start each required member it lacks and each it only approximates.                                                                                                    |
     | `AstryxAppearance`, `AstryxAccessibilitySettings`, `AstryxHaptics`, `AstryxClipboard`, `AstryxPlatformInfo` (`spec:AST-130`) | The saved appearance per app, kept across runs and applied before the first frame, and a run-only override; the run's accessibility settings, changed live, with the same snapshot and event; each haptic in the run's trace, with no feedback; the clipboard as an in-memory string that `detectPatterns` classifies without handing it back; Stage's own app identity, revisions, and feature rows. |
     | `AstryxPermissions`, `AstryxFilePicker`, `AstryxStorage`, `AstryxBack`, `AstryxLaunch` (`spec:AST-130`)                      | Permissions start `undetermined` and a request draws a prompt (a run option starts one granted), and `hasHardware` is false, as on the Simulator; the document picker, and a photo picker over a fixed set of sample images with thumbnails for them; one store per namespace, kept across runs, and empty at the start of a headless run; back and launch absent, as on iOS.                         |
-    | Web view (`spec:AST-131`)                                                                                                    | On macOS the page in the system's web engine, with the device's navigation, sessions, page storage, bundled folders, messages, and content-process end; `preventsCapture` ignored, as iOS does. `AstryxWebViewInfo` answers as the device it shows.                                                                                                                                                   |
+    | Web view (`spec:AST-131`)                                                                                                    | On macOS the page in the system's web engine, with the device's navigation, sessions, page storage, messages, and content-process end; `preventsCapture` ignored, as iOS does. `AstryxWebViewInfo` answers as the device it shows.                                                                                                                                                                    |
     | Media and camera (`spec:AST-132`)                                                                                            | Players with the device's states, seeking, rate, volume, mute, and loop; sound in a window on macOS, and state without sound headless; `isBackgroundAvailable()` true. Video: on macOS the frame at the player's position with `contain` and `cover`, elsewhere a surface at the video's ratio; picture in picture unsupported. The camera view absent, as on a device with no camera.                |
     | Photos and documents (`spec:AST-135`)                                                                                        | A built-in library of placeholder photos and one video with fixed ids; the run sets the starting access and the prompt's answer; listing, cursors, export, and change events follow the platform Stage runs as. Thumbnails draw the asset's placeholder tile, `cover` or `contain`, with that platform's load size.                                                                                   |
 
@@ -180,10 +180,8 @@ define, so Astryx React Native itself stays the same with or without it.
   end state without animation.
 
   FR6 gap: Astryx Stage shows `AstryxWebView` only on macOS (on Linux and
-  Windows the view reports absent and the library draws its fallback), loads
-  no page ahead of time (a `warm` bundle view loads its own page, and
-  `warmBundle` is not listed), and ignores `preventsCapture` in an Android
-  look.
+  Windows the view reports absent and the library draws its fallback), and
+  ignores `preventsCapture` in an Android look.
 
   FR6 gap: Astryx Stage shows no Now Playing card and has no remote commands,
   interruptions, route changes, or background pausing; it reads real levels
@@ -198,13 +196,21 @@ define, so Astryx React Native itself stays the same with or without it.
   - Each release of `@astryxdesign/react-native` names the oldest Astryx
     Stage that implements its native contracts: the project's Stage version
     floor.
-  - Stage declares the contracts it implements, by name, with its own
-    version, and reports the named features each contract has in its binary
-    (`spec:AST-112/DEC-14`). How it publishes the declaration is OQ3.
-  - Before any of the project's JavaScript runs, a Stage below the floor
-    refuses the project by itself. The refusal lists each contract it lacks
-    and names the Stage version that has them. It never renders with a silent
-    fallback.
+  - A contract is its specification plus the named features a binary
+    reports; no contract carries a revision number (`spec:AST-112/DEC-14`).
+    Stage declares the contracts it implements, by name, with its own
+    version, and reports each contract's named features in the same one
+    feature list the package's binaries use. How it publishes the
+    declaration is OQ3.
+  - The project's contract manifest is forward compatible by rule: it
+    carries a top-level `requires` list, and a Stage refuses a manifest that
+    names a requirement it does not know, naming the Stage version that knows
+    it.
+  - Stage checks the floor and the manifest itself, whichever command or
+    window starts it, not only through the CLI. Before any of the project's
+    JavaScript runs, a Stage below the floor refuses the project. The refusal
+    lists each contract it lacks and names the Stage version that has them.
+    It never renders with a silent fallback.
   - A Stage at or above the floor runs the project, and a newer Stage renders
     a project on an older package.
   - A named feature that the Stage binary does not implement answers as an
@@ -274,22 +280,25 @@ define, so Astryx React Native itself stays the same with or without it.
     file the command did not write (`architecture:cli-surface` DEC-16).
   - The group answers: what does this app render, and
     how does it behave, without a simulator? `experimental render` renders a
-    web page from a page module, so it does not answer. Its function is
+    web page from a page module, so it does not answer, and `astryx rn run`
+    puts the app on a simulator, an emulator, or a device and returns no
+    picture, accessibility tree, or step report, so an option on it cannot
+    answer either (`spec:AST-042` FR4). Its function is
     `stage` in the package's `./commands` entry, and its result is captures,
     step reports, and the accessibility tree.
   - Outcomes beyond the shared ones of `spec:AST-112/FR13`:
 
-    | Outcome                                                                                                                      | Code                         |
-    | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                                    | `ERR_DEP_MISSING`            |
-    | The Stage download fails                                                                                                     | `ERR_FETCH_FAILED`           |
-    | A Stage binary fails its checksum or signature                                                                               | `ERR_STAGE_UNTRUSTED`        |
-    | `--window` names no open Stage window                                                                                        | `ERR_STAGE_NO_WINDOW`        |
-    | A script step fails; the report names the step                                                                               | `ERR_STAGE_STEP_FAILED`      |
-    | The app throws or fails to start in Stage                                                                                    | `ERR_STAGE_JS_ERROR`         |
-    | Stage cannot set up the project                                                                                              | `ERR_STAGE_PROJECT_SETUP`    |
-    | The project's Stage version floor is above this Stage; the envelope lists the contracts it lacks and the Stage that has them | `ERR_STAGE_CONTRACTS`        |
-    | A named dev server does not answer                                                                                           | `ERR_DEV_SERVER_UNREACHABLE` |
+    | Outcome                                                                                                                                                                         | Code                         |
+    | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                                                                                       | `ERR_DEP_MISSING`            |
+    | The Stage download fails                                                                                                                                                        | `ERR_FETCH_FAILED`           |
+    | A Stage binary fails its checksum or signature                                                                                                                                  | `ERR_STAGE_UNTRUSTED`        |
+    | `--window` names no open Stage window                                                                                                                                           | `ERR_STAGE_NO_WINDOW`        |
+    | A script step fails; the report names the step                                                                                                                                  | `ERR_STAGE_STEP_FAILED`      |
+    | The app throws or fails to start in Stage                                                                                                                                       | `ERR_STAGE_JS_ERROR`         |
+    | Stage cannot set up the project                                                                                                                                                 | `ERR_STAGE_PROJECT_SETUP`    |
+    | The project's Stage version floor is above this Stage, or its manifest names a requirement this Stage does not know; the envelope lists what it lacks and the Stage that has it | `ERR_STAGE_CONTRACTS`        |
+    | A named dev server does not answer                                                                                                                                              | `ERR_DEV_SERVER_UNREACHABLE` |
 
 ### Evidence
 
@@ -320,23 +329,25 @@ define, so Astryx React Native itself stays the same with or without it.
 - `architecture:cli-surface` INV10 and `spec:AST-081` FR7 gain the Stage
   cache as a per-user write root, and INV10 admits a file that `--out` names
   by an absolute path, as DEC-16 does for `experimental render --out`.
+  `spec:AST-112/FR13`'s rule that the commands' own writes stay inside the app
+  gains the same two exceptions for the `astryx rn stage` group (FR8).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states how Stage shows them (FR6) and how Stage
   pairs with them (FR7).
 
 ## Verification
 
-| Contract | Verification                                                                                                                | Representative states                                                                                      | Mutation or failure expectation                                                                                                                                  |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | The same bundle rendered in Stage and on the Simulator and emulator; layout comparison                                      | a sample app; each platform profile                                                                        | A layout that differs from the device's with no entry in the report                                                                                              |
-| FR2      | Report contract tests of each headless verb; a scripted check that fails a step                                             | capture; scripted check; accessibility tree; a JavaScript exception; an unknown route                      | A failed run that reports success, or a picture of nothing reported as ready                                                                                     |
-| FR3      | Captures per option compared with the Simulator and emulator                                                                | each profile; dark; RTL; largest text size; Reduce Motion                                                  | An option that changes nothing, or a theme default that Stage adds                                                                                               |
-| FR4      | Runs from a dev server with an edit, from a production bundle, and from a sample                                            | hot reload with state; one-shot bundle                                                                     | An edit that loses the app's state on hot reload, or a bundle that runs differently from the dev server's                                                        |
-| FR5      | A project with an unknown native view and module; a run on a desktop without a system web view                              | each kind of simulated entry                                                                               | A missing native piece that the report does not name                                                                                                             |
-| FR6      | Stage contract checks of each group's contracts beside the same scripts on the Simulator and emulator                       | each public API; each note in FR6's table; each look                                                       | A Stage answer that differs from iOS and Android and is not a named gap, or a public API with neither a simulation nor a report entry                            |
-| FR7      | Stage's declared contracts and named features compared with the package's; a Stage below the floor; a Stage at the floor    | an older package; a newer package; one missing contract; one missing named feature                         | A Stage below the floor that runs the project, a refusal without the list, JavaScript that runs before the refusal, or a missing feature that `supports` reports |
-| FR8      | CLI contract tests of `astryx rn stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode` | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                          |
-| FR9      | Review of each native change's evidence                                                                                     | a native behavior change                                                                                   | A native claim backed only by Stage                                                                                                                              |
+| Contract | Verification                                                                                                                                                                                      | Representative states                                                                                       | Mutation or failure expectation                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1      | The same bundle rendered in Stage and on the Simulator and emulator; layout comparison                                                                                                            | a sample app; each platform profile                                                                         | A layout that differs from the device's with no entry in the report                                                                                                                                                |
+| FR2      | Report contract tests of each headless verb; a scripted check that fails a step                                                                                                                   | capture; scripted check; accessibility tree; a JavaScript exception; an unknown route                       | A failed run that reports success, or a picture of nothing reported as ready                                                                                                                                       |
+| FR3      | Captures per option compared with the Simulator and emulator                                                                                                                                      | each profile; dark; RTL; largest text size; Reduce Motion                                                   | An option that changes nothing, or a theme default that Stage adds                                                                                                                                                 |
+| FR4      | Runs from a dev server with an edit, from a production bundle, and from a sample                                                                                                                  | hot reload with state; one-shot bundle                                                                      | An edit that loses the app's state on hot reload, or a bundle that runs differently from the dev server's                                                                                                          |
+| FR5      | A project with an unknown native view and module; a run on a desktop without a system web view                                                                                                    | each kind of simulated entry                                                                                | A missing native piece that the report does not name                                                                                                                                                               |
+| FR6      | Stage contract checks of each group's contracts beside the same scripts on the Simulator and emulator                                                                                             | each public API; each note in FR6's table; each look                                                        | A Stage answer that differs from iOS and Android and is not a named gap, or a public API with neither a simulation nor a report entry                                                                              |
+| FR7      | Stage's declared contracts and named features compared with the package's; a Stage below the floor; a Stage at the floor; a manifest with an unknown requirement; a Stage started without the CLI | an older package; a newer package; one missing contract; one missing named feature; one unknown requirement | A Stage below the floor that runs the project, a refusal without the list, JavaScript that runs before the refusal, a manifest with an unknown requirement that runs, or a missing feature that `supports` reports |
+| FR8      | CLI contract tests of `astryx rn stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving                                                                       | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode`  | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                                                                            |
+| FR9      | Review of each native change's evidence                                                                                                                                                           | a native behavior change                                                                                    | A native claim backed only by Stage                                                                                                                                                                                |
 
 ## Decision log
 
