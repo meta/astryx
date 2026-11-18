@@ -1,19 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The bin makes a piped stdout and stderr block on write, so an error
- * answer longer than a pipe holds (64 KiB) reaches a slow reader whole, though
- * the run ends in `process.exit`.
+ * @file A run, from the bin or from the host entry, makes a piped stdout and
+ * stderr block on write, so an error answer longer than a pipe holds (64 KiB)
+ * reaches a slow reader whole, in --json and in text, though the run ends in
+ * `process.exit`.
  */
 
 import {execFile} from 'node:child_process';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bin = path.join(here, 'bin/astryx.mjs');
+const host = pathToFileURL(path.join(here, '../../host/index.mjs')).href;
 
 /**
  * Run node with `args` and pipe one of its streams to a reader that starts
@@ -57,27 +59,43 @@ describe.skipIf(process.platform === 'win32')(
       expect(out.length).toBeLessThan(BIG);
     }, 60_000);
 
-    it('a CLI error answer in --json reaches a slow reader whole', async () => {
-      const name = 'q'.repeat(100_000);
-      const {status, out} = await throughSlowReader(
-        [bin, 'component', name, '--json'],
-        'stdout',
-      );
-      expect(status).toBe(1);
-      const answer = JSON.parse(out);
-      expect(answer.code).toBe('ERR_UNKNOWN_COMPONENT');
-      expect(answer.error).toContain(name);
-    }, 60_000);
+    // The bin and the host entry each start a run through run.mjs.
+    const entries = [
+      {entry: 'the bin', args: [bin]},
+      {
+        entry: 'the host entry',
+        args: [
+          '--input-type=module',
+          '-e',
+          `import {runHostedCli} from ${JSON.stringify(host)};
+           await runHostedCli({argv: process.argv.slice(1)});`,
+        ],
+      },
+    ];
 
-    it('a CLI error in text reaches a slow reader whole on stderr', async () => {
-      const name = 'q'.repeat(100_000);
-      const {status, out} = await throughSlowReader(
-        [bin, 'component', name],
-        'stderr',
-      );
-      expect(status).toBe(1);
-      expect(out).toContain(name);
-      expect(out.endsWith('\n')).toBe(true);
-    }, 60_000);
+    for (const {entry, args} of entries) {
+      it(`${entry}: a --json error answer reaches a slow reader whole`, async () => {
+        const name = 'q'.repeat(100_000);
+        const {status, out} = await throughSlowReader(
+          [...args, 'component', name, '--json'],
+          'stdout',
+        );
+        expect(status).toBe(1);
+        const answer = JSON.parse(out);
+        expect(answer.code).toBe('ERR_UNKNOWN_COMPONENT');
+        expect(answer.error).toContain(name);
+      }, 60_000);
+
+      it(`${entry}: a text error reaches a slow reader whole on stderr`, async () => {
+        const name = 'q'.repeat(100_000);
+        const {status, out} = await throughSlowReader(
+          [...args, 'component', name],
+          'stderr',
+        );
+        expect(status).toBe(1);
+        expect(out).toContain(name);
+        expect(out.endsWith('\n')).toBe(true);
+      }, 60_000);
+    }
   },
 );
