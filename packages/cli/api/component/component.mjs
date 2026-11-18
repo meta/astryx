@@ -486,6 +486,7 @@ async function componentRead(name, options = {}) {
           return componentDetailProps(
             {props: sub.matchingComponent.props},
             owner.package,
+            {docPath: owner.docPath},
           );
         }
         return componentDetail(sub.scoped, owner, dirName, coreDir);
@@ -494,7 +495,11 @@ async function componentRead(name, options = {}) {
         scoped.kind === 'integration'
           ? scopeIntegrationMember(loaded, owner, dirName)
           : loaded;
-      if (props) return componentDetailProps(docs, owner.package);
+      if (props) {
+        return componentDetailProps(docs, owner.package, {
+          docPath: owner.docPath,
+        });
+      }
       return componentDetail(docs, owner, dirName, coreDir);
     }
 
@@ -521,7 +526,11 @@ async function componentRead(name, options = {}) {
         return componentDetailBlocks(dirName, cwd, scoped.ext.name);
       }
       const docs = await loadComponentDoc(extDocPath, docOpts);
-      if (props) return componentDetailProps(docs, scoped.ext.name);
+      if (props) {
+        return componentDetailProps(docs, scoped.ext.name, {
+          docPath: extDocPath,
+        });
+      }
       return componentDetail(
         docs,
         {package: scoped.ext.name, sourcePath: null},
@@ -604,7 +613,11 @@ async function componentRead(name, options = {}) {
     }
     const loaded = await loadComponentDoc(owner.docPath, docOpts);
     const docs = scopeIntegrationMember(loaded, owner, dirName);
-    if (props) return componentDetailProps(docs, owner.package);
+    if (props) {
+      return componentDetailProps(docs, owner.package, {
+        docPath: owner.docPath,
+      });
+    }
     return componentDetail(docs, owner, dirName, coreDir);
   }
 
@@ -660,6 +673,7 @@ async function componentRead(name, options = {}) {
       return componentDetailProps(
         {props: sub.matchingComponent.props},
         resolved.resolvedOwnerPackage,
+        {docPath: resolved.readmePath},
       );
     return componentDetail(
       sub.scoped,
@@ -672,7 +686,11 @@ async function componentRead(name, options = {}) {
     );
   }
 
-  if (props) return componentDetailProps(docs, resolved.resolvedOwnerPackage);
+  if (props) {
+    return componentDetailProps(docs, resolved.resolvedOwnerPackage, {
+      docPath: resolved.readmePath,
+    });
+  }
   return componentDetail(
     docs,
     {

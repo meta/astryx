@@ -142,10 +142,25 @@
 
 /**
  * astryx --json component <name> --props
+ * @typedef {object} ComponentPropsType
+ * @property {string} name The type's name, as the package exports it
+ *   (`import type {<name>} from '<package>'`).
+ * @property {string} [declaration] The type's declaration, without comments.
+ *   A type that a listed type names, beyond the answer's length limit, has
+ *   no declaration.
+ */
+
+/**
+ * A prop, with `types`: the types its `type` names that the package exports,
+ * then the types those types name. Absent when it names none.
+ * @typedef {import('@astryxdesign/cli/authoring').ComponentPropDoc & {types?: ComponentPropsType[]}} ComponentPropsEntry
+ */
+
+/**
  * @typedef {object} ComponentDetailPropsResponse
  * @property {'component.detail.props'} type
  * @property {string} package The npm package that owns the component.
- * @property {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} data
+ * @property {ComponentPropsEntry[]} data
  */
 
 /**
