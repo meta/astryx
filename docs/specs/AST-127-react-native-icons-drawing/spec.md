@@ -31,27 +31,24 @@ the platform's system symbol, such as an SF Symbol on iOS; an icon the app or
 theme defines replaces it, and a drawn glyph stands in where no system symbol
 exists. Icons mirror in right-to-left layouts, are named or hidden for screen
 readers, enlarge in the iOS Large Content Viewer where a fixed-size control
-needs it, and look the same in Astryx Stage. No icon font, SVG library, or image
-library is installed for any of it.
+needs it. The package installs no icon font, SVG library, or image library; an
+app may still use such libraries beside these components.
 
 This record details the icon and drawing pieces of the platform layer of
 `spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the result
 vocabulary (`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`),
 additive evolution (`spec:AST-112/FR8`), the mapping of Astryx icon names onto
-system symbols (`spec:AST-112/FR9`), and Astryx Stage, which conforms to these
-contracts and never defines them (`spec:AST-112/FR12`). Icon names and theme
-icons follow `spec:AST-082/FR17`.
+system symbols (`spec:AST-112/FR9`). Icon names and theme icons follow
+`spec:AST-082/FR17`.
 
 ## Why this exists
 
 - **`AstryxSymbolView`.** Icons default to system symbols, so the core needs an
   SF Symbols view that takes Astryx's name mapping, Bold Text, and Reduce Motion
-  into account, behaves the same in Astryx Stage, and adds no third-party native
-  dependency (`spec:AST-112/FR2`).
+  into account and needs no other native package (`spec:AST-112/FR2`).
 - **`AstryxVectorView` and `AstryxVectorInfo`.** Drawn glyphs and charts need
-  one small, versioned scene format that iOS, Android, and Astryx Stage draw the
-  same way, on one native view per drawing, with no third-party native
-  dependency.
+  one small, versioned scene format that iOS and Android draw the same way, on
+  one native view per drawing, with no other native package.
 - **`AstryxIconView` and `AstryxIcons`.** React Native's `Image` loads every
   source asynchronously, so a menu can open with empty icon slots. A theme's or
   app's image icons need to appear in the view's first frame, and their prefetch
@@ -78,14 +75,16 @@ icons follow `spec:AST-082/FR17`.
   vector scene. Text lies over a drawing; touches go to the view under it.
 - The system menu's own symbol images (the Menus and presentation record owns
   the menu host).
+- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
+  they conform to this record's contracts.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI
   job/workflow topology belong in architecture or implementation unless callers
   or interoperating systems intentionally depend on that exact mechanism as a
-  public protocol. The vector scene format is such a protocol: three renderers
-  and the library's writer depend on it (FR7).
+  public protocol. The vector scene format is such a protocol: every renderer
+  and the library's writer depend on it (FR6).
 
 ## Requirements
 
@@ -122,14 +121,7 @@ All five contracts belong to the platform's core: every binary has them.
   - Where the view is absent (Jest, a binary without it), `NativeIconView` falls
     back to React Native's `Image` with the same mask, fit, tint, and mirroring
     and no fade-in. The icon then appears when that asynchronous load completes.
-- **FR2 — A previewed project never fetches through an icon.** In a project that
-  runs inside the Astryx app's preview host, `AstryxIconView` shows a bundled
-  mask, a `data:` URI, and a file the project may read, and nothing else.
-  `NativeIconView` gives a remote mask to the native view only when it knows the
-  runtime belongs to the app. In any other runtime it uses `Image`, so the
-  project's own image loading and network rules apply. A project never receives
-  a mask that the app's runtime downloaded.
-- **FR3 — `AstryxIcons.prefetch` warms the masks and resolves a result.**
+- **FR2 — `AstryxIcons.prefetch` warms the masks and resolves a result.**
   `AstryxIcons` has the capability shape (`spec:AST-112/FR7`) and
   `prefetch({uris, scale})`.
   - It downloads every remote mask that is not already available. It skips local
@@ -140,8 +132,8 @@ All five contracts belong to the platform's core: every binary has them.
     number that could not load when at least one other mask did. It never
     rejects. Its reasons are `no-module`, `unsupported` (a binary without
     `prefetch`), `unavailable` (`isSupported()` answers false), `fetch-failed`
-    (no missing mask loaded), `not-allowed` (a previewed project's runtime), and
-    `error`. An empty list resolves `ok` with zero counts and calls nothing.
+    (no missing mask loaded), and `error`. An empty list resolves `ok` with zero
+    counts and calls nothing.
   - `isAvailable()` is true only where the module has `prefetch` and
     `isSupported()` does not answer false.
   - `AstryxProvider` prefetches the active theme's image icons each time that
@@ -149,7 +141,7 @@ All five contracts belong to the platform's core: every binary has them.
     is on.
   - The native `cacheInfo()` answers how many masks are available. The
     `AstryxIcons` object does not expose it (OQ3).
-- **FR4 — `SymbolView` shows an SF Symbol (iOS).** The `.` entry exports
+- **FR3 — `SymbolView` shows an SF Symbol (iOS).** The `.` entry exports
   `SymbolView` with `symbolName`, `size`, `color`, `weight` (`ultraLight`
   through `black`, default `regular`), `mirrored`, `effect`, `fallback`, and
   `onError`, and the probe `isSymbolViewAvailable()`, which is false off iOS.
@@ -168,14 +160,14 @@ All five contracts belong to the platform's core: every binary has them.
   - Where the view is absent (Android, Jest, any binary without it),
     `SymbolView` renders `fallback` (nothing by default) and reports
     `onError({reason: 'no-native-view'})` once per mount.
-- **FR5 — `Icon` resolves a name to a defined icon, then a system symbol, then a
+- **FR4 — `Icon` resolves a name to a defined icon, then a system symbol, then a
   drawn glyph.** The built-in names are core's (`spec:AST-082/FR17`); any other
   name is namespaced (`<library>:<name>`). In this order:
   - A theme entry that names a shipped image (`assetName`) shows that image
     through `NativeIconView`; one that names a platform symbol (`systemName`)
     shows it through `SymbolView` on iOS.
   - An image the app registers for the name shows through `NativeIconView`.
-  - A glyph the theme defines for the name draws as a vector scene (FR7).
+  - A glyph the theme defines for the name draws as a vector scene (FR6).
   - Under the `platform` icon source, a built-in name shows its system symbol:
     on iOS, the SF Symbol the library's name table gives it, where the symbol
     view is present and the running iOS meets that symbol's minimum.
@@ -189,7 +181,7 @@ All five contracts belong to the platform's core: every binary has them.
     `AstryxCapabilitiesProvider`, a value or a function of the theme's name,
     decides; without it, the theme's own setting decides; without either, the
     source is `platform`. Under `theme`, built-in names skip system symbols.
-- **FR6 — The library applies Astryx's display rules before the views draw.**
+- **FR5 — The library applies Astryx's display rules before the views draw.**
   - Right-to-left: `chevronLeft`, `chevronRight`, `chevronsLeft`,
     `chevronsRight`, and `externalLink` mirror; `chevronDown`, `arrowUp`,
     `arrowDown`, `arrowsUpDown`, `upload`, `check`, and `close` do not. The
@@ -205,7 +197,7 @@ All five contracts belong to the platform's core: every binary has them.
 
 ### Drawing
 
-- **FR7 — One vector scene format, read the same everywhere.** A `VectorScene`
+- **FR6 — One vector scene format, read the same everywhere.** A `VectorScene`
   is data the platform owns and the library writes: `version`, `viewBox`
   (`[x, y, width, height]` or null for the view's own points), `fit` (`meet`,
   `slice`, `none`), `alignX` and `alignY` (0, 0.5, or 1, as SVG's
@@ -236,8 +228,8 @@ All five contracts belong to the platform's core: every binary has them.
     existing scene unchanged. A rule that would change how an existing scene
     looks gets a new `version` number.
   - One set of shared conformance cases fixes what every reader (iOS, Android,
-    Astryx Stage, and the JavaScript reference reader) draws and reports.
-- **FR8 — `NativeVectorView` draws one scene on one native view.** The `.` entry
+    and the JavaScript reference reader) draws and reports.
+- **FR7 — `NativeVectorView` draws one scene on one native view.** The `.` entry
   exports `NativeVectorView` with `scene`, `isLargeContentImage`, `fallback`,
   `onError`, the view props, and a ref, the scene types, and the probe
   `isNativeVectorViewAvailable()`.
@@ -257,7 +249,7 @@ All five contracts belong to the platform's core: every binary has them.
   - `Icon` treats an absent vector view as a broken install: a drawn glyph shows
     nothing, and a development warning names the view. `Vector` draws nothing
     and keeps its size.
-- **FR9 — `AstryxVectorInfo` reports the scene versions a binary reads.**
+- **FR8 — `AstryxVectorInfo` reports the scene versions a binary reads.**
   `AstryxVectorInfo` has the capability shape and no methods. `version()`
   answers the highest scene version the binary's vector view reads, 2 for this
   contract set, and null when the module is missing. A binary that lacks the
@@ -265,7 +257,7 @@ All five contracts belong to the platform's core: every binary has them.
   - `Vector` writes version 2 only when a drawing uses a group, and version 1
     otherwise. If the view exists but the report has no usable number, `Vector`
     writes version 1 and warns once in development that the two disagree.
-- **FR10 — A drawn glyph is the Large Content Viewer image (iOS).** When
+- **FR9 — A drawn glyph is the Large Content Viewer image (iOS).** When
   `isLargeContentImage` is true, the vector view renders its scene into a
   template image. It gives that image, scaled by the system, to the closest
   enclosing React Native view in its surface that has
@@ -277,53 +269,48 @@ All five contracts belong to the platform's core: every binary has them.
     recycled, or the prop becomes false, the view removes the image, unless
     another glyph has replaced it on that control.
   - The search for that enclosing view never leaves the view's own surface and
-    changes only React Native views, so a previewed project cannot change the
-    app's own bars.
+    changes only React Native views.
   - The library marks at most one glyph per control. For an icon shown as a
     symbol or an image, the viewer shows only the control's title.
   - Android has no Large Content Viewer and ignores the prop.
 
 ### Behaviour across binaries
 
-- **FR11 — The group is at its baseline.** Every contract in this group is at
+- **FR10 — The group is at its baseline.** Every contract in this group is at
   revision 1 on iOS and Android, `isLargeContentImage` included, and lists no
   named feature (`spec:AST-112/FR8`).
-- **FR12 — Absence never throws.** Every probe answers false, every call
+- **FR11 — Absence never throws.** Every probe answers false, every call
   resolves a result (`spec:AST-112/FR6`), and every absent view reports
   `no-native-view` and draws its fallback (`spec:AST-112/FR7`). The
   `isPlatformEnabled={false}` switch sends `SymbolView`, `NativeIconView`, and
   `Vector` to their fallbacks; `Icon` then draws built-in names as drawn glyphs,
   because the vector view is core.
-- **FR13 — Native code uses public platform API only.** The views and modules
+- **FR12 — Native code uses public platform API only.** The views and modules
   use the public APIs of UIKit, Core Graphics, Foundation, the Android SDK, and
   React Native. This group needs no exception.
 
 ### Platform support
 
-| Contract           | iOS                                                   | Android                                               | Astryx Stage                                                                                                                     |
-| ------------------ | ----------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxIconView`   | Masks tinted, fitted, and mirrored                    | Masks tinted, fitted, and mirrored                    | Local masks tinted, fitted, and mirrored; a previewed project's remote mask shows nothing                                        |
-| `AstryxIcons`      | Shared downloads; resolves counts                     | Shared downloads; resolves counts                     | Counts and `not-allowed` as on a device                                                                                          |
-| `AstryxSymbolView` | SF Symbols with weights and symbol effects            | Absent: `fallback`                                    | macOS: the SF Symbol; Linux: the drawn glyph with a close stroke; effects shown in their end state                               |
-| `AstryxVectorView` | Core Graphics drawing; the Large Content Viewer image | Canvas drawing; the Large Content Viewer prop ignored | Draws the same scenes as a device; shows no system viewer and reports the Large Content Viewer image in its accessibility output |
-| `AstryxVectorInfo` | Reports 2                                             | Reports 2                                             | Reports 2                                                                                                                        |
+| Contract           | iOS                                                   | Android                                               |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------------- |
+| `AstryxIconView`   | Masks tinted, fitted, and mirrored                    | Masks tinted, fitted, and mirrored                    |
+| `AstryxIcons`      | Shared downloads; resolves counts                     | Shared downloads; resolves counts                     |
+| `AstryxSymbolView` | SF Symbols with weights and symbol effects            | Absent: `fallback`                                    |
+| `AstryxVectorView` | Core Graphics drawing; the Large Content Viewer image | Canvas drawing; the Large Content Viewer prop ignored |
+| `AstryxVectorInfo` | Reports 2                                             | Reports 2                                             |
 
-- FR1 gap: in Astryx Stage, an app runtime's remote (`http(s)`) mask shows
-  nothing, and `prefetch` counts it without downloading it.
-- FR4 gap: Astryx Stage shows each symbol effect in its end state and does not
-  animate it, and off macOS it shows the drawn glyph in place of the SF Symbol.
-- FR5 gap: no contract shows Android's system icons, so on Android every
+- FR4 gap: no contract shows Android's system icons, so on Android every
   built-in name without a defined icon draws its drawn glyph.
 - Supported feature/engine floor: `spec:AST-112` Platform support (iOS at React
   Native's minimum, Android API level 24, New Architecture only); each SF
   Symbol's minimum iOS in the library's name table; symbol effects by kind on
-  iOS 17, 18, or 26 (FR4); the Astryx Stage version floor (`spec:AST-112/FR12`).
+  iOS 17, 18, or 26 (FR3).
 - Unsupported behavior: an absent view draws its fallback and reports
   `no-native-view`; an absent module answers `no-module`; a binary without a
   named feature keeps the revision-1 behavior, draws its fallback, or answers
-  `unsupported` (`spec:AST-112/FR8`, FR12).
+  `unsupported` (`spec:AST-112/FR8`, FR11).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
-  emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
+  emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
@@ -331,8 +318,6 @@ All five contracts belong to the platform's core: every binary has them.
   by default, so these five core contracts are in every binary.
 - Relies on `spec:AST-112` FR8 (amended): every contract starts at revision 1
   and later behavior is a named feature the binary reports.
-- Relies on `spec:AST-112` FR12 (amended): the package names the oldest Astryx
-  Stage that supports its contracts, and an older Stage refuses the project.
 - Changes `spec:AST-112/FR1`: the core's list gains `AstryxIconView`,
   `AstryxIcons`, `AstryxVectorView`, and `AstryxVectorInfo` beside system
   symbols.
@@ -342,49 +327,51 @@ All five contracts belong to the platform's core: every binary has them.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                                        | Representative states                                                                                                                      | Mutation or failure expectation                                                                                                               |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests through the `./testing` doubles; Simulator and emulator frame captures; Astryx Stage contract checks                                                                                     | bundled, disk, `data:`, and remote masks; a mask shown before; a scale change; the view absent                                             | A local mask missing from the first frame, two downloads for one URI, or no `Image` fallback where the view is absent                         |
-| FR2      | Astryx Stage contract checks in a previewed project; device check in the Astryx app's preview                                                                                                       | a remote mask; an app file; a project file                                                                                                 | A request leaves through an icon, or a project shows an app file or an app-downloaded mask                                                    |
-| FR3      | Unit tests through `mockIcons()` in its absent, older, and current shapes                                                                                                                           | no module; no `prefetch`; `isSupported` false; all, some, and no masks loaded; a previewed project; an empty list                          | A rejection, a reason outside the set, or a call for an empty list                                                                            |
-| FR4      | iOS Simulator frame captures per iOS major; Astryx Stage contract checks; unit tests of the absent view                                                                                             | each weight; mirrored; each effect kind; a trigger change; a trigger at mount; repeat; an unknown name; Android                            | An effect that plays at mount, plays on an iOS without it, or runs JavaScript per frame; no `no-native-view` report where absent              |
-| FR5      | Library unit tests of name resolution and the icon source                                                                                                                                           | a theme `assetName` and `systemName` entry; an app image; a theme glyph; each icon source; a symbol above the running iOS; an unknown name | A built-in symbol drawn over an icon the app or theme defines, a symbol under `theme`, or an unknown name that draws in development           |
-| FR6      | Library unit tests of mirroring, Bold Text, Reduce Motion, colors, and labels                                                                                                                       | RTL; Bold Text; Reduce Motion; a scheme change; a `PlatformColor`; a label                                                                 | A mirrored vertical arrow, an effect under Reduce Motion, a stale color after a scheme change, or an unlabeled icon exposed to screen readers |
-| FR7      | The shared conformance cases run by each reader; unit tests of the writer                                                                                                                           | each path command, paint, and transform; version 2 groups; unknown nodes; non-finite numbers; a bad viewBox; deep JSON                     | A reader that crashes, draws an ignored node, or reports a reason other than the case's                                                       |
-| FR8      | Unit tests through `installPlainVectorViewForTesting`; accessibility-hierarchy checks on the Simulator and emulator; UI-thread frame checks (no JavaScript per frame); Astryx Stage contract checks | a new scene object; the same object again; a label; no label; the view absent                                                              | A resend for the same object, a touch taken, an unlabeled drawing exposed to screen readers, or a fallback that changes the layout            |
-| FR9      | Unit tests through `mockVectorInfo()`                                                                                                                                                               | no module; version 2; a view without a report                                                                                              | A version 2 scene sent to a binary that does not read it, or a silent blank drawing                                                           |
-| FR10     | iOS Simulator accessibility checks at an accessibility text size; Astryx Stage accessibility output                                                                                                 | a marked glyph; a glyph change; RTL; unmount; two marked glyphs; a previewed project                                                       | No image in the viewer, a stale image after a glyph change, an image left after unmount, or a change outside the surface                      |
-| FR11     | The platform's spec rules check                                                                                                                                                                     | each contract on iOS and Android                                                                                                           | A contract above revision 1 or with a named feature this record does not list                                                                 |
-| FR12     | Unit tests of every probe, call, and view in the absent shape; `isPlatformEnabled={false}` library tests                                                                                            | Jest with no natives; the platform off                                                                                                     | A throw, a rejection, or an `Icon` that shows nothing with the platform off                                                                   |
-| FR13     | Review of the native sources' imports and calls                                                                                                                                                     | each view and module on iOS and Android                                                                                                    | A call to an API outside the platform's public SDKs                                                                                           |
+| Contract | Verification                                                                                                                                                          | Representative states                                                                                                                      | Mutation or failure expectation                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests through the `./testing` doubles; Simulator and emulator frame captures                                                                                     | bundled, disk, `data:`, and remote masks; a mask shown before; a scale change; the view absent                                             | A local mask missing from the first frame, two downloads for one URI, or no `Image` fallback where the view is absent                         |
+| FR2      | Unit tests through `mockIcons()` in its absent, older, and current shapes                                                                                             | no module; no `prefetch`; `isSupported` false; all, some, and no masks loaded; an empty list                                               | A rejection, a reason outside the set, or a call for an empty list                                                                            |
+| FR3      | iOS Simulator frame captures per iOS major; unit tests of the absent view                                                                                             | each weight; mirrored; each effect kind; a trigger change; a trigger at mount; repeat; an unknown name; Android                            | An effect that plays at mount, plays on an iOS without it, or runs JavaScript per frame; no `no-native-view` report where absent              |
+| FR4      | Library unit tests of name resolution and the icon source                                                                                                             | a theme `assetName` and `systemName` entry; an app image; a theme glyph; each icon source; a symbol above the running iOS; an unknown name | A built-in symbol drawn over an icon the app or theme defines, a symbol under `theme`, or an unknown name that draws in development           |
+| FR5      | Library unit tests of mirroring, Bold Text, Reduce Motion, colors, and labels                                                                                         | RTL; Bold Text; Reduce Motion; a scheme change; a `PlatformColor`; a label                                                                 | A mirrored vertical arrow, an effect under Reduce Motion, a stale color after a scheme change, or an unlabeled icon exposed to screen readers |
+| FR6      | The shared conformance cases run by each reader; unit tests of the writer                                                                                             | each path command, paint, and transform; version 2 groups; unknown nodes; non-finite numbers; a bad viewBox; deep JSON                     | A reader that crashes, draws an ignored node, or reports a reason other than the case's                                                       |
+| FR7      | Unit tests through `installPlainVectorViewForTesting`; accessibility-hierarchy checks on the Simulator and emulator; UI-thread frame checks (no JavaScript per frame) | a new scene object; the same object again; a label; no label; the view absent                                                              | A resend for the same object, a touch taken, an unlabeled drawing exposed to screen readers, or a fallback that changes the layout            |
+| FR8      | Unit tests through `mockVectorInfo()`                                                                                                                                 | no module; version 2; a view without a report                                                                                              | A version 2 scene sent to a binary that does not read it, or a silent blank drawing                                                           |
+| FR9      | iOS Simulator accessibility checks at an accessibility text size                                                                                                      | a marked glyph; a glyph change; RTL; unmount; two marked glyphs                                                                            | No image in the viewer, a stale image after a glyph change, an image left after unmount, or a change outside the surface                      |
+| FR10     | The platform's spec rules check                                                                                                                                       | each contract on iOS and Android                                                                                                           | A contract above revision 1 or with a named feature this record does not list                                                                 |
+| FR11     | Unit tests of every probe, call, and view in the absent shape; `isPlatformEnabled={false}` library tests                                                              | Jest with no natives; the platform off                                                                                                     | A throw, a rejection, or an `Icon` that shows nothing with the platform off                                                                   |
+| FR12     | Review of the native sources' imports and calls                                                                                                                       | each view and module on iOS and Android                                                                                                    | A call to an API outside the platform's public SDKs                                                                                           |
 
 ## Decision log
 
 ### DEC-1 — One data-only scene format on one native view
 
-**Reference:** `spec:AST-127/DEC-1` **Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-1`
+**Decider:** imdreamrunner, 2026-11-17
 
 A drawing is one versioned scene in one prop, read by every renderer against
-shared conformance cases, so Astryx Stage draws what a device draws, a binary
+shared conformance cases, so iOS and Android draw the same picture, a binary
 reports what it cannot read, and drawing costs no JavaScript.
 
-Rejected: a tree of native elements per drawing, because three renderers would
+Rejected: a tree of native elements per drawing, because every renderer would
 keep each element's props in step.
 
 ### DEC-2 — Image icons appear in their first frame
 
-**Reference:** `spec:AST-127/DEC-2` **Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-2`
+**Decider:** imdreamrunner, 2026-11-17
 
 A menu or list shows its icons with its rows. The icon view shows a local or
 already-downloaded mask as soon as it mounts, and the provider prefetches a
-theme's remote masks. A previewed project never downloads through the app.
+theme's remote masks.
 
 Rejected: React Native's `Image` for every icon, because it loads each source
 asynchronously.
 
 ### DEC-3 — The library decides; the views draw
 
-**Reference:** `spec:AST-127/DEC-3` **Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-3`
+**Decider:** imdreamrunner, 2026-11-17
 
 Which icons mirror, the Bold Text weight step, and dropping effects under Reduce
 Motion are Astryx's rules, so the library applies them and the views take plain
@@ -392,7 +379,8 @@ flags. The views stay small and the same in every renderer.
 
 ### DEC-4 — The drawn glyph's own view supplies the Large Content Viewer image
 
-**Reference:** `spec:AST-127/DEC-4` **Decider:** imdreamrunner, 2026-11-17
+**Reference:** `spec:AST-127/DEC-4`
+**Decider:** imdreamrunner, 2026-11-17
 
 React Native's views have no prop for a large-content image. The vector view
 already holds the glyph's paths, so it renders them a second time for the
@@ -409,12 +397,12 @@ would render the glyph again and the two could differ.
   system versus drawn rendering across Astryx's chrome. Options:
   - **System symbols by default (this record).** Icons look native on each
     platform. Costs: a name without a faithful symbol, an older iOS, Android
-    without a system icon view, and Astryx Stage off macOS fall back to the
-    drawn glyph, so one app mixes two icon styles; and that stand-in must be
-    reconciled with `spec:AST-082/FR17`, under which a native platform has no
-    default for a name it does not map.
-  - **Drawn glyphs by default.** Every name has the same shape on iOS, Android,
-    and Astryx Stage and follows the theme's stroke weight. Costs: departs from
+    without a system icon view fall back to the drawn glyph, so one app mixes
+    two icon styles; and that stand-in must be reconciled with
+    `spec:AST-082/FR17`, under which a native platform has no default for a name
+    it does not map.
+  - **Drawn glyphs by default.** Every name has the same shape on iOS and
+    Android and follows the theme's stroke weight. Costs: departs from
     `spec:AST-082/FR17` and `spec:AST-112/FR9`, and icons do not match the
     system's own.
 - **OQ2 — Does `AstryxVectorInfo` fold into the platform info's named
