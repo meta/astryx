@@ -51,9 +51,27 @@ export const overflowStyles = stylex.create({
 export const wrapStyles = stylex.create({
   cell: {
     overflow: 'hidden',
+    // Break a word only when it cannot fit its column. In children mode the
+    // table uses automatic layout, where a zero max-width or a break at any
+    // letter shrinks every column to one letter. Data mode sets fixed column
+    // widths, so neither changes its columns.
     overflowWrap: 'break-word',
-    wordBreak: 'break-word',
-    maxWidth: '0',
+  },
+});
+
+/**
+ * Truncation for header cells.
+ *
+ * A header label stays on one line and ends in an ellipsis when its column is
+ * narrower than the label. There is no zero max-width: in children mode's
+ * automatic layout it made every column zero wide, so a wide table squeezed
+ * into its container instead of scrolling in the Scroll region.
+ */
+export const headerOverflowStyles = stylex.create({
+  cell: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
