@@ -84,8 +84,8 @@ Scope notes: the photo library pieces are specified in `spec:AST-135`.
   - `camera` links capture on iOS (AVFoundation) and CameraX on Android, and
     declares the camera permission and the optional camera hardware feature.
     On Android, code scanning comes from the Android code-scanning
-    integration, an optional package that brings the decoder (FR10, DEC-6). It holds the camera view and camera
-    capture:
+    integration, an optional package that brings the decoder (FR10, DEC-6).
+    `camera` holds the camera view and camera capture:
     `CameraView`'s `takePhoto` (FR9) is the capture (`spec:AST-130/FR12`).
     The `./camera` entry exports `CameraView`, `isCameraViewAvailable()`,
     `CODE_TYPES`, and `createCodeDetector`; the native camera view stays
@@ -423,10 +423,11 @@ stays in the core package's `camera` capability, because the `camera` create tem
 **Reference:** `spec:AST-132/DEC-6`
 **Decider:** imdreamrunner, 2026-11-18
 
-Astryx React Native takes no third-party library dependency, and a separate
-package exists only to bring one. The Android code decoder is third-party
-code, so the Android code-scanning integration brings it, and an app adds that
-package when it scans codes on Android. iOS scans with the system's own
+A third-party library is an optional integration (`spec:AST-082/FR13`), and a
+separate package exists when it brings a third-party dependency
+(`spec:AST-112/FR1`). The Android code decoder is third-party code, so the
+Android code-scanning integration brings it, and an app adds that package when
+it scans codes on Android. iOS scans with the system's own
 metadata output. On Android without the integration, code scanning answers
 `unsupported`.
 
