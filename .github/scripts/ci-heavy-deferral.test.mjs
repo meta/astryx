@@ -203,6 +203,13 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     expect(heavyCi(github).result).toBe('skipped');
   });
 
+  it('never defers a release-critical pull request: its first push runs every suite (DEC-30)', () => {
+    const github = pushEvent({login: 'someone', labels: ['release-critical']});
+    expect(heavyCi(github).result).toBe('skipped');
+    for (const id of HEAVY.filter(item => item !== 'test-native-swift'))
+      expect(starts(id, github), id).toBe(true);
+  });
+
   it('names no author in the deferral, and keeps the shared agent logins in one list with the heavy-suite caps', () => {
     expect(HEAVY_CANDIDATE).not.toContain('user.login');
     const caps = fs.readFileSync(
