@@ -43,6 +43,23 @@ const VIEWS_CODE = [
 const deeperThanDocs = (_name, rel) => rel.includes(path.sep);
 
 /**
+ * Whether a stored summary is a list of views: each a name with an object or
+ * null. Any other value is read again.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+const isViewList = value =>
+  Array.isArray(value) &&
+  value.every(
+    entry =>
+      Array.isArray(entry) &&
+      entry.length === 2 &&
+      typeof entry[0] === 'string' &&
+      (entry[1] === null ||
+        (typeof entry[1] === 'object' && !Array.isArray(entry[1]))),
+  );
+
+/**
  * Each of `names` with the {@link ComponentMatchView} of the doc the matcher
  * reads for it under `<coreDir>/src`: `src/<Name>/<Name>.doc.mjs`, then
  * `src/<Name>/XDS<Name>.doc.mjs`, then `src/<group>/<Name>/<Name>.doc.mjs`.
@@ -77,6 +94,7 @@ async function readViews(coreDir, names) {
       code: VIEWS_CODE,
       key: [names.join('\n')],
       recorded: true,
+      accept: isViewList,
     },
     async ([tree]) => {
       const [{readDocView}, {pathExists}, {componentMatchView}] =

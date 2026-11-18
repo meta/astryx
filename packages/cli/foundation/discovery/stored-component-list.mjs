@@ -111,6 +111,8 @@ function keptInputsCheck(coreDir, inputs) {
       code: CHECK_CODE,
       key: [path.resolve(coreDir), storedKey(JSON.stringify(inputs))],
       recorded: true,
+      // A stored verdict that is not one is checked again.
+      accept: value => typeof value === 'boolean',
     },
     () => inputsUnchanged(coreDir, inputs, CORE_FOLDER_SKIP),
   );

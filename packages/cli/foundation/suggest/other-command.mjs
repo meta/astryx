@@ -531,6 +531,19 @@ export async function coreHookKeywords(coreDir) {
       code: HOOK_KEYWORDS_CODE,
       skip: name => HOOK_SKIP_DIRS.has(name),
       recorded: true,
+      // A stored value that is not such a list is read again.
+      accept: value =>
+        Array.isArray(value) &&
+        value.every(
+          hook =>
+            hook !== null &&
+            typeof hook === 'object' &&
+            typeof hook.name === 'string' &&
+            Array.isArray(hook.keywords) &&
+            hook.keywords.every(
+              (/** @type {unknown} */ keyword) => typeof keyword === 'string',
+            ),
+        ),
     },
     async () => discoverHookKeywords(coreDir),
   );
