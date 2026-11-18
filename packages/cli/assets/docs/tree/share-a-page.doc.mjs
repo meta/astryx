@@ -37,7 +37,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A shareable page is one HTML file. It opens in a browser, as an attachment, or in an artifact viewer that shows HTML in a sandboxed frame. It runs no script and loads nothing from the network. It also carries its own source, so anyone who has the file can turn it back into code, change it, and render it again. The render command is experimental: its options and its output can change in a patch release.',
+          text: 'A shareable page is one HTML file. It opens in a browser, as an attachment, or in an artifact viewer that shows HTML in a sandboxed frame. It loads nothing from the network, and it carries the page\u2019s own script, so its controls work as in the app. It also carries its own source, so anyone who has the file can turn it back into code, change it, and render it again. The render command is experimental: its options and its output can change in a patch release.',
         },
         {
           type: 'list',
@@ -72,7 +72,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: the file runs no script, so every reader, on any screen, gets the one layout that the query\u2019s server answer (false) picks.',
+            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: every reader, on any screen, first sees the one layout that the query\u2019s server answer (false) picks, and keeps it in a viewer that blocks scripts; elsewhere it changes once the script runs.',
             'A row runs out of room first. In an HStack, a Badge beside a long heading or text shrinks and cuts off its label. Wrap the badge in `<StackItem size="static">` so it keeps its size, and the text in `<StackItem size="fill">` so the text wraps, as the example does. StackItem comes from `@astryxdesign/core/Stack`.',
             'A VStack stretches each child to its full width, so a Badge or Token on a line of its own becomes a bar across the page. Wrap that one item in `<StackItem crossAlignSelf="start">`. Do not give the VStack `hAlign="start"`: it shrinks every child, Cards and Grids too.',
             'A ListItem `label` or `description` that is a string stays on one line and ends in an ellipsis, and the file cannot show the rest. When readers need the whole text, pass an element: `label={<Text type="body">\u2026</Text>}`.',
@@ -80,7 +80,7 @@ export const docs = {
             'A column\u2019s floor includes its cells\u2019 24 px of padding. It must fit the column\u2019s longest word, because wrapped text breaks inside a word that does not fit, and its header, which stays on one line and is cut off with an ellipsis: `width: pixel(64)` holds a short number under a one-word header such as \u201cp95\u201d, and a two-word header such as \u201cError rate\u201d needs about 100 px.',
             'Give each CodeBlock `isWrapped`, so a reader on a phone sees whole lines.',
             'Charts use recharts: install it in the page\u2019s folder first (`{@pm install recharts}`). Size a chart with `<ResponsiveContainer width="100%" aspect={2.5}>`, and color each series with a theme variable, such as `stroke="var(--color-data-categorical-blue)"`, so it follows the theme too.',
-            'Leave out controls that need a browser. Buttons, filters, tabs and menus show in the file but do nothing.',
+            'Controls that need a browser (buttons, filters, tabs, menus) work once the page\u2019s script runs, and do nothing in a viewer that blocks scripts. Keep what a reader must see in the first paint, not behind a click (see `astryx docs cli/experimental/export-pages interactive`).',
           ],
         },
       ],
@@ -92,7 +92,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental render page.tsx --out page.html',
+          code: 'astryx experimental export page.tsx --out page.html',
         },
         {
           type: 'prose',
@@ -106,7 +106,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network and no script shows it as it is. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
+          text: 'The file is the whole page: send it, put it on a web host, or upload it to an artifact viewer that accepts one HTML file. A viewer that shows HTML in a frame with no network shows it as it is; one that also blocks scripts shows its first paint. In a viewer\u2019s frame that allows scripts, forms work, storage works in memory (what the page saves lasts until the page closes), and copying works through the browser\u2019s copy command. A cookie write throws there, fullscreen and printing do not work, and a link opens only when the viewer allows pop-ups. Upload it with the host\u2019s own command, and keep the link or ID it gives back: you update that same artifact later, so readers keep the same link.',
         },
         {
           type: 'prose',
@@ -127,9 +127,9 @@ export const docs = {
           style: 'ordered',
           items: [
             'Get the current file, such as the latest version of the artifact: the shared copy can be newer than yours.',
-            'Turn it back into source. `astryx experimental render --reverse page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
+            'Turn it back into source. `astryx experimental export --reverse page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
             'Edit the page in that folder, such as `page-restored/page.tsx`.',
-            'Render it over the old file: `astryx experimental render page-restored/page.tsx --out page.html`. The command replaces a file only when a render wrote it.',
+            'Render it over the old file: `astryx experimental export page-restored/page.tsx --out page.html`. The command replaces a file only when a render wrote it.',
             'Share the new file, or upload it as a new version of the same artifact.',
           ],
         },
@@ -154,7 +154,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Every detail of the command, such as what it carries, its warnings, and files from other CLI versions: {@link generic:render-pages}.',
+          text: 'Every detail of the command, such as what it carries, its warnings, and files from other CLI versions: {@link generic:export-pages}.',
         },
       ],
     },

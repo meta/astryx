@@ -17,6 +17,10 @@ import {
 } from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
+import {Project} from '../../foundation/config/project.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
+import {iconSetDirectoryNames} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {iconSection} from './_icons.mjs';
 import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
@@ -34,6 +38,55 @@ import {
 } from '../../foundation/discovery/stored-search-catalog.mjs';
 
 export {componentKeywords} from './_gather-components.mjs';
+
+/**
+ * The icon section of a search (_icons.mjs): the installed icons that answer
+ * a query that asks for an icon, or null. Only where icon features are on:
+ * the ask test reads the installed sets' names from their directories alone,
+ * and the sets themselves are read only for a query that asks. A project
+ * that fails to load has no section. Nothing is kept with the gathered
+ * catalog, so a pack installed or removed shows on the next search.
+ * @param {string} query
+ * @param {{cwd: string, declaredNames: string[], resultDomains: string[], limit: number}} options
+ *   `declaredNames`: the names of the components and hooks search reads;
+ *   `resultDomains`: the domains of its results
+ * @returns {Promise<import('./search.type.mjs').SearchIconSection | null>}
+ */
+export async function searchIconSection(
+  query,
+  {cwd, declaredNames, resultDomains, limit},
+) {
+  let project;
+  try {
+    project = await Project.load(cwd);
+  } catch {
+    return null;
+  }
+  if (!iconFeatureGate(project).on) return null;
+  const loaded = /** @type {Project} */ (project);
+  return iconSection(
+    query,
+    {
+      setNames: loaded.loadedIntegrations.flatMap(integration =>
+        integration?.iconSets
+          ? iconSetDirectoryNames(integration.iconSets)
+          : [],
+      ),
+      read: async () => {
+        try {
+          return await loaded.iconSets();
+        } catch {
+          return {
+            sets: [],
+            withdrawn: [],
+            choice: /** @type {const} */ ({status: 'none', reason: ''}),
+          };
+        }
+      },
+    },
+    {declaredNames, resultDomains, limit},
+  );
+}
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -129,9 +182,7 @@ async function gatherDomains(options) {
     return result;
   }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
-    wants('component')
-      ? gatherComponents(coreDir, cwd)
-      : [],
+    wants('component') ? gatherComponents(coreDir, cwd) : [],
     wants('hook') ? gatherHooks(coreDir) : [],
     wants('doc') ? gatherDocs(cwd) : [],
     wants('template') ? gatherTemplates(cwd) : [],
@@ -381,7 +432,7 @@ export function gatherCandidatesReused(options) {
  *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
  *   null when build's loader finds the file absent, unreadable, or the wrong
  *   shape.
- * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
+ * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData, ownEvidence?: boolean}} SearchCatalog
  */
 
 /** @type {SearchData | null} */

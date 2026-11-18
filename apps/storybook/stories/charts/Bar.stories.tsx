@@ -6,7 +6,7 @@ import {monthlyData, groupedStackData, profitLossData} from './_data';
 import {useLocale} from '@astryxdesign/core';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/Bar',
+  title: 'Charts/Marks/Bar',
   component: Chart,
 };
 export default meta;
@@ -18,7 +18,7 @@ const axes = (
   </>
 );
 
-export const Simple: StoryObj = {
+export const Default: StoryObj = {
   render: () => {
     const locale = useLocale();
     return (

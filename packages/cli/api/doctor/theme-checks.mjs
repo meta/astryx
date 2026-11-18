@@ -51,6 +51,7 @@ import {
   themeShippedImportFindings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
+import {settingIssueLocation} from '../theme/build/setting-effects.mjs';
 import {
   getCliInvocation,
   formatCliCommand,
@@ -67,6 +68,7 @@ const CHECKS = [
   ['theme-module-import', 'App imports the theme module'],
   ['theme-stylesheet-imports', 'Built theme stylesheet imports'],
   ['theme-local-builds', 'Local theme build freshness'],
+  ['theme-setting-effects', 'Theme settings that show'],
   ['theme-private-variables', 'Private theme variables'],
   ['theme-core-peers', 'Theme Core peer compatibility'],
   ['theme-default', 'Default added theme'],
@@ -182,11 +184,36 @@ function walkAst(value, visit) {
 }
 
 /**
+ * The string values a source file holds, object keys included, read from its
+ * syntax tree, so a commented-out copy never counts. A config names a plugin
+ * package this way (`plugins: {'@acme/postcss': {}}`).
+ * @param {string} source
+ * @returns {Set<string>}
+ */
+export function stringValues(source) {
+  const values = new Set();
+  walkAst(parseModule(source), node => {
+    if (node.type === 'StringLiteral') values.add(node.value);
+    if (
+      node.type === 'TemplateLiteral' &&
+      node.expressions?.length === 0 &&
+      typeof node.quasis?.[0]?.value?.cooked === 'string'
+    ) {
+      values.add(node.quasis[0].value.cooked);
+    }
+  });
+  return values;
+}
+
+/**
+ * The module specifiers a source file imports, re-exports, or loads with
+ * `import()` or `require()`, read from its syntax tree, so a commented-out
+ * or quoted copy never counts.
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
  */
-function moduleSpecifiers(source, options = {}) {
+export function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -594,7 +621,7 @@ function globalRules(css, slug) {
 
 /**
  * Report source copies made by the released `theme add` before it copied
- * descriptors. This is a migration notice, not one of the ten setup checks.
+ * descriptors. This is a migration notice, not one of the eleven setup checks.
  * @param {string} projectDir
  * @returns {DoctorCheck|null}
  */
@@ -1008,9 +1035,9 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
- * The fix line for a project with no installed theme: the install command in
- * the project's package manager, or `npm install` with a note when its
- * lockfiles disagree.
+ * The fix line for a project with no installed theme: the install guidance
+ * its integrations give, else the install command in the project's package
+ * manager, or `npm install` with a note when its lockfiles disagree.
  * @param {string} cwd
  * @param {string} run the CLI invocation stem
  * @returns {string}
@@ -1243,7 +1270,7 @@ function privateInputFile(theme, owner, projectDir) {
 }
 
 /**
- * Run all ten app-theme checks.
+ * Run all eleven app-theme checks.
  * @param {string} cwd
  * @returns {Promise<DoctorCheck[]>}
  */
@@ -1609,6 +1636,16 @@ export async function checkAppThemes(cwd) {
   }
 
   const localThemes = resolved.filter(theme => theme.source === 'local');
+  /**
+   * What each local theme's build check says does not show as written (the
+   * `settingIssues` of `theme build --check`), and whether the checks ran.
+   * @type {Array<{slug: string, issues: Array<{message: string, fix: string, line: number | null, file?: string}>}>}
+   */
+  const settingIssuesByTheme = [];
+  /** The local themes whose build check returned a receipt. @type {Set<string>} */
+  const settingsChecked = new Set();
+  /** Why a local theme's build check did not run, by its slug. @type {Map<string, string>} */
+  const uncheckedWhy = new Map();
   if (incompleteResolution) {
     checks.push({
       id: 'theme-local-builds',
@@ -1627,6 +1664,8 @@ export async function checkAppThemes(cwd) {
       message:
         "The project's Core isn't installed, so local theme builds were not checked. Install the project's dependencies, then run doctor again.",
     });
+    for (const theme of localThemes)
+      uncheckedWhy.set(theme.slug, "the project's Core isn't installed");
   } else if (localThemes.length === 0) {
     checks.push({
       id: 'theme-local-builds',
@@ -1663,6 +1702,12 @@ export async function checkAppThemes(cwd) {
             {check: true},
             {cwd: state.projectDir, projectCore: true},
           );
+          if (receipt?.type === 'theme.build.check') {
+            settingsChecked.add(theme.slug);
+            const issues = /** @type {any} */ (receipt).data.settingIssues;
+            if (Array.isArray(issues) && issues.length > 0)
+              settingIssuesByTheme.push({slug: theme.slug, issues});
+          }
           if (
             receipt == null ||
             receipt.type !== 'theme.build.check' ||
@@ -1675,9 +1720,20 @@ export async function checkAppThemes(cwd) {
           // variables" check's to report, not a stale output.
           if (isPrivateVarRefusal(error)) {
             refused.push(theme.slug);
+            uncheckedWhy.set(theme.slug, 'it sets a private variable');
             continue;
           }
           const missing = missingThemePackage(error);
+          // What the build said: the first line of its refusal.
+          const said = String(
+            /** @type {any} */ (error)?.message ?? error,
+          ).split('\n')[0];
+          uncheckedWhy.set(
+            theme.slug,
+            missing
+              ? `it imports ${missing}, which the project lacks`
+              : `the build refused it: ${said.replace(/\.$/, '')}`,
+          );
           if (missing) {
             missingPackages.set(missing, [
               ...(missingPackages.get(missing) ?? []),
@@ -1719,7 +1775,8 @@ export async function checkAppThemes(cwd) {
                 '; ',
               )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
             fix: [
-              install?.installCommand ??
+              install?.installGuidance ??
+                install?.installCommand ??
                 install?.noCommandReason ??
                 `Install ${packages.join(', ')}.`,
               ...refresh,
@@ -1751,6 +1808,64 @@ export async function checkAppThemes(cwd) {
               },
     );
   }
+
+  // Each setting of an added local theme the browser does not show as
+  // written, as its build check reports it: a warning with the theme, the
+  // setting and the fix, never a failure (the theme builds as before). It
+  // passes only when every local theme's build check ran.
+  const settingIssueCount = settingIssuesByTheme.reduce(
+    (n, t) => n + t.issues.length,
+    0,
+  );
+  // Each local theme whose build check did not run, with why (the cause
+  // the freshness check names).
+  const unchecked = localThemes
+    .map(theme => theme.slug)
+    .filter(slug => !settingsChecked.has(slug))
+    .map(
+      slug =>
+        `${slug} (${uncheckedWhy.get(slug) ?? 'its build check returned no result'})`,
+    );
+  const uncheckedNote =
+    unchecked.length > 0
+      ? `Not checked, because ${unchecked.length === 1 ? 'its build check' : 'their build checks'} did not run: ${unchecked.join('; ')}.`
+      : '';
+  checks.push(
+    settingIssueCount > 0
+      ? {
+          id: 'theme-setting-effects',
+          label: 'Theme settings that show',
+          status: 'warn',
+          message: `${settingIssueCount} ${settingIssueCount === 1 ? 'setting does' : 'settings do'} not show as written: ${settingIssuesByTheme
+            .flatMap(t =>
+              t.issues.map(
+                i => `${t.slug}: ${i.message}${settingIssueLocation(i)}`,
+              ),
+            )
+            .join('; ')}.${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
+          fix: `${settingIssuesByTheme
+            .flatMap(t => t.issues.map(i => `${t.slug}: ${i.fix}`))
+            .join('; ')}.`,
+        }
+      : incompleteResolution || unchecked.length > 0
+        ? {
+            id: 'theme-setting-effects',
+            label: 'Theme settings that show',
+            status: 'info',
+            message: incompleteResolution
+              ? 'Could not check that each local theme setting shows until every local output resolves.'
+              : uncheckedNote,
+          }
+        : {
+            id: 'theme-setting-effects',
+            label: 'Theme settings that show',
+            status: 'pass',
+            message:
+              localThemes.length > 0
+                ? 'Every setting of the added local themes shows as written.'
+                : 'No added local themes to check.',
+          },
+  );
 
   // The inputs load with Core, and doctor reads only the Core the project
   // installed, never the one the answering copy carries.
