@@ -176,8 +176,9 @@ Capabilities that no Astryx component uses are outside the core package
     fraction of the source read so far; the result still carries every
     level. Aborting `signal` stops the read and
     answers `cancelled`.
-  - Bytes cross in slices (`appendLevelsBytes`) and are held in memory only,
-    never written to a file. They are freed when the read ends, when it is
+  - Bytes the caller holds cross in slices (`appendLevelsBytes`), each an
+    `ArrayBuffer` (`spec:AST-140/FR4`), and are held in memory only, never
+    written to a file. They are freed when the read ends, when it is
     cancelled, and when the module goes away.
   - The read decodes as a stream and keeps only the levels, so it refuses no
     source for its size; the caller bounds the time with `signal`.
@@ -350,10 +351,7 @@ isPossible})`.
 
 ## Current-state impact
 
-- One departure from `spec:AST-140/FR4`: FR6 sends in-memory bytes across
-  the native boundary in slices that are never written to a file, where
-  `spec:AST-140/FR4` passes bytes as a `file:` URI. DEC-3 decides it.
-- Otherwise none beyond `spec:AST-112` and `spec:AST-140`. This record details
+- None beyond `spec:AST-112` and `spec:AST-140`. This record details
   `spec:AST-112`'s FR3 (`media` and `camera` stay opt-in) and FR7 (the probes
   and a camera view that never prompts), and `spec:AST-140`'s FR3 (the
   group's closed reasons) and FR5 (the group's revision-1 baseline).
@@ -401,8 +399,9 @@ picture would then restart playback or move the view.
 **Reference:** `spec:AST-132/DEC-3`
 **Decider:** imdreamrunner, 2026-11-17
 
-A level read decodes as a stream and keeps only the levels, and bytes arrive
-in slices, so no source is refused for its size. The caller bounds the time
+A level read decodes as a stream and keeps only the levels, and bytes the
+caller holds arrive in slices as `ArrayBuffer` values (`spec:AST-140/FR4`), so
+no source is refused for its size. The caller bounds the time
 with an abort signal.
 
 Rejected: a size cap, because it refuses a long recording the device can read.
