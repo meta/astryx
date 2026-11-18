@@ -782,8 +782,8 @@ export const docsDense = {
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
     placeholder: 'Placeholder text.',
     labelTooltip: 'Tooltip text in info icon at label end.',
-    startIcon: 'Icon at input start. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
-    labelIcon: 'Icon before label text. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    startIcon: 'Icon at input start; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     status:
       "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
     onEntryErrorChange:

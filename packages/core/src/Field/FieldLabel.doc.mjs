@@ -228,7 +228,7 @@ export const docsDense = {
     isDisabled: 'Use disabled label presentation.',
     isOptional: 'Show localized optional exception indicator.',
     isRequired: 'Show localized required exception indicator.',
-    labelIcon: 'Icon before label text. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     labelTooltip: 'Help text for the info button after the label.',
     description: 'Supporting content outside the accessible name.',
     descriptionID: 'ID for caller-owned aria-describedby wiring.',

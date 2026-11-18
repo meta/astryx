@@ -124,7 +124,7 @@ export const docsDense = {
     'menu row that reveals a nested flyout of its own children/items (single component, not Sub/SubTrigger/SubContent); drills in on a phone',
   propDescriptions: {
     label: 'primary label text for the trigger row',
-    icon: 'icon before label. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     description: 'secondary text below label',
     children: 'flyout menu items (same components as top level)',
     isDisabled: 'renders trigger but never opens',

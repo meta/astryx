@@ -481,7 +481,7 @@ export const docsDense = {
       'Status indicator w/ type + message; colored message box, sets aria-invalid on error.',
     onFocus: 'Fired when switch receives focus.',
     onBlur: 'Fired when switch loses focus.',
-    labelIcon: 'Icon before label text. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     labelTooltip: 'Tooltip text in info icon at label end.',
     labelPosition: 'Which side label appears; "start" places before switch.',
     labelSpacing:

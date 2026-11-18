@@ -51,8 +51,8 @@ export const docs = {
   ],
   examples: [
     {
-      label: 'Bulk delete with the selection state',
-      code: `const [selectedKeys, setSelectedKeys] = useState(new Set());
+      label: 'Bulk action with the selection state',
+      code: `const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 const {selectionConfig, selectionState} = useTableSelectionState({
   data: users,
   idKey: 'id',
@@ -61,17 +61,16 @@ const {selectionConfig, selectionState} = useTableSelectionState({
 });
 const selectionPlugin = useTableSelection(selectionConfig);
 
-const deleteSelected = () => {
-  deleteUsers([...selectionState.selectedKeys]);
+const exportSelected = () => {
+  exportUsers([...selectionState.selectedKeys]);
   selectionState.clearSelection();
 };
 
 <>
   {selectionState.hasSelection && (
     <Button
-      label={\`Delete \${selectionState.selectedCount} users\`}
-      variant="destructive"
-      onClick={deleteSelected}
+      label={\`Export \${selectionState.selectedCount} users\`}
+      onClick={exportSelected}
     />
   )}
   <Table data={users} columns={columns} idKey="id" plugins={{selection: selectionPlugin}} />

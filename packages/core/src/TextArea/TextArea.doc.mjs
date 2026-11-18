@@ -802,7 +802,7 @@ export const docsDense = {
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'Tooltip in info icon at label end.',
-    startIcon: 'Icon inside leading edge of textarea wrapper. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    startIcon: 'Icon inside leading edge of textarea wrapper; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     hasSpellCheck: 'Enables/disables browser spell checking.',
     hasAutoFocus: 'Auto-focus textarea on mount.',
     size: 'Textarea size; affects internal padding. Height controlled by rows.',

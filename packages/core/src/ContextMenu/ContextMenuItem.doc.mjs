@@ -83,7 +83,7 @@ export const docsDense = {
   displayName: 'Context Menu Item',
   description: 're-exported DropdownMenuItem for compound mode',
   propDescriptions: {
-    icon: 'icon before label. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     label: 'primary label text',
     description: 'secondary text below label',
     endContent: 'additional content after label+description',

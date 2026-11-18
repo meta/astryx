@@ -203,7 +203,7 @@ export const docs = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows a clear (×) button when a value is selected. When true, value becomes required and accepts null, and onChange receives null when the user clears the selection.',
+        'Shows a clear (×) button when a value is selected; with it, value becomes required and accepts null, and onChange receives null when the user clears the selection.',
       default: 'false',
     },
     {

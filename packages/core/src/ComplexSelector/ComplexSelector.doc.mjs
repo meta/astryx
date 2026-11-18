@@ -397,7 +397,7 @@ export const docsDense = {
     triggerLabel: 'Closed trigger label/content.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    startIcon: 'Leading trigger icon; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     placement: 'Popup placement.',
     alignment: 'Popup alignment.',
     renderTrigger:

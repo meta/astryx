@@ -82,7 +82,7 @@ export const docsDense = {
     'Helper component for custom item rendering inside Selector renderOption prop.',
   propDescriptions: {
     label: 'Primary label text for item.',
-    icon: 'Icon displayed before label. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    icon: 'Icon displayed before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     description: 'Secondary description text below label.',
     endContent: 'Additional content after label+description.',
   },

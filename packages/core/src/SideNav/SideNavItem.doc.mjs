@@ -203,8 +203,8 @@ export const docsDense = {
   propDescriptions: {
     label: 'Item label.',
     as: 'Custom link component.',
-    icon: 'Icon displayed in outline (unselected) variant. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
-    selectedIcon: 'Icon displayed when item selected (filled variant). Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+    icon: 'Icon displayed in outline (unselected) variant; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    selectedIcon: 'Icon displayed when item selected (filled variant); semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     isSelected: 'Marks this item as current page.',
     isDisabled: 'Disabled state.',
     href: 'Navigation URL.',

@@ -561,7 +561,7 @@ export const docsDense = {
     isDisabled: 'Disables entire component.',
     status: 'Validation status object w/ type + optional message.',
     startIcon:
-      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer. Semantic icon name string OK, e.g. \'search\' (astryx docs icons), or icon component/element.',
+      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
