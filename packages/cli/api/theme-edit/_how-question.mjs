@@ -550,6 +550,35 @@ function colorsIn(c) {
 }
 
 /**
+ * The colors a tint word modifies in a clause: the color right after
+ * "tinted", "tint" or "washed" ("cards tinted blue"), or right before
+ * "tint" ("a green tint"), as RGB.
+ * @param {string} c a clause, lower-case
+ * @returns {number[][]}
+ */
+function tintedColors(c) {
+  const found = colorsFound(c);
+  /** @type {number[][]} */
+  const out = [];
+  for (const m of c.matchAll(/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/g)) {
+    const at = m.index ?? 0;
+    const end = at + m[0].length;
+    const after = found.find(
+      ([i]) => i >= end && !/[,;.]|\bwith\b|\band\b/.test(c.slice(end, i)),
+    );
+    // (The color word, with a shade word before it, then the tint word.)
+    const before = [...found]
+      .reverse()
+      .find(([i]) => i < at && /^\S+(?:\s+\S+)?\s+$/.test(c.slice(i, at)));
+    const pick =
+      /^tints?$/.test(m[0]) && before && !after ? before : (after ?? before);
+    const rgb = pick ? parseColor(pick[1]) : null;
+    if (rgb) out.push(rgb);
+  }
+  return out;
+}
+
+/**
  * A clause that forbids a change ("don't make buttons rounder", "inputs
  * shouldn't be round"): it changes nothing and says what stays.
  */
@@ -25436,22 +25465,28 @@ export function draftAnswer(ctx, env, question) {
         // ("badges #26272b with #d0d6e0 text": the text asked with a fill
         // goes where that fill goes, its pair, never to the variants the
         // fill keeps apart.)
-        const pairedTo = o
-          .filter(
-            x =>
-              x !== st &&
-              x.on === st.on &&
-              !x.state &&
-              /^background/.test(x.thing) &&
-              /^variant:/.test(String(x.when ?? '')),
-          )
-          .map(x => String(x.when));
+        // (Each pair keeps its fill's mode: "a navy background in dark mode
+        // and white text" is white text in dark mode only.)
+        const pairedTo = o.filter(
+          x =>
+            x !== st &&
+            x.on === st.on &&
+            !x.state &&
+            /^background/.test(x.thing) &&
+            /^variant:/.test(String(x.when ?? '')),
+        );
         if (pairedTo.length) {
-          o.splice(
-            i,
-            1,
-            ...[...new Set(pairedTo)].map(w => ({...st, when: w})),
-          );
+          /** @type {Map<string, any>} */
+          const pairs = new Map();
+          for (const x of pairedTo) {
+            const mode = st.mode ?? x.mode;
+            pairs.set(`${x.when}\0${mode ?? ''}`, {
+              ...st,
+              when: String(x.when),
+              ...(mode ? {mode} : {}),
+            });
+          }
+          o.splice(i, 1, ...pairs.values());
           continue;
         }
         const fills = (C.partReads(one(st.on), 'background') ?? []).filter(
@@ -25471,9 +25506,12 @@ export function draftAnswer(ctx, env, question) {
           const r = fills.find(x =>
             x.when.some(w => w.trim() === `variant=${v}`),
           );
-          const given = givenFill(v);
+          const asked = givenFill(v);
           return modes.filter(m => {
-            if (given && given.mode && given.mode !== m) return true;
+            // (A fill given for one mode is that mode's look; in the other
+            // mode the text sits on the variant's own fill there.)
+            const given =
+              asked && (!asked.mode || asked.mode === m) ? asked : null;
             // (A see-through fill is read over the page it sits on.)
             const raw = given
               ? String(given.value)
@@ -25528,24 +25566,54 @@ export function draftAnswer(ctx, env, question) {
   // ("selected nav items tinted forest green", "a green tint on hover"):
   // a tint is the color at a low strength over what is beneath, never the
   // solid color, as the accent's tint is.
+  // Only the color the tint word modifies is tinted, on the parts named
+  // before it ("cards tinted blue with a navy header": the cards' blue,
+  // never the header), on every line of the answer that writes it (the
+  // card variants' own lines too).
+  /** @type {Array<{parts: Set<string>, colors: number[][]}>} */
+  const tints = [];
   for (const d of result) {
     const c = draftClause.get(d);
     if (!c || !/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/.test(c.text)) continue;
-    for (const o of d.options)
-      for (const [k, st] of o.entries())
-        if (
-          /^background(?:-color)?$/.test(st.thing) &&
-          parseColor(String(st.value ?? '')) &&
-          alphaOf(String(st.value)) >= 1
-        ) {
-          o[k] = {
-            ...st,
-            value: `color-mix(in srgb, ${st.value} 15%, transparent)`,
-          };
-          if (!/a tint: /.test(d.text))
-            d.text += ` (a tint: ${st.value} at 15% over what is beneath)`;
-        }
+    const text = c.text.toLowerCase();
+    const colors = tintedColors(text);
+    const at = text.search(/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/);
+    // (A part is named before the tint word when its own word is: the
+    // last word of its name, "card" for card, "header" for
+    // app-shell-header.)
+    const parts = new Set(
+      c.parts
+        .map(p => p.on)
+        .filter(on => {
+          const word = on.split('-').pop() ?? on;
+          return new RegExp(`\\b${word}`).test(text.slice(0, at));
+        }),
+    );
+    if (colors.length && parts.size) tints.push({parts, colors});
   }
+  for (const d of tints.length ? result : [])
+    for (const o of d.options)
+      for (const [k, st] of o.entries()) {
+        const v = parseColor(String(st.value ?? ''));
+        if (
+          !st.on ||
+          !/^background(?:-color)?$/.test(st.thing) ||
+          !v ||
+          alphaOf(String(st.value)) < 1 ||
+          !tints.some(
+            t =>
+              t.parts.has(String(st.on)) &&
+              t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
+          )
+        )
+          continue;
+        o[k] = {
+          ...st,
+          value: `color-mix(in srgb, ${st.value} 15%, transparent)`,
+        };
+        if (!/a tint: /.test(d.text))
+          d.text += ` (a tint: ${st.value} at 15% over what is beneath)`;
+      }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides
