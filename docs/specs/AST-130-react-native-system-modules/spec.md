@@ -445,9 +445,10 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 - **FR18 — Public platform API only, and no web engine in the core.**
   - The native code of every module in the group uses public platform API
     only; the group needs no exception.
-  - No core module links WebKit (iOS) or androidx.webkit (Android). Web view
-    data and the web view's cookie store belong to the `web` capability
-    (`spec:AST-112/FR3`).
+  - The core reaches neither WebKit (iOS) nor androidx.webkit (Android).
+    Clearing web view data has no Astryx call and is outside the core package;
+    an app that needs it uses its host platform's implementation
+    (`spec:AST-112/FR20`). The web view's own data rules are `spec:AST-131`'s.
   - FR18 gap: on iOS the core's storage module links WebKit to remove web
     view data.
 
@@ -501,8 +502,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 - Changes `spec:AST-112` FR1 and FR5 (amended): cookies leave the core's list
   and the `./network` entry, since no Astryx component uses them; the network
   state and secure random bytes are already outside the amended core.
-- Changes `spec:AST-112/FR1` and FR3: the core links no web engine, and the
-  `web` capability carries web view data and its cookie store (FR18).
+- Changes `spec:AST-112/FR1` and FR3: the core links no web engine, and
+  clearing web view data has no Astryx call (FR18).
 - Departs from `spec:AST-112/FR7` ("never a silent no-op") for the calls that
   return nothing (FR2); OQ2 asks whether the exception stands.
 - Details `spec:AST-112` FR7 (each module's probes) and FR9 (the haptic moment mapping), and `spec:AST-140/FR3`
