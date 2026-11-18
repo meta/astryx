@@ -92,6 +92,26 @@ describe('experimental export is the name', () => {
     },
   );
 
+  it.each([[[]], [['--json']]])(
+    'the help says export is for a page built with Astryx (%j)',
+    async flags => {
+      for (const words of [
+        ['experimental', '--help'],
+        ['experimental', 'export', '--help'],
+      ]) {
+        const {stdout, stderr} = await runCli([...flags, ...words]);
+        expect(stdout + stderr).toMatch(
+          /Export a page built with Astryx components as one self-contained HTML file/u,
+        );
+      }
+    },
+  );
+
+  it('the group help example exports an Astryx page', async () => {
+    const {stdout} = await runCli(['experimental', '--help']);
+    expect(stdout).toMatch(/Export an Astryx page as one HTML file/u);
+  });
+
   it.each(['render', 'export', 'share', 'bundle', 'snapshot', 'standalone'])(
     'an unknown `astryx %s page.tsx` suggests experimental export page.tsx',
     async word => {
