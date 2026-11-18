@@ -23,6 +23,19 @@ import {readKept} from './kept-entry.mjs';
 export {readKept, writeKept} from './kept-entry.mjs';
 export const BUILD_ID = 'clients/cli/build-id.generated.json';
 
+/**
+ * Doctor's kept-cache row with its entry count and size masked: a write
+ * earlier in the run changes them. Covers the message, `(3 entries, 1.2 MB)`,
+ * and the brief, `3 entries (1.2 MB)`.
+ * @param {string} text
+ * @returns {string}
+ */
+export function maskCacheCount(text) {
+  return text
+    .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)')
+    .replace(/\d+ entr(?:y|ies) \([\d.]+ MB\)/g, '<count>');
+}
+
 /** @type {string} */
 export let work;
 /** @type {string} */

@@ -96,6 +96,28 @@ describe('the old transpile cache row', () => {
     ).toBe("rm -rf '/home/o'\\''neil/.cache/astryx/jiti'");
   });
 
+  it('removes several folders with one command', () => {
+    expect(
+      removeFolderCommand(
+        [
+          '/home/me/.cache/astryx/catalogs',
+          '/home/me/.cache/astryx/transpiled',
+        ],
+        'linux',
+      ),
+    ).toBe(
+      'rm -rf /home/me/.cache/astryx/catalogs /home/me/.cache/astryx/transpiled',
+    );
+    expect(
+      removeFolderCommand(
+        ['C:\\Users\\me\\catalogs', "C:\\Users\\o'neil\\transpiled"],
+        'win32',
+      ),
+    ).toBe(
+      "Remove-Item -Recurse -Force -LiteralPath C:\\Users\\me\\catalogs, 'C:\\Users\\o''neil\\transpiled'",
+    );
+  });
+
   it('finds the old folder with one stat and never lists it', () => {
     const options = {platform: 'linux', home, env: {XDG_CACHE_HOME: home}};
     const old = path.join(home, 'astryx', 'jiti');
