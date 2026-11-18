@@ -307,8 +307,7 @@ grantsOrigin?}` (an HTML string).
 - **FR16 — Accessibility.** The engine exposes the page's own structure
   (headings, links, form fields, text) to VoiceOver and TalkBack, and the
   platform passes it through as the page builds it. The caller names the
-  region on a containing view, and the library's components take a required
-  label. The page's text follows the system text size
+  region on a containing view. The page's text follows the system text size
   through `textScale` (FR9). The link menu is the system's context menu.
 - **FR17 — Named features are checked before use.** Contracts grow by named
   features (`spec:AST-140/FR5`). JavaScript checks a named feature (FR13)
