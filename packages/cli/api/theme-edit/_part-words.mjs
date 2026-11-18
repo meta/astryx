@@ -91,7 +91,12 @@ export const OVERRIDES = [
   // A radio's dot is its own part (the mark a checked radio shows).
   [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
-  [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
+  // (The accent buttons and the call to action are the primary button:
+  // the one the accent fills.)
+  [
+    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)\b/,
+    {on: 'button', when: 'variant:primary'},
+  ],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
   [/\bghost buttons?\b/, {on: 'button', when: 'variant:ghost'}],
   [
