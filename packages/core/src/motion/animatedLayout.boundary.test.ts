@@ -136,7 +136,7 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     }
   });
 
-  it("keeps the copy mechanism to the swap and the layer's exit copy", () => {
+  it("keeps the copy mechanism to the swap, the layer's exit copy and the Reduce Motion cross-fade", () => {
     const users = sourceFiles(coreSrc)
       .filter(path =>
         /from '[./]+(motion\/)?transientCopy'/.test(readFileSync(path, 'utf8')),
@@ -146,6 +146,7 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     expect(users).toEqual([
       'Layer/layerExitCopy.ts',
       'motion/animatedLayout.ts',
+      'motion/reducedMotionCrossFade.ts',
     ]);
   });
 

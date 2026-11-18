@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A DropdownMenu in a fixed top bar that opens as a finger presses it, and one in the content, on a page that scrolls with the document',
       },
       {
+        name: 'Refresh Control',
+        href: '/pages/refresh-control/',
+        description:
+          'A RefreshControl list in a card on a page that scrolls with the document, to check a pull to refresh on a phone, also under Reduce Motion',
+      },
+      {
         name: 'BottomSheet Pull',
         href: '/pages/bottom-sheet-pull/',
         description:
