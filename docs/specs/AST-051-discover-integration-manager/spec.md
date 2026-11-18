@@ -62,7 +62,7 @@ discover sources follow it except where this record says otherwise.
   what it adds as one list per kind, and the latest release a source knows.
   The text view shows a description's first sentence. It MUST then list, once per integration, every package its sources
   offer that the project neither loads nor declares as a dependency, each with
-  the package-manager command that adds it (FR2), and MUST NOT offer a package
+  what adds it (FR2), and MUST NOT offer a package
   whose integration the project has under another name. Official packages come
   first in both lists. An integration that failed to load is left out, even an
   official one; the integration-issues warning and Doctor report it. An
@@ -80,7 +80,9 @@ discover sources follow it except where this record says otherwise.
   included; the default is the installed version, else the latest release. A
   version no source lists MUST fail with `ERR_NOT_FOUND` and suggest releases.
   For a package the project does not have, discover MUST print the
-  package-manager command that adds it, as text, and MUST NOT run it; for an
+  package-manager command that adds it, or in its place the install guidance
+  a loaded integration gives (`spec:AST-039` FR16) for the same package and
+  version, as text, and MUST NOT run it; for an
   alias of a package the project has, it names that package instead. For a
   package the official list supplies, that command pins what FR11 names and
   quotes a range for the shell.

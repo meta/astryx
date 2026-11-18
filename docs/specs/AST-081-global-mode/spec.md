@@ -707,7 +707,8 @@ works on is `spec:AST-040` FR9's.
     lists each computer-level integration the project does not install, whose
     peer range admits the release that answers there and whose manifest loads,
     among the packages the project could add, with source
-    `installed for this computer` and the project's install command. Those are
+    `installed for this computer` and the project's install command, or the
+    install guidance a loaded integration gives (`spec:AST-039` FR16). Those are
     the integrations beside the copy that answers when it was installed outside
     the project, otherwise beside the first `astryx` on the search path that is
     installed for the computer. The command name a door passes still applies
@@ -720,7 +721,7 @@ works on is `spec:AST-040` FR9's.
   - `doctor` outside a project lists each computer-level integration it uses and
     each the folder loads its own copy of, and warns about each it skips or
     cannot load, naming why; inside a project, it lists the ones `discover`
-    lists as available, with the project's install command.
+    lists as available, with the same install command or guidance.
 
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
   Code and Codex plugins.** The repository MAY ship one plugin skill, shared
