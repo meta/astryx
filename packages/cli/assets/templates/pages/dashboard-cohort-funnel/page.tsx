@@ -813,7 +813,7 @@ export default function FunnelCohortAnalyticsPage() {
                 conversion
               </Text>
             </VStack>
-            <HStack gap={2}>
+            <HStack gap={2} wrap="wrap">
               <SegmentedControl
                 label="Funnel window"
                 value={funnelWindow}

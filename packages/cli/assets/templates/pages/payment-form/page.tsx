@@ -13,6 +13,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Selector} from '@astryxdesign/core/Selector';
@@ -198,6 +199,7 @@ const cardLogo: CSSProperties = {
 };
 
 export default function PaymentFormPage() {
+  const showToast = useToast();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -313,7 +315,13 @@ export default function PaymentFormPage() {
                             label="Sign In"
                             variant="secondary"
                             size="sm"
-                            onClick={() => {}}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that signs the shopper in.
+                              showToast({
+                                body: 'Demo: sign-in would start here',
+                                uniqueID: 'sign-in',
+                              })
+                            }
                           />
                         </HStack>
                         <Text type="supporting" color="secondary">
@@ -503,7 +511,13 @@ export default function PaymentFormPage() {
                               label="PayPal"
                               variant="primary"
                               size="lg"
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that starts PayPal.
+                                showToast({
+                                  body: 'Demo: PayPal checkout would start here',
+                                  uniqueID: 'paypal',
+                                })
+                              }
                               style={paypalButton}>
                               <img
                                 src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-100px.png"
@@ -516,7 +530,13 @@ export default function PaymentFormPage() {
                               label="Google Pay"
                               variant="primary"
                               size="lg"
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that starts Google Pay.
+                                showToast({
+                                  body: 'Demo: Google Pay checkout would start here',
+                                  uniqueID: 'google-pay',
+                                })
+                              }
                               style={gpayButton}>
                               <img
                                 src="https://pay.google.com/about/static_kcs/images/logos/google-pay-logo.svg"
@@ -721,7 +741,13 @@ export default function PaymentFormPage() {
                             label="Apply"
                             variant="secondary"
                             size="lg"
-                            onClick={() => {}}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that applies the promo code.
+                              showToast({
+                                body: 'Demo: the promo code would be applied here',
+                                uniqueID: 'apply-promo',
+                              })
+                            }
                           />
                         </HStack>
                       </VStack>

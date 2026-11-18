@@ -77,7 +77,9 @@ describe('hunt20', () => {
       themeEditSet('b', 'background', 'red', {
         cwd,
         on: 'button',
-        state: 'pressed',
+        // (A button's pressed is its aria-pressed state now; "down" is
+        // still another word for active.)
+        state: 'down',
       }),
     );
     expect(pressed.run[0]).toMatch(/--state active$/);

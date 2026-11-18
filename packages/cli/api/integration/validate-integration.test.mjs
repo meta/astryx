@@ -130,6 +130,26 @@ describe('validate-integration API', () => {
     expect(byCode(result.issues, 'missing_root')).toHaveLength(1);
   });
 
+  it('drops a themeProvider part it cannot use with a warning, and still loads the rest', async () => {
+    // themeProvider is a hint: a bad prop name or a mode prop alone never
+    // stops the package's other contributions loading.
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { components: './c', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'the theme', modeProp: 'themeMode'} };\n`,
+    });
+    const result = await validateLocalIntegration(pkgDir);
+    expect(byCode(result.issues, 'invalid_manifest')).toHaveLength(0);
+    const ignored = byCode(result.issues, 'ignored_manifest_field');
+    expect(ignored.map(i => i.severity)).toEqual(['warning', 'warning']);
+    expect(ignored[0].message).toContain(
+      '"themeProvider.themeProp" because it names no prop',
+    );
+    expect(ignored[1].message).toContain(
+      '"themeProvider.modeProp" because it needs themeProp beside it',
+    );
+    expect(byCode(result.issues, 'missing_root')).toHaveLength(1);
+  });
+
   it('still flags a known manifest key of the wrong type as invalid_manifest', async () => {
     const pkgDir = path.join(tmpDir, 'pkg');
     writePackage(pkgDir, {
@@ -525,6 +545,22 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     );
     const result = await validateInstalledIntegration('@acme/nope', consumer);
     expect(byCode(result.issues, 'package_not_found')).toHaveLength(1);
+  });
+
+  it('in the folder of the package itself, points to integration check', async () => {
+    const own = path.join(tmpDir, 'own');
+    writePackage(own, {
+      name: '@acme/widgets',
+      manifest: 'export default {};\n',
+    });
+
+    const result = await validateInstalledIntegration('@acme/widgets', own);
+
+    const [issue] = byCode(result.issues, 'package_not_found');
+    expect(issue.message).toContain(
+      '"@acme/widgets" is the package in this folder, not one it installs',
+    );
+    expect(issue.message).toMatch(/run `[^`]*integration check`/);
   });
 
   it('reports malformed installed package.json distinctly from not found', async () => {

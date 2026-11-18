@@ -31,10 +31,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
 import {
   sectionKey,
@@ -45,22 +46,12 @@ import {
 
 export {withSourceTitle};
 
-/** Where the CLI's own topics live. */
-const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
-
 /**
  * Owner package recorded for the built-in topics. They ship inside the CLI
  * (assets/docs), not in @astryxdesign/core, so this is the CLI's own name —
  * unlike component discovery, whose built-ins belong to core.
  */
 export const BUILTIN_DOCS_PACKAGE = CLI_PROVIDER_ID;
-
-/**
- * A built-in topic file: `{topic}.doc.mjs`. Anchored at both ends so a
- * localization overlay (`{topic}.doc.zh.mjs`) is not read as a topic of its
- * own — it is loaded by the topic it overlays.
- */
-const BUILTIN_TOPIC_FILE_RE = /^([\w-]+)\.doc\.mjs$/;
 
 /** Conventional doc-file suffixes for an integration's topics. */
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
@@ -82,11 +73,14 @@ export function isGuideRoute(target) {
 /**
  * What the integrations do to one guide the docs tree places, in configured
  * order: a replacement, and the extensions merged onto whatever is there.
+ * Set on the guide's tree node where the project's tree is built.
  * @typedef {object} GuideOverlay
  * @property {DocsTopicRecord | null} replacement the doc readers get at the
  *   route instead of the guide; the last package configured wins
  * @property {Array<{package: string, path: string, providerId?: string}>} extensions
- *   extensions authored after the replacement, if any, in configured order
+ *   every extension of the guide, in configured order, whether it was
+ *   configured before or after a replacement: an extension adds to whatever
+ *   answers its route
  * @property {string} [replacedPackage] the package of the replacement this one
  *   took over from, when the guide was replaced twice
  */
@@ -144,6 +138,28 @@ export function discoverBuiltinTopics() {
 }
 
 /**
+ * The name an integration doc declares, and whether it is placed (has
+ * `placement`, so it is no topic or root namespace), as docs discovery reads
+ * the doc; null when the doc does not load or parse, or names nothing. A doc
+ * of exported literals is read as data ({@link readDocAsData}).
+ *
+ * @param {string} file an integration doc file
+ * @returns {Promise<{name: string, placed: boolean} | null>}
+ */
+export async function integrationDocDeclaration(file) {
+  let doc;
+  try {
+    doc = /** @type {any} */ (
+      parseReadableDoc(await readDocAsData(file), path.basename(file))
+    );
+  } catch {
+    return null;
+  }
+  if (typeof doc?.name !== 'string') return null;
+  return {name: doc.name, placed: doc.placement != null};
+}
+
+/**
  * The CLI's own guide files: every flat topic and every doc in its docs tree,
  * without the dense, translated, and draft variants.
  *
@@ -178,6 +194,51 @@ export async function loadTopicModule(file) {
     );
   }
   return doc;
+}
+
+/**
+ * The doc `file` exports, as {@link loadTopicModule} gives it, read as data
+ * when the file holds only exported literals (../doc-compiler/literal-doc.mjs),
+ * so the read is the file alone; else imported.
+ * @param {string} file absolute path to a doc file
+ * @returns {Promise<unknown>} the authored doc value
+ */
+export async function readDocAsData(file) {
+  return readLiteralDoc(file) ?? loadTopicModule(file);
+}
+
+/**
+ * The CLI's own topics with what these integrations' docs add, in
+ * configured order, each package's docs read with `read` and withdrawn as
+ * the project's catalog withdraws them ({@link DocsCatalog#addDiscovered}).
+ * Icon sets and issues are the project's (config/project.mjs docs); this
+ * reads the doc files alone.
+ * @param {Array<{name?: string, docs?: unknown} | null | undefined>} integrations
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link readDocAsData} by default
+ * @returns {Promise<DocsCatalog>}
+ */
+export async function integrationDocsCatalog(
+  integrations,
+  {read = readDocAsData} = {},
+) {
+  const catalog = DocsCatalog.fromBuiltins();
+  for (const [at, integration] of integrations.entries()) {
+    if (!integration?.docs) continue;
+    try {
+      catalog.addDiscovered(
+        await discoverIntegrationDocs(
+          /** @type {{name: string, docs: string}} */ (integration),
+          {read},
+        ),
+        {package: integration.name ?? '', rank: at + 1},
+      );
+    } catch {
+      // A package whose docs fail to read adds none, as the project's
+      // catalog withdraws it.
+    }
+  }
+  return catalog;
 }
 
 /** Every block kind a section may hold, with the fields each one requires. */
@@ -504,9 +565,14 @@ function isFolder(dir) {
  * against its package while the rest of the CLI keeps working.
  *
  * @param {{name: string, docs?: string, providerId?: string}} integration a loaded integration
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link loadTopicModule} by default
  * @returns {Promise<{records: DocsTopicRecord[], errors: Error[], namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>}
  */
-export async function discoverIntegrationDocs(integration) {
+export async function discoverIntegrationDocs(
+  integration,
+  {read = loadTopicModule} = {},
+) {
   const docsDir = integration?.docs;
   /** @type {DocsTopicRecord[]} */
   const records = [];
@@ -545,7 +611,7 @@ export async function discoverIntegrationDocs(integration) {
   for (const file of files) {
     let doc;
     try {
-      doc = parseReadableDoc(await loadTopicModule(file), path.basename(file));
+      doc = parseReadableDoc(await read(file), path.basename(file));
     } catch (err) {
       errors.push(
         new Error(
@@ -880,61 +946,21 @@ export class DocsCatalog {
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
   #issues = [];
-  /** @type {Map<string, GuideOverlay>} lowercased route → what applies there */
-  #guideOverlays = new Map();
   /** @type {DocsTopicRecord[]} every doc that targets a route, in order */
   #guideTargeters = [];
 
   /**
    * Record a doc that replaces or extends a guide the docs tree places, by
-   * its route. Whether the route holds such a guide is known only once the
-   * tree is built: {@link guideOverlay} applies the record there, and a route
-   * that holds none applies nothing.
+   * its route. Whether the route holds such a guide, under that route or one
+   * it moved from, is known only once the tree is built, so the project tree
+   * applies each record there, in configured order ({@link GuideOverlay}); a
+   * route that holds none applies nothing.
    * @param {DocsTopicRecord} record
    * @returns {import('../integrations/issue').AstryxIntegrationIssue | null}
    */
   #targetGuide(record) {
-    const route = /** @type {string} */ (
-      record.replaces ?? record.extendsTopic
-    );
-    const key = route.toLowerCase();
-    const overlay = this.#guideOverlays.get(key) ?? {
-      replacement: null,
-      extensions: [],
-    };
-    if (record.replaces != null) {
-      const earlier = overlay.replacement;
-      if (earlier) {
-        // As with a flat topic, the later-configured doc wins, and reads name
-        // the replacement it took over from. Unlike a flat topic's, this is
-        // no warning: a new failing finding joins only in a minor release
-        // (architecture:cli-surface INV35); `integration validate` lists one
-        // package's two replacements of a guide as a note.
-        overlay.replacedPackage = earlier.package;
-      }
-      // Extensions were authored against the content that just went away.
-      overlay.replacement = record;
-      overlay.extensions = [];
-    } else {
-      overlay.extensions.push({
-        package: record.package,
-        path: record.path,
-        ...(record.providerId ? {providerId: record.providerId} : {}),
-      });
-    }
-    this.#guideOverlays.set(key, overlay);
     this.#guideTargeters.push(record);
     return null;
-  }
-
-  /**
-   * What the integrations do to the guide the docs tree places at `route`, or
-   * null when they leave it as it is.
-   * @param {string} route
-   * @returns {GuideOverlay | null}
-   */
-  guideOverlay(route) {
-    return this.#guideOverlays.get(route.toLowerCase()) ?? null;
   }
 
   /**
@@ -961,6 +987,42 @@ export class DocsCatalog {
    */
   get issues() {
     return this.#issues;
+  }
+
+  /**
+   * Add what one integration's docs discovery found
+   * ({@link discoverIntegrationDocs}): its topics and tree inputs, or, when
+   * any doc is unusable, none of them and each failure as an issue of the
+   * catalog. A partial contribution is the state where a `replaces` silently
+   * does nothing, so one unusable doc withdraws the package's docs.
+   * @param {Awaited<ReturnType<typeof discoverIntegrationDocs>>} discovered
+   * @param {{package: string, rank: number}} owner the package the catalog
+   *   names in an issue, and the integration's place in configured order
+   * @returns {import('../integrations/issue').AstryxIntegrationIssue[]} the
+   *   issues of the package's docs, in order
+   */
+  addDiscovered({records, errors, namespaces, guides}, {package: pkg, rank}) {
+    if (errors.length > 0) {
+      for (const e of errors) {
+        this.addIssue({package: pkg, message: e.message});
+      }
+      return errors.map(e => ({
+        code: 'invalid_doc',
+        severity: 'error',
+        message: e.message,
+      }));
+    }
+    /** @type {import('../integrations/issue').AstryxIntegrationIssue[]} */
+    const issues = [];
+    for (const record of records) {
+      const issue = this.add(record);
+      if (issue) issues.push(issue);
+    }
+    this.addTreeInputs({
+      namespaces: namespaces.map(input => ({...input, rank})),
+      guides: guides.map(input => ({...input, rank})),
+    });
+    return issues;
   }
 
   /**
@@ -1091,8 +1153,12 @@ export class DocsCatalog {
         // the topic was already replaced.
         replacedPackage: target.package,
         ...(record.providerId ? {providerId: record.providerId} : {}),
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to the topic a reader reads under the name it
+        // extends, so it carries over to the replacement: otherwise configured
+        // order alone would decide whether its sections show (a theme
+        // package's sections on `theme` would vanish in an app whose base
+        // library, configured later, replaces `theme`).
+        extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
         this.#aliases.set(replacedKey, replacementKey);

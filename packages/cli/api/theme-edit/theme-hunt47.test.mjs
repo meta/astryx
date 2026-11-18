@@ -77,7 +77,10 @@ describe('hunt47', () => {
 
   it('F20-N3: a font set through typography is the theme file own', async () => {
     await themeEditNew('ty', {cwd});
-    source('ty', "typography: {heading: {family: 'Georgia, serif'}}");
+    source(
+      'ty',
+      "typography: {heading: {family: 'Georgia', fallbacks: 'serif'}}",
+    );
     await themeEditShow('ty', {cwd});
     const r = await themeEditSet('ty', '--font-family-heading', 'Times', {cwd});
     expect(notes(r)).toMatch(/ty\.theme\.ts sets --font-family-heading itself/);

@@ -5,6 +5,7 @@
 import {useState, useCallback, type CSSProperties} from 'react';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
 import {Dialog} from '@astryxdesign/core/Dialog';
@@ -618,6 +619,13 @@ export default function EditorPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('blocks');
   const [pageTitle, setPageTitle] = useState('Page Editor');
+  const showToast = useToast();
+  const publish = () =>
+    // Demo only: replace this toast with the call that publishes the page.
+    showToast({
+      body: `Demo: ${pageTitle} would be published here`,
+      uniqueID: 'publish',
+    });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [viewport, setViewport] = useState<ViewportSize>('desktop');
   // Mobile only: the customizations (tabs + Add Block/Layers) open in a
@@ -823,7 +831,7 @@ export default function EditorPage() {
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(true)}
                 />
-                <Button label="Publish" variant="primary" />
+                <Button label="Publish" variant="primary" onClick={publish} />
               </HStack>
             </HStack>
           ) : (
@@ -881,7 +889,11 @@ export default function EditorPage() {
                       variant="ghost"
                       isIconOnly
                     />
-                    <Button label="Publish" variant="primary" />
+                    <Button
+                      label="Publish"
+                      variant="primary"
+                      onClick={publish}
+                    />
                   </HStack>
                 }
               />

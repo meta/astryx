@@ -476,9 +476,8 @@ describe('integration template discovery', () => {
     const renderedBuild = await runCli(['build', 'shell-side-nav'], tmpDir);
     expect(renderedBuild.status).toBe(0);
     expect(renderedBuild.stdout).toContain(
-      'template shell-side-nav --type page <path>',
+      'template shell-side-nav --type page src/pages/shell-top-nav',
     );
-    expect(renderedBuild.stdout).not.toContain('template shell-top-nav <path>');
 
     const listed = await template(undefined, {list: true, cwd: tmpDir});
     expect(listed.data).toEqual(
@@ -1210,7 +1209,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'acme-app-shell',
-      command: 'astryx template shell-side-nav --type page <path>',
+      command:
+        'astryx template shell-side-nav --type page src/pages/acme-app-shell',
     });
     const selected = await template('shell-side-nav', {
       type: 'page',
@@ -1229,7 +1229,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
-      command: 'astryx template contact-form --type page <path>',
+      command:
+        'astryx template contact-form --type page src/pages/contact-form',
     });
     const selected = await template('contact-form', {
       type: 'page',

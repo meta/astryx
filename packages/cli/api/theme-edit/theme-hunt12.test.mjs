@@ -76,6 +76,8 @@ describe('a theme name with a space', () => {
     await themeEditNew('my-theme', {cwd});
     const {refusal} = await import('../../test-utils/theme-edit-fixture.mjs');
     const r = await refusal(() => themeEditUndo('My Theme', {cwd}));
+    // The theme's name; a step back with nothing to go back to (it was
+    // just made) is no line to offer, so its show is.
     expect(r.run[0]).toMatch(/ show my-theme$/);
     expect(r.message).not.toMatch(/more than one theme/);
     // A name that starts with a label word is still one name: "Theme Park"

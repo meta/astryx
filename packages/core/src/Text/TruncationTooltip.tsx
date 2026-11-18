@@ -27,7 +27,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,

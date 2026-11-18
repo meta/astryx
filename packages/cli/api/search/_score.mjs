@@ -40,10 +40,13 @@ const MIN_TOKEN_SCORE = 50;
  * @param {string} tok
  * @param {Candidate} candidate
  * @param {{fuzzy?: boolean, part?: boolean}} [opts] - see scoreCandidate
+ * @param {{score: number, reason: string} | null} [direct] - scoreCandidate(tok,
+ *   candidate, opts), when the caller already holds it
  * @returns {{score: number, reason: string} | null}
  */
-export function bestForToken(tok, candidate, opts = {}) {
-  let best = scoreCandidate(tok, candidate, opts);
+export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
+  let best =
+    direct !== undefined ? direct : scoreCandidate(tok, candidate, opts);
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
     for (const s of syns) {
@@ -131,8 +134,17 @@ export function scoreQuery(
    *  single words), but if stopwords left exactly one DIFFERENT token (e.g.
    *  "pricing page" → "pricing"), score that token too and take the stronger. */
   const fewTokens = () => {
+    // A one-word query whose token is the query itself scores exactly as
+    // `full` did: `joins` only matters for a term with a space in it.
     const single =
-      tokens.length === 1 ? bestForToken(tokens[0], candidate, {fuzzy}) : null;
+      tokens.length === 1
+        ? bestForToken(
+            tokens[0],
+            candidate,
+            {fuzzy},
+            tokens[0] === term && !/\s/.test(term) ? full : undefined,
+          )
+        : null;
     if (full && (!single || full.score >= single.score)) return asFull(full);
     return single ? asFull(single) : null;
   };

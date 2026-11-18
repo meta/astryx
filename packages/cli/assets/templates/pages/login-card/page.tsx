@@ -9,6 +9,7 @@ import {Center} from '@astryxdesign/core/Center';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Card} from '@astryxdesign/core/Card';
 import {Link} from '@astryxdesign/core/Link';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -71,6 +72,7 @@ export default function LoginSimple() {
   const [password, setPassword] = useState('');
   const [loginFailed, setLoginFailed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const showToast = useToast();
 
   const handleLogin = () => {
     if (!email || !password) {
@@ -172,12 +174,26 @@ export default function LoginSimple() {
                 variant="secondary"
                 icon={<AppleIcon />}
                 size="lg"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that starts Apple sign-in.
+                  showToast({
+                    body: 'Demo: Apple sign-in would start here',
+                    uniqueID: 'sign-in-apple',
+                  })
+                }
               />
               <Button
                 label="Login with Google"
                 variant="secondary"
                 icon={<GoogleIcon />}
                 size="lg"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that starts Google sign-in.
+                  showToast({
+                    body: 'Demo: Google sign-in would start here',
+                    uniqueID: 'sign-in-google',
+                  })
+                }
               />
             </VStack>
 

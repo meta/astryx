@@ -61,6 +61,12 @@ export async function withRealRenders(fn) {
 const shown = (cwd, file) => path.relative(cwd, file).split(path.sep).join('/');
 
 /**
+ * The editor's render stamp on a stand-in page, so the editor reads it as a
+ * page it wrote (a page without the stamp is the user's and is left alone).
+ */
+const STAND_IN_STAMP = `<!-- astryx: render of ${'0'.repeat(24)} ${'0'.repeat(16)} -->`;
+
+/**
  * The settings a stand-in preview was written from, as its key, so the
  * stand-in is current exactly when the real page would be.
  * @param {any} data
@@ -89,7 +95,7 @@ export function stubRenders(original) {
       const out = path.join(cwd, 'themes', slug, 'preview.html');
       fs.writeFileSync(
         out,
-        `<!doctype html><title>${slug}: sample page</title><!-- test stand-in ${standInKey(data)} -->\n`,
+        `<!doctype html><title>${slug}: sample page</title><!-- test stand-in ${standInKey(data)} -->\n${STAND_IN_STAMP}\n`,
       );
       return shown(cwd, out);
     },
@@ -123,9 +129,9 @@ export function stubRenders(original) {
       fs.mkdirSync(path.dirname(out), {recursive: true});
       fs.writeFileSync(
         out,
-        `<!doctype html><title>${slug}: every component${options.group ? ` (${options.group})` : ''}</title><!-- test stand-in -->\n`,
+        `<!doctype html><title>${slug}: every component${options.group ? ` (${options.group})` : ''}</title><!-- test stand-in -->\n${STAND_IN_STAMP}\n`,
       );
-      return {file: shown(cwd, out), components: 1, skipped: []};
+      return {file: shown(cwd, out), components: 1, skipped: [], notes: []};
     },
   };
 }

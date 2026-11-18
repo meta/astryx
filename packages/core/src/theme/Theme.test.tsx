@@ -9,6 +9,7 @@ import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import type * as DefineThemeModule from './defineTheme';
 import {dynamicTypeScaleRule} from './dynamicType';
+import {__resetDevWarnings} from '../utils/devWarning';
 
 const {generateThemeCSSSpy} = vi.hoisted(() => ({
   generateThemeCSSSpy: vi.fn(),
@@ -619,5 +620,43 @@ describe('Theme', () => {
 
     unmount();
     expect(document.head.querySelector(selector)).toBeNull();
+  });
+});
+
+describe('the runtime injection hint', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  // The hint a runtime theme logs, by its name.
+  const hintFor = (name: string) => {
+    __resetDevWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <Theme theme={defineTheme({name, tokens: {}})}>
+        <div />
+      </Theme>,
+    );
+    const message = warn.mock.calls
+      .map(args => String(args[0]))
+      .find(m => m.includes(`"${name}" is using runtime style injection`));
+    expect(message, name).toBeDefined();
+    return String(message);
+  };
+
+  it('gives the build step and invents no package or identifier from the name', () => {
+    for (const name of ['canvas-editor', 'neutral']) {
+      const message = hintFor(name);
+      expect(message).toContain(
+        'npx @astryxdesign/cli theme build <the file that defines it> --detail full',
+      );
+      expect(message).toContain(
+        'use the import lines it prints for the built .js and .css',
+      );
+      expect(message).not.toContain('@astryxdesign/theme-');
+      expect(message).not.toMatch(/import \{[^}]*\}/);
+      expect(message).not.toContain(`${name}Theme`);
+    }
   });
 });

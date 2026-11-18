@@ -203,8 +203,10 @@ describe('every suggested new is accepted and keeps the valid options', () => {
           break;
         } catch (e) {
           if (!(e instanceof AstryxError)) throw e;
-          const next = (e.suggestions ?? []).find(s =>
-            s.name.startsWith(`${P} new `),
+          // A line offered only after a step (an install) is not run now.
+          const next = (e.suggestions ?? []).find(
+            s =>
+              s.name.startsWith(`${P} new `) && !/^then /.test(s.reason ?? ''),
           );
           if (!next) {
             failures.push(`${c.i}: ${line} refused with no new: ${e.message}`);

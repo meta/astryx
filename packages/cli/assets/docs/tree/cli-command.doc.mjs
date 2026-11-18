@@ -99,9 +99,8 @@ export default {
         {
           type: 'code',
           lang: 'text',
-          code: `status:  [warn]
-label:   CLI command
-message: Loaded integrations declare different CLI commands: @acme/astryx-widgets (\`acme astryx\`), @other/kit (\`other astryx\`). Neither is used, so printed commands start with \`pnpm exec astryx\`.`,
+          code: `[warn]  cli-command - CLI command - Loaded integrations declare different CLI commands: @acme/astryx-widgets (\`acme
+        astryx\`), @other/kit (\`other astryx\`). Neither is used, so printed commands start with \`pnpm exec astryx\`.`,
         },
         {
           type: 'prose',

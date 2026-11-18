@@ -50,6 +50,12 @@
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
+# - A run can hold more matrix legs at once when CI has room for them
+#   (`leg-widths`). It waits for `peak`, which counts each such matrix at its
+#   tight width. When the look that starts it also has room for every matrix
+#   at full width, `widths` gives the full widths, and the matrices'
+#   `max-parallel` reads them; on any other start, the tight widths. So the run
+#   never starts more legs than the look counted.
 # - A failed lookup, a rate limit included, starts the run.
 
 name: CI admission
@@ -57,7 +63,7 @@ description: Waits until a CI run's jobs fit under CI's ceiling.
 
 inputs:
   peak:
-    description: The most jobs this run holds at once.
+    description: The most jobs this run holds at once, with each `leg-widths` matrix at its tight width.
     required: true
   main:
     description: "'true' for a main full check or release re-check, which does not wait for other main runs."
@@ -74,6 +80,19 @@ inputs:
     description: JSON map of a pull-request label to the jobs it adds to `peak`.
     required: false
     default: '{}'
+  leg-widths:
+    description: >-
+      JSON map of a matrix job to `{"tight": n, "full": m}`: how many of its
+      legs run at once when CI has room for the run at `tight` widths only
+      (counted in `peak`), and when it has room at `full` widths. The run
+      waits for `peak`; when the deciding look also has room for each job's
+      `full - tight` more legs, the legs run at full width (`widths`).
+    required: false
+    default: '{}'
+  wide:
+    description: "For 'rest': 'true' when the whole run fit at full leg widths on the 'room' look."
+    required: false
+    default: ''
   phase:
     description: "'whole' waits for the whole run; 'room' waits for room for one job and records whether the whole run fit; 'rest' waits for the rest of the run after 'room'."
     required: false
@@ -111,6 +130,12 @@ outputs:
   next:
     description: When the wait planned its next look, in milliseconds since the epoch.
     value: ${{ steps.wait.outputs.next }}
+  wide:
+    description: "'true' when the run starts with room for its legs at full width."
+    value: ${{ steps.wait.outputs.wide }}
+  widths:
+    description: 'JSON map of each `leg-widths` job to how many legs run at once: `full` when `wide`, else `tight`.'
+    value: ${{ steps.widths.outputs.widths }}
 
 runs:
   using: composite
@@ -126,6 +151,8 @@ runs:
         PEAK: ${{ inputs.peak }}
         MAIN: ${{ inputs.main }}
         LABEL_LEGS: ${{ inputs.label-legs }}
+        LEG_WIDTHS: ${{ inputs.leg-widths }}
+        WIDE: ${{ inputs.wide }}
         MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
         MAX_LOOKS: ${{ inputs.max-looks }}
         COUNT_MODULE: ${{ github.action_path }}/count.mjs
@@ -171,6 +198,12 @@ runs:
           if (!Number.isInteger(peak) || peak < 1) {
             throw new Error(`peak must be a positive integer, got "${process.env.PEAK}".`);
           }
+          // The legs run at full width only when the deciding look has room
+          // for them; every other start runs them at tight width, which
+          // `peak` counts.
+          core.setOutput('wide', 'false');
+          const widths = Object.values(JSON.parse(process.env.LEG_WIDTHS || '{}'));
+          const widen = widths.reduce((sum, width) => sum + width.full - width.tight, 0);
           const main = process.env.MAIN === 'true';
           const pr = context.payload.pull_request;
           if (pr != null) {
@@ -191,6 +224,7 @@ runs:
           // The rest waits only when room measured that the run did not fit;
           // when room started on an API error or a low budget, so does the rest.
           if (PHASE === 'rest' && process.env.FITS !== 'false') {
+            if (process.env.FITS === 'true') core.setOutput('wide', String(process.env.WIDE === 'true'));
             core.info(process.env.FITS === 'true' ? 'The whole run fit when its first job found room.' : 'Room did not measure the run; starting.');
             return;
           }
@@ -269,7 +303,10 @@ runs:
               const fits = others + peak <= CI_CEILING && !mainWaiting;
               core.setOutput('fits', String(fits));
               if (fits) {
-                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
+                // A run with no widening matrix has no full width to take.
+                const wide = widen > 0 && others + peak + widen <= CI_CEILING;
+                core.setOutput('wide', String(wide));
+                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.${widen === 0 ? '' : wide ? ` Legs run at full width: + ${widen} <= ${CI_CEILING}.` : ` Legs run at tight width: + ${widen} > ${CI_CEILING}.`}`);
                 return;
               }
               if (PHASE === 'room') {
@@ -334,3 +371,18 @@ runs:
           } finally {
             core.info(`CI admission: ${calls} API calls.`);
           }
+
+    # Runs after any end of the wait, so the matrices always read a width.
+    - id: widths
+      if: always()
+      shell: bash
+      env:
+        LEG_WIDTHS: ${{ inputs.leg-widths }}
+        WIDE: ${{ steps.wait.outputs.wide }}
+      run: |
+        node -e '
+          const widths = JSON.parse(process.env.LEG_WIDTHS || "{}");
+          const pick = width => (process.env.WIDE === "true" ? width.full : width.tight);
+          const chosen = Object.fromEntries(Object.entries(widths).map(([job, width]) => [job, pick(width)]));
+          console.log(`widths=${JSON.stringify(chosen)}`);
+        ' >> "$GITHUB_OUTPUT"

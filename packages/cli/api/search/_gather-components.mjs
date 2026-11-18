@@ -76,6 +76,7 @@ async function gatherCoreComponents(coreDir) {
     let guidance = [];
     /** @type {import('@astryxdesign/cli/authoring').ComponentDeprecation | undefined} */
     let deprecated;
+    let category = '';
     if (readme && readme.endsWith('.doc.mjs')) {
       const loaded = await loadModuleDoc(readme);
       // A member documented in its family's doc (VStack in Stack's doc) is
@@ -87,6 +88,7 @@ async function gatherCoreComponents(coreDir) {
         description = doc.usage?.description || doc.description || '';
         guidance = guidanceFrom(doc);
         deprecated = doc.deprecated;
+        category = typeof doc.category === 'string' ? doc.category : '';
       }
       for (const [n, place] of familyPlaces(loaded)) places.set(n, place);
     }
@@ -97,6 +99,7 @@ async function gatherCoreComponents(coreDir) {
       description,
       guidance,
       ...(deprecated ? {_deprecated: deprecated} : {}),
+      _category: category,
       _package: CORE_PACKAGE,
       _import: resolveImportPath(coreDir, comp),
     });
@@ -184,6 +187,7 @@ async function gatherIntegrationComponents(loadedIntegrations) {
         description: doc ? doc.usage?.description || doc.description || '' : '',
         guidance: guidanceFrom(doc),
         ...(doc?.deprecated ? {_deprecated: doc.deprecated} : {}),
+        _category: typeof doc?.category === 'string' ? doc.category : '',
         ...places.get(rec.name),
         _package: rec.package ?? integration.name,
         // Exactly what `component` reports: a doc may state its own specifier
@@ -290,17 +294,20 @@ export async function gatherComponents(coreDir, cwd) {
 
 /**
  * Every component the project can use, Core's and its integrations', with the
- * keywords its own doc declares: the discovery and doc reads search's own
+ * keywords and category its own doc declares: the discovery and doc reads search's own
  * candidates use, without the import paths and prose a result carries. `build`
  * reads it to tell a part of a page from a page when its search was narrowed
  * away from components.
  * @param {string} coreDir
  * @param {string} cwd
- * @returns {Promise<{name: string, keywords: string[]}[]>}
+ * @returns {Promise<{name: string, keywords: string[], category: string}[]>}
  */
 export async function componentKeywords(coreDir, cwd) {
   /** @param {any} doc */
   const keywordsOf = doc => (Array.isArray(doc?.keywords) ? doc.keywords : []);
+  /** @param {any} doc */
+  const categoryOf = doc =>
+    typeof doc?.category === 'string' ? doc.category : '';
   const core = Object.values(discoverComponents(coreDir))
     .flat()
     .map(async name => {
@@ -309,7 +316,8 @@ export async function componentKeywords(coreDir, cwd) {
         readme && readme.endsWith('.doc.mjs')
           ? await loadModuleDoc(readme)
           : null;
-      return {name, keywords: keywordsOf(familyMember(loaded, name) ?? loaded)};
+      const doc = familyMember(loaded, name) ?? loaded;
+      return {name, keywords: keywordsOf(doc), category: categoryOf(doc)};
     });
   const loadedIntegrations = await loadIntegrationsSafely(cwd);
   const replacements = await loadComponentReplacements(
@@ -324,6 +332,7 @@ export async function componentKeywords(coreDir, cwd) {
         return {
           name: rec.name,
           keywords: keywordsOf(integrationMemberEntry(loaded, rec) ?? loaded),
+          category: categoryOf(integrationMemberEntry(loaded, rec) ?? loaded),
         };
       }),
     );

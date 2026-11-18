@@ -34,6 +34,7 @@ import {
   isIgnoredThemeEntry,
   readStaticDescriptorValue,
 } from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
@@ -149,7 +150,7 @@ export function discoverIconSetDirectory(root, owner) {
   } catch {
     return {sets, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (isIgnoredThemeEntry(entry.name) || !entry.isDirectory()) continue;
     // Only a lower-kebab directory is a set (FR1).
     if (!SET_NAME_RE.test(entry.name)) continue;

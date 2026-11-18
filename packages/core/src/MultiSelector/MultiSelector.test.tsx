@@ -2479,6 +2479,69 @@ describe('MultiSelector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          isDefaultOpen
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed without an open callback when disabled and read-only', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          onOpenChange={onOpenChange}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <MultiSelector
+            label="Fruit"
+            options={defaultOptions}
+            value={[]}
+            onChange={() => {}}
+            isDefaultOpen
+          />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},

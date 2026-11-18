@@ -142,6 +142,20 @@ change.
   `architecture:cli-surface` INV34.
 - **FR14 — One command checks an integration, and can gate its build.** Governed by
   `architecture:cli-surface` INV35.
+- **FR15 — A package that wires its own themes names its provider once.** An
+  integration whose themes reach an app through its own provider component,
+  not through Astryx's `Theme`, MAY declare `themeProvider: {export, from}` in
+  its manifest: the component's named export and the module an app imports it
+  from, and MAY name `themeProp`, the provider's prop that takes a theme
+  object, and, only beside it, `modeProp`, the prop that takes a color mode.
+  The field is a hint and never stops the manifest loading: a part a CLI
+  cannot use is dropped with a warning that says why. It is an integration-level fact that covers every theme under the
+  package's themes root, so it MUST NOT be repeated in a theme's descriptor or
+  keyed by theme. Each theme's stylesheet stays the one the package exports
+  for it (`spec:AST-050/FR7`). A CLI that does not know the key ignores it
+  with a warning and loads the rest of the manifest. An integration adds the
+  key in the same change that moves its exact CLI pin to the first release
+  that reads it, so an app on that pin never sees the warning.
 
 ### Compatibility transition
 
@@ -189,6 +203,7 @@ metadata stays outside Core runtime authoring, consistent with
 | FR11     | integration-add writer tests; catalog codemod tests                                                                                | second item of a kind; leftover 0.6 catalog                                                                                                                | adding an item writes a shared file, or a leftover catalog is read instead of refused                                                                                                                                                          |
 | FR12     | prop-drift unit tests; `doctor integration components` tests; a repository test over every shipped component descriptor            | each finding kind; a type written differently but equal; props declared in another package; no TypeScript installed                                        | a removed or renamed prop or a changed union passes unreported, or a missing compiler reads as a pass                                                                                                                                          |
 | FR13     | doc type unit tests; `doctor integration validate` tests; a repository test over every shipped descriptor and translation          | each finding kind; a field hidden behind an unknown field; a descriptor in another kind's root; an annotation naming another type; no TypeScript installed | an unknown, missing, or mistyped field passes unreported, or a missing compiler reads as a pass                                                                                                                                                |
+| FR15     | manifest parser tests; doctor, `theme list` and `theme add` tests over a fixture integration that declares a provider              | a provider the app renders; one it only imports; a same-named component from another module; several themes, with and without an imported stylesheet       | a theme counts as wired without the app rendering the declared provider, or the provider is declared per theme                                                                                                                                 |
 | FR14     | `integration check` text and JSON tests, with and without `--strict`; a test that lists every finding that fails it; a search test | a clean package; a warning only; an error in one check; no manifest; a skipped comparison; a search for ci                                                 | the default exit differs from a check's own, a warning or a skipped comparison passes `--strict`, text and JSON exit differently, a new failing finding is added without the list changing, or a search for ci does not find the command first |
 
 ## Decision log

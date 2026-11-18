@@ -24,7 +24,7 @@ import {
   focusVars,
   sizeVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {CODE_SYNTAX_CLASS} from './CodeSyntaxPlugin';
+import {CODE_SYNTAX_CLASS} from './internal/CodeSyntaxPlugin';
 import type {EditorThemeClasses} from 'lexical';
 
 // Document blocks follow core Markdown's typography, spacing, and measure

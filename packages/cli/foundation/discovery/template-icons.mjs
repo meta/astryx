@@ -61,6 +61,7 @@ import {
 import {definitionsByIcon, iconUseCommand} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('./icon-set-discovery.mjs').IconSetChoice} IconSetChoice */
@@ -665,7 +666,7 @@ export function sharedTemplateMeanings(declared) {
   return [...byDefinition]
     .filter(([, icons]) => icons.size > 1)
     .map(([definition, icons]) => ({definition, keys: [...icons.values()]}))
-    .sort((a, b) => a.definition.localeCompare(b.definition));
+    .sort((a, b) => compareText(a.definition, b.definition));
 }
 
 /**

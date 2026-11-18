@@ -13,8 +13,12 @@
  *   carries only the gesture code its touch components import; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does; the names that entry gives Lab are not in the root
- *   entry
+ *   `import()` does, but for `Item`'s loader for its deprecated swipe props,
+ *   the one `import()` of swipe code, which this guard counts out of
+ *   `Item`'s import by name; the names that entry gives Lab are not in the
+ *   root entry; and what `Item` alone and `ListItem` alone load at once (the
+ *   entry output and the chunks it reaches by static import) holds no byte
+ *   of a swipe module, while `Item` with `createSwipe` holds them
  * @position Node test over source, so it needs no build. Its build files
  *   live under the repository's `node_modules/.cache`, never the system temp
  *   directory, whose listing esbuild would read for every build
@@ -51,6 +55,17 @@ beforeAll(() => {
   fs.mkdirSync(CACHE, {recursive: true});
   scratch = fs.mkdtempSync(path.join(CACHE, 'run-'));
 });
+
+/**
+ * The modules the swipe runs on (`spec:AST-057` FR10): the shared gesture
+ * core, the animator, the snap-point drag, the panels' rendering, and the
+ * row's gesture code with its UIKit table. The reader of a swipe value and
+ * DEP-0017's row style are `Item`'s handoff and deprecated path, not swipe
+ * modules.
+ */
+const SWIPE_MODULE =
+  /^packages\/core\/src\/(gestures\/|animator\/|dragToSnapPoints\/|motion\/animator\.ts$|motion\/uikit\/swipeActions\.ts$|Swipe\/(?!swipeHost(\.stylex)?\.ts$))/;
+
 afterAll(() => {
   fs.rmSync(scratch, {recursive: true, force: true});
 });
@@ -79,6 +94,43 @@ const BUILD_OPTIONS = {
   metafile: true,
   write: false,
   logLevel: 'silent',
+};
+
+/**
+ * The one `import()` of swipe code: `Item`'s loader for its deprecated
+ * `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), which loads the
+ * gesture the first time a row has them, so an import of `Item` loads none of
+ * it at once. Removed with the props (`spec:AST-057` CLN-0025).
+ */
+const DEPRECATED_SWIPE_LOADER = {
+  importer: 'packages/core/src/Item/Item.tsx',
+  target: 'packages/core/src/Swipe/SwipeActionsLayer',
+};
+
+/**
+ * The rest of DEP-0017's deprecated-path exception, beside its loader: the
+ * released row style a row given the deprecated `swipeActions` takes from its
+ * first render. It holds no gesture code. Removed with the props
+ * (`spec:AST-057` CLN-0025).
+ */
+const DEPRECATED_SWIPE_STYLE = 'packages/core/src/Swipe/swipeHost.stylex';
+
+/**
+ * Counts DEP-0017's loader's chunk out of the import that holds the loader, as
+ * the size report's code splitting does; every other `import()` stays in.
+ */
+const DEPRECATED_SWIPE_LOADED_LATER = {
+  name: 'deprecated-swipe-loader',
+  setup(build) {
+    build.onResolve({filter: /SwipeActionsLayer$/}, args =>
+      args.kind === 'dynamic-import' &&
+      path.relative(REPO, args.importer) === DEPRECATED_SWIPE_LOADER.importer &&
+      path.relative(REPO, path.resolve(args.resolveDir, args.path)) ===
+        DEPRECATED_SWIPE_LOADER.target
+        ? {path: args.path, external: true}
+        : undefined,
+    );
+  },
 };
 
 /**
@@ -158,6 +210,49 @@ const LAB_ONLY_NAMES = [
   'measureLogicalScrollAxis',
   'timing',
 ];
+
+/**
+ * The bytes each source module puts in what an import of `entry` loads at
+ * once: its entry output and the chunks it reaches by static import, built
+ * with the size report's code splitting, so a chunk only an `import()` reaches
+ * is left out.
+ */
+function eagerBytesOf(entry) {
+  const {metafile} = esbuild.buildSync({
+    ...BUILD_OPTIONS,
+    entryPoints: [entry],
+    splitting: true,
+  });
+  const {outputs} = metafile;
+  // An import() target is an entry point of its own in the metafile: start
+  // from this entry's output only.
+  const pending = Object.keys(outputs).filter(
+    file => outputs[file].entryPoint === path.relative(REPO, entry),
+  );
+  expect(pending).toHaveLength(1);
+  const eager = new Set();
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (eager.has(file)) {
+      continue;
+    }
+    eager.add(file);
+    for (const {path: next, kind} of outputs[file].imports) {
+      if (kind === 'import-statement' && outputs[next] != null) {
+        pending.push(next);
+      }
+    }
+  }
+  const bytes = {};
+  for (const file of eager) {
+    for (const [input, {bytesInOutput}] of Object.entries(
+      outputs[file].inputs,
+    )) {
+      bytes[input] = (bytes[input] ?? 0) + bytesInOutput;
+    }
+  }
+  return bytes;
+}
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
 function bytesOf(bytes, pattern = PRIMITIVE_INPUT) {
@@ -256,6 +351,9 @@ const GESTURE_USERS = new Set([
   // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
   // imports none of it.
   'SnapPaging',
+  // Swipe actions: createSwipe brings a row's swipe on that drag
+  // (`spec:AST-057` FR10).
+  'Swipe',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
@@ -330,6 +428,7 @@ async function gestureCarriers(imports) {
     ...BUILD_OPTIONS,
     entryPoints: entries.map(entry => path.join(REPO, entry)),
     splitting: false,
+    plugins: [DEPRECATED_SWIPE_LOADED_LATER],
   });
   const outputs = new Map(
     Object.values(metafile.outputs).map(output => [output.entryPoint, output]),
@@ -474,6 +573,43 @@ export const ${name} = () => new GestureArena();
   });
 });
 
+describe('the swipe modules in bundles (spec:AST-057 FR10)', () => {
+  const ITEM = path.join(CORE_SRC, 'Item/Item');
+  const LIST_ITEM = path.join(CORE_SRC, 'List/ListItem');
+  const CREATE_SWIPE = path.join(CORE_SRC, 'Swipe/createSwipe');
+
+  it.each([
+    ['Item', `export {Item} from ${JSON.stringify(ITEM)};`],
+    ['ListItem', `export {ListItem} from ${JSON.stringify(LIST_ITEM)};`],
+  ])('put no byte in what %s alone loads at once', (name, source) => {
+    const bytes = eagerBytesOf(entryWith(`fr10-${name}.ts`, source));
+    // The row is in the build, so a swipe module would be found if it were.
+    expect(bytes[`${path.relative(REPO, ITEM)}.tsx`]).toBeGreaterThan(0);
+    expect(bytesOf(bytes, SWIPE_MODULE)).toEqual([]);
+  });
+
+  it('are in what Item with createSwipe loads at once', () => {
+    const bytes = eagerBytesOf(
+      entryWith(
+        'fr10-item-with-create-swipe.ts',
+        `export {Item} from ${JSON.stringify(ITEM)};\n` +
+          `export {createSwipe} from ${JSON.stringify(CREATE_SWIPE)};`,
+      ),
+    );
+    const swipeModules = bytesOf(bytes, SWIPE_MODULE).map(([input]) => input);
+    for (const module of [
+      'packages/core/src/Swipe/createSwipe.ts',
+      'packages/core/src/Swipe/SwipeActionsLayer.tsx',
+      'packages/core/src/Swipe/useSwipeAction.ts',
+      'packages/core/src/dragToSnapPoints/createDragToSnapPoints.ts',
+      'packages/core/src/motion/animator.ts',
+    ]) {
+      expect(swipeModules).toContain(module);
+    }
+    expect(swipeModules.some(input => PRIMITIVE_INPUT.test(input))).toBe(true);
+  });
+});
+
 describe('the touch module internals', () => {
   it('are built from files under the repository, not the system temp directory', () => {
     expect(path.relative(REPO, scratch).split(path.sep)[0]).toBe(
@@ -527,5 +663,53 @@ describe('the touch module internals', () => {
       ),
     );
     expect(dynamic.map(file => path.relative(REPO, file))).toEqual([]);
+  });
+
+  it('reach Core only through DEP-0017\u2019s loader by import(): the one loader of swipe code', () => {
+    const loaders = filesUnder(CORE_SRC, /\.(ts|tsx)$/)
+      .filter(file => !/\.(test|spec)\.(ts|tsx)$|__tests__/.test(file))
+      .flatMap(file =>
+        [
+          ...fs
+            .readFileSync(file, 'utf8')
+            .matchAll(/\bimport\(\s*['"]([^'"]+)['"]/g),
+        ].map(([, specifier]) => [
+          path.relative(REPO, file),
+          path.relative(REPO, path.resolve(path.dirname(file), specifier)),
+        ]),
+      )
+      .filter(([, target]) => target.startsWith('packages/core/src/Swipe/'));
+    expect(loaders).toEqual([
+      [DEPRECATED_SWIPE_LOADER.importer, DEPRECATED_SWIPE_LOADER.target],
+    ]);
+  });
+
+  it('reach a Core component from swipe actions only through the reader of a swipe value and DEP-0017\u2019s row style', () => {
+    const imports = filesUnder(CORE_SRC, /\.(ts|tsx)$/)
+      .filter(file => !/\.(test|spec)\.(ts|tsx)$|__tests__/.test(file))
+      .filter(file => {
+        const own = path.relative(CORE_SRC, file);
+        return !own.startsWith(`Swipe${path.sep}`) && own !== 'index.ts';
+      })
+      .flatMap(file =>
+        [
+          ...fs
+            .readFileSync(file, 'utf8')
+            .matchAll(/^import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm),
+        ].map(([, specifier]) => [
+          path.relative(REPO, file),
+          path.relative(REPO, path.resolve(path.dirname(file), specifier)),
+        ]),
+      )
+      .filter(([, target]) => target.startsWith('packages/core/src/Swipe/'));
+    expect(imports).toEqual([
+      [DEPRECATED_SWIPE_LOADER.importer, 'packages/core/src/Swipe/swipeHost'],
+      [DEPRECATED_SWIPE_LOADER.importer, DEPRECATED_SWIPE_STYLE],
+      // ListItem keys its swipe value for its Item; it reads the value only.
+      [
+        'packages/core/src/List/ListItem.tsx',
+        'packages/core/src/Swipe/swipeHost',
+      ],
+    ]);
   });
 });

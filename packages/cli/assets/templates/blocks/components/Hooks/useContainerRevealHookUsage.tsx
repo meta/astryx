@@ -64,8 +64,8 @@ export default function UseContainerRevealHookUsage() {
     <Card width={420} padding={2}>
       <Stack gap={0}>
         <Text type="supporting" color="secondary" xstyle={styles.intro}>
-          Hover a row — or Tab into it — to reveal its actions. On touch they
-          stay visible.
+          Hover a row — or Tab into it — to reveal its actions. Under a coarse
+          primary pointer (a phone or tablet) they stay visible.
         </Text>
         <FileRow name="report.pdf" />
         <FileRow name="budget.xlsx" />

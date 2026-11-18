@@ -48,8 +48,10 @@ const names = (/** @type {any} */ e) =>
 
 describe('N10: a token the part does not read', () => {
   it('suggests only tokens of the same kind', async () => {
+    // (A heading reads every weight token through its weight prop; a badge
+    // reads none of the heading sizes.)
     const err = await refusal(() =>
-      themeEditSet('b', '--font-weight-bold', '700', {cwd, on: 'heading'}),
+      themeEditSet('b', '--text-heading-1-weight', '700', {cwd, on: 'badge'}),
     );
     for (const n of names(err)) expect(n).not.toMatch(/-size 700|leading 700/);
   });

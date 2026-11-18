@@ -198,6 +198,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {useHoverCard} from '@astryxdesign/core/HoverCard';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Icon} from '@astryxdesign/core/Icon';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {usePowerSearchConfig} from '@astryxdesign/core/PowerSearch';
@@ -531,6 +532,7 @@ function Figure({
  * yet at the moment the hook attaches to it.
  */
 function DescriptionCell({item}: {item: InvoiceRow}) {
+  const showToast = useToast();
   const anchorRef = useRef<HTMLElement>(null);
   const hoverCard = useHoverCard({
     placement: 'below',
@@ -594,7 +596,18 @@ function DescriptionCell({item}: {item: InvoiceRow}) {
               {`${share.toFixed(1)}%`}
             </MetadataListItem>
           </MetadataList>
-          <Button label="Dispute this line" variant="secondary" width="100%" />
+          <Button
+            label="Dispute this line"
+            variant="secondary"
+            width="100%"
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Dispute opened for ${item.description}`,
+                uniqueID: `dispute-${item.id}`,
+              })
+            }
+          />
         </VStack>,
       )}
     </>

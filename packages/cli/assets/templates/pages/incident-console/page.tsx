@@ -12,7 +12,8 @@
  *
  * Responsive contract:
  *   > 1024px  header | rows | inspector 380
- *   <= 1024px inspector hidden; rows keep full width
+ *   <= 1024px inspector hidden; rows keep full width, and choosing a row
+ *             opens its details in a bottom sheet
  *
  * Container policy (tracker archetype): dense data renders as rows —
  * edge-to-edge lists grouped by status, zero cards. Status is carried by
@@ -51,6 +52,8 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {Token} from '@astryxdesign/core/Token';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {useToast} from '@astryxdesign/core/Toast';
 import {BellAlertIcon, PlusIcon} from '@heroicons/react/24/outline';
 
 const styles: Record<string, CSSProperties> = {
@@ -268,6 +271,19 @@ const STATUS_LABEL: Record<Status, string> = {
   resolved: 'Resolved',
 };
 
+/** The status the inspector's next-step button moves an incident to. */
+const NEXT_STATUS: Record<Status, Status> = {
+  investigating: 'mitigated',
+  mitigated: 'resolved',
+  resolved: 'investigating',
+};
+
+const NEXT_ACTION_LABEL: Record<Status, string> = {
+  investigating: 'Mark mitigated',
+  mitigated: 'Resolve',
+  resolved: 'Reopen',
+};
+
 const STATUS_TOKEN_COLOR: Record<Status, 'red' | 'yellow' | 'green'> = {
   investigating: 'red',
   mitigated: 'yellow',
@@ -312,10 +328,12 @@ function IncidentRows({
   incidents,
   selectedId,
   onSelect,
+  isNarrow,
 }: {
   incidents: Incident[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  isNarrow: boolean;
 }) {
   const groups = STATUS_ORDER.map(status => ({
     status,
@@ -362,14 +380,18 @@ function IncidentRows({
                 }
                 endContent={
                   <HStack gap={3} vAlign="center">
-                    <Token
-                      size="sm"
-                      color={STATUS_TOKEN_COLOR[incident.status]}
-                      label={STATUS_LABEL[incident.status]}
-                    />
+                    {/* The group header already names the status, so a
+                        narrow row gives the title the token's width. */}
+                    {!isNarrow && (
+                      <Token
+                        size="sm"
+                        color={STATUS_TOKEN_COLOR[incident.status]}
+                        label={STATUS_LABEL[incident.status]}
+                      />
+                    )}
                     <Timestamp
                       value={incident.startedAt}
-                      format="relative"
+                      format="date_time"
                       color="secondary"
                     />
                   </HStack>
@@ -385,16 +407,19 @@ function IncidentRows({
   );
 }
 
-function IncidentInspector({incident}: {incident: Incident}) {
-  const nextAction =
-    incident.status === 'investigating'
-      ? 'Mark mitigated'
-      : incident.status === 'mitigated'
-        ? 'Resolve'
-        : 'Reopen';
-
+function IncidentInspector({
+  incident,
+  onAdvance,
+  onEscalate,
+  style,
+}: {
+  incident: Incident;
+  onAdvance: (id: string) => void;
+  onEscalate: (incident: Incident) => void;
+  style?: CSSProperties;
+}) {
   return (
-    <VStack gap={4} style={styles.inspector}>
+    <VStack gap={4} style={style}>
       <VStack gap={2}>
         <HStack gap={2} vAlign="center">
           <StatusDot
@@ -414,8 +439,17 @@ function IncidentInspector({incident}: {incident: Incident}) {
       </VStack>
 
       <HStack gap={2}>
-        <Button label={nextAction} size="sm" />
-        <Button label="Escalate" variant="secondary" size="sm" />
+        <Button
+          label={NEXT_ACTION_LABEL[incident.status]}
+          size="sm"
+          onClick={() => onAdvance(incident.id)}
+        />
+        <Button
+          label="Escalate"
+          variant="secondary"
+          size="sm"
+          onClick={() => onEscalate(incident)}
+        />
       </HStack>
 
       <Divider />
@@ -460,7 +494,10 @@ function IncidentInspector({incident}: {incident: Incident}) {
 }
 
 export default function IncidentConsolePage() {
+  const [incidents, setIncidents] = useState(INCIDENTS);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const showToast = useToast();
   const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(INCIDENTS[0].id);
   const {config, applyFilters} = usePowerSearchConfig(fieldDefs, 'Incidents');
@@ -476,24 +513,69 @@ export default function IncidentConsolePage() {
   });
 
   const visible = useMemo(() => {
-    const searched = applyFilters(filters, INCIDENTS);
+    const searched = applyFilters(filters, incidents);
     return statusFilter === 'all'
       ? searched
       : searched.filter(incident => incident.status === statusFilter);
-  }, [filters, applyFilters, statusFilter]);
+  }, [filters, applyFilters, statusFilter, incidents]);
 
-  const selected = visible.find(incident => incident.id === selectedId) ?? null;
+  // The selection comes from the full list, so moving an incident out of the
+  // filtered view keeps its details open instead of removing them mid-read.
+  const selected =
+    incidents.find(incident => incident.id === selectedId) ?? null;
 
-  const openCount = INCIDENTS.filter(
+  // The sheet exists only on a narrow screen. Widening the window closes it,
+  // so narrowing again later does not re-open it without a tap.
+  const [wasNarrow, setWasNarrow] = useState(isNarrow);
+  if (wasNarrow !== isNarrow) {
+    setWasNarrow(isNarrow);
+    if (!isNarrow) {
+      setIsSheetOpen(false);
+    }
+  }
+
+  const openCount = incidents.filter(
     incident => incident.status === 'investigating',
   ).length;
+
+  const advance = (id: string) =>
+    setIncidents(prev =>
+      prev.map(incident =>
+        incident.id === id
+          ? {...incident, status: NEXT_STATUS[incident.status]}
+          : incident,
+      ),
+    );
+
+  const escalate = (incident: Incident) =>
+    // Demo only: replace this toast with the call that performs the action.
+    showToast({
+      body: `Demo: escalating ${incident.id} to the next on-call tier would start here`,
+      uniqueID: `escalate-${incident.id}`,
+    });
+
+  const selectIncident = (id: string) => {
+    setSelectedId(id);
+    if (isNarrow) {
+      setIsSheetOpen(true);
+    }
+  };
+
+  const inspector = selected ? (
+    <IncidentInspector
+      incident={selected}
+      onAdvance={advance}
+      onEscalate={escalate}
+      style={isNarrow ? undefined : styles.inspector}
+    />
+  ) : null;
 
   return (
     <Layout
       height="fill"
       header={
         <LayoutHeader hasDivider>
-          <HStack gap={3} vAlign="center">
+          <HStack gap={3} vAlign="center" wrap="wrap">
             <StackItem size="fill">
               <HStack gap={2} vAlign="center">
                 <Heading level={1}>Incidents</Heading>
@@ -519,6 +601,13 @@ export default function IncidentConsolePage() {
               label="Declare incident"
               icon={<Icon icon={PlusIcon} size="sm" />}
               size="sm"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: declaring an incident would open here',
+                  uniqueID: 'declare-incident',
+                })
+              }
             />
           </HStack>
         </LayoutHeader>
@@ -540,11 +629,23 @@ export default function IncidentConsolePage() {
             <StackItem size="fill" style={styles.rows}>
               <IncidentRows
                 incidents={visible}
-                selectedId={selected?.id ?? null}
-                onSelect={setSelectedId}
+                selectedId={
+                  isNarrow && !isSheetOpen ? null : (selected?.id ?? null)
+                }
+                onSelect={selectIncident}
+                isNarrow={isNarrow}
               />
             </StackItem>
           </VStack>
+          {isNarrow && selected && (
+            <BottomSheet
+              isOpen={isSheetOpen}
+              onOpenChange={setIsSheetOpen}
+              label={selected.title}
+              padding={4}>
+              {inspector}
+            </BottomSheet>
+          )}
         </LayoutContent>
       }
       end={
@@ -561,9 +662,7 @@ export default function IncidentConsolePage() {
               width={inspectorPanel.size}
               padding={0}
               label="Incident details">
-              {selected ? (
-                <IncidentInspector incident={selected} />
-              ) : (
+              {inspector ?? (
                 <EmptyState
                   title="No incident selected"
                   description="Select an incident to see details and timeline."

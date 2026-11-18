@@ -1469,7 +1469,7 @@ export default function ServiceHealthMonitorPage() {
                 </Text>
               </HStack>
             </VStack>
-            <HStack gap={2} vAlign="center">
+            <HStack gap={2} vAlign="center" wrap="wrap">
               <SegmentedControl
                 label="Time window"
                 value={timeWindow}

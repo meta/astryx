@@ -48,20 +48,25 @@ async function refusal(run) {
 const dir = () => path.join(cwd, 'themes/a');
 
 describe('R15-A: lifted that is not a list', () => {
+  // The build writes lifted: one that is no list of text is dropped with a
+  // note, and the change goes through (the build writes it again).
   it.each([5, 'x', [1]])(
-    'lifted %j is named, never a crash',
+    'lifted %j is dropped with a note, never a crash',
     async lifted => {
       const file = path.join(dir(), 'a.settings.json');
       const kept = fs.readFileSync(file, 'utf8');
       fs.writeFileSync(file, JSON.stringify({...JSON.parse(kept), lifted}));
       try {
-        const err = await refusal(() =>
-          themeEditSet('a', 'corners', 'pill', {cwd}),
+        const r = await themeEditSet('a', 'corners', 'pill', {cwd});
+        expect(JSON.stringify(r.data)).toContain(
+          `lifted was ${JSON.stringify(lifted)}`.replace(/"/g, '\\"'),
         );
-        expect(err.code).toBe('ERR_THEME_INVALID');
-        expect(err.message).toContain(`lifted is ${JSON.stringify(lifted)}`);
-        expect(err.message).not.toContain('not iterable');
-        expect(JSON.stringify(err.suggestions)).toContain(' undo a');
+        const after = JSON.parse(fs.readFileSync(file, 'utf8')).lifted;
+        expect(
+          after == null ||
+            (Array.isArray(after) &&
+              after.every((/** @type {unknown} */ x) => typeof x === 'string')),
+        ).toBe(true);
       } finally {
         fs.writeFileSync(file, kept);
       }

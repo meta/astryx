@@ -35,14 +35,14 @@ import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
 import {ContentEditable} from '@lexical/react/LexicalContentEditable';
 import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
 import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
-import {TableScrollRegionPlugin} from './TableScrollRegionPlugin';
-import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
-import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
-import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
-import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
+import {TableScrollRegionPlugin} from './internal/TableScrollRegionPlugin';
+import {TableColumnFloorPlugin} from './internal/TableColumnFloorPlugin';
+import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
+import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
-import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {TaskCheckboxPlugin} from './internal/TaskCheckboxPlugin';
 import type {
   AnyLexicalExtension,
   Klass,

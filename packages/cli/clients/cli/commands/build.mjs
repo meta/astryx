@@ -251,6 +251,7 @@ export function registerBuild(program) {
                     'package',
                     'displayName',
                     'description',
+                    'fit',
                     'command',
                   ],
                   format: {command: formatCliCommand},

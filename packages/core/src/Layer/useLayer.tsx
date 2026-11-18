@@ -73,7 +73,7 @@ import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
-import {isShadowRoot} from '../utils/nodeType';
+import {isDialogShown, isShadowRoot, isShownAsPopover} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -508,6 +508,12 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   watchesOutsidePans?: (layer: HTMLElement) => () => void;
   /**
+   * Called with true when a `show()` that the layer accepted starts to wait
+   * for a valid anchor, and with false when that wait ends. The owner reads
+   * it right after `show()`, to tell an open that waits from a refused one.
+   */
+  onOpenPendingChange?: (isPending: boolean) => void;
+  /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
    * then skips its own read as the layer shows, so a show reads the layer
@@ -841,16 +847,6 @@ function observeAnchorClearance(
   };
 }
 
-/** Whether `element` is shown as a popover (`:popover-open`). */
-function isShownAsPopover(element: HTMLElement): boolean {
-  try {
-    return element.matches(':popover-open');
-  } catch {
-    // An engine without the pseudo-class has no popovers to be shown as.
-    return false;
-  }
-}
-
 /**
  * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
  * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
@@ -858,7 +854,9 @@ function isShownAsPopover(element: HTMLElement): boolean {
  * `Dialog` displays its element during render but only calls `showModal()` in
  * a later Effect, so in that window the trigger already has a box while the
  * dialog is not yet in the top layer; opening a layer then paints it before
- * the dialog is modal.
+ * the dialog is modal. A `<dialog>` the page displays while it stays closed
+ * is never in the top layer; show() opens on it after one commit (see
+ * `isInClosedDialog`).
  */
 function isAnchorReady(anchor: HTMLElement): boolean {
   // No layout box at all: `display: none`, or inside a closed `<dialog>`. An
@@ -869,7 +867,21 @@ function isAnchorReady(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog == null || dialog.open || isShownAsPopover(dialog);
+  return dialog == null || isDialogShown(dialog);
+}
+
+/**
+ * Whether `anchor` has a layout box inside a `<dialog>` that is neither open
+ * nor shown as a popover. Such a dialog is about to open, in the Effects of
+ * the commit that displayed it. Or the page shows it in flow while it stays
+ * closed.
+ */
+function isInClosedDialog(anchor: HTMLElement): boolean {
+  if (anchor.getClientRects().length === 0) {
+    return false;
+  }
+  const dialog = anchor.closest('dialog');
+  return dialog != null && !isDialogShown(dialog);
 }
 
 /**
@@ -1278,6 +1290,8 @@ function useLayerImplementation(
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
+  const onOpenPendingChange =
+    mode === 'context' ? options.onOpenPendingChange : undefined;
   const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
@@ -1695,7 +1709,7 @@ function useLayerImplementation(
   ]);
 
   // A wait for the trigger to get a layout box, started by a show() that
-  // found none. Cancelled by the next show()/hide() or by
+  // found none. Cancelled by hide(), by a show() for another trigger, or by
   // unmount, so a stale wait from a closed-then-reopened layer never fires
   // openNow() after the fact.
   const pendingAnchorWaitRef = useRef<(() => void) | null>(null);
@@ -1708,7 +1722,21 @@ function useLayerImplementation(
   // the same commit never reopens by itself.
   const pendingRestartRef = useRef<{cancelled: boolean} | null>(null);
 
+  // A wait whose trigger sits in a closed `<dialog>` that renders decides in
+  // the next commit (see show()). The state update asks React for that commit,
+  // and the ref holds the decision.
+  const closedDialogDecisionRef = useRef<(() => void) | null>(null);
+  const [closedDialogCommit, requestClosedDialogCommit] = useState(0);
+  // Syncs that wait with the dialog's top-layer state, after the Effects of
+  // the commit before have run.
+  useIsomorphicLayoutEffect(() => {
+    const decide = closedDialogDecisionRef.current;
+    closedDialogDecisionRef.current = null;
+    decide?.();
+  }, [closedDialogCommit]);
+
   const cancelPendingAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current?.();
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
@@ -1716,14 +1744,21 @@ function useLayerImplementation(
       pendingRestartRef.current.cancelled = true;
       pendingRestartRef.current = null;
     }
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A wait that reached its end: nothing is pending any more, so a later
   // trigger swap must not restart it.
   const finishAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A trigger with no layout box (no client rect) is not a valid CSS anchor. Opening against it now resolves the popover to
   // its fallback position (the viewport corner), and unlike a live layout
@@ -1739,9 +1774,20 @@ function useLayerImplementation(
   // owns the trigger element (`triggerRef`, set by `contextRef` below) and the
   // one place every context-mode show() funnels through.
   const show = useCallback(() => {
+    const anchor = mode === 'context' ? triggerRef.current : null;
+    // A wait for this trigger is already running, and its signals end it.
+    // Restarting it would cancel a settle wait that is under way. A wait in a
+    // closed `<dialog>` asks for a render. A controlled layer calls show() on
+    // each render while it is closed, so each restart would ask again.
+    if (
+      anchor != null &&
+      pendingAnchorWaitRef.current != null &&
+      pendingAnchorElementRef.current === anchor
+    ) {
+      return;
+    }
     cancelPendingAnchorWait();
 
-    const anchor = mode === 'context' ? triggerRef.current : null;
     if (!anchor) {
       openNow();
       return;
@@ -1779,11 +1825,14 @@ function useLayerImplementation(
     // - The enclosing `<dialog>`'s `open` attribute and `toggle` event: the
     //   trigger can have a box before the dialog is modal (see
     //   `isAnchorReady`), and a popover-shown dialog never sets `open`.
+    // - The next commit, for a trigger with a box in a closed `<dialog>`: a
+    //   dialog still closed then stays out of the top layer.
     //
     // A ResizeObserver stub that fires synchronously (several component tests
     // use one) resolves exactly as fast as it always did. Environments with no
     // real layout ever are excluded before this point.
     const anchorElement: HTMLElement = anchor;
+    const hadBoxAtShow = anchor.getClientRects().length > 0;
     const dialog = anchor.closest('dialog');
     let cancelSettleWait: () => void = () => {};
     let resolved = false;
@@ -1808,9 +1857,40 @@ function useLayerImplementation(
         openNow();
       });
     };
+    // A closed `<dialog>` that renders enters the top layer only if something
+    // opens it. Astryx's dialogs open it in the Effects of the commit that
+    // displayed them. React runs a commit's Effects before it renders again,
+    // so the next commit decides. A dialog still closed then is one the page
+    // shows in flow. Its trigger is a valid anchor. A trigger that had its box
+    // when show() ran opens at once, as it does anywhere else. For a press,
+    // that commit runs before the press's task ends, so the layer's initial
+    // focus lands within the press. A trigger that got its box later, as the
+    // page displayed its dialog, takes the settle wait: the dialog can still
+    // be animating in.
+    const decideInNextCommit = () => {
+      closedDialogDecisionRef.current = () => {
+        if (resolved || !isInClosedDialog(anchorElement)) {
+          return;
+        }
+        if (hadBoxAtShow) {
+          resolved = true;
+          release();
+          finishAnchorWait();
+          openNow();
+        } else {
+          resolve();
+        }
+      };
+      requestClosedDialogCommit(count => count + 1);
+    };
     function check() {
-      if (!resolved && isAnchorReady(anchorElement)) {
+      if (resolved) {
+        return;
+      }
+      if (isAnchorReady(anchorElement)) {
         resolve();
+      } else if (isInClosedDialog(anchorElement)) {
+        decideInNextCommit();
       }
     }
     const intersection =
@@ -1839,7 +1919,17 @@ function useLayerImplementation(
       cancelSettleWait();
     };
     pendingAnchorElementRef.current = anchor;
-  }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
+    // An open that did not happen within this call now waits.
+    if (!isOpenRef.current) {
+      onOpenPendingChange?.(true);
+    }
+  }, [
+    mode,
+    openNow,
+    cancelPendingAnchorWait,
+    finishAnchorWait,
+    onOpenPendingChange,
+  ]);
 
   const hide = useCallback(() => {
     cancelAfterReleaseRef.current?.();

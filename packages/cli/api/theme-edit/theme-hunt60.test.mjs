@@ -11,7 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
@@ -22,6 +22,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -84,15 +92,16 @@ describe('round 4 (2): what is in the copy folder', () => {
     }
   }, 240_000);
 
-  it('a file of yours stops it, and wiring gives the steps by hand naming it', async () => {
+  it('a file of yours at a copy name stops it, and wiring gives the steps by hand naming it', async () => {
+    // (A file at another name no longer stops it: hunt62.)
     await themeEditNew('n', {cwd});
-    fs.writeFileSync(path.join(cwd, 'src/themes/n/notes.md'), 'mine');
+    fs.writeFileSync(path.join(cwd, 'src/themes/n/nTheme.ts'), '// mine\n');
     const before = read('src/themes/n/n.css');
     const r = await themeEditSet('n', 'corners', 'pill', {cwd});
     expect(read('src/themes/n/n.css')).toBe(before);
     const shown = await themeEditShow('n', {cwd});
     const wiring = /** @type {any} */ (shown.data).wiring.join('\n');
-    expect(wiring).toContain("src/themes/n/notes.md is not the editor's");
+    expect(wiring).toContain('src/themes/n/nTheme.ts is yours');
     expect(wiring).toContain('<Theme theme={nTheme}');
     expect(wiring).not.toMatch(/ theme add n:/);
     expect(r.data.setting.value).toBe('pill');

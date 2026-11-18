@@ -14,12 +14,20 @@
  */
 
 import {executablesOnSearchPath} from '../../foundation/env/search-path.mjs';
-import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
+import {
+  findProjectCoreDir,
+  listComponents,
+} from '../../foundation/fs/paths.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 
-export {planCopy, relativeSpecifierBetween, renderFile} from './_moduleGraph.mjs';
+export {
+  planCopy,
+  relativeSpecifierBetween,
+  renderFile,
+} from './_moduleGraph.mjs';
 
 /**
  * Whether an executable `gh` is on `PATH` (with a `PATHEXT` extension on
@@ -72,8 +80,12 @@ export async function resolveComponentReplacement(
 export function resolveCore(cwd) {
   const coreDir = findProjectCoreDir(cwd);
   if (!coreDir) {
+    // Swizzle copies source into an app, so it needs the app's own Core,
+    // never the one the CLI carries.
     throw new AstryxError(
-      'Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.',
+      isOutsideProject(cwd)
+        ? "Could not find @astryxdesign/core. This folder is outside a project; swizzle copies a component's source into an app project that installs @astryxdesign/core."
+        : 'Could not find installed @astryxdesign/core. Install it in this project, then run swizzle again.',
       [],
       ERROR_CODES.ERR_CORE_NOT_FOUND,
     );

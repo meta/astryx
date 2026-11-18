@@ -80,7 +80,11 @@ describe('hunt56', () => {
       const r = await refusal(() => themeEditSet('wt', prop, value, {cwd, on}));
       expect(r.code).toBe('ERR_THEME_BAD_VALUE');
       expect(r.message).toMatch(why);
-      expect(r.run[0]).toMatch(/var\(--(spacing-4|radius-container)\)/);
+      // No length was typed: never a stock token, only how.
+      expect(r.run.join('\n')).not.toMatch(
+        /var\(--(spacing-4|radius-container)\)/,
+      );
+      expect(r.run[0]).toMatch(/ how /);
     },
     240_000,
   );

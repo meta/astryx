@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {moduleRecorder} from '../../test-utils/module-recorder.mjs';
 
 const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
 const CLI_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -80,43 +81,7 @@ function packageOf(url) {
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'loaded.txt');
-  fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-loaded.mjs');
-  fs.writeFileSync(
-    hook,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      // Loads, not resolutions: resolving a package reads no module of it.
-      'export async function load(url, context, nextLoad) {',
-      '  const result = await nextLoad(url, context);',
-      `  appendFileSync(${JSON.stringify(log)}, url + '\\n');`,
-      '  return result;',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  const preload = path.join(dir, 'register-loaded.mjs');
-  fs.writeFileSync(
-    preload,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      "import Module, {register} from 'node:module';",
-      "import {isAbsolute} from 'node:path';",
-      "import {pathToFileURL} from 'node:url';",
-      // Async module hooks do not observe CommonJS require calls: note each
-      // CommonJS module as it loads.
-      'const load = Module.prototype.load;',
-      'Module.prototype.load = function (file, ...rest) {',
-      '  if (isAbsolute(file)) {',
-      `    appendFileSync(${JSON.stringify(log)}, pathToFileURL(file).href + '\\n');`,
-      '  }',
-      '  return load.call(this, file, ...rest);',
-      '};',
-      `register(${JSON.stringify(pathToFileURL(hook).href)});`,
-      '',
-    ].join('\n'),
-  );
+  const {preload, loads: log} = moduleRecorder(dir);
   const app = path.join(dir, 'app');
   const home = path.join(dir, 'home');
   fs.mkdirSync(app, {recursive: true});

@@ -56,6 +56,7 @@ beforeAll(() => {
     path.join(pkg, 'built.js'),
     `export const stoneTheme = ${JSON.stringify({
       name: 'stone',
+      __built: true,
       tokens: {},
       components: {
         'progress-bar': {

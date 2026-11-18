@@ -75,6 +75,7 @@
  *   | 'ERR_FILE_EXISTS'
  *   | 'ERR_PATH_TRAVERSAL'
  *   | 'ERR_WRITE_FAILED'
+ *   | 'ERR_READ_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
  *   | 'ERR_THEME_STALE'
@@ -100,6 +101,7 @@
  *   | 'ERR_RENDER_FAILED'
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_RENDER_NEWER_FORMAT'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -214,6 +216,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_PATH_TRAVERSAL: 'ERR_PATH_TRAVERSAL',
   /** Writing output files failed (and was rolled back). */
   ERR_WRITE_FAILED: 'ERR_WRITE_FAILED',
+  /** An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system. */
+  ERR_READ_FAILED: 'ERR_READ_FAILED',
 
   // ── Theme build ──────────────────────────────────────────────────
   /** A theme definition or contributed theme descriptor is invalid. */
@@ -327,10 +331,16 @@ export const ERROR_CODES = Object.freeze({
    * carries a file a
    * render never embeds (a dotfile, node_modules, a manifest, lockfile or
    * tool configuration, a file a test, story or benchmark runner would run,
-   * or any kind but a page module, stylesheet, JSON file or image). Nothing
+   * or any kind but a module, stylesheet, JSON file or image). Nothing
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * `render --reverse` was given a file in a newer render format than this
+   * CLI reads. Nothing was written. The message names the CLI version that
+   * wrote the file, which reads it.
+   */
+  ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

@@ -14,15 +14,13 @@ import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {SquaresPlusIcon, CheckCircleIcon} from '@heroicons/react/24/outline';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Link} from '@astryxdesign/core/Link';
 import {Divider} from '@astryxdesign/core/Divider';
 
-const COVER_IMAGE_URL =
-  '/template-assets/light-working-vertical-1.png';
-const APPLE_LOGO_URL =
-  '/template-assets/AppleLogo.png';
-const GOOGLE_LOGO_URL =
-  '/template-assets/GoogleLogo.png';
+const COVER_IMAGE_URL = '/template-assets/light-working-vertical-1.png';
+const APPLE_LOGO_URL = '/template-assets/AppleLogo.png';
+const GOOGLE_LOGO_URL = '/template-assets/GoogleLogo.png';
 
 // Grid emits minmax(MIN, 1fr) where MIN is a hard floor, so MIN plus the
 // grid inset and page padding must fit the narrowest phone or the column is
@@ -82,6 +80,7 @@ export default function LoginTwoColumn() {
   const [loginFailed, setLoginFailed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const showToast = useToast();
 
   const handleLogin = () => {
     if (!email || !password) {
@@ -205,6 +204,13 @@ export default function LoginTwoColumn() {
                                 />
                               }
                               size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that starts Apple sign-in.
+                                showToast({
+                                  body: 'Demo: Apple sign-in would start here',
+                                  uniqueID: 'sign-in-apple',
+                                })
+                              }
                             />
                             <Button
                               label="Google"
@@ -218,6 +224,13 @@ export default function LoginTwoColumn() {
                                 />
                               }
                               size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that starts Google sign-in.
+                                showToast({
+                                  body: 'Demo: Google sign-in would start here',
+                                  uniqueID: 'sign-in-google',
+                                })
+                              }
                             />
                           </Grid>
                         </VStack>

@@ -88,7 +88,9 @@ describe('experimental theme editor show text output', () => {
 
   it('says colors, never palette or family, before the file names', () => {
     const words = text.slice(0, text.indexOf('colorFiles:'));
-    expect(words).not.toMatch(/palette|(?<!font-)famil/i);
+    // As words: a name that holds one (the part command-palette-item, the
+    // token --font-family-body) is a name, not the word.
+    expect(words).not.toMatch(/(?<![\w-])(palette|famil)/i);
   });
 });
 

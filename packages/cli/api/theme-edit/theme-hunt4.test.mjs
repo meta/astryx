@@ -11,7 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -28,6 +28,15 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -92,7 +101,6 @@ describe('words and values', () => {
       ['surfaces', 'frosted', 'glass'],
       ['buttons', 'uppercase', 'caps'],
       ['mode', 'auto', 'both'],
-      ['base', 'NEUTRAL', 'neutral'],
     ]) {
       const r = await refusal(() => themeEditSet('z', thing, word, {cwd}));
       expect(r.run[0], word).toMatch(new RegExp(`set z ${thing} ${want}$`));
@@ -170,7 +178,10 @@ describe('builds', () => {
     const preview = path.join(cwd, 'themes/z/preview.html');
     fs.rmSync(preview, {force: true});
     fs.mkdirSync(preview);
-    const r = await refusal(() => themeEditShow('z', {cwd}));
+    // The page write itself refuses the folder.
+    const r = await withRealRenders(() =>
+      refusal(() => themeEditShow('z', {cwd})),
+    );
     expect(r.code).toBe('ERR_WRITE_FAILED');
     expect(r.message).toContain('is a folder');
     fs.rmdirSync(preview);

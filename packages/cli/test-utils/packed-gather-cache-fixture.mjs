@@ -19,6 +19,9 @@ import {afterAll, beforeAll, expect} from 'vitest';
 import {REPO_ROOT} from './repo-root.mjs';
 import {packPublishedCli} from './pack-published-cli.mjs';
 import {runFolder} from './global-local-fixtures.mjs';
+import {readKept} from './kept-entry.mjs';
+
+export {readKept, writeKept} from './kept-entry.mjs';
 export const BUILD_ID = 'clients/cli/build-id.generated.json';
 
 /** @type {string} */
@@ -89,6 +92,9 @@ export function makeProject() {
 /** This file's own user config folder (settings and state), in its work folder. */
 export const userConfig = () => path.join(work, 'config');
 
+/** This file's compiled-module cache, in its work folder (see run()). */
+const compileCache = () => path.join(work, 'compile-cache');
+
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
@@ -117,9 +123,12 @@ export function run(
         TMP: tmp,
         TEMP: tmp,
         NO_UPDATE_NOTIFIER: '1',
-        // Node's compile cache (bin/astryx.mjs) keeps its own folder in the
-        // same temp folder; these runs look only at the catalog's.
-        NODE_DISABLE_COMPILE_CACHE: '1',
+        // The compiled modules stay warm across this file's runs, as a user's
+        // do across their commands. The cache changes how a module compiles,
+        // never what it loads or prints, and it lives outside every temp
+        // folder the cases inspect. compile-cache.test.mjs covers the bin's
+        // own cache folder.
+        NODE_COMPILE_CACHE: compileCache(),
         // The kept catalogs live in the user's cache folder.
         XDG_CACHE_HOME: tmp,
         // A gather reads the user's settings and state files: they are this
@@ -160,7 +169,7 @@ export function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
           TMP: tmp,
           TEMP: tmp,
           NO_UPDATE_NOTIFIER: '1',
-          NODE_DISABLE_COMPILE_CACHE: '1',
+          NODE_COMPILE_CACHE: compileCache(),
           XDG_CACHE_HOME: tmp,
           XDG_CONFIG_HOME: userConfig(),
           ...env,
@@ -204,7 +213,7 @@ export const freshTmp = () => path.join(work, 'tmp', `fresh-${fresh++}`);
  */
 export function derivedEntry(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).derived === true;
+    return readKept(file).derived === true;
   } catch {
     return false;
   }
@@ -218,7 +227,7 @@ export function derivedEntry(file) {
  */
 export function issuesEntry(file) {
   try {
-    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const entry = readKept(file);
     return entry.derived !== true && Array.isArray(entry.value);
   } catch {
     return false;
@@ -238,7 +247,7 @@ export function doctorEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const {value} = readKept(file);
       if (value && typeof value.id === 'string' && 'label' in value) {
         out.set(value.id, fs.statSync(file).ino);
       }
@@ -285,7 +294,7 @@ export function derivedEntries(tmp) {
  */
 export function templatesEntry(file) {
   try {
-    const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const {value} = readKept(file);
     return (
       value != null &&
       !Array.isArray(value) &&
@@ -316,8 +325,73 @@ export function templatesEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds the CLI's own docs tree inputs, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function docsTreeEntry(file) {
+  try {
+    const {key} = readKept(file);
+    return JSON.parse(key)[5] === 'docs-tree-inputs';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The kept CLI docs tree inputs in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function docsTreeEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (docsTreeEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
+ * Whether a kept file holds what theme build checks a theme against in
+ * Core's component docs, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function themeFactsEntry(file) {
+  try {
+    const {key} = readKept(file);
+    return JSON.parse(key)[5] === 'core-theme-facts';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The kept theme build facts from Core's docs in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function themeFactsEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (themeFactsEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
- * (a value derived from a catalog, search's entry table, is not a catalog).
+ * (a value derived from a catalog, search's entry table, is not a catalog;
+ * nor is the CLI's own docs tree, which every project shares, nor theme
+ * build's facts from Core's docs).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -328,7 +402,13 @@ export function entries(tmp) {
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (derivedEntry(file) || issuesEntry(file) || templatesEntry(file))
+    if (
+      derivedEntry(file) ||
+      issuesEntry(file) ||
+      templatesEntry(file) ||
+      docsTreeEntry(file) ||
+      themeFactsEntry(file)
+    )
       continue;
     const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
@@ -384,7 +464,7 @@ export function themeEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const {value} = readKept(file);
       if (
         Array.isArray(value) &&
         value.length > 0 &&

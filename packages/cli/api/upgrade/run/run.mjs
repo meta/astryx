@@ -63,6 +63,7 @@ import {
 } from '../../../foundation/fs/path-safety.mjs';
 import {createFileProtectionResolver} from '../../../foundation/fs/file-protection.mjs';
 import {withoutProtected} from '../../../assets/codemods/runner.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Collapse per-codemod protection hits into one stable row per file.
@@ -92,7 +93,7 @@ function summarizeProtectedFiles(rows) {
       declarations: [...item.declarations].sort(),
       commands: [...item.commands].sort(),
     }))
-    .sort((a, b) => a.file.localeCompare(b.file));
+    .sort((a, b) => compareText(a.file, b.file));
 }
 
 /** Every declined finding for a manual migration starts with this. */
@@ -167,7 +168,7 @@ export function summarizeDeclinedCandidates(
           .join('; '),
       };
     })
-    .sort((a, b) => a.file.localeCompare(b.file));
+    .sort((a, b) => compareText(a.file, b.file));
 }
 
 /**
@@ -383,7 +384,7 @@ function summarizeRegenerate(protectedFiles, outcomes) {
       commands: [...item.commands].sort(),
       messages: [...item.messages].sort(),
     }))
-    .sort((a, b) => a.file.localeCompare(b.file));
+    .sort((a, b) => compareText(a.file, b.file));
 }
 
 /**

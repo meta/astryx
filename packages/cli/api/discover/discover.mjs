@@ -192,10 +192,19 @@ export async function discover(query, options = {}) {
       : undefined;
 
   const {packages: scanned, configured, project} = await discoverPackages();
-  const integrations = await describeInstalled(project, scanned);
-  const declared = declaredDependencies(project);
   // The official list is always read, so discover always has a source.
   const official = officialList({project});
+  // The list asks every source for its catalog. A catalog needs nothing the
+  // installed packages' descriptions give, so a slow source, such as a remote
+  // catalog, answers while they are read.
+  const listCatalog = query
+    ? undefined
+    : callSources(project, undefined, {official});
+  // Awaited below; a failure reading the installed packages first must not
+  // leave it unhandled.
+  listCatalog?.catch(() => {});
+  const integrations = await describeInstalled(project, scanned);
+  const declared = declaredDependencies(project);
   const declarations = officialDeclarations(project, official.packages);
   const add = addCommand(project);
   const addOfficial = addCommand(project, {official: official.packages});
@@ -221,7 +230,7 @@ export async function discover(query, options = {}) {
   // No query, or any query in a project that loads no integration and has no
   // discover source of its own: the list (spec:AST-051 FR1).
   if (!query || (integrations.length === 0 && !hasSources(project))) {
-    const catalog = await catalogFor();
+    const catalog = await (listCatalog ?? catalogFor());
     const packages = installedFor(catalog);
     // Inside a project, the integrations installed for the computer are
     // available, never loaded (spec AST-081 FR12).

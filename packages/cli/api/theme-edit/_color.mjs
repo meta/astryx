@@ -179,6 +179,14 @@ const NAMED = wordTable(
 /** The CSS named colors, for suggestions. */
 export const COLOR_NAMES = Object.keys(NAMED);
 
+/**
+ * The hex a CSS color name is, or null.
+ * @param {string} name
+ * @returns {string | null}
+ */
+export const namedColorHex = name =>
+  Object.hasOwn(NAMED, name) ? NAMED[name] : null;
+
 /** Color keywords that are valid colors but have no fixed value. */
 const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE];
 
@@ -326,6 +334,19 @@ function args(fn, body) {
   if (channels.length !== 3) return null;
   const read = channels.map(x => num(x, !legacy));
   if (read.some(x => !x)) return null;
+  // The comma (legacy) syntax as CSS Color 4 takes it: rgb() with all
+  // numbers or all percentages, hsl() with a hue and two percentages. Bare
+  // numbers for saturation and lightness, or mixed rgb() channels, are the
+  // space-separated syntax's only: browsers drop them written with commas.
+  if (legacy) {
+    const units = /** @type {Num[]} */ (read).map(x => x.unit);
+    const ok = /^rgba?$/i.test(fn)
+      ? units.every(u => u === '') || units.every(u => u === '%')
+      : ['', 'deg', 'grad', 'rad', 'turn'].includes(units[0]) &&
+        units[1] === '%' &&
+        units[2] === '%';
+    if (!ok) return null;
+  }
   let a = 1;
   if (alpha !== undefined) {
     const v = num(alpha, !legacy);
@@ -442,6 +463,20 @@ const polar = (c, h) => [
 ];
 
 /**
+ * The colors written inside a value (a shadow's layers, a gradient's
+ * stops): each hex color and each color function, in order.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function colorsIn(value) {
+  return [...String(value ?? '').matchAll(COLOR_IN_VALUE)].map(m => m[0]);
+}
+
+/** One color written inside a value: a hex color or a color function. */
+export const COLOR_IN_VALUE =
+  /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\([^()]*\))*\)/gi;
+
+/**
  * The opacity of a CSS color, 0 to 1: the alpha of an 8- or 4-digit hex,
  * `rgba()`/`hsla()`, or a `/ alpha` part; 0 for `transparent`; 1 otherwise.
  * @param {unknown} value
@@ -514,7 +549,33 @@ export function mixSide(side) {
     if (w == null) return null;
     const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
     const n = cssNumber(plain);
-    return n?.unit === '%' ? n.value : null;
+    if (n) return n.unit === '%' ? n.value : null;
+    // Math of two terms that gives a percentage: percentages added or
+    // taken away (`25% + 25%`), a percentage scaled by a number
+    // (`50% * 1`, `100% / 2`).
+    const m = /^(\S+)\s*([*/+-])\s*(\S+)$/.exec(plain);
+    if (!m) return null;
+    const [a, b] = [cssNumber(m[1]), cssNumber(m[3])];
+    if (!a || !b) return null;
+    const pct = (/** @type {{unit: string}} */ x) => x.unit === '%';
+    const plainNum = (/** @type {{unit: string}} */ x) => x.unit === '';
+    const r =
+      m[2] === '+' || m[2] === '-'
+        ? pct(a) && pct(b)
+          ? m[2] === '+'
+            ? a.value + b.value
+            : a.value - b.value
+          : null
+        : m[2] === '*'
+          ? pct(a) && plainNum(b)
+            ? a.value * b.value
+            : plainNum(a) && pct(b)
+              ? a.value * b.value
+              : null
+          : pct(a) && plainNum(b) && b.value !== 0
+            ? a.value / b.value
+            : null;
+    return r != null && Number.isFinite(r) ? r : null;
   };
   if (words.length < 2) return {color: side.trim(), pct: null};
   const last = share(words.at(-1));
@@ -792,6 +853,24 @@ export function isClipped(value) {
 }
 
 /**
+ * A comma (legacy) rgb() or hsl() that CSS does not take as written, in the
+ * space-separated syntax CSS reads the same channels in (`hsl(0, 100, 50)`
+ * is `hsl(0 100 50)`); null for any other value.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function colorAsCssReads(value) {
+  const s = String(value ?? '').trim();
+  const fn = /^(rgba?|hsla?)\((.*)\)$/i.exec(s);
+  if (!fn || !fn[2].includes(',') || readColor(s)) return null;
+  const parts = fn[2].split(',').map(x => x.trim());
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const name = fn[1].toLowerCase().replace(/a$/, '');
+  const modern = `${name}(${parts.slice(0, 3).join(' ')}${parts[3] ? ` / ${parts[3]}` : ''})`;
+  return readColor(modern) ? modern : null;
+}
+
+/**
  * Why a value cannot seed a color dial, or null when it is one fixed,
  * opaque color: `opaque` is the color without its alpha, for a suggestion.
  * @param {unknown} value
@@ -990,6 +1069,17 @@ export const isNumber = (v, name = '') => {
 };
 
 /**
+ * A value with each CSS escape (`Gill\ Sans`, `\5FAE`) as one plain
+ * character, as CSS reads it: an escape is part of a name, never a
+ * boundary. A backslash that escapes nothing (at the end, or before a line
+ * break) could join the next declaration, so it stays.
+ * @param {string} v
+ */
+export function withoutCssEscapes(v) {
+  return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
+}
+
+/**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
  * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
@@ -1009,7 +1099,7 @@ export function isSafeValue(v) {
     )
   )
     return false;
-  const outside = v
+  const outside = withoutCssEscapes(v)
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
   if (/[;{}\\<>]/.test(outside)) return false;
