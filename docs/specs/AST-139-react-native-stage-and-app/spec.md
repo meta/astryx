@@ -214,9 +214,14 @@ code on a real phone with no build.
   code of its own: the app sets up what the project needs before the
   project's code runs (`spec:AST-112/FR5`).
 
+- **FR16 — Picking an element never touches the project.** While the Astryx
+  app's inspector is picking an element in a running project, every touch
+  goes to the inspector and none reaches the project. When picking ends, the
+  project receives touches again.
+
 ### Evidence
 
-- **FR16 — Stage and Preview are development evidence.** A Stage result and a
+- **FR17 — Stage and Preview are development evidence.** A Stage result and a
   Preview run show what the app does on the platform's contracts. A claim
   about native behavior is still checked on the Simulator, the emulator, or a
   device (`spec:AST-112/FR15`), and Stage is kept matched to them.
@@ -268,7 +273,8 @@ code on a real phone with no build.
 | FR13     | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                  | a valid link; each failed check                                                       | A key that reaches the server, code that runs before every check passes, or decrypted bytes written to the device     |
 | FR14     | Reload and return while a project runs; a dev server that stops; removing a listed project                  | a running project; an unreachable address; an encrypted project                       | A project that cannot be left, an encrypted project in the list, or stored data left after removal                    |
 | FR15     | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                          | the Astryx app's build; a plain project                                               | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run          |
-| FR16     | Review of each native change's evidence                                                                     | a native behavior change                                                              | A native claim backed only by Stage or Preview                                                                        |
+| FR16     | Inspector picking over a project that counts its touches, on iOS and Android                                | picking on; picking ended                                                             | A touch that reaches the project while picking, or a project that gets no touches after picking ends                  |
+| FR17     | Review of each native change's evidence                                                                     | a native behavior change                                                              | A native claim backed only by Stage or Preview                                                                        |
 
 ## Decision log
 
