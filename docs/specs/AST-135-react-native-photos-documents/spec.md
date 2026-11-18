@@ -36,8 +36,8 @@ module within `spec:AST-112`. `photos` is part of the core package, because
 `FileInput`'s photo picker uses it; `pdf` and image markup are part of the
 optional add-on package, not the core package. It follows the platform layer and its opt-in capabilities
 (`spec:AST-112/FR1`, `spec:AST-112/FR3`), the result vocabulary
-(`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`), and additive
-evolution (`spec:AST-112/FR8`). It
+(`spec:AST-140/FR3`), the capability shape (`spec:AST-112/FR7`), and additive
+evolution (`spec:AST-140/FR5`). It
 specifies the photo library module (`AstryxPhotoLibrary`), the photo thumbnail
 view (`AstryxPhotoThumbnailView`), the PDF view (`AstryxPdfView`), the PDF page
 module (`AstryxPdfModule`), and the image markup module (`AstryxImageMarkup`).
@@ -198,15 +198,21 @@ nextCursor}`: the photos and videos the app can see (only the selection
 - **FR5 — Assets are exported to files.**
   - `exportAssets(ids, {format, maxPixels, quality, allowsNetwork, signal,
 onProgress})` writes each asset, in the order given, to a file in the
-    calling runtime's file cache and answers `{files, failures}`. Each file
-    has `id`, a `file://` URI, its cache `name`, `mimeType`, `mediaType`,
-    pixel `width` and `height`, and `size` in bytes.
+    app's file cache (the core package's files module) and answers
+    `{files, failures}`. Each file has `id`, a `file://` URI, its cache
+    `name`, `mimeType`, `mediaType`, pixel `width` and `height`, `size` in
+    bytes, and the asset's `creationDate` and `duration` as `listAssets`
+    answers them.
   - `format: 'jpeg'` (the default) writes an image as an upright JPEG
     (orientation applied) with its longest side at most `maxPixels` (absent
-    is full size) at `quality` (0 to 1, default 0.85), and a video as an MP4
-    where the platform converts it: iOS re-encodes a QuickTime movie, and
-    Android writes the stored file and reports its own type.
-    `format: 'original'` writes the stored bytes; a HEIC image stays HEIC.
+    is full size) at `quality` (0 to 1, default 0.85). The JPEG carries no
+    location and no other EXIF metadata. It writes a video as an MP4 on both
+    platforms, and the video's file also has `poster`, the `file://` URI of a
+    JPEG of its first frame in the same cache.
+    `format: 'original'` writes the stored bytes, metadata included; a HEIC
+    image stays HEIC.
+  - FR5 gap: on Android a `jpeg` export writes a video's stored file and
+    reports its own type, which need not be MP4.
   - With `allowsNetwork` (default true), iOS downloads an iCloud-only original
     first, and the progress counts the download. A download that makes no
     progress for ten minutes fails that asset `download-failed`. With
@@ -330,7 +336,7 @@ name, width, height, pageCount}`.
     and the common reasons. No image is refused for its pixel size.
 - **FR11 — Results and fallbacks.**
   - No call throws. Every asynchronous call resolves an `AstryxResult` and
-    never rejects (`spec:AST-112/FR6`); a reason the JavaScript does not know
+    never rejects (`spec:AST-140/FR3`); a reason the JavaScript does not know
     reads `error`.
   - Not opted in: the capability's JavaScript still loads, `isAvailable()`,
     `isPhotoThumbnailAvailable()`, `isPdfViewAvailable()`, and
@@ -375,7 +381,7 @@ name, width, height, pageCount}`.
   links the framework at launch (FR1).
 - **FR15 — Contract baseline.** Every contract in the group is at revision 1
   on iOS and Android, find included, and carries no revision counter
-  (`spec:AST-112/FR8`). A behaviour added after revision 1 is a named feature
+  (`spec:AST-140/FR5`). A behaviour added after revision 1 is a named feature
   (`AstryxPhotoLibrary.<feature>`, `AstryxPhotoThumbnailView.<feature>`,
   `AstryxPdfView.<feature>`, `AstryxPdfModule.<feature>`,
   `AstryxImageMarkup.<feature>`) that the binary reports through the platform
@@ -412,9 +418,9 @@ name, width, height, pageCount}`.
   opt-in capabilities, and photos, PDF, and image markup among the app-level
   modules), FR3 (`photos` and `pdf` stay opt-in),
   FR4 (the host declarations written for `photos`), FR5 (the `./photos` and
-  `./pdf` entries), FR6 (the group's closed reasons), FR7 (the probes,
-  `supports`, and views that never prompt), and FR8 (the revision-1 baseline and
-  named features).
+  `./pdf` entries) and FR7 (the probes, `supports`, and views that never
+  prompt); and `spec:AST-140`: its FR3 (the group's closed reasons) and FR5
+  (the revision-1 baseline and named features).
 - It places `photos` in the core package, for `FileInput`'s photo picker, and
   `pdf` and image markup in the optional add-on package, not the core
   package.
@@ -424,23 +430,23 @@ name, width, height, pageCount}`.
 
 ## Verification
 
-| Contract | Verification                                                                                                                       | Representative states                                                                             | Mutation or failure expectation                                                                                                                          |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader; an iOS launch check                     | `photos` and `pdf` opted out; opted in; an app that never marks up                                | An opted-out app links PhotoKit or PDFKit or declares a media permission, the library imports a capability outside its loader, or launch loads PencilKit |
-| FR2      | The platform's spec rules check; the contracts list against the codegen specs                                                      | each module method; each view prop, command, and event                                            | A listed member is missing, a shipped member changes, or a method rejects                                                                                |
-| FR3      | The photos contract suite over the `./testing` double (`mockPhotosCapability`); Simulator, emulator, and device checks             | each access state; `canAsk` true and false; limited picker on and off the supported versions      | A read prompts, `requestAccess` prompts without `canAsk` or opens Settings, or the picker runs without `limited`                                         |
-| FR4      | Unit tests of paging; JVM tests of the cursor and selection rules; hosted iOS tests over a seeded library                          | first, middle, and last page; limited selection; a change between pages on each platform          | An asset repeats or is skipped, an iOS cursor survives a change, an Android cursor goes stale, or a page size is refused                                 |
-| FR5      | Unit tests of export through the double; hosted iOS tests; emulator and device checks                                              | `jpeg` and `original`; `maxPixels`; an iCloud-only asset; one missing id; a cancel mid-export     | One failure fails the batch, a cancelled asset leaves a file, progress arrives faster than its bound, or a JPEG keeps the stored orientation             |
-| FR6      | Library tests of `PhotoThumbnail`; hosted iOS tests; emulator checks                                                               | `cover` and `contain`; a scrolled grid; a removed asset; no access                                | A picture crosses to JavaScript, a cell decodes twice at one size, a hidden cell keeps decoding, or the view prompts                                     |
-| FR7      | Library tests through the doubles; Simulator, emulator, and device checks; JVM tests of Android's page rendering and memory bounds | each `fit` and `displayMode`; zoom to `maxZoom`; `goToPage`; a locked or missing file; many views | A page event is 1-based, a locked file loads, or a closed view's pages stay in memory                                                                    |
-| FR8      | Hosted iOS find tests on a fixture document; emulator checks on API level 35 and below; unit tests of the find state               | a match on several pages; no match; a superseded find; `clearFind`; a new document                | A match is missed or capped, a superseded find resolves its state, or a new document keeps the old highlights                                            |
-| FR9      | Module tests of renders and cancels; JVM tests of the job queue; Simulator and emulator checks                                     | the same request twice; a cancel queued and in flight; a cache clear mid-render; each reason      | A second identical request renders a new file, a cancelled render leaves a file, or `page-out-of-range` lacks `pageCount`                                |
-| FR10     | Hosted iOS tests of the markup screen; unit tests of the wrapper                                                                   | PNG and JPEG; Close with and without strokes; Save; a second call while open; an unwritable save  | The source file changes, the new file carries metadata or a different pixel size, a second call queues, or a failed save closes the screen               |
-| FR11     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                              | each capability not opted in; each view absent                                                    | A call throws, a reason falls outside the set, or `no-native-view` repeats                                                                               |
-| FR12     | Unit tests of the feature rows; emulator checks below and at API level 35; iOS checks below and at 16                              | each row true and false                                                                           | A call runs where its row is false, or a row answers true on a device that lacks the feature                                                             |
-| FR13     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                               | a labelled and an unlabelled thumbnail; a page change; the markup screen                          | A thumbnail has no image role, an unlabelled one is read, the page is not announced, or a markup control has no name                                     |
-| FR14     | Review of each platform source against the platform SDKs                                                                           | each piece                                                                                        | A piece calls an API outside the platform's public SDK, other than the named exception                                                                   |
-| FR15     | Contract baseline check                                                                                                            | a binary without a named feature                                                                  | The JavaScript uses a feature the binary does not list                                                                                                   |
+| Contract | Verification                                                                                                                       | Representative states                                                                                                         | Mutation or failure expectation                                                                                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader; an iOS launch check                     | `photos` and `pdf` opted out; opted in; an app that never marks up                                                            | An opted-out app links PhotoKit or PDFKit or declares a media permission, the library imports a capability outside its loader, or launch loads PencilKit                            |
+| FR2      | The platform's spec rules check; the contracts list against the codegen specs                                                      | each module method; each view prop, command, and event                                                                        | A listed member is missing, a shipped member changes, or a method rejects                                                                                                           |
+| FR3      | The photos contract suite over the `./testing` double (`mockPhotosCapability`); Simulator, emulator, and device checks             | each access state; `canAsk` true and false; limited picker on and off the supported versions                                  | A read prompts, `requestAccess` prompts without `canAsk` or opens Settings, or the picker runs without `limited`                                                                    |
+| FR4      | Unit tests of paging; JVM tests of the cursor and selection rules; hosted iOS tests over a seeded library                          | first, middle, and last page; limited selection; a change between pages on each platform                                      | An asset repeats or is skipped, an iOS cursor survives a change, an Android cursor goes stale, or a page size is refused                                                            |
+| FR5      | Unit tests of export through the double; hosted iOS tests; emulator and device checks                                              | `jpeg` and `original`; `maxPixels`; a photo with location; a video; an iCloud-only asset; one missing id; a cancel mid-export | One failure fails the batch, a cancelled asset leaves a file, progress arrives faster than its bound, a JPEG keeps the stored orientation or its location, or a video has no poster |
+| FR6      | Library tests of `PhotoThumbnail`; hosted iOS tests; emulator checks                                                               | `cover` and `contain`; a scrolled grid; a removed asset; no access                                                            | A picture crosses to JavaScript, a cell decodes twice at one size, a hidden cell keeps decoding, or the view prompts                                                                |
+| FR7      | Library tests through the doubles; Simulator, emulator, and device checks; JVM tests of Android's page rendering and memory bounds | each `fit` and `displayMode`; zoom to `maxZoom`; `goToPage`; a locked or missing file; many views                             | A page event is 1-based, a locked file loads, or a closed view's pages stay in memory                                                                                               |
+| FR8      | Hosted iOS find tests on a fixture document; emulator checks on API level 35 and below; unit tests of the find state               | a match on several pages; no match; a superseded find; `clearFind`; a new document                                            | A match is missed or capped, a superseded find resolves its state, or a new document keeps the old highlights                                                                       |
+| FR9      | Module tests of renders and cancels; JVM tests of the job queue; Simulator and emulator checks                                     | the same request twice; a cancel queued and in flight; a cache clear mid-render; each reason                                  | A second identical request renders a new file, a cancelled render leaves a file, or `page-out-of-range` lacks `pageCount`                                                           |
+| FR10     | Hosted iOS tests of the markup screen; unit tests of the wrapper                                                                   | PNG and JPEG; Close with and without strokes; Save; a second call while open; an unwritable save                              | The source file changes, the new file carries metadata or a different pixel size, a second call queues, or a failed save closes the screen                                          |
+| FR11     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                              | each capability not opted in; each view absent                                                                                | A call throws, a reason falls outside the set, or `no-native-view` repeats                                                                                                          |
+| FR12     | Unit tests of the feature rows; emulator checks below and at API level 35; iOS checks below and at 16                              | each row true and false                                                                                                       | A call runs where its row is false, or a row answers true on a device that lacks the feature                                                                                        |
+| FR13     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                               | a labelled and an unlabelled thumbnail; a page change; the markup screen                                                      | A thumbnail has no image role, an unlabelled one is read, the page is not announced, or a markup control has no name                                                                |
+| FR14     | Review of each platform source against the platform SDKs                                                                           | each piece                                                                                                                    | A piece calls an API outside the platform's public SDK, other than the named exception                                                                                              |
+| FR15     | Contract baseline check                                                                                                            | a binary without a named feature                                                                                              | The JavaScript uses a feature the binary does not list                                                                                                                              |
 
 ## Decision log
 
