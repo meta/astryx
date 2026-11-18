@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {findOverrides} from './_settings.mjs';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -89,6 +89,36 @@ describe('findOverrides', () => {
   });
 });
 
+describe('findOverrides, once per variant', () => {
+  it('lists a variant once though Core writes its rule once per mode scope', () => {
+    const scopes = [
+      ':where(:scope[data-theme="light"] *)',
+      ':where(:scope:not([data-theme="light"], [data-theme="dark"]) *)',
+      ':where(:scope [data-astryx-media="light"] *)',
+      ':where(:scope[data-theme="dark"] *)',
+      ':where(:scope [data-astryx-media="dark"] *)',
+    ];
+    const css = scopes
+      .map(
+        w =>
+          `:is(.astryx-tab[data-selected="selected"])${w} { background-color: #111; }`,
+      )
+      .join('\n');
+    expect(
+      findOverrides(css, {
+        components: {tab: {base: {backgroundColor: '#eeeeee'}}},
+      }),
+    ).toEqual([
+      {
+        target: 'tab',
+        key: 'selected',
+        prop: 'backgroundColor',
+        value: '#eeeeee',
+      },
+    ]);
+  });
+});
+
 describe('a whole-part state setting on a theme with its own variant rule', () => {
   /** @type {string} */
   let cwd;
@@ -98,6 +128,30 @@ describe('a whole-part state setting on a theme with its own variant rule', () =
     await themeEditNew('q', {cwd, like: 'neutral'});
   }, 120_000);
   afterAll(() => removeLinkedFixture(cwd));
+
+  it('keeps the fill of a state the theme fills in both modes, and lists nothing twice', async () => {
+    for (const mode of ['light', 'dark'])
+      await themeEditSet('q', 'background-color', '#222222', {
+        cwd,
+        on: 'tab',
+        state: 'selected',
+        mode,
+      });
+    const r = await themeEditSet('q', 'background-color', '#eeeeee', {
+      cwd,
+      on: 'tab',
+    });
+    expect(r.data.lifted).toEqual([]);
+    const settings = fs.readFileSync(
+      path.join(cwd, 'themes/q/q.settings.ts'),
+      'utf8',
+    );
+    const selected = settings.slice(settings.indexOf('"selected": {'));
+    const block = selected.slice(0, selected.indexOf('\n      }'));
+    expect(block).not.toMatch(/^\s{8}"backgroundColor": "#eeeeee"/m);
+    for (const mode of ['light', 'dark']) await themeEditUndo('q', {cwd});
+    await themeEditUndo('q', {cwd});
+  }, 120_000);
 
   it('repeats a one-mode hover on the state the theme fills in that mode', async () => {
     await themeEditSet('q', 'background-color', '#eeeeee', {
