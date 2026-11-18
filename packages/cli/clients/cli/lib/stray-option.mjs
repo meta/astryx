@@ -305,6 +305,13 @@ const CONFIRM_OPTIONS = new Set([
 ]);
 
 /**
+ * The option that approves the action on a command that only previews
+ * without it. A `--yes` there means "go ahead", so the answer names it.
+ * @type {Record<string, string>}
+ */
+const APPROVAL_OPTIONS = {upgrade: '--apply', 'gap-report': '--confirm-public'};
+
+/**
  * The answer to an option a command does not take.
  *
  * The message names the options the command takes, and a group's
@@ -345,17 +352,30 @@ export function strayOptionAnswer(
   if (CONFIRM_OPTIONS.has(stray.split('=')[0])) {
     const flag = stray.split('=')[0];
     const run = words.filter(word => word.split('=')[0] !== flag);
+    const line = (/** @type {string[]} */ w) =>
+      formatCliCommand(w.map(x => quoteCommandArgument(x)).join(' '));
+    const approval = APPROVAL_OPTIONS[path.join(' ')];
+    const approved =
+      approval && !run.includes(approval) ? [...run, approval] : null;
+    if (
+      approved &&
+      runParses(rootOf(cmd), approved) &&
+      runParses(rootOf(cmd), run)
+    )
+      return {
+        message: `${flag} is not needed: Astryx commands never ask questions. ${path.join(' ')} goes ahead only with ${approval}.`,
+        suggestions: [
+          {name: line(approved), reason: 'do this instead: go ahead'},
+          {
+            name: line(run),
+            reason: `without ${approval}: see what it would do first`,
+          },
+        ],
+      };
     if (runParses(rootOf(cmd), run))
       return {
         message: `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
-        suggestions: [
-          {
-            name: formatCliCommand(
-              run.map(w => quoteCommandArgument(w)).join(' '),
-            ),
-            reason: 'do this instead',
-          },
-        ],
+        suggestions: [{name: line(run), reason: 'do this instead'}],
       };
   }
   const json = path.length === 0 || jsonSupported(path.join(' '));

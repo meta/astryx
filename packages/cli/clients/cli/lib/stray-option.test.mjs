@@ -214,23 +214,39 @@ describe('the run as meant', () => {
 });
 
 describe('an option that answers a question', () => {
-  it.each(['--yes', '-y', '--non-interactive', '--no-input'])(
-    'says %s is not needed and names the run without it',
-    flag => {
-      const {component} = program();
-      const a = answer(component, flag, ['component', 'Button', flag]);
-      expect(a?.message).toBe(
-        `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
-      );
-      expect(runs(a)).toEqual(['component Button']);
-    },
-  );
+  it.each([
+    '--yes',
+    '-y',
+    '--assume-yes',
+    '--non-interactive',
+    '--no-interactive',
+    '--no-input',
+  ])('says %s is not needed and names the run without it', flag => {
+    const {component} = program();
+    const a = answer(component, flag, ['component', 'Button', flag]);
+    expect(a?.message).toBe(
+      `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
+    );
+    expect(runs(a)).toEqual(['component Button']);
+  });
 
   it('keeps the other options of the run', () => {
     const {component} = program();
     expect(
       runs(answer(component, '--yes', ['component', '--list', '--yes'])),
     ).toEqual(['component --list']);
+  });
+
+  it('names the approval on a command that goes ahead only with one', () => {
+    const {upgrade} = program();
+    upgrade.option('--apply', 'apply');
+    const a = answer(upgrade, '--yes', ['upgrade', '--from', '0.6.0', '--yes']);
+    expect(a?.message).toBe(
+      '--yes is not needed: Astryx commands never ask questions. upgrade goes ahead only with --apply.',
+    );
+    expect(
+      a?.suggestions.map(s => s.name.replace(/^.*?astryx\S*\s+/, '')),
+    ).toEqual(['upgrade --from 0.6.0 --apply', 'upgrade --from 0.6.0']);
   });
 
   it('gives the usual answer for an option that is no answer to a question', () => {
