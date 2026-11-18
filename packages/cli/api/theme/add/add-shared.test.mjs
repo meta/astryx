@@ -251,8 +251,11 @@ describe('theme add with a shared theme', () => {
     ]);
     expect(result.data.copy).toMatchObject({
       installed: [`@astryxdesign/theme-neutral@${CLI_VERSION}`],
+      installRan: true,
       installCommand: expect.stringMatching(/^npm install left-pad/),
     });
+    // (No integration says how this project adds packages.)
+    expect(result.data.copy).not.toHaveProperty('installGuidance');
   });
 
   it('reports every file it wrote and the record and dependency it changed', async () => {
@@ -607,6 +610,7 @@ describe('theme add with a shared theme', () => {
     expect(runs).toEqual([]);
     expect(result.data.copy).toMatchObject({
       installed: [],
+      installRan: false,
       installGuidance:
         'Add left-pad to package.json, then run the relock script',
       installRetryCommand: `Add @astryxdesign/theme-neutral@${CLI_VERSION} to package.json, then run the relock script`,

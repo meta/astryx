@@ -152,7 +152,10 @@
  * `.tgz` archive, or an https URL to one) instead of a slug: `from` as it
  * was given, `folder` where the theme sat in it, `outputDir` and `files`
  * the copy in the app's local themes root, `installed` the Astryx package
- * specs installed for what the theme imports, `installCommand` the command
+ * specs installed for what the theme imports, `installRan` whether the
+ * package manager was run for them (present when the theme imports one the
+ * app lacks; false when an integration's install guidance, or lockfiles that
+ * disagree, leave the step to the builder, named in `installRetryCommand`), `installCommand` the command
  * that installs the other packages it imports that the app lacks (never run
  * for the theme; null when there are none), `installGuidance` the line a
  * loaded integration gives for adding them, shown instead of
@@ -169,7 +172,7 @@
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: boolean, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**

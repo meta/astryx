@@ -2020,6 +2020,9 @@ export async function addSharedThemeToApp(source, options) {
         outputDir,
         files,
         installed: install.installed,
+        ...(install.installRan === undefined
+          ? {}
+          : {installRan: install.installRan}),
         installCommand: install.installCommand,
         ...(install.installGuidance
           ? {installGuidance: install.installGuidance}
@@ -2272,7 +2275,7 @@ function relFrom(cwd, file) {
  * for the theme: the result names the command that installs it.
  * @param {{missingAstryx: string[], missingPackages: string[], installCommand: string | null, installGuidance: string | null}} needs
  * @param {string} projectDir
- * @returns {{installed: string[], installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string}}
+ * @returns {{installed: string[], installRan?: boolean, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string}}
  */
 function installSharedThemeNeeds(needs, projectDir) {
   // (An integration that says how this project adds packages is followed
@@ -2302,6 +2305,7 @@ function installSharedThemeNeeds(needs, projectDir) {
   if (guided) {
     return {
       installed: [],
+      installRan: false,
       ...others,
       installError:
         "this project's integrations say how it adds packages, so theme add does not install them itself",
@@ -2311,15 +2315,17 @@ function installSharedThemeNeeds(needs, projectDir) {
   if (base == null) {
     return {
       installed: [],
+      installRan: false,
       ...others,
       installError: `the app's lockfiles disagree on its package manager; install ${specs.join(' ')} with the one it uses`,
       installRetryCommand: `npm install ${specs.join(' ')} --ignore-scripts`,
     };
   }
   const run = runPackageManager(projectDir, 'add', specs);
-  if (run.ok) return {installed: specs, ...others};
+  if (run.ok) return {installed: specs, installRan: true, ...others};
   return {
     installed: [],
+    installRan: true,
     ...others,
     installError: run.why,
     installRetryCommand: run.command,

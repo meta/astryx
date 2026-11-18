@@ -823,7 +823,7 @@ function printThemeApp(result) {
     if (copy.installError)
       emit(
         text(
-          `[!] Not installed: ${copy.installError}.${copy.installRetryCommand ? ` Install it: ${copy.installRetryCommand}` : ''}`,
+          `[!] Not installed: ${copy.installError}.${copy.installRetryCommand ? ` Install it with: ${copy.installRetryCommand}` : ''}`,
         ),
       );
     if (copy.installGuidance ?? copy.installCommand)
