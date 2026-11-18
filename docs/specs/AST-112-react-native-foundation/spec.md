@@ -310,23 +310,23 @@ shared icon names under FR17.
   - Each group of the platform has its own record, which details these rules
     and FR3's linking for the group's pieces:
 
-    | Group                                                                                                         | Record         | Links             |
-    | ------------------------------------------------------------------------------------------------------------- | -------------- | ----------------- |
-    | Surfaces and glass                                                                                            | `spec:AST-123` | core              |
-    | Gestures and drag                                                                                             | `spec:AST-124` | core              |
-    | Navigation hosts                                                                                              | `spec:AST-125` | core              |
-    | Native controls                                                                                               | `spec:AST-126` | core              |
-    | Icons and drawing                                                                                             | `spec:AST-127` | core              |
-    | Menus and presentation                                                                                        | `spec:AST-128` | core              |
-    | Layout, text, and keyboard                                                                                    | `spec:AST-129` | core              |
-    | System modules                                                                                                | `spec:AST-130` | core              |
-    | Web                                                                                                           | `spec:AST-131` | `web`             |
-    | Media and camera                                                                                              | `spec:AST-132` | `media`, `camera` |
-    | Storage, identity, and files (secure storage, client identity, files)                                         | `spec:AST-133` | add-on            |
-    | Web data, bundled web content, and sign-in (web sessions, web data, bundled folders, page snapshots, sign-in) | `spec:AST-134` | add-on            |
-    | Photos and documents (the photo library, PDF, image markup)                                                   | `spec:AST-135` | add-on            |
-    | Capture (the audio recorder, the code reader, screen capture)                                                 | `spec:AST-136` | add-on            |
-    | Diagnostics (crash reports, daily metrics; the frame recorder in tests only)                                  | `spec:AST-137` | add-on            |
+    | Group                                                                                                         | Record         | Links                                                               |
+    | ------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------- |
+    | Surfaces and glass                                                                                            | `spec:AST-123` | core                                                                |
+    | Gestures and drag                                                                                             | `spec:AST-124` | core                                                                |
+    | Navigation hosts                                                                                              | `spec:AST-125` | core                                                                |
+    | Native controls                                                                                               | `spec:AST-126` | core                                                                |
+    | Icons and drawing                                                                                             | `spec:AST-127` | core                                                                |
+    | Menus and presentation                                                                                        | `spec:AST-128` | core                                                                |
+    | Layout, text, and keyboard                                                                                    | `spec:AST-129` | core                                                                |
+    | System modules                                                                                                | `spec:AST-130` | core                                                                |
+    | Web                                                                                                           | `spec:AST-131` | `web`                                                               |
+    | Media and camera                                                                                              | `spec:AST-132` | `media`, `camera`                                                   |
+    | Storage, identity, and files (secure storage, client identity, files)                                         | `spec:AST-133` | add-on                                                              |
+    | Web data, bundled web content, and sign-in (web sessions, web data, bundled folders, page snapshots, sign-in) | `spec:AST-134` | add-on                                                              |
+    | Photos and documents (the photo library, PDF, image markup)                                                   | `spec:AST-135` | core (the photo library and thumbnails); add-on (PDF, image markup) |
+    | Capture (the audio recorder, the code reader, screen capture)                                                 | `spec:AST-136` | add-on                                                              |
+    | Diagnostics (crash reports, daily metrics; the frame recorder in tests only)                                  | `spec:AST-137` | add-on                                                              |
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
   never silently wrong. `spec:AST-140` owns the rules and the check that
@@ -576,7 +576,7 @@ shared icon names under FR17.
   - Native capabilities that no Astryx component or template uses live in a
     separate optional add-on package (OQ9): secure storage, client identity,
     files, web data, bundled web folders and page snapshots, the system
-    sign-in session, the photo library and its thumbnails, PDF, image markup,
+    sign-in session, PDF, image markup,
     audio recording, code reading, screen capture, crash reports, daily
     metrics, network state, and secure random, with the crypto installer that
     fills `crypto.getRandomValues` and `crypto.randomUUID` from it.
@@ -863,8 +863,8 @@ A library component with a native half is complete only when that half links,
 so the native half of every library component links in every app: controls,
 navigation hosts, gestures and drag, surfaces, menus, icons, and layout and
 keyboard. A device feature brings a permission, a usage string, or a
-library's size that an app must choose to carry, so camera, media,
-microphone, PDF, photos, and web stay opt-in.
+library's size that an app must choose to carry, so camera, media, and web
+stay opt-in.
 
 Rejected: opt-in capabilities for the library's own native pieces, because an
 app would have to know which component needs which capability.
