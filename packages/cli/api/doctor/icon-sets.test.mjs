@@ -626,6 +626,18 @@ describe('icon-imports check', () => {
     expect(check).toMatchObject({status: 'pass'});
   });
 
+  it('an icon component of your own, imported through baseUrl with a .js name for its .tsx source, is not a missing package', async () => {
+    const check = await importsCheckOf(
+      {config: {experimental: {iconSet: 'glyphs'}}},
+      {
+        'tsconfig.json': JSON.stringify({compilerOptions: {baseUrl: '.'}}),
+        'src/rows.tsx': 'export const RowsIcon = () => null;\n',
+        'src/page.tsx': ["import {RowsIcon} from 'src/rows.js';", 'export const A = () => <RowsIcon />;', ''].join('\n'),
+      },
+    );
+    expect(check).toMatchObject({status: 'pass'});
+  });
+
   it('still fails for imports of the main set once its package is uninstalled', async () => {
     const check = await importsCheckOf(
       {packages: [], config: {experimental: {iconSet: '@acme/glyphs/glyphs'}}},

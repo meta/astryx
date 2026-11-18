@@ -85,6 +85,30 @@ export function devError(
   console.error(formatDevMessage(component, message), ...args);
 }
 
+/**
+ * Make the error that a component throws in development when a required prop
+ * is missing or has the wrong shape. The message names the component, the prop
+ * and the fix, so the builder does not get a TypeError from deep inside.
+ *
+ * Call it only inside an inline `process.env.NODE_ENV !== 'production'` check.
+ * A production bundle then drops the check, the message and this helper, and
+ * the component behaves as it did before.
+ *
+ * @example
+ * ```
+ * if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+ *   throw devPropError('Selector', 'options', 'must be an array of {value, label} objects.');
+ * }
+ * ```
+ */
+export function devPropError(
+  component: string,
+  prop: string,
+  message: string,
+): Error {
+  return new Error(formatDevMessage(component, `\`${prop}\` ${message}`));
+}
+
 const warnedKeys = new Set<string>();
 
 /**

@@ -21,6 +21,7 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {appPackages, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -87,7 +88,9 @@ describe('a stylesheet in another language', () => {
             themeEditPreviewApp('q', {cwd, theme: 't'}),
           );
           expect(e.message, spec).toContain(
-            `imports '${spec}', a stylesheet in another language than CSS`,
+            hasModuleHooks
+              ? `imports '${spec}', a stylesheet in another language than CSS`
+              : `${spec.replace(/^\.\//, '').replace(/\?.*$/, '')}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later`,
           );
           expect(fs.existsSync(path.join(cwd, 'q')), spec).toBe(false);
           fs.rmSync(file, {force: true});
@@ -132,7 +135,9 @@ describe('a refused starter from a stale theme', () => {
         const e = await refusal(() =>
           themeEditPreviewApp('q', {cwd, theme: 't'}),
         );
-        expect(e.message).toContain('Nothing was changed');
+        expect(e.message).toContain(
+          hasModuleHooks ? 'Nothing was changed' : 'Nothing was written',
+        );
         expect(snapshot()).toEqual(before);
         expect(Math.round(fs.statSync(dir).mtimeMs)).toBe(folderTime);
         expect(fs.existsSync(path.join(cwd, 'q'))).toBe(false);

@@ -15,6 +15,8 @@
  * state. Every line offered is run.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
@@ -223,6 +225,7 @@ describe('words', () => {
 describe('keeps', () => {
   it('a kept focus ring stays kept, in one mode too', async () => {
     const t = await fresh('k1');
+    // (Kept as Core draws an invalid field while focused: its own ring.)
     const keep = writes(
       await how(
         t,
@@ -230,9 +233,21 @@ describe('keeps', () => {
       ),
     );
     expect(keep).toContain(
-      `set ${t} box-shadow none --on inputs --when status:error --state focus-within`,
+      `set ${t} box-shadow 'inset 0 0 0 2px var(--color-accent-muted)' --on inputs --when status:error --state focus-within`,
     );
     await follow(keep);
+    // Every input the new ring reaches keeps its error ring, the ones whose
+    // field draws the status included.
+    const css = fs.readFileSync(
+      path.join(cwd, 'themes', t, `${t}.css`),
+      'utf8',
+    );
+    for (const part of ['text-input', 'date-time-input', 'complex-selector'])
+      expect(css, part).toMatch(
+        new RegExp(
+          `\\.astryx-${part}[^{]*\\[data-status="error"\\][^{]*:focus-within[^{]*\\{\\s*box-shadow: inset 0 0 0 2px var\\(--color-accent-muted\\);`,
+        ),
+      );
     const dark = writes(
       await how(
         'q0',
@@ -243,7 +258,7 @@ describe('keeps', () => {
       "set q0 box-shadow 'inset 0 0 0 2px light-dark(var(--color-accent-muted), #dc2626)' --on inputs --state focus-within",
     );
     expect(dark).toContain(
-      'set q0 box-shadow none --on inputs --when status:error --state focus-within',
+      "set q0 box-shadow 'inset 0 0 0 2px var(--color-accent-muted)' --on inputs --when status:error --state focus-within",
     );
   }, 240_000);
 
