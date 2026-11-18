@@ -39,7 +39,7 @@ developer expects on a device, and every place where it differs says so.
 Stage conforms to Astryx React Native's contracts and never defines them.
 `@astryxdesign/react-native` does not depend on it: an app builds and runs on
 its devices with no Stage, and it may use third-party libraries and another
-router beside the package. This record owns the `astryx rn stage …` commands
+router beside the package. This record owns the `astryx experimental rn stage …` commands
 and Stage's notes per module. Preview in the Astryx app is specified in
 `spec:AST-141`.
 
@@ -71,7 +71,7 @@ define, so Astryx React Native itself stays the same with or without it.
   record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states it, and Stage matches it
   (FR6).
 - The Astryx app and its Preview: `spec:AST-141`.
-- The React Native commands outside the `astryx rn stage` group, and the
+- The React Native commands outside the `astryx experimental rn stage` group, and the
   rules every React Native command follows (`spec:AST-112/FR13`).
 - macOS, Windows, and the web as targets for apps built with the packages
   (`spec:AST-112`).
@@ -217,26 +217,27 @@ define, so Astryx React Native itself stays the same with or without it.
     older device binary does: `supports(feature)` is false and the call takes
     its fallback or its refusal, so the project's JavaScript detects what is
     missing. The report lists it (FR5).
-- **FR8 — `astryx rn stage` runs Stage from the Astryx CLI.**
+- **FR8 — `astryx experimental rn stage` runs Stage from the Astryx CLI.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
   its other commands, and the group follows their rules
   (`spec:AST-112/FR13`): it asks no question, prints one envelope under
   `--json`, prints plain text otherwise, exits 0 or 1 the same in text and
-  JSON, and its outcomes differ by `code`. `astryx rn stage` without a
+  JSON, and its outcomes differ by `code`. `astryx experimental rn stage` without a
   subcommand prints the group's help. It answers for one platform: the one
   `--platform` names, `ios` otherwise.
 
-  | Command                         | Its one job                                                                                                                                         |
-  | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `astryx rn stage open`          | Shows the app in a Stage window, and keeps running until the window closes or the process is stopped.                                               |
-  | `astryx rn stage shot`          | Takes one capture of the app and writes it with the run's report.                                                                                   |
-  | `astryx rn stage play <script>` | Runs a scripted check and reports each step.                                                                                                        |
-  | `astryx rn stage a11y`          | Reads the app's accessibility tree.                                                                                                                 |
-  | `astryx rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
-  | `astryx rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
-  | `astryx rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
-  - The group is experimental (`spec:AST-017` FR21; this record's DEC-6): its
-    help and its docs say so, the docs carry `stability: 'experimental'`, and
+  | Command                                      | Its one job                                                                                                                                         |
+  | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `astryx experimental rn stage open`          | Shows the app in a Stage window, and keeps running until the window closes or the process is stopped.                                               |
+  | `astryx experimental rn stage shot`          | Takes one capture of the app and writes it with the run's report.                                                                                   |
+  | `astryx experimental rn stage play <script>` | Runs a scripted check and reports each step.                                                                                                        |
+  | `astryx experimental rn stage a11y`          | Reads the app's accessibility tree.                                                                                                                 |
+  | `astryx experimental rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
+  | `astryx experimental rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
+  | `astryx experimental rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
+  - The group is experimental and lives in the CLI's experimental namespace
+    (`spec:AST-017` FR21 and FR27; this record's DEC-6): its help and its docs
+    say so, the docs carry `stability: 'experimental'`, and
     its commands, flags, and results may change or be removed in any release.
     Its outcome codes are the exception: they are append-only, and a shipped
     code keeps its meaning (`architecture:cli-surface` INV3).
@@ -290,7 +291,7 @@ define, so Astryx React Native itself stays the same with or without it.
 
     | Outcome                                                                                                                                                                         | Code                         |
     | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                                                                                       | `ERR_DEP_MISSING`            |
+    | No Stage binary is installed; the suggestion is `astryx experimental rn stage install`                                                                                          | `ERR_DEP_MISSING`            |
     | The Stage download fails                                                                                                                                                        | `ERR_FETCH_FAILED`           |
     | A Stage binary fails its checksum or signature                                                                                                                                  | `ERR_STAGE_UNTRUSTED`        |
     | `--window` names no open Stage window                                                                                                                                           | `ERR_STAGE_NO_WINDOW`        |
@@ -325,12 +326,12 @@ define, so Astryx React Native itself stays the same with or without it.
 ## Current-state impact
 
 - `spec:AST-112` names this record for Astryx Stage and the
-  `astryx rn stage …` commands, and `spec:AST-141` for Preview.
+  `astryx experimental rn stage …` commands, and `spec:AST-141` for Preview.
 - `architecture:cli-surface` INV10 and `spec:AST-081` FR7 gain the Stage
   cache as a per-user write root, and INV10 admits a file that `--out` names
   by an absolute path, as DEC-16 does for `experimental render --out`.
   `spec:AST-112/FR13`'s rule that the commands' own writes stay inside the app
-  gains the same two exceptions for the `astryx rn stage` group (FR8).
+  gains the same two exceptions for the `astryx experimental rn stage` group (FR8).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states how Stage shows them (FR6) and how Stage
   pairs with them (FR7).
@@ -346,7 +347,7 @@ define, so Astryx React Native itself stays the same with or without it.
 | FR5      | A project with an unknown native view and module; a run on a desktop without a system web view                                                                                                    | each kind of simulated entry                                                                                | A missing native piece that the report does not name                                                                                                                                                               |
 | FR6      | Stage contract checks of each group's contracts beside the same scripts on the Simulator and emulator                                                                                             | each public API; each note in FR6's table; each look                                                        | A Stage answer that differs from iOS and Android and is not a named gap, or a public API with neither a simulation nor a report entry                                                                              |
 | FR7      | Stage's declared contracts and named features compared with the package's; a Stage below the floor; a Stage at the floor; a manifest with an unknown requirement; a Stage started without the CLI | an older package; a newer package; one missing contract; one missing named feature; one unknown requirement | A Stage below the floor that runs the project, a refusal without the list, JavaScript that runs before the refusal, a manifest with an unknown requirement that runs, or a missing feature that `supports` reports |
-| FR8      | CLI contract tests of `astryx rn stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving                                                                       | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode`  | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                                                                            |
+| FR8      | CLI contract tests of `astryx experimental rn stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving                                                          | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode`  | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                                                                            |
 | FR9      | Review of each native change's evidence                                                                                                                                                           | a native behavior change                                                                                    | A native claim backed only by Stage                                                                                                                                                                                |
 
 ## Decision log
@@ -451,7 +452,7 @@ contracts to a development tool's output.
   (`human-design`) FR7 pairs by the package's version floor and named
   features. Options for the declaration:
   - **A published manifest per Stage release** that lists each contract and
-    its named features, read by `astryx doctor` and `astryx rn stage which`. One
+    its named features, read by `astryx doctor` and `astryx experimental rn stage which`. One
     table to compare with the package's contracts.
   - **The manifest plus each contract's spec hash**, so a contract whose spec
     changed without a new floor is caught at start. Catches drift the floor
