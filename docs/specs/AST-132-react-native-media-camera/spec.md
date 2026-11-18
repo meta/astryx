@@ -171,27 +171,24 @@ Scope notes: the photo library pieces are specified in `spec:AST-135`.
   - A remote URL answers `bad-source` before anything is read. The reasons are
     `bad-source`, `no-audio`, `decode`, `invalid-option`, and the common
     reasons.
-- **FR7 — `NativeVideoView` draws a player that `AstryxAudio` plays.**
-  `NativeVideoView` is the library's internal wrapper of `AstryxVideoView`;
-  `VideoView` renders it.
+- **FR7 — `AstryxVideoView` draws a player that `AstryxAudio` plays.**
+  `VideoView` renders it through the library's internal wrapper.
   - Its props are `playerId` (an `AstryxAudio` player opened with
     `hasVideo`; `''` draws nothing), `resizeMode` (`contain`, the default,
     letterboxes; `cover` fills and crops), `controls` (`none`, the default,
     the bare picture; `system`, the platform's own playback controls over it),
     `allowsPictureInPicture` (default true), and
     `startsPictureInPictureAutomatically` (default false).
-  - `volume`, `isMuted`, and `isLooping` belong to the player: a set prop is
-    applied to the player through `AstryxAudio` when it changes or the view
-    takes another player, and an unset prop leaves the player as it is. They
-    reach the player through `AstryxAudio` alone.
+  - `volume`, `isMuted`, and `isLooping` belong to the player: `VideoView`
+    applies a set value to the player through `AstryxAudio` when it changes
+    or the view takes another player, and an unset value leaves the player as
+    it is.
   - Events: `onVideoSize({width, height})` once the picture's natural size is
     known, and `onPictureInPictureChange({isSupported, isActive,
 isPossible})`.
-  - `ref` is a handle with `startPictureInPicture()` and
-    `stopPictureInPicture()`; `fallback`, `style`, and `testID` as every view
-    (FR13).
+  - Commands: `startPictureInPicture` and `stopPictureInPicture`.
   - A second view of the same player shows it without restarting it; the view
-    that registered last owns the handle.
+    that registered last takes the picture-in-picture commands.
 - **FR8 — Picture in picture.**
   - iOS uses the system's picture-in-picture window over the view's player.
     With `startsPictureInPictureAutomatically`, it starts by itself when the
@@ -276,8 +273,8 @@ isPossible})`.
     (`pictureInPicture`, `enterPictureInPicture`, `exitPictureInPicture`),
     and `naturalAspectRatio`. It opens a player only where the video view
     exists.
-  - `VideoView` draws `NativeVideoView` for a `useVideoPlayer` controller's
-    player. Its full screen draws a second `NativeVideoView` of the same
+  - `VideoView` draws `AstryxVideoView` for a `useVideoPlayer` controller's
+    player. Its full screen draws a second `AstryxVideoView` of the same
     player, so playback continues where it was. While picture in picture
     shows the player, `VideoView` hides the content it draws over the
     picture. The rest
@@ -293,8 +290,9 @@ isPossible})`.
     and `isCameraViewAvailable()` answer false, and calls answer `not-linked`
     (`spec:AST-112/FR3`). Without the native side (Jest, the web) they answer
     `no-module`.
-  - `NativeVideoView` where the view is absent draws `fallback` (nothing by
-    default) and reports `onError` with `no-native-view` once.
+  - Where `AstryxVideoView` is absent, `VideoView`'s internal wrapper draws
+    `fallback` (nothing by default) and reports `onError` with
+    `no-native-view` once.
   - `useAudioPlayer` and `useVideoPlayer` without the platform (not opted
     in, Jest, the web, or the platform switched off through the capabilities
     provider) report `status: 'unavailable'`, and their calls return at once.
@@ -303,7 +301,7 @@ isPossible})`.
   - `CameraView` with `camera` not opted in draws the simulated camera and
     reports `onError` with `not-linked` once per mount, naming the opt-in.
 - **FR14 — Accessibility.**
-  - The element that names the video is the caller's, and `NativeVideoView`'s
+  - The element that names the video is the caller's, and `AstryxVideoView`'s
     bare picture sits inside it, hidden from assistive technology (`VideoView`'s own record
     owns its name and role). With `controls: 'system'` the system's controls
     are read as the system reads them.
@@ -340,6 +338,8 @@ isPossible})`.
 
 ## Current-state impact
 
+- Departs from `spec:AST-082/FR13` on Android: the `camera` capability links
+  ZXing, a third-party pure-Java decoder, for live codes (FR1, FR10).
 - This record details `spec:AST-112`'s FR3 (`media` and `camera` stay
   opt-in), FR5 (the native views are internal behind `VideoView` and
   `CameraView`), and FR7 (the probes and a camera view that leaves the prompt
@@ -366,7 +366,7 @@ isPossible})`.
 | FR11     | Unit tests of the simulated camera; Simulator renders                                                                                | no camera; `simulation.isEnabled`; Reduce Motion; simulated codes                                        | A device without a camera prompts, the scene moves under Reduce Motion, or a simulated photo carries a `uri`                                          |
 | FR12     | Library tests of `useAudioPlayer`, `useVideoPlayer`, and `VideoView`                                                                 | a source change; unmount; full screen; picture in picture; a changed option                              | A player leaks after unmount, a callback is not stable, or full screen opens a second player                                                          |
 | FR13     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                                | each capability not opted in; the view absent; an unknown native reason                                  | A call throws, a reason falls outside the set, `no-native-view` is reported more than once, or a hook does not report `unavailable`                   |
-| FR14     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                                 | `NativeVideoView` bare and with system controls; the camera's status changes                             | The bare picture is read, the system controls are covered, or a camera status change is not announced                                                 |
+| FR14     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                                 | `AstryxVideoView` bare and with system controls; the camera's status changes                             | The bare picture is read, the system controls are covered, or a camera status change is not announced                                                 |
 | FR15     | The platform's spec rules check of the named features                                                                                | a binary without a picture-in-picture feature row                                                        | The JavaScript uses a feature the binary does not report                                                                                              |
 
 ## Decision log
