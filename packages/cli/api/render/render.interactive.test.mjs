@@ -218,6 +218,60 @@ describe("a render, which carries the page's script", () => {
     dom.window.close();
   });
 
+  it('asks for no focus in its first paint, and the drawn page focuses as the app does', async () => {
+    put(
+      'src/focus.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <input aria-label="Search" autoFocus data-note="no autofocus here" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/focus.tsx', {cwd: dir, out: 'focus.html'});
+    const file = read('focus.html');
+    const markup = renderedMarkupOf(file) ?? '';
+    expect(markup).toContain('aria-label="Search"');
+    expect(markup).toContain('data-note="no autofocus here"');
+    // Raw HTML can quote a value with single quotes or none: its text stays.
+    const {withoutAutofocus} =
+      await import('../../foundation/render/render-page.mjs');
+    expect(
+      withoutAutofocus(
+        `<span title='press autofocus now' data-x=autofocus autofocus>x</span>`,
+      ),
+    ).toBe(`<span title='press autofocus now' data-x=autofocus>x</span>`);
+    // It reads tags as the render's HTML reader does: spaces around `=` and a
+    // `>` inside a quoted value are part of the attribute.
+    expect(
+      withoutAutofocus(
+        `<span title = "press autofocus now" autofocus>x</span>`,
+      ),
+    ).toBe(`<span title = "press autofocus now">x</span>`);
+    expect(withoutAutofocus(`<input title="a>b" autofocus>`)).toBe(
+      `<input title="a>b">`,
+    );
+    // An unquoted value keeps a space before a `/` that follows the cut, so
+    // it never reads as part of the value.
+    expect(withoutAutofocus(`<input title=x autofocus/>`)).toBe(
+      `<input title=x />`,
+    );
+    const painted = new JSDOM(markup).window.document.querySelector('input');
+    expect(painted?.hasAttribute('autofocus')).toBe(false);
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const input = dom.window.document.querySelector(
+      'input[aria-label="Search"]',
+    );
+    expect(dom.window.document.activeElement).toBe(input);
+    dom.window.close();
+  });
+
   it('opens a link out of the file in a new tab, and submits a form itself, also on Enter', async () => {
     put(
       'src/form.tsx',
@@ -386,6 +440,54 @@ export default function Page() {
     );
     // The script drew them: they are not the first paint's elements.
     expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('./photo.png');
+    dom.window.close();
+  }, 120_000);
+
+  it("keeps a theme's rules for a part Core draws only after a click, and the part shows them", async () => {
+    // Core names a part's class at run time (`banner-icon` becomes
+    // `astryx-banner-icon`), so the script holds only the part's name.
+    put(
+      'src/notice.css',
+      '.astryx-banner-icon{outline-style:dotted}.astryx-never-a-part{outline-style:dashed}\n',
+    );
+    put(
+      'src/notice.tsx',
+      `import {useState} from 'react';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import './notice.css';
+
+export default function Notice() {
+  const [shown, setShown] = useState(false);
+  return (
+    <main>
+      <Button label="Show notice" onClick={() => setShown(true)} />
+      {shown && <Banner status="warning" title="Saved for later" />}
+    </main>
+  );
+}
+`,
+    );
+    await render('src/notice.tsx', {cwd: dir, out: 'notice.html'});
+    const file = read('notice.html');
+    expect(renderedMarkupOf(file)).not.toContain('astryx-banner-icon');
+    expect(file).toContain('.astryx-banner-icon{outline-style:dotted}');
+    expect(file).not.toContain('.astryx-never-a-part');
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const settle = () =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    await settle();
+    const doc = dom.window.document;
+    /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
+    await settle();
+    const icon = doc.querySelector(`#${ROOT_ID} .astryx-banner-icon`);
+    expect(icon).not.toBeNull();
+    expect(
+      dom.window.getComputedStyle(/** @type {Element} */ (icon)).outlineStyle,
+    ).toBe('dotted');
     dom.window.close();
   }, 120_000);
 

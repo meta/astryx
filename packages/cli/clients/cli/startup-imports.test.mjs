@@ -6,8 +6,10 @@
  * schema and module-loader packages, and none of the CLI's own doc, discovery,
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
- * only patching an integration manifest uses. A module hook in the child
- * records every module that the run loads (resolving a package loads none).
+ * only patching an integration manifest uses, and a search with icon
+ * features off loads none of the icon section's code. A module hook in the
+ * child records every module that the run loads (resolving a package loads
+ * none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -210,6 +212,22 @@ describe('a component lookup in a folder with no project', () => {
     expect(cliModules.has('clients/cli/commands/component.mjs')).toBe(true);
     expect(
       ['jscodeshift', 'recast'].filter(name => packages.has(name)),
+    ).toEqual([]);
+  });
+});
+
+describe('a search in a folder with no project', () => {
+  it("loads none of the icon section's code while icon features are off (astryx search tooltip)", () => {
+    const {status, cliModules} = modulesLoadedBy(['search', 'tooltip']);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // The icon commands' docs are search results; their code is not.
+    expect(
+      [...cliModules].filter(
+        file =>
+          file === 'api/search/_icons.mjs' ||
+          (file.startsWith('api/icon/') && !file.endsWith('.doc.mjs')),
+      ),
     ).toEqual([]);
   });
 });

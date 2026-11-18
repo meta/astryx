@@ -91,7 +91,9 @@ theme matcha` is `theme add matcha`) and the table of their words in
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's
-   shareable-page exception.
+   shareable-page exception, and a way-back word (`import`, `back`,
+   `restore`, `unrender`, `reverse`) names `experimental import` under the
+   same exception.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -160,8 +162,9 @@ and remains available through explicit Core package selection.
   every field. A component read (`astryx component <Name>` with no `--detail`)
   prints the short answer, the `--detail compact` level: the description's
   first paragraph, the import, a usage line, each prop with its description's
-  first sentence, the accessibility requirements, the component's pieces, and
-  as its last line the `--detail full` command that prints the whole doc.
+  first sentence, the accessibility requirements, the component's pieces, a
+  hook's returns, and as its last line the `--detail full` command that prints
+  the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
   The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and
@@ -794,10 +797,19 @@ non-interactive guarantee.
   verification.
 - `foundation/discovery/theme-discovery.mjs` and `api/theme` — typed integration
   theme descriptor discovery, package-aware selection, source copy, and build.
+- `api/render` and `foundation/render` — `astryx experimental export`, which
+  writes a page as one HTML file that records the files it could not carry,
+  and `--reverse`, which gives the page back. Its `missing` lists every file
+  the restored page imports that it lacks, and every file the rendered file
+  records as not carried; `exact` is true only when `missing` is empty and
+  every restored file matches its recorded checksum.
+  `astryx experimental import` follows the same rule: it reports the same
+  `missing` and `exact`.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
 - `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental export` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
+- `foundation/render/render-page.mjs` — the CSS a file `astryx experimental export` writes: Core's and the page's stylesheets cut to the classes the first paint uses and the names in the page's script, each name also as the class Core's naming module (`@astryxdesign/core/naming`) builds from it, so a theme's rules for every Core part the script can draw stay in the file; a Core without the naming module keeps the cut to the first paint and the script's names.
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
@@ -1102,8 +1114,8 @@ absolute path. A path the caller names absolutely is their choice of place, so
 refusing it (INV10). The file it writes there is still never one a render did
 not write: an existing file is replaced only when its head shows that a render
 wrote it, as everywhere else. A relative `--out` stays inside the current
-folder, and `--reverse`, which writes files the embedded source names, keeps
-every write inside it.
+folder, and the way back (`experimental import`, or `export --reverse`),
+which writes files the embedded source names, keeps every write inside it.
 
 Rejected: refusing every path outside the current folder (most agents that
 render a page for an artifact name an absolute path, and retry after the

@@ -15,6 +15,7 @@ import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
 import {registerExperimentalExport} from './export.mjs';
+import {registerExperimentalImport} from './import.mjs';
 import {registerExperimentalTheme} from './theme.mjs';
 import {servedSubcommands} from '../../lib/base-gate.mjs';
 import {RENAMED_EXPERIMENTAL} from '../../lib/renamed-commands.mjs';
@@ -46,6 +47,7 @@ export function registerExperimental(program) {
   });
   registerExperimentalIcon(experimental, program);
   registerExperimentalExport(experimental, program);
+  registerExperimentalImport(experimental, program);
   registerExperimentalTheme(experimental, program);
   for (const [old, renamed] of Object.entries(RENAMED_EXPERIMENTAL)) {
     // Hidden, and never runs the command: the old name's line, and its help,
@@ -95,17 +97,40 @@ function renamedAnswer(old, renamed, words) {
   const at = words.findIndex(
     (w, i) => w === old && words[i - 1] === 'experimental',
   );
+  // An option of the old name that is now its own command moves the run
+  // there in one step: `render --reverse x.html` is `import x.html`.
+  const moved = Object.entries(MOVED_BY_OPTION[old] ?? {}).find(([flag]) =>
+    words.some((w, i) => i > at && (w === flag || w.startsWith(`${flag}=`))),
+  );
+  const target = moved ? moved[1] : renamed;
+  const after = words
+    .slice(at + 1)
+    .filter(w => !moved || (w !== moved[0] && !w.startsWith(`${moved[0]}=`)));
   const line =
     at < 0
-      ? ['experimental', renamed]
-      : [...words.slice(0, at), renamed, ...words.slice(at + 1)];
-  return cliError(`experimental ${old} is now experimental ${renamed}.`, {
-    suggestions: [
-      {
-        name: ['astryx', ...line.map(w => quoteCommandArgument(w))].join(' '),
-        reason: `the command is experimental ${renamed}`,
-      },
-    ],
-    code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-  });
+      ? ['experimental', target]
+      : [...words.slice(0, at), target, ...after];
+  return cliError(
+    moved
+      ? `experimental ${old} ${moved[0]} is now experimental ${target}.`
+      : `experimental ${old} is now experimental ${renamed}.`,
+    {
+      suggestions: [
+        {
+          name: ['astryx', ...line.map(w => quoteCommandArgument(w))].join(' '),
+          reason: `the command is experimental ${target}`,
+        },
+      ],
+      code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+    },
+  );
 }
+
+/**
+ * Options of a renamed command's old name that are now a command of their
+ * own, by old name: the option, and the command it is now.
+ * @type {Readonly<Record<string, Readonly<Record<string, string>>>>}
+ */
+const MOVED_BY_OPTION = Object.freeze({
+  render: Object.freeze({'--reverse': 'import'}),
+});

@@ -46,13 +46,13 @@
  * @property {string} data.input - The page module, relative to cwd when inside it.
  * @property {string} data.output - The HTML file written.
  * @property {number} data.bytes - Size of the HTML file.
- * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so --reverse can give it back.
+ * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so an import can give it back.
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
- * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
+ * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
@@ -68,7 +68,7 @@
  */
 
 /**
- * `astryx --json experimental export --reverse <file.html>`.
+ * `astryx --json experimental import <file.html>` (or `experimental export --reverse`).
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderReverseResponse
  * @property {'render.reverse'} type
@@ -77,8 +77,8 @@
  * @property {'embedded' | 'rebuilt'} data.mode - `embedded`: the file carried its source, written back byte for byte. `rebuilt`: rebuilt from Astryx markup (text and layout only).
  * @property {string} data.output - The page module written: `out`, or by default inside a new folder beside the HTML file named after it (`report.html` gives `report-restored/`).
  * @property {string[]} data.files - Every file written, page first.
- * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered.
- * @property {string[]} [data.missing] - Embedded only: relative imports the file did not carry (files a render never embeds), so the restored page needs them before it renders.
+ * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered. A file the rendered file records as not carried makes it false too, also when no import names it.
+ * @property {string[]} [data.missing] - Embedded only: imports the file did not carry (files a render never embeds), and the files the render recorded as not carried (such as a module an alias names from outside the carried folder), so the restored page needs them before it renders.
  * @property {RenderAliased} [data.aliased] - Embedded only: the imports the page makes through a path alias that no alias here names. Their files come back in the page's own layout inside the new folder, and the page needs the alias to build or render again: `config` names the tsconfig.json or jsconfig.json TypeScript reads for the page (or the new one to create), `paths` the whole `paths` it needs, and `imports` each import with the file it came back as.
  * @property {string[]} [data.components] - Rebuilt only: the components the page uses.
  * @property {number} [data.elements] - Rebuilt only: how many component elements were rebuilt.

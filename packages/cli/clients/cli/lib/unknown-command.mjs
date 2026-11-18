@@ -8,8 +8,8 @@
  * some commands take, a command deeper in the tree, or a name another command
  * reads. Otherwise it names the commands with a near name, else every
  * command. It only suggests: it runs nothing, and it names no experimental
- * command except the one spec:AST-017 FR27's shareable-page exception lets a
- * share word name.
+ * command except the ones spec:AST-017 FR27's shareable-page exception lets a
+ * share word or a way-back word name.
  *
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints
@@ -96,8 +96,9 @@ function offers(cmd, long) {
 
 /**
  * The experimental commands a stable answer may name (spec:AST-017 FR27, the
- * shareable-page exception), with the words people and agents type when they
- * mean each one. The reason says the command is experimental.
+ * shareable-page exception: the command that writes a page as one HTML file,
+ * and the one that turns that file back into its page), with the words people
+ * and agents type when they mean each one. The reason says the command is experimental.
  */
 const NAMED_EXPERIMENTAL = [
   {
@@ -112,6 +113,12 @@ const NAMED_EXPERIMENTAL = [
     ],
     reason:
       'the command is experimental export (experimental): a page as one shareable HTML file',
+  },
+  {
+    words: ['experimental', 'import'],
+    asks: ['import', 'back', 'restore', 'unrender', 'reverse'],
+    reason:
+      'the command is experimental import (experimental): a file experimental export wrote, back into its page',
   },
 ];
 

@@ -571,6 +571,39 @@ const CASES = [
     },
   },
   {
+    // The way back as its own command: the --reverse projection above.
+    name: 'experimental import',
+    args: [
+      'experimental',
+      'import',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
+    cwd: '__TMP__',
+    setup: dir => {
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
+  },
+  {
     name: 'manifest',
     args: ['manifest'],
     // Manifest describes the CLI itself; exempt (AST-042 FR1).

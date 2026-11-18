@@ -11,8 +11,8 @@ export const docs = {
   props: [
     {
       name: 'icon',
-      type: 'IconType',
-      description: 'Icon to display before the label.',
+      type: 'ReactNode | IconType',
+      description: 'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'label',
@@ -51,8 +51,8 @@ export const docsZh = {
   props: [
     {
       name: 'icon',
-      type: 'IconType',
-      description: '显示在标签前的图标。',
+      type: 'ReactNode | IconType',
+      description: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'label',
@@ -83,7 +83,7 @@ export const docsDense = {
   displayName: 'Context Menu Item',
   description: 're-exported DropdownMenuItem for compound mode',
   propDescriptions: {
-    icon: 'icon before label',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     label: 'primary label text',
     description: 'secondary text below label',
     endContent: 'additional content after label+description',

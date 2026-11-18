@@ -41,7 +41,7 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
-import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {reachableFiles, receivingAliases, resolutionCandidates} from '../../foundation/render/embedded-imports.mjs';
 import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
@@ -814,7 +814,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   };
   if (block.found && 'newer' in block) {
     const {format, cli} = block.newer;
-    const command = `${cliCommand(cli ?? 'latest')} experimental export --reverse ${shellArg(shown(cwd, input))}`;
+    const command = `${cliCommand(cli ?? 'latest')} experimental import ${shellArg(shown(cwd, input))}`;
     throw new AstryxError(
       `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
       [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
@@ -871,7 +871,27 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      // A file the render could not carry is missing too, also when no
+      // import here names it (an alias this reverse cannot resolve). An
+      // import already in missing names one recorded file, the one it
+      // resolves to as the walk resolves it (the path as written, then each
+      // extension in order, then its folder's index), so only that file is
+      // not listed again.
+      const recordedOut = (Array.isArray(source.notCarried) ? source.notCarried : []).filter(
+        (/** @type {unknown} */ file) => typeof file === 'string' && file !== '',
+      );
+      const recordedSet = new Set(recordedOut);
+      const covered = new Set(
+        unreached.map(spec => resolutionCandidates(spec).find(candidate => recordedSet.has(candidate))).filter(Boolean),
+      );
+      const missing = [...unreached];
+      const listed = new Set(missing);
+      for (const file of recordedOut) {
+        if (covered.has(file) || listed.has(file)) continue;
+        listed.add(file);
+        missing.push(file);
+      }
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its

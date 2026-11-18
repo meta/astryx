@@ -119,6 +119,16 @@ describe('the embedded source', () => {
   });
 });
 
+describe('the record of files a render could not carry', () => {
+  it('round-trips through the embedded source, and is left out when empty', () => {
+    const files = [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}];
+    const read = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: ['../shared/rows.ts', 'site.scss']})}</body>`);
+    expect(read).toMatchObject({found: true, source: {notCarried: ['../shared/rows.ts', 'site.scss']}});
+    const none = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: []})}</body>`);
+    expect(/** @type {any} */ (none).source).not.toHaveProperty('notCarried');
+  });
+});
+
 describe('the parts of a rendered file a reverse compares', () => {
   it('finds the title, the style and the body as a browser does: outside comments and style text', () => {
     const style = '<style>.t::before{content:"</head><body><!-- x -->"}</style>';

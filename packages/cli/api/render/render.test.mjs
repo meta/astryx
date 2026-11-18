@@ -960,7 +960,7 @@ describe('render(): every write stays inside the current folder', () => {
         expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
         expect(result.data.warnings).toContainEqual({
           code: 'not-embedded',
-          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so --reverse cannot give it back.',
+          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so experimental import cannot give it back.',
         });
       } finally {
         fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o644);
@@ -2017,7 +2017,7 @@ describe('render --reverse: a received file may carry only what a render embeds'
     expect(r.data.warnings).toContainEqual({
       code: 'not-carried',
       message:
-        "package.json is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
+        "package.json is not carried: it is a tool's configuration, which experimental import never writes. The page shows what it reads from it, but experimental import cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
     });
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
@@ -2066,10 +2066,10 @@ describe('astryx experimental export (CLI)', () => {
         const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
         expect(line).toBeDefined();
         // The printed command, run as printed after the CLI's own name.
-        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental export ')[1];
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental import ')[1];
         const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
-        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
-        const back = await runCli(['experimental', 'export', ...args], dir);
+        expect(args).toEqual([out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'import', ...args], dir);
         expect(back.status, back.stderr).toBe(0);
         expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
           fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
@@ -2518,15 +2518,15 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-carried',
       message:
-        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
+        "chart.config.json is not carried: its name reads as a tool's configuration, which experimental import never writes. The page shows it, but experimental import cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
     });
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     expect(html).toContain('Sales in USD');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (--reverse cannot give them back)\n');
+    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (experimental import cannot give them back)\n');
     expect(note).not.toContain('come back exactly');
-    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.');
+    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; experimental import gives back the rest.');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
@@ -2552,7 +2552,7 @@ describe('render(): a page outside a project', () => {
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     const note = html.slice(0, html.indexOf('-->'));
     const line = note.split('\n').find(l => l.trim().startsWith('Not carried:'));
-    expect(line?.trim().replace(/^Not carried: | \(--reverse cannot give them back\)$/g, '').split(', ').sort()).toEqual([
+    expect(line?.trim().replace(/^Not carried: | \(experimental import cannot give them back\)$/g, '').split(', ').sort()).toEqual([
       'chart.config.json',
       'fake.png',
       'rows.test.ts',
@@ -2594,21 +2594,128 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
     });
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html).toContain('North South');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
-    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+    // The import and the record name rows.ts, which is named once; the
+    // record also names helper.ts, which only rows.ts imports.
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows', '../lib/helper.ts']});
     // Rendered from the folder that holds both, the module is carried.
     const whole = runBin(tree, ['experimental', 'export', 'page/page.tsx', '--out', 'whole.html']);
     expect(whole.status).toBe(0);
     expect(whole.json.data).not.toHaveProperty('notCarried');
     expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
+  }, 60_000);
+
+  it('names a folder the page imports from above the carried folder once on the way back', () => {
+    const tree = path.join(away, 'outside-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+  }, 60_000);
+
+  it('names an extensionless JSON import the render leaves out once on the way back', () => {
+    const tree = path.join(away, 'extensionless-json');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import site from './site.config';\nexport default function Page() {\n  return <h1>{site.title}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.config.json']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['site.config']});
+  }, 60_000);
+
+  it('keeps a recorded JSON file that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-json');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import data from './rows.json';\nexport const rows: string[] = data;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.json', '../lib/rows.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    // The import names rows.ts, the file it resolves to first; rows.json is
+    // named by itself.
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.json']);
+  }, 60_000);
+
+  it('keeps a recorded folder index beside a same-named module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './rows/index';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.ts', '../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows/index.ts']);
+  }, 60_000);
+
+  it('keeps a recorded image that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.tsx'), "export const Rows = () => <img src=\"../lib/rows.png\" alt=\"\" />;\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {Rows} from '../lib/rows';\nexport default function Page() {\n  return <main><Rows /></main>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.png', '../lib/rows.tsx']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.png']);
+  }, 60_000);
+
+  it('follows a TypeScript-style .js import in a module from outside the carried folder to its source', () => {
+    const tree = path.join(away, 'outside-ts-js');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south: string = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper.js';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8')).toContain('North South');
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
   }, 60_000);
 
   it('in a project, tells the reader to move a file from outside the project inside it', () => {
@@ -2627,7 +2734,7 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.",
+        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Move it inside the project's folder.",
     });
   }, 60_000);
 
@@ -2651,13 +2758,18 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
     });
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html).toContain('North South');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: ../shared/rows.ts (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: ../shared/rows.ts (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
+    // --reverse cannot resolve the alias, but the file records what the
+    // render left out, so it names the module as missing.
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../shared/rows.ts']});
   }, 60_000);
 
   it('carries a JSON file and a stylesheet from above the page folder, and names an image from there as not carried', () => {
@@ -2707,10 +2819,11 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: site.scss (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
-    expect(back.json.data).toMatchObject({exact: false, missing: ['site.scss']});
+    expect(back.json.data.exact).toBe(false);
+    expect(back.json.data.missing).toEqual(['site.scss']);
   }, 60_000);
 
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
