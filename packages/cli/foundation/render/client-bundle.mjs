@@ -104,7 +104,12 @@ const moveTo = link => {
 // card's handler that calls stopPropagation) has the browser's own move held
 // at that point, and the file decides once every handler has run: it moves
 // unless the page cancelled the click, by preventDefault, \`returnValue =
-// false\` or an onclick handler that returns false.
+// false\` or an onclick handler that returns false. A cancel made on the
+// window or the document while the click is still on its way down comes from
+// the frame that hosts the file (a viewer that scrolls to the place itself and
+// leaves the address alone), not from the page: it holds the browser's own
+// move, and the file still moves, so a page that routes on its address sees
+// the new place.
 window.addEventListener('click', event => {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
   if (!link || !movesInFile(event, link)) return;
@@ -137,8 +142,11 @@ window.addEventListener('click', event => {
     cancel.call(event);
     moveTo(link);
   };
+  const byHost = () =>
+    event.eventPhase === Event.CAPTURING_PHASE && (event.currentTarget === window || event.currentTarget === document);
   event.preventDefault = function () {
-    cancelled = true;
+    if (byHost()) held = true;
+    else cancelled = true;
     return cancel.call(this);
   };
   const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');

@@ -114,6 +114,43 @@ const TYPES = {
  * the control by its role and accessible name.
  * @type {{do: string, role?: string, name?: string, key?: string, text?: string, shows: Record<string, unknown>}[]}
  */
+// A page that routes on its address, as an app with in-page navigation does:
+// its links name a place, and the page shows the one the address names.
+const ROUTES = `import {useEffect, useState} from 'react';
+import {Heading} from '@astryxdesign/core/Heading';
+
+const titles = {home: 'Home page', members: 'Members page', settings: 'Settings page'};
+export default function Page() {
+  const [place, setPlace] = useState('home');
+  useEffect(() => {
+    const follow = () => setPlace(window.location.hash.slice(1) || 'home');
+    follow();
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
+  }, []);
+  return (
+    <main>
+      <nav>
+        <a href="#home">Home</a> <a href="#members">Members</a> <a href="#settings">Settings</a>{' '}
+        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a>
+      </nav>
+      <Heading level={1}>{titles[place] ?? 'Home page'}</Heading>
+    </main>
+  );
+}
+`;
+
+// What a viewer may do in the frame it shows a file in: cancel every link to a
+// place in the page on its way down and scroll to the place itself, leaving
+// the frame's address as it is.
+const HOST_SCROLLS = `<script>document.addEventListener('click', function (event) {
+  var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+  if (!link) return;
+  event.preventDefault();
+  var place = document.getElementById(link.getAttribute('href').slice(1));
+  if (place) place.scrollIntoView({block: 'start'});
+}, true);</script>`;
+
 const STEPS = [
   {
     do: 'click',
@@ -257,6 +294,8 @@ describe.runIf(BROWSER_STEP)(
     let browser;
     /** @type {string} */
     let file;
+    /** @type {string} */
+    let routes;
 
     beforeAll(async () => {
       home = makeLinkedFixture('astryx-render-parity-', [
@@ -296,6 +335,9 @@ describe.runIf(BROWSER_STEP)(
 
       await render('page.tsx', {cwd: home, out: 'page.html'});
       file = fs.readFileSync(path.join(home, 'page.html'), 'utf8');
+      fs.writeFileSync(path.join(home, 'routes.tsx'), ROUTES);
+      await render('routes.tsx', {cwd: home, out: 'routes.html'});
+      routes = fs.readFileSync(path.join(home, 'routes.html'), 'utf8');
 
       const executablePath = chromium.executablePath();
       if (!fs.existsSync(executablePath))
@@ -374,6 +416,64 @@ describe.runIf(BROWSER_STEP)(
         await context.close();
       }
     }, 300_000);
+
+    it('moves to the place a link names in a viewer frame, also when the viewer cancels the link itself', async () => {
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      await context.route('**/*', (/** @type {any} */ route) =>
+        route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort(),
+      );
+      try {
+        for (const host of ['', HOST_SCROLLS]) {
+          const viewer = await context.newPage();
+          /** @type {string[]} */
+          const errors = [];
+          viewer.on('pageerror', (/** @type {Error} */ e) =>
+            errors.push(e.message),
+          );
+          const framed = routes.replace(
+            '<head>',
+            `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">${host}`,
+          );
+          await viewer.setContent(
+            `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+              .replace(/&/g, '&amp;')
+              .replace(/"/g, '&quot;')}"></iframe></body>`,
+          );
+          const scope = viewer.frameLocator('iframe');
+          const heading = scope.getByRole('heading', {level: 1});
+          await heading.getByText('Home page').waitFor();
+          const shown = [];
+          for (const name of [
+            'Members',
+            'Settings',
+            'Members, cancelled',
+            'Home',
+          ]) {
+            await scope.getByRole('link', {name, exact: true}).click();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            shown.push(await heading.textContent());
+          }
+          // A link the page cancels itself stays where it is.
+          expect(
+            shown,
+            host ? 'viewer cancels the link' : 'plain frame',
+          ).toEqual([
+            'Members page',
+            'Settings page',
+            'Settings page',
+            'Home page',
+          ]);
+          expect(errors).toEqual([]);
+          await viewer.close();
+        }
+      } finally {
+        await context.close();
+      }
+    }, 120_000);
 
     it('opens a link out of the file in a new tab, leaving the page in its frame', async () => {
       expect(file).toContain(
