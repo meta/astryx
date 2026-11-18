@@ -63,6 +63,7 @@ import {isDisabledControl} from '../utils/pressDisabled';
 import {isElement, isHTMLElement} from '../utils/nodeType';
 import {findTextEntryControl} from '../keyboard/keyboardHeight';
 import {
+  isLastPointerTouch,
   isTextEntrySincePointer,
   useInteractionModalityTrackingFor,
 } from '../utils/interactionModality';
@@ -299,6 +300,15 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * rules as a tap it sees, and arms the outside dismissal when it opens.
    */
   answerTap: (tapEvent: Event | null) => void;
+  /**
+   * Whether a mouse arrival on the trigger now comes from a finger, not a
+   * hovering pointer: the trigger's own pointer is a finger, the document's
+   * last pointer was a finger (a tap's compatibility mouse events also reach
+   * a trigger that moved under the finger), or the device has no pointer
+   * that can hover. Gate hover-opening on it; a leave keeps the trigger's own
+   * pointer check, so a mouse-opened layer still closes.
+   */
+  isTouchHover: () => boolean;
 }
 
 /**
@@ -337,6 +347,15 @@ export function useTouchTrigger(
  *
  * @internal
  */
+/**
+ * Whether the trigger's device has no pointer that can hover, as on a phone:
+ * every mouse event there is a tap's compatibility event.
+ */
+function hasNoHoverPointer(trigger: Element | null): boolean {
+  const view = trigger?.ownerDocument.defaultView;
+  return view?.matchMedia?.('(any-hover: none)').matches === true;
+}
+
 export function useTouchTriggerInternal(
   options: UseTouchTriggerOptions,
   /**
@@ -465,6 +484,15 @@ export function useTouchTriggerInternal(
     [triggerRef],
   );
 
+  const isTouchHover = useCallback(() => {
+    const trigger = triggerRef.current;
+    return (
+      isTouchPointerRef.current ||
+      isLastPointerTouch(trigger) ||
+      hasNoHoverPointer(trigger)
+    );
+  }, [triggerRef]);
+
   const handlePointerEnter = useCallback((event: PointerEvent) => {
     // Only a finger is hoverless on arrival. A pen in detection range hovers
     // like a mouse, and treating its arrival as touch would bail out of the
@@ -567,5 +595,6 @@ export function useTouchTriggerInternal(
     clearTapOpen: disarmOutsideDismiss,
     armOutsideDismiss,
     answerTap,
+    isTouchHover,
   };
 }

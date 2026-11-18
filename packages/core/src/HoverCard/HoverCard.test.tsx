@@ -1709,6 +1709,77 @@ describe('HoverCard', () => {
       });
     });
 
+    it('closes a mouse-opened card on the compatibility mouseleave of a tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            delay={0}
+            hideDelay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerOver(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      });
+    });
+
+    it('opens nothing on a mouse arrival when the device has no pointer that can hover', async () => {
+      const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+          matches: query === '(any-hover: none)',
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }),
+      });
+      try {
+        const onOpenChange = vi.fn();
+        render(
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>,
+        );
+        // No pointer event reached the page: a phone's tap that mounted the
+        // trigger under the finger before any Core component tracked input.
+        fireEvent.mouseEnter(screen.getByText('Ruby Cheung'));
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(onOpenChange).not.toHaveBeenCalled();
+      } finally {
+        if (original == null) {
+          Reflect.deleteProperty(window, 'matchMedia');
+        } else {
+          Object.defineProperty(window, 'matchMedia', original);
+        }
+      }
+    });
+
     it('opens on a tap when the trigger performs no action', async () => {
       const onOpenChange = vi.fn();
       render(

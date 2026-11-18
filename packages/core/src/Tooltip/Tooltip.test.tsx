@@ -505,6 +505,37 @@ describe('Tooltip', () => {
       });
     });
 
+    it('closes a mouse-opened tooltip on the compatibility mouseleave of a tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip
+            content="Tooltip text"
+            onOpenChange={onOpenChange}
+            delay={0}
+            hideDelay={0}>
+            Abbreviation
+          </Tooltip>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerOver(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      });
+    });
+
     it('opens on a tap after React discards a render that controls it', async () => {
       // A transition that suspends for good: React renders it, then keeps the
       // committed tree and never commits that render.

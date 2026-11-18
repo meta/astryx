@@ -29,7 +29,7 @@ import {
   type LayerPlacement,
 } from '../Layer/useLayer';
 import {
-  useTouchTrigger,
+  useTouchTriggerInternal,
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -41,7 +41,6 @@ import {
   radiusVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {isLastPointerTouch} from '../utils/interactionModality';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({
@@ -360,7 +359,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     handlePointerEnter,
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
-  } = useTouchTrigger({
+    isTouchHover,
+  } = useTouchTriggerInternal({
     touchTrigger,
     isEnabled,
     isControlled: isOpen !== undefined,
@@ -396,13 +396,6 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     }, hideDelay);
   }, [isOpen, clearTimeouts, hideLayer, hideDelay]);
 
-  // A tap's compatibility mouse events are not hover. They also reach a
-  // trigger that moved under the finger, which saw no pointer of its own.
-  const isTouchHover = useCallback(
-    () => isTouchPointerRef.current || isLastPointerTouch(triggerRef.current),
-    [isTouchPointerRef],
-  );
-
   // Event handlers
   const handleMouseEnter = useCallback(() => {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
@@ -417,11 +410,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const handleMouseLeave = useCallback(() => {
     // On touch the synthesized mouseleave arrives with the next tap elsewhere,
     // which the outside-tap dismissal already handles.
-    if (isTouchHover()) {
+    if (isTouchPointerRef.current) {
       return;
     }
     scheduleHide();
-  }, [isTouchHover, scheduleHide]);
+  }, [isTouchPointerRef, scheduleHide]);
 
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
@@ -721,7 +714,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
             clearTimeouts();
           }}
           onMouseLeave={() => {
-            if (isTouchHover()) {
+            if (isTouchPointerRef.current) {
               return;
             }
             isHoveringContentRef.current = false;
@@ -759,6 +752,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       scheduleHide,
       popoverXstyle,
       isTouchHover,
+      isTouchPointerRef,
     ],
   );
 
