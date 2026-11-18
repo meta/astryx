@@ -281,9 +281,10 @@ All five contracts belong to the platform's core: every binary has them.
 
 ### Behaviour across binaries
 
-- **FR10 — The group is at its baseline.** Every contract in this group is at
-  revision 1 on iOS and Android, `isLargeContentImage` included, and lists no
-  named feature (`spec:AST-140/FR5`).
+- **FR10 — The group is at its baseline.** Each contract's baseline is its first
+  release's shape (`spec:AST-140/FR5`), on iOS and Android,
+  `isLargeContentImage` included. No contract in this group lists a named
+  feature.
 - **FR11 — Absence never throws.** Every probe answers false, every call
   resolves a result (`spec:AST-140/FR3`), and every absent view reports
   `no-native-view` and draws its fallback (`spec:AST-140/FR2`). Setting the
@@ -316,7 +317,7 @@ All five contracts belong to the platform's core: every binary has them.
   Symbol's minimum iOS; symbol effects by kind on iOS 17, 18, or 26 (FR3).
 - Unsupported behavior: an absent view draws its fallback and reports
   `no-native-view`; an absent module answers `no-module`; a binary without a
-  named feature keeps the revision-1 behavior, draws its fallback, or answers
+  named feature keeps the baseline behavior, draws its fallback, or answers
   `unsupported` (`spec:AST-140/FR5`, FR11).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, and devices (`spec:AST-112/FR15`).
@@ -325,8 +326,8 @@ All five contracts belong to the platform's core: every binary has them.
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces link
   by default, so these five core contracts are in every binary.
-- Relies on `spec:AST-140/FR5`: every contract starts at revision 1 and later
-  behavior is a named feature the binary reports.
+- Relies on `spec:AST-140/FR5`: each contract's baseline is its first release's
+  shape, and later behavior is a named feature the binary reports.
 - Changes `spec:AST-112/FR1`: the core's list gains `AstryxIconView`,
   `AstryxIcons`, `AstryxVectorView`, and `AstryxVectorInfo` beside system
   symbols.
@@ -351,7 +352,7 @@ All five contracts belong to the platform's core: every binary has them.
 | FR7      | Unit tests through `installPlainVectorViewForTesting`; accessibility-hierarchy checks on the Simulator and emulator; UI-thread frame checks (no JavaScript per frame) | a new scene object; the same object again; a label; no label; the view absent                                                                      | A resend for the same object, a touch taken, an unlabeled drawing exposed to screen readers, or a fallback that changes the layout            |
 | FR8      | Unit tests through `mockVectorInfo()`                                                                                                                                 | no module; version 2; a view without a report                                                                                                      | A version 2 scene sent to a binary that does not read it, or a silent blank drawing                                                           |
 | FR9      | iOS Simulator accessibility checks at an accessibility text size                                                                                                      | a marked glyph; a glyph change; RTL; unmount; two marked glyphs                                                                                    | No image in the viewer, a stale image after a glyph change, an image left after unmount, or a change outside the surface                      |
-| FR10     | The platform's spec rules check                                                                                                                                       | each contract on iOS and Android                                                                                                                   | A contract above revision 1 or with a named feature this record does not list                                                                 |
+| FR10     | The platform's spec rules check                                                                                                                                       | each contract on iOS and Android                                                                                                                   | A contract whose baseline changes, or one with a named feature this record does not list                                                      |
 | FR11     | Unit tests of every probe, call, and view in the absent shape; `isPlatformEnabled={false}` library tests                                                              | Jest with no natives; the platform off                                                                                                             | A throw, a rejection, or an `Icon` that shows nothing with the platform off                                                                   |
 | FR12     | Review of the native sources' imports and calls                                                                                                                       | each view and module on iOS and Android                                                                                                            | A call to an API outside the platform's public SDKs                                                                                           |
 
