@@ -2712,7 +2712,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8')).toContain('North South');
     expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
