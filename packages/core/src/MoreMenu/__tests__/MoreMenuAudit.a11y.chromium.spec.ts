@@ -620,11 +620,25 @@ for (const mode of ['light', 'dark'] as const) {
       // The story opens its sheet on load.
       const dialog = page.getByRole('dialog');
       await dialog.first().waitFor({state: 'visible', timeout: 5000});
+      const labels = ['Edit', 'Duplicate', 'Share', 'Delete'];
+      // The story opens its sheet as it mounts, which can be before the
+      // rows' module has loaded at rest. Then the rows show a moment after
+      // the dialog does, so wait for them before the sheet is read.
+      await Promise.all(
+        labels.map(async label =>
+          dialog
+            .first()
+            .getByText(label, {exact: true})
+            .first()
+            .waitFor({state: 'visible', timeout: 5000})
+            .catch(() => {}),
+        ),
+      );
       await settle(page);
       const sheet = await dialog.first().evaluate(el => ({
         text: el.textContent ?? '',
       }));
-      for (const label of ['Edit', 'Duplicate', 'Share', 'Delete']) {
+      for (const label of labels) {
         check(sheet.text.includes(label), `sheet has no "${label}" row`);
       }
       const expanded = await trigger.getAttribute('aria-expanded');
