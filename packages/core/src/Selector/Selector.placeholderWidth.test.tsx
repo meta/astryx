@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * An input Selector takes the width its field gives it and ellipsizes its
- * value, so a long placeholder never sets how wide the field must be. Ghost
- * and secondary triggers size to their value.
+ * An input Selector's value keeps its one-line width as the field's
+ * preferred width but sets no minimum: it may break anywhere and shows one
+ * clamped line. Ghost and secondary triggers keep `nowrap`.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -27,9 +27,10 @@ describe('a Selector value', () => {
         onChange={() => {}}
       />,
     );
-    expect(getComputedStyle(screen.getByText(PLACEHOLDER)).contain).toBe(
-      'inline-size',
-    );
+    const style = getComputedStyle(screen.getByText(PLACEHOLDER));
+    expect(style.wordBreak).toBe('break-all');
+    expect(style.whiteSpace).toBe('normal');
+    expect(style.getPropertyValue('-webkit-line-clamp')).toBe('1');
   });
 
   it.each(['ghost', 'secondary'] as const)(

@@ -205,13 +205,17 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     textAlign: 'start',
   },
-  // An input trigger takes the width its field gives it and ellipsizes its
-  // value, so the value never sets how wide the field must be: without this,
-  // a long placeholder's one-line width becomes the layout's minimum and
-  // pushes a narrow page sideways. Ghost and secondary triggers size to their
-  // value and keep it.
+  // An input trigger's value keeps its one-line width as the field's
+  // preferred width but sets no minimum: it may break between any two
+  // characters, and the clamp shows only its first line with an ellipsis,
+  // as `nowrap` would. A long placeholder then cannot push a narrow page
+  // sideways. Ghost and secondary triggers keep `nowrap`.
   triggerLabelInField: {
-    contain: 'inline-size',
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: 1,
+    whiteSpace: 'normal',
+    wordBreak: 'break-all',
   },
   // Inside an InputGroup the group's own height is the row, and the trigger
   // takes it: `height: 100%` from `groupStyles.inGroup` can only govern if the
