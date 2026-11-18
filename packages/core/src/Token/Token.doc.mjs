@@ -49,7 +49,7 @@ export const docs = {
       name: 'removeButtonLabel',
       type: 'string',
       description:
-        'Accessible name for the remove button. Use it when several tokens share a label and each remove button needs context, for example "Remove Morning from Tuesday".',
+        'Fully translated accessible name for the remove button. Use it when several tokens share a label and each remove button needs context, for example "Remove Morning from Tuesday".',
       default: "'Remove {label}'",
     },
     {
@@ -165,7 +165,7 @@ export const docsZh = {
       name: 'removeButtonLabel',
       type: 'string',
       description:
-        '移除按钮的无障碍名称。当多个标记共享同一标签且每个移除按钮需要上下文时使用，例如“Remove Morning from Tuesday”。',
+        '完整翻译后的移除按钮无障碍名称。当多个标记共享同一标签且每个移除按钮需要上下文时使用，例如“Remove Morning from Tuesday”。',
       default: "'Remove {label}'",
     },
     {
@@ -257,7 +257,7 @@ export const docsDense = {
     icon: 'Optional icon before label.',
     isDisabled: 'Reduces opacity, blocks interactions.',
     onRemove: 'Fired on remove button click. Renders X button when provided.',
-    removeButtonLabel: 'Accessible name for the remove button; defaults to "Remove {label}".',
+    removeButtonLabel: 'Fully translated accessible name for the remove button; defaults to "Remove {label}".',
     onClick: 'Click handler. Renders <span> w/ invisible <button> inside for a11y.',
     href: 'Link URL. Renders as <a> element. Follows the shared navigation rule (see Link href).',
     description: 'A11y description via aria-description on root.',

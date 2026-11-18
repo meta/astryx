@@ -158,7 +158,13 @@ export const WithRemove: Story = {
  */
 export const RepeatedLabelsWithRemove: Story = {
   render: () => (
-    <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '8px',
+      }}>
       {['Monday', 'Tuesday', 'Wednesday'].map(day => (
         <Token
           key={day}
