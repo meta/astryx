@@ -63,12 +63,8 @@ Real asks said next to a question ("set font to Inter; does that need an import?
 
 - `astryx experimental theme editor`: a role color the theme sets now reaches a badge or other part the base theme draws for that role in a color of another family (stone's info badge in its categorical blue): the part takes the role token the base gives that same color, so its look stays and it follows the role.
 
-- Palette recipe `astryx-oklch-v2`: a dusty seed's pale tints (above shade 70) stay at or below its own chroma even where the gamut is wide, so a muted olive gives an earthy tint instead of chartreuse; the middle of a ramp is still drawn as v1 draws it.
-
 - `astryx experimental theme editor`: the fix line for a loading placeholder that does not show now offers the theme's own gray nearest the placeholder's color (else a darker or lighter shade of that color), not a plain gray.
 
 - `astryx experimental theme editor`: a role's icons and status dots (warning, danger, success, info, accent) take the shade nearest the role's fill that reads at 3:1, as WCAG asks of graphics, instead of text's deeper 4.5:1 shade, so a warning dot stays nearer amber where warning text deepens.
-
-- `astryx theme build` gives one warning, at its line, for a part's variants written as other styling libraries write them (`variants: {variant: {secondary: {…}}}`), naming the style keys that write them (`'variant:secondary': {…}`), instead of three warnings that never showed the working form. The output is the same as before.
 
 @josephfarina
