@@ -180,7 +180,8 @@ the rules above. Which pieces link in every app and which an app opts in is
     `ArrayBuffer`, the method's own argument after its request object (FR3),
     such as bytes an app hands over for analysis.
   - Bytes that native code produces cross as a `file:` URI to a file in the
-    core's cache. A short, fixed-size value, such as a block of random bytes,
+    core's cache. The file stays there until the system reclaims the cache;
+    the core never deletes it itself (`spec:AST-130/FR14`). A short, fixed-size value, such as a block of random bytes,
     may cross as a base64 string.
   - No size limit refuses or cuts bytes in either direction. A large value is
     handled by its shape: native code reads an `ArrayBuffer` in place and
@@ -492,10 +493,3 @@ carry a per-frame reader of its view tree.
   Options: iOS only, as FR7 states, with `recordFrames` throwing
   `unsupported-step` on Android; or a frame-callback recorder on Android with
   the same samples.
-- **OQ4 — How long does a file that native code produces stay in the core's
-  cache?** (`human-api`) Options:
-  - **Until the system or the app clears the cache.** A caller that keeps the
-    bytes copies the file to its own storage; a file it does not copy may be
-    gone at the next launch.
-  - **Until the caller releases it.** The file stays until a release call or
-    the end of the runtime that received it, and the platform deletes it then.
