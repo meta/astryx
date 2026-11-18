@@ -159,9 +159,10 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent | KeyboardEvent): boolean => {
       // A bare Space with no active buffer is not typeahead (menus activate on
-      // Space); once the user is mid-typing, Space extends the query. Chorded
-      // with ctrl or meta it is neither — that is an OS or IME shortcut, and
-      // consuming it would append a raw space that poisons the whole buffer.
+      // Space); once the user is mid-typing, Space extends the query. With a
+      // Control or Command shortcut it is neither — that is an OS or IME
+      // shortcut, and consuming it would append a raw space that poisons the
+      // whole buffer.
       const isSpaceMidType =
         e.key === ' ' &&
         !isShortcutChord(e) &&

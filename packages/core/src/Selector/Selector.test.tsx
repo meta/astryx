@@ -2407,6 +2407,27 @@ describe('Selector', () => {
       await waitFor(() => expect(search).toHaveFocus());
     });
 
+    it('seeds a letter typed with AltGr on a closed hasSearch trigger (INV17)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          hasSearch
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(await screen.findByPlaceholderText('Search…')).toHaveValue('ł');
+    });
+
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
