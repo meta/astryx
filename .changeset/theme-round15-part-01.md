@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx experimental theme editor how`:
+[experimental] `astryx experimental theme editor how`:
 
 - A value no page could show, such as a line height of 0 or 99999px of padding, is not written. The answer gives the range that works instead.
 - "List items more spacing between them" points to the list's gap, not each item's padding. A visited link gets the "no visited state" answer.
