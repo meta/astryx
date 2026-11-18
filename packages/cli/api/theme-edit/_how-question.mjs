@@ -29393,10 +29393,12 @@ function systemFamilyIn(c, question) {
  */
 function fontIn(cl, question) {
   const c = cl.text.replace(/\bsanz\b/g, 'sans');
-  // A family written in quotes, as typed: a shipped font when it names one.
-  for (const name of cl.quoted ?? []) {
+  // (A family the editor's font tables name is its preset, with the
+  // table's fallbacks: "Segoe UI" is `segoe`.)
+  /** @param {string} name */
+  const presetOf = name => {
     const low = name.toLowerCase();
-    const slug =
+    return (
       Object.keys(OPEN_FONTS).find(
         k =>
           OPEN_FONTS[k].family.toLowerCase() === low ||
@@ -29404,9 +29406,11 @@ function fontIn(cl, question) {
       ) ??
       Object.keys(FONTS).find(
         k => k === low || FONTS[k][0].toLowerCase() === low,
-      );
-    return slug ?? name;
-  }
+      )
+    );
+  };
+  // A family written in quotes, as typed: a shipped font when it names one.
+  for (const name of cl.quoted ?? []) return presetOf(name) ?? name;
   // A shipped font named in the clause, the longest name first, so "Geist
   // Mono" is not Geist and "DM Sans" is not the generic sans.
   const shipped = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)].sort(
@@ -29460,7 +29464,7 @@ function fontIn(cl, question) {
     typed &&
     (!known || typed.replace(/\s+/g, '-').toLowerCase().length > known.length)
   )
-    return typed;
+    return presetOf(typed) ?? typed;
   if (known) return known;
   // "the default Mac font": the system font.
   if (OS_FONT.test(c)) return 'system';
