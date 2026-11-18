@@ -333,6 +333,13 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(tes
  */
 const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 
+/**
+ * An import of a router or history that keeps the route in the URL hash:
+ * React Router's `HashRouter` and `createHashRouter`, or a `createHashHistory`
+ * (TanStack Router, `history`).
+ */
+const HASH_ROUTING_IMPORT = /\bimport\s*(?:type\s+)?\{[^}]*\b(?:HashRouter|createHashRouter|createHashHistory)\b[^}]*\}\s*from\s*['"][^'"]+['"]/;
+
 
 /**
  * The name another module imports a module by: its file name without the
@@ -395,8 +402,9 @@ export function findButtonsWithoutAction(projectDir) {
     if (!installed.has(key)) installed.set(key, findInstalledPackage(path.dirname(file), name, Infinity) != null);
     return installed.get(key) === true;
   };
-  // An app that routes by the URL hash opens its first page from a `#` link.
-  const hashRouting = files.some(file => /\b(?:HashRouter|createHashRouter)\b/.test(textOf(file) ?? ''));
+  // An app that routes by the URL hash opens its first page from a `#` link:
+  // one that imports a hash router or a hash history.
+  const hashRouting = files.some(file => HASH_ROUTING_IMPORT.test(textOf(file) ?? ''));
   /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
   const scans = new Map();
   const scan = (/** @type {string} */ file) => {
@@ -411,6 +419,7 @@ export function findButtonsWithoutAction(projectDir) {
               stem: moduleStem(file),
               hashRouting,
               knownPackage: specifier => knownPackage(specifier, file),
+              jsx: !/\.[cm]?ts$/.test(file),
             }),
       );
     }

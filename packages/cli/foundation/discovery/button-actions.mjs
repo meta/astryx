@@ -865,20 +865,21 @@ function ownModule(specifier, isOwnCode) {
  * action of their own, the components of the app it renders, and the
  * components it exports. Null when the module does not parse.
  * @param {string} source
- * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean, knownPackage?: (specifier: string) => boolean}} options
+ * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean, knownPackage?: (specifier: string) => boolean, jsx?: boolean}} options
  *   `isOwnCode` tells a path alias from a package; `stem` is the module's
  *   name as another module imports it (its file name, or its folder's for an
  *   `index` file); `hashRouting` says the app routes by the URL hash, so a
  *   `#` link opens its first page; `knownPackage` tells a package from a
  *   module path only a bundler resolves (`~/Hero`), whose imports the scan
- *   cannot follow (by default, every bare module path is a package)
+ *   cannot follow (by default, every bare module path is a package); `jsx:
+ *   false` reads a plain TypeScript module (`.ts`)
  * @returns {ModuleScan | null}
  */
-export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false, knownPackage = () => true}) {
+export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false, knownPackage = () => true, jsx = true}) {
   /** @type {any} */
   let file;
   try {
-    file = parseTemplateSource(source);
+    file = parseTemplateSource(source, {jsx});
   } catch {
     return null;
   }
@@ -1116,7 +1117,14 @@ export function buttonsWithoutAction({files, scan, modulesNaming, complete = tru
     if (lookFor.length > 0) {
       for (const other of modulesNaming(lookFor)) {
         if (other === file) continue;
-        for (const use of scan(other)?.uses ?? []) {
+        const read = scan(other);
+        // A module that names the component but cannot be read may render
+        // it anywhere.
+        if (read == null) {
+          places.push({file: other, placement: 'blocked'});
+          continue;
+        }
+        for (const use of read.uses) {
           const byName = use.local == null && use.names.some(name => shared.includes(name));
           const byModule = use.module != null && moduleNames.has(use.module);
           if (byName || byModule) places.push({file: other, placement: use.placement});

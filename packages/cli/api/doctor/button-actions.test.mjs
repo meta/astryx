@@ -145,6 +145,51 @@ describe('the button-actions check', () => {
         'src/App.tsx': app('<Button label="Home" href="#" />'),
       });
       expect(check?.status).toBe('pass');
+      const history = await buttonCheck({
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\nimport {createHashHistory} from '@tanstack/react-router';"),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(history?.status).toBe('pass');
+      // A name in a comment is not an import of a hash router.
+      const comment = await buttonCheck({
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\n// No HashRouter here."),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(comment?.status).toBe('warn');
+    },
+    SLOW,
+  );
+
+  it(
+    'a module that names the component but cannot be read may render it anywhere',
+    async () => {
+      const check = await buttonCheck({
+        'src/main.tsx': MAIN,
+        'src/sections.tsx': ["import {Hero} from './Hero';", '@register', 'class Sections {}', 'export const sections = [Hero];', ''].join('\n'),
+        'src/App.tsx': [
+          "import {sections} from './sections';",
+          'export default function App() {',
+          '  return <a href="/start">{sections.map(S => <S key="s" />)}</a>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/Hero.tsx': HERO.replace('export default function Hero', 'export function Hero'),
+      });
+      expect(check?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'a .ts module is read as TypeScript, so its type assertions do not stop the scan',
+    async () => {
+      const check = await buttonCheck({
+        'src/main.tsx': MAIN,
+        'src/sections.ts': ["import {Hero} from './Hero';", "export const root = <HTMLElement>document.getElementById('root');", 'export {Hero};', ''].join('\n'),
+        'src/App.tsx': ["import {Hero} from './sections';", 'export default function App() {', '  return <main><Hero /></main>;', '}', ''].join('\n'),
+        'src/Hero.tsx': HERO.replace('export default function Hero', 'export function Hero'),
+      });
+      expect(check?.message).toBe('1 button does nothing when pressed: src/Hero.tsx:3 "Start".');
     },
     SLOW,
   );
