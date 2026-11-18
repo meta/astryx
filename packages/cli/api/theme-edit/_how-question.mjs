@@ -28217,6 +28217,21 @@ export function draftAnswer(ctx, env, question) {
             !aspectsOf(w).length &&
             stateWord(w) == null &&
             !colorsIn(w).length &&
+            // (A weight word, "normal text", "medium labels", is read by the
+            // weight reader: once an answer writes a weight, it is no word
+            // left out.)
+            !(
+              /^(?:thin|light|regular|normal|medium|semi-?bold|bold|heavy|black|extra-?bold)$/.test(
+                w,
+              ) &&
+              result.some(r =>
+                r.options.some(o =>
+                  o.some(st =>
+                    /^(?:font-weight|--font-weight)/.test(String(st.thing)),
+                  ),
+                ),
+              )
+            ) &&
             // (A warm or cool look is read by the neutral dial's grays.)
             !/^(?:warm|cool)(?:er)?$/.test(w) &&
             !/^(?:dark|light)(?:-only)?$/.test(w) &&
