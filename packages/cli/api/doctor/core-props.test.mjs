@@ -47,7 +47,7 @@ function link(app, name, target) {
  * @param {{typescript?: boolean}} [options]
  */
 async function propsCheck(files, {typescript = true} = {}) {
-  const app = path.join(tmp, 'app');
+  const app = fs.mkdtempSync(path.join(tmp, 'app-'));
   const all = {
     'package.json': JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}}),
     ...files,
@@ -127,6 +127,29 @@ describe('doctor core-props', () => {
       });
       expect(check?.status).toBe('pass');
       expect(check?.message).toMatch(/^Every prop given to a Core component is one it takes \(\d+ props read\)\.$/);
+    },
+    SLOW,
+  );
+
+  it(
+    "reads a project's own declaration that gives every component a prop, and judges no module or project on another JSX runtime",
+    async () => {
+      // A library's css prop, declared for every component by the project's own types.
+      const declared = await propsCheck({
+        'src/css-prop.d.ts': "import 'react';\ndeclare module 'react' {\n  interface Attributes {\n    css?: unknown;\n  }\n}\n",
+        'src/App.tsx': app('Button', '<Button label="Go" css={{}} />'),
+      });
+      expect(declared?.status).toBe('pass');
+      const pragma = await propsCheck({
+        'src/App.tsx': ['/** @jsxImportSource @emotion/react */', app('TabList', '<TabList selectedID="a" />')].join('\n'),
+      });
+      expect(pragma?.status).toBe('pass');
+      const config = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', jsxImportSource: '@emotion/react'}}),
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(config?.status).toBe('info');
+      expect(config?.message).toMatch(/^Not checked: The project compiles JSX with `@emotion\/react`/);
     },
     SLOW,
   );

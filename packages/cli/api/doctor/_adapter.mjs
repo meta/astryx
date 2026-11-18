@@ -242,6 +242,9 @@ export function readTextFileIfExists(file) {
   }
 }
 
+/** The most source files {@link listProjectSourceFiles} reads. */
+const SOURCE_FILE_LIMIT = 5000;
+
 /**
  * A bounded app-source walk that excludes dependencies, generated output, and
  * links. The doctor parses the returned bytes without executing app code.
@@ -255,7 +258,7 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
   const files = [];
   /** @type {string[]} */
   const queue = [root];
-  while (queue.length > 0 && files.length < 5000) {
+  while (queue.length > 0 && files.length < SOURCE_FILE_LIMIT) {
     const dir = /** @type {string} */ (queue.shift());
     let entries;
     try {
@@ -324,6 +327,20 @@ export function findIconPlaceholders(projectDir) {
 }
 
 /**
+ * A TypeScript module that may widen what JSX gives every component: one
+ * that augments React or the global scope (where `JSX` lives), or that loads
+ * a library's `css` prop types.
+ */
+const JSX_DECLARATION = /\bdeclare\s+(?:module\s+['"]react(?:\/jsx-runtime)?['"]|global\b)|\bnamespace\s+JSX\b|styled-components\/cssprop|@emotion\/react\/types\/css-prop/;
+
+/**
+ * A module that compiles its JSX with a runtime other than React's (a
+ * `@jsxImportSource` or `@jsx` pragma), which can give every component props
+ * of its own.
+ */
+const OTHER_JSX_RUNTIME = /@jsxImportSource\s+(?!react(?:\s|\*|$))\S|@jsx\s+[A-Za-z_$]/m;
+
+/**
  * Test, story and fixture files, and the folders that usually hold them:
  * code that shows or checks a component, not a page a person uses.
  */
@@ -347,12 +364,16 @@ const NOT_PAGE_CODE =
  * component (the props `astryx component <Name> --package @astryxdesign/core`
  * lists) leave it out, and it is reported only when the project's TypeScript,
  * reading Core's own published types as the project's pages see them, says
- * the component's props do not take it either. The name of an HTML, SVG, DOM
- * or ARIA attribute React's types know is never reported: a component may
- * pass it on to the element it renders. A component with no docs, one
- * TypeScript cannot read, and a generic one are not judged. Test, story and
- * fixture files are not read. `skipped` says why nothing was judged: no
- * TypeScript, or types or augmentations it could not read.
+ * the component's props do not take it either; the project's own modules
+ * that widen React's JSX are read with Core's types. A prop name React's types
+ * give an HTML or SVG element is never reported, since a component may pass
+ * it on to the element it renders, and neither is a prop JSX gives every
+ * component. A component with no docs, one TypeScript cannot read, a generic
+ * one, and a module that compiles its JSX with another runtime are not
+ * judged. Test, story and fixture files are not read. `skipped` says why
+ * nothing was judged: no TypeScript, a project on another JSX runtime, more
+ * source files than doctor reads, or types or augmentations it could not
+ * read.
  * @param {string} projectDir
  * @returns {Promise<{found: UnknownCoreProp[], uses: number, skipped: string | null}>}
  */
@@ -360,15 +381,18 @@ export async function findUnknownCoreProps(projectDir) {
   const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
   /** @type {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string}>} */
   const uses = [];
-  for (const file of listProjectSourceFiles(projectDir, '')) {
-    if (NOT_PAGE_CODE.test(relative(file))) continue;
+  /** @type {string[]} */
+  const jsxDeclarations = [];
+  const files = listProjectSourceFiles(projectDir, '');
+  for (const file of files) {
     let text;
     try {
       text = readTextFile(file);
     } catch {
       continue;
     }
-    if (!text.includes('@astryxdesign/core')) continue;
+    if (/\.[cm]?ts$/.test(file) && JSX_DECLARATION.test(text)) jsxDeclarations.push(file);
+    if (NOT_PAGE_CODE.test(relative(file)) || !text.includes('@astryxdesign/core') || OTHER_JSX_RUNTIME.test(text)) continue;
     for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file)});
   }
   // One batch read of the props Core's docs list, as `astryx component
@@ -390,6 +414,11 @@ export async function findUnknownCoreProps(projectDir) {
     return props != null && !props.includes(use.prop);
   });
   if (candidates.length === 0) return {found: [], uses: uses.length, skipped: null};
+  // A declaration beyond the files doctor reads could add a prop to every
+  // component.
+  if (files.length >= SOURCE_FILE_LIMIT) {
+    return {found: [], uses: uses.length, skipped: 'the project has more source files than doctor reads, so the props were not checked.'};
+  }
   const compiler = resolveProjectTypeScript([projectDir]);
   if (compiler === null) {
     return {found: [], uses: uses.length, skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`};
@@ -404,7 +433,7 @@ export async function findUnknownCoreProps(projectDir) {
   /** @type {Map<string, Set<string>>} */
   const asked = new Map();
   for (const use of candidates) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
-  const types = readCorePropTypes({ts: compiler.ts, projectDir, augmentations: augmentations.files, props: asked});
+  const types = readCorePropTypes({ts: compiler.ts, projectDir, augmentations: [...augmentations.files, ...jsxDeclarations], props: asked});
   if (types.unread) return {found: [], uses: uses.length, skipped: `${types.unread}, so the props were not checked.`};
   const found = candidates
     .filter(use => !types.attributes.has(use.prop) && types.takes.get(use.component)?.get(use.prop) === false)

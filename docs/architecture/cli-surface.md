@@ -378,17 +378,20 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   component do not list is a candidate. The `core-props` check reads Core's
   own published types with the project's own TypeScript, as the project's
   pages see them, together with the files of the project and of its installed
-  theme and integration packages that augment Core's modules. It warns on a
-  candidate only when TypeScript says the component's props do not take it,
-  and never on the name of an HTML, SVG, DOM or ARIA attribute that React's
-  types know, which a component can pass on to the element it renders. It
-  does not judge a component that Core's docs do not describe, one whose type
-  TypeScript cannot read, a generic one, or one from outside Core. When the
-  project has no TypeScript that it can use, or when the types or the files
-  that augment Core cannot all be read, the check does not run and says why.
-  The warning names each prop's file, line and component, and the documented
-  prop that the name is closest to when one is close, as a failed
-  `astryx component` lookup suggests a name. It never fails `doctor`.
+  theme and integration packages that augment Core's modules, and the
+  project's own modules that widen React's JSX. It warns on a candidate only
+  when TypeScript says the component's props do not take it. It never warns
+  on a prop name that React's types give an HTML or SVG element, which a
+  component can pass on to the element it renders, or on a prop that JSX
+  gives every component. It does not judge a component that Core's docs do
+  not describe, one whose type TypeScript cannot read, a generic one, or one
+  from outside Core, and it does not judge a module that compiles its JSX
+  with another runtime. When the project has no TypeScript that it can use,
+  compiles JSX with another runtime, has more source files than `doctor`
+  reads, or when the types or the files that augment Core cannot all be read,
+  the check does not run and says why. The warning names each prop's file,
+  line and component, and the documented prop that has the same words when
+  there is one. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

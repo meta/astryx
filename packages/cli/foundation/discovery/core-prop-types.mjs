@@ -63,9 +63,10 @@ function subpathsByComponent(projectDir) {
 
 /**
  * A module that exists only for this read: it names each component's props
- * type, imported from the module that declares it, and every prop name of
- * every HTML and SVG element React's types know (`React.JSX`, or the global
- * `JSX` of older React types).
+ * type, imported from the module that declares it; every prop name of every
+ * HTML and SVG element React's types know; and the props JSX gives every
+ * component (`React.JSX`, or the global `JSX` of older React types), which a
+ * project's own declarations can widen (a `css` prop).
  * @param {string[]} components
  * @param {Map<string, string>} modules each component's module
  */
@@ -76,6 +77,8 @@ function queryText(components, modules) {
     "import type * as React from 'react';",
     'export type Attributes = {[K in keyof React.JSX.IntrinsicElements]: keyof React.JSX.IntrinsicElements[K]}[keyof React.JSX.IntrinsicElements];',
     'export type GlobalAttributes = {[K in keyof JSX.IntrinsicElements]: keyof JSX.IntrinsicElements[K]}[keyof JSX.IntrinsicElements];',
+    'export type Everywhere = keyof (React.JSX.IntrinsicAttributes & React.JSX.IntrinsicClassAttributes<unknown>);',
+    'export type GlobalEverywhere = keyof (JSX.IntrinsicAttributes & JSX.IntrinsicClassAttributes<unknown>);',
     ...components.flatMap((_, i) => [
       `export type Component${i} = typeof Component${i}Value;`,
       `export type Props${i} = React.ComponentProps<typeof Component${i}Value>;`,
@@ -89,6 +92,22 @@ function queryText(components, modules) {
  * @param {any} type
  */
 const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
+
+/**
+ * The JSX runtime other than React's that the project's TypeScript config
+ * names (`jsxImportSource`), or null.
+ * @param {any} ts
+ * @param {string} projectDir
+ * @returns {string | null}
+ */
+function jsxRuntime(ts, projectDir) {
+  const config = ts.findConfigFile(projectDir, ts.sys.fileExists, 'tsconfig.json');
+  if (!config) return null;
+  const read = ts.readConfigFile(config, ts.sys.readFile);
+  if (read.error) return null;
+  const source = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(config)).options.jsxImportSource;
+  return typeof source === 'string' && source !== 'react' ? source : null;
+}
 
 /**
  * Whether a component is generic: its props may come from a type argument the
@@ -108,7 +127,8 @@ function isGeneric(ts, checker, type) {
  * @property {Map<string, Map<string, boolean>>} takes for each component
  *   whose props type TypeScript reads, whether it takes each prop asked about
  * @property {Set<string>} attributes the prop names React's types give HTML
- *   and SVG elements, DOM events and ARIA attributes included
+ *   and SVG elements, DOM events and ARIA attributes included, and the props
+ *   JSX gives every component
  * @property {string | null} unread why the types could not be read, or null
  */
 
@@ -116,17 +136,28 @@ function isGeneric(ts, checker, type) {
  * Read Core's own published types with the project's TypeScript, as the
  * project's pages see them: Core and React resolved from the project folder,
  * each component from the Core subpath that exports it, with the files that
- * augment Core's modules read too. Nothing is written: the module that names
- * the types exists only in memory. A component whose type TypeScript cannot
- * read, or that is generic, is left out of `takes`.
+ * augment Core's modules or React's JSX read too. Nothing is written: the
+ * module that names the types exists only in memory. A component whose type
+ * TypeScript cannot read, or that is generic, is left out of `takes`. A
+ * project whose TypeScript config compiles JSX with another runtime
+ * (`jsxImportSource`), which can give every component props of its own, is
+ * not read.
  * @param {object} input
  * @param {any} input.ts the project's TypeScript compiler
  * @param {string} input.projectDir
- * @param {string[]} input.augmentations files that augment Core
+ * @param {string[]} input.augmentations files that augment Core or React's JSX
  * @param {Map<string, Set<string>>} input.props for each component, the props to judge
  * @returns {CorePropTypes}
  */
 export function readCorePropTypes({ts, projectDir, augmentations, props}) {
+  const runtime = jsxRuntime(ts, projectDir);
+  if (runtime) {
+    return {
+      takes: new Map(),
+      attributes: new Set(),
+      unread: `The project compiles JSX with \`${runtime}\`, which can give every component props of its own`,
+    };
+  }
   const components = [...props.keys()];
   const file = path.join(projectDir, '__astryx_core_props__.ts');
   const text = queryText(components, subpathsByComponent(projectDir));
@@ -165,6 +196,10 @@ export function readCorePropTypes({ts, projectDir, augmentations, props}) {
   /** @type {any[]} */
   const names = attributesType?.isUnion() ? attributesType.types : attributesType ? [attributesType] : [];
   const attributes = new Set(names.filter(type => type.isStringLiteral()).map(type => type.value));
+  const everywhere = [aliases.get('Everywhere'), aliases.get('GlobalEverywhere')].find(type => type && !unreadable(ts, type));
+  for (const type of everywhere?.isUnion() ? everywhere.types : everywhere ? [everywhere] : []) {
+    if (type.isStringLiteral()) attributes.add(type.value);
+  }
   if (attributes.size === 0) {
     return {takes, attributes, unread: "TypeScript could not read React's types from this project"};
   }
