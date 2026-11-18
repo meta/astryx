@@ -23,12 +23,11 @@ const FOCUS_OUTLINE_COLOR = focusVars['--focus-outline-color'];
 
 const FOCUS_OUTLINE_OFFSET = focusVars['--focus-outline-offset'];
 
-// Whether the rings show: Core's private `--_focus-ring` switch, 0 after a
-// pointer press. Browsers match `:focus-visible` on a text field, or on an
-// element focused by script, even right after a tap or a click, so each ring
-// scales its width by it. The modality store in `interactionModality.ts` sets
-// it on each document's root; unset, as in server markup or before any input,
-// it reads as 1.
+// Core's private `--_focus-ring` switch is 0 after a pointer press. Browsers
+// match `:focus-visible` on a text field, or after focus by script, even right
+// after a tap or a click, so each ring scales its width by the switch. The
+// store in `interactionModality.ts` sets it on each document's root. Unset, as
+// in server markup or before any input, it reads as 1.
 const RING_ON = 'var(--_focus-ring, 1)';
 const GATED_OUTLINE_WIDTH = `calc(${FOCUS_OUTLINE_WIDTH} * ${RING_ON})`;
 const GATED_OUTLINE = `${GATED_OUTLINE_WIDTH} ${FOCUS_OUTLINE_STYLE} ${FOCUS_OUTLINE_COLOR}`;

@@ -146,6 +146,59 @@ describe('interactionModality', () => {
     expect(ring(pageDocument)).toBe('');
   });
 
+  it('shows the rings for focus that comes back from a child frame or another window with no press here', async () => {
+    // A document with its own window, so the window's blur reaches the store.
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const pageDocument = host.contentDocument as Document;
+    const pageWindow = pageDocument.defaultView as Window;
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    tracker.__startInteractionModalityTrackingForTest();
+    const ring = () =>
+      pageDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    const first = pageDocument.createElement('button');
+    const frame = pageDocument.createElement('iframe');
+    const next = pageDocument.createElement('button');
+    pageDocument.body.append(first, frame, next);
+    const focusIn = (target: Element) =>
+      target.dispatchEvent(new FocusEvent('focusin', {bubbles: true}));
+    const leaveWindow = (activeElement: Element) => {
+      vi.spyOn(pageDocument, 'activeElement', 'get').mockReturnValue(
+        activeElement,
+      );
+      pageWindow.dispatchEvent(new FocusEvent('blur'));
+      vi.restoreAllMocks();
+    };
+
+    try {
+      // A press on the page, then focus into a frame and back out by keyboard.
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      expect(ring()).toBe('0');
+      leaveWindow(frame);
+      focusIn(next);
+      expect(ring()).toBe('');
+
+      // A press that brings focus back from the frame keeps the rings off.
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      leaveWindow(frame);
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      focusIn(first);
+      expect(ring()).toBe('0');
+
+      // The window giving focus back to the element it left is a restore.
+      leaveWindow(first);
+      focusIn(first);
+      expect(ring()).toBe('0');
+      // Focus that comes back to another element moved by keyboard.
+      leaveWindow(first);
+      focusIn(next);
+      expect(ring()).toBe('');
+    } finally {
+      host.remove();
+    }
+  });
+
   it("releases a second document's listeners with its last consumer", async () => {
     const secondDocument = document.implementation.createHTMLDocument();
     const tracker = await loadTracker();
@@ -165,7 +218,7 @@ describe('interactionModality', () => {
 
     releaseSecond();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['keydown', 'pointerdown'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -206,7 +259,7 @@ describe('interactionModality', () => {
     // The last component in that document unmounts: tracking there stops.
     second.unmount();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['keydown', 'pointerdown'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -243,6 +296,7 @@ describe('interactionModality', () => {
     elementRef.current = secondDocument.createElement('div');
     rerender();
     expect(firstRemove.mock.calls.map(([type]) => type).sort()).toEqual([
+      'focusin',
       'keydown',
       'pointerdown',
     ]);
@@ -356,6 +410,7 @@ describe('interactionModality', () => {
       expect(remove).not.toHaveBeenCalled();
       await frame.render(h(Fragment, null));
       expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
+        'focusin',
         'keydown',
         'pointerdown',
       ]);
