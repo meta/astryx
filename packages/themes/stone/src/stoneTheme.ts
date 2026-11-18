@@ -372,20 +372,20 @@ export const stoneTheme = defineTheme({
       },
     },
 
-    // Progress fills use the same family as their matching status surface,
-    // at the stops that reach 3:1 on the skeleton track in each mode.
+    // Status fills take the theme's status roles, and the accent fill uses the
+    // blue family; each reaches 3:1 on the skeleton track in both modes.
     'progress-bar-fill': {
       'variant:accent': {
         backgroundColor: lightDark(blue.light[40], blue.dark[80]),
       },
       'variant:success': {
-        backgroundColor: lightDark(green.light[40], green.dark[80]),
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: lightDark(yellow.light[40], yellow.dark[80]),
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: lightDark(red.light[40], red.dark[80]),
+        backgroundColor: 'var(--color-error)',
       },
       // The secondary text color (stop 70) reads under 3:1 on the dark track,
       // so a neutral or disabled fill takes stop 80 there.

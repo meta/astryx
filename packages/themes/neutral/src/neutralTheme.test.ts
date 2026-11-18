@@ -638,25 +638,29 @@ describe('neutral touch + narrow type pin', () => {
   });
 });
 
-describe('neutral progress track', () => {
-  // A neutral or disabled bar fills with the secondary text color, so the
-  // track keeps that fill at the 3:1 non-text floor in both modes while it
-  // still stands apart from the surface.
+describe('neutral progress fill', () => {
+  // The track follows the emphasized border. A neutral or disabled bar fills
+  // with secondary text in light mode and with stop 75 in dark mode, where
+  // secondary text (stop 65) reads under 3:1 on that track.
   const {light, dark} = neutralPalettes.neutral;
-  it('is the mapped track in both modes', () => {
+  it('keeps the track on the emphasized border', () => {
     expect(neutralTheme.components?.['progress-bar']?.base).toMatchObject({
-      '--color-background-muted': lightDark(light[85], dark[30]),
+      '--color-background-muted': 'var(--color-border-emphasized)',
+    });
+  });
+
+  it.each(['neutral', 'disabled'])('maps a %s fill', variant => {
+    expect(
+      neutralTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+    ).toMatchObject({
+      backgroundColor: `light-dark(var(--color-text-secondary), ${dark[75]})`,
     });
   });
 
   it.each([
-    {name: 'light', track: light[85], fill: light[30], surface: light[100]},
-    {name: 'dark', track: dark[30], fill: dark[65], surface: dark[15]},
-  ])(
-    'keeps a secondary-text fill at 3:1 in $name mode',
-    ({track, fill, surface}) => {
-      expect(contrastRatio(fill, track)).toBeGreaterThanOrEqual(3);
-      expect(contrastRatio(track, surface)).toBeGreaterThanOrEqual(1.15);
-    },
-  );
+    {name: 'light', track: light[85], fill: light[30]},
+    {name: 'dark', track: dark[35], fill: dark[75]},
+  ])('keeps the fill at 3:1 on the track in $name mode', ({track, fill}) => {
+    expect(contrastRatio(fill, track)).toBeGreaterThanOrEqual(3);
+  });
 });

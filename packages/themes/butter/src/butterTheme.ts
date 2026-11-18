@@ -728,9 +728,9 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — pale track in light, warm brown in dark. Semantic fills
-    // use the banner families at the stops that reach 3:1 on that track: the
-    // banner stops themselves read at about 1.2:1 to 2.6:1 on it.
+    // Progress bar — pale track in light, warm brown in dark. Status fills take
+    // the theme's status roles, which reach 3:1 on that track; the banner stops
+    // read at about 1.2:1 to 2.6:1 on it in light mode.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
@@ -738,13 +738,13 @@ export const butterTheme = defineTheme({
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: lightDark(green.light[45], green.dark[80]),
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: lightDark(yellow.light[45], yellow.dark[80]),
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: lightDark(red.light[50], red.dark[85]),
+        backgroundColor: 'var(--color-error)',
       },
       // The secondary text color (stop 70) reads under 3:1 on the dark track,
       // so a neutral or disabled fill takes stop 80 there.

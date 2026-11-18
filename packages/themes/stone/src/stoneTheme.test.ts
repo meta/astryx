@@ -117,26 +117,37 @@ describe('stone strong status contrast', () => {
 
   it('keeps every progress fill at 3:1 on the skeleton track', () => {
     const fill = stoneTheme.components!['progress-bar-fill'];
-    const families = {
-      accent: 'blue',
-      success: 'green',
-      warning: 'yellow',
-      error: 'red',
-    } as const;
-    for (const [variant, family] of Object.entries(families)) {
-      const palette = stoneModePalettes[family];
-      expect(fill[`variant:${variant}`]).toMatchObject({
-        backgroundColor: `light-dark(${palette.light[40]}, ${palette.dark[80]})`,
-      });
-      expect(
-        contrast(palette.light[40], stoneModePalettes.neutral.light[85]),
-      ).toBeGreaterThanOrEqual(3);
-      expect(
-        contrast(palette.dark[80], stoneModePalettes.neutral.dark[40]),
-      ).toBeGreaterThanOrEqual(3);
-      expect(
-        contrast(stoneModePalettes.neutral.light[100], palette.light[40]),
-      ).toBeGreaterThanOrEqual(3);
+    const {blue, green, neutral, red, yellow} = stoneModePalettes;
+    // Accent uses the blue family; each status fill takes the theme's status
+    // role.
+    expect(fill['variant:accent']).toMatchObject({
+      backgroundColor: `light-dark(${blue.light[40]}, ${blue.dark[80]})`,
+    });
+    const tones = [
+      {light: blue.light[40], dark: blue.dark[80]},
+      ...(
+        [
+          ['success', green],
+          ['warning', yellow],
+          ['error', red],
+        ] as const
+      ).map(([variant, palette]) => {
+        expect(fill[`variant:${variant}`]).toMatchObject({
+          backgroundColor: `var(--color-${variant})`,
+        });
+        expect(stoneTheme.tokens[`--color-${variant}`]).toBe(
+          `light-dark(${palette.light[30]}, ${palette.dark[80]})`,
+        );
+        return {light: palette.light[30], dark: palette.dark[80]};
+      }),
+    ];
+    for (const tone of tones) {
+      expect(contrast(tone.light, neutral.light[85])).toBeGreaterThanOrEqual(3);
+      expect(contrast(tone.dark, neutral.dark[40])).toBeGreaterThanOrEqual(3);
+      // Marks on a light-mode fill are light ink.
+      expect(contrast(neutral.light[100], tone.light)).toBeGreaterThanOrEqual(
+        3,
+      );
     }
   });
 

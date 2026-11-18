@@ -7,7 +7,7 @@
 // prettier-ignore
 export const stonePaletteRefs = {
   green: {
-    light: {30: '#354f31', 40: '#416d3b', 55: '#609757', 85: '#bfdfbb', 90: '#d2eccf'},
+    light: {30: '#354f31', 55: '#609757', 85: '#bfdfbb', 90: '#d2eccf'},
     dark: {25: '#2f412c', 35: '#3e5d38', 70: '#90ba8a', 80: '#b3d0af', 90: '#d5e9d2'},
   },
   yellow: {

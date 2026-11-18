@@ -182,13 +182,14 @@ describe('butter color token mapping completeness', () => {
 
 describe('butter progress fills', () => {
   // In light mode the banner stops read at 1.2:1 to 2.6:1 on the progress
-  // track, so each fill takes a stop in the banner family that reaches 3:1.
+  // track, so each status fill takes the theme's status role, which reaches
+  // 3:1 on it.
   const {green, neutral, red, yellow} = butterModePalettes;
   const track = {light: neutral.light[85], dark: neutral.dark[40]};
   const fills = {
-    success: {light: green.light[45], dark: green.dark[80]},
-    warning: {light: yellow.light[45], dark: yellow.dark[80]},
-    error: {light: red.light[50], dark: red.dark[85]},
+    success: {light: green.light[25], dark: green.dark[70]},
+    warning: {light: yellow.light[30], dark: yellow.dark[75]},
+    error: {light: red.light[30], dark: red.dark[85]},
   };
 
   it.each(Object.entries(fills))(
@@ -196,9 +197,10 @@ describe('butter progress fills', () => {
     (variant, fill) => {
       expect(
         butterTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
-      ).toMatchObject({
-        backgroundColor: `light-dark(${fill.light}, ${fill.dark})`,
-      });
+      ).toMatchObject({backgroundColor: `var(--color-${variant})`});
+      expect(butterTheme.tokens[`--color-${variant}`]).toBe(
+        `light-dark(${fill.light}, ${fill.dark})`,
+      );
       expect(contrast(fill.light, track.light)).toBeGreaterThanOrEqual(3);
       expect(contrast(fill.dark, track.dark)).toBeGreaterThanOrEqual(3);
     },
