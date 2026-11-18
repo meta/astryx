@@ -32,9 +32,10 @@ message channel. The person sees the page as part of the screen, and a screen
 reader reads the page's own content.
 
 This record details the `web` capability of `spec:AST-112`: the platform layer
-and its opt-in capabilities (`spec:AST-112/FR1`, `spec:AST-112/FR3`), the
-result vocabulary (`spec:AST-112/FR6`), the capability shape
-(`spec:AST-112/FR7`), and additive evolution (`spec:AST-112/FR8`). It specifies the native web view
+and its opt-in capabilities (`spec:AST-112/FR1`, `spec:AST-112/FR3`), and
+the capability shape (`spec:AST-112/FR7`). It follows the shared platform rules
+of `spec:AST-140`: the result vocabulary (`spec:AST-140/FR3`) and additive
+evolution (`spec:AST-140/FR5`). It specifies the native web view
 (`AstryxWebView`) and its device report (`AstryxWebViewInfo`), which the
 library's `WebView` and `WebContent` use. The capability's other modules are
 part of the same platform package; "Who uses it" lists them, and each has its
@@ -50,7 +51,8 @@ own record.
   message sender comes from the engine (FR9, DEC-2). Loads report closed
   reasons (FR13). The package keeps one dependency set (`spec:AST-112/FR2`).
   Astryx takes no third-party native dependency for the web view; an app may
-  use react-native-webview beside these components without conflict.
+  use react-native-webview beside these components without conflict
+  (`spec:AST-140/FR9`).
 - `AstryxWebViewInfo`: it answers what the device can keep (a frame-safe
   channel, separate page data), so a caller that needs a guarantee is refused
   loudly instead of getting a weaker page (DEC-5). OQ7 asks whether it folds
@@ -149,7 +151,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     `allowedExternalSchemes` (FR5).
   - Both contracts are at revision 1. The web view's named features
     (FR14) are listed with every other contract's by the platform info
-    module (`spec:AST-112/FR8`); `AstryxWebViewInfo` carries no feature list
+    module (`spec:AST-140/FR5`); `AstryxWebViewInfo` carries no feature list
     and no revision counter.
 
 - **FR4 — Safe defaults.** A page in the view cannot read local files or
@@ -288,7 +290,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   `{ok: false, reason, message, url}` with `reason` from `offline`, `timeout`,
   `ssl`, `invalid-url`, `invalid-config`, `unsupported`, `no-native-view`, and
   `error`; a reason the JavaScript does not know reads `error`
-  (`spec:AST-112/FR6`). `message` never carries a URL's query or a cookie. The
+  (`spec:AST-140/FR3`). `message` never carries a URL's query or a cookie. The
   JavaScript checks the session and the source first. When it knows the view
   cannot honour them, it does not render the host view and reports the reason
   through `onError` one time for that page.
@@ -301,7 +303,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   `userAgent`, `externalNavigation`, `sessionHandle`,
   `externalSchemes`, `grantsOrigin`, `channelIsolation`, `preventsCapture`,
   `pageStorage`, `bundledOrigin`, `pageProfile`, `linkMenu`, `messageOrigin`,
-  `warmBundle`, and `contentProcessEnd` (`spec:AST-112/FR8`).
+  `warmBundle`, and `contentProcessEnd` (`spec:AST-140/FR5`).
   - The binary of each platform lists the features it implements. A feature
     one platform implements is listed only there: `preventsCapture` on
     Android; `linkMenu` and `warmBundle` on iOS.
@@ -319,7 +321,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 - **FR16 — Fallbacks when `web` is not linked or the view is absent.**
   - Not opted in: the capability's module still loads; `isNativeWebViewAvailable()`
     and `AstryxWebViewInfo.isAvailable()` answer false, and module calls
-    resolve `not-linked` (`spec:AST-112/FR3`). A missing view of an opted-in
+    resolve `not-linked` (`spec:AST-112/FR3`, `spec:AST-140/FR2`). A missing view of an opted-in
     capability reports `no-native-view`.
   - `NativeWebView` where the view is absent renders `fallback` (nothing by
     default) and reports `onError` with `no-native-view` once.
@@ -334,7 +336,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   components require a label). The page's text follows the system text size
   through `textScale` (FR10). The link menu is the system's context menu.
 - **FR18 — Contract baseline.** Every contract in the group is at revision 1
-  (`spec:AST-112/FR8`). JavaScript checks a named feature (FR14) before it
+  (`spec:AST-140/FR5`). JavaScript checks a named feature (FR14) before it
   uses the behaviour; without it, JavaScript keeps the revision-1 behaviour
   or answers `unsupported`, never a silent weaker path (DEC-5).
 - **FR19 — Native code uses public platform API only.** The web view and its
@@ -371,7 +373,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   feature an app opts in; Astryx's components link by default.
 - Relies on `spec:AST-112` FR4 (amended): native code uses public platform
   API only, and a record names any exception (FR19).
-- Relies on `spec:AST-112` FR8 (amended): every contract is at revision 1,
+- Relies on `spec:AST-140` FR5: every contract is at revision 1,
   later behaviour is a named feature the platform info module lists, and no
   contract carries a revision counter (FR3, FR14, FR18).
 - `spec:AST-093/FR5` (every native component is tested and validated the same
