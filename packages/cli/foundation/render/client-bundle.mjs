@@ -355,7 +355,8 @@ export function scriptSafe(code) {
  *   `builtin` tells a Node built-in; `describe` names a file for a message;
  *   `oneCopy` names the packages every module, a package's too, takes from
  *   the one copy `packageDir` names (React outside a project).
- * @returns {Promise<{code: string, modules: number}>}
+ * @returns {Promise<{code: string, modules: number, astryx: boolean}>} `astryx`:
+ *   the build's module graph holds a module an Astryx package owns
  */
 export async function bundleForBrowser({
   esbuild,
@@ -561,5 +562,69 @@ export async function bundleForBrowser({
   const modules = Object.values(output?.inputs ?? {}).filter(
     (/** @type {any} */ input) => input.bytesInOutput > 0,
   ).length;
-  return {code, modules};
+  const astryx = graphHoldsAstryx(
+    Object.keys(result.metafile?.inputs ?? {}),
+    ownerName(entry),
+  );
+  return {code, modules, astryx};
+}
+
+/**
+ * Whether a build's module graph holds a module an Astryx package owns. The
+ * owner is the package whose package.json holds the file, by its name: a
+ * workspace copy of Core counts as an installed one does. The page's own
+ * package is not counted, so a page inside an Astryx package's folder still
+ * needs an import.
+ * @param {string[]} inputs the metafile's input keys
+ * @param {string | null} own the name of the package that holds the page
+ * @returns {boolean}
+ */
+export function graphHoldsAstryx(inputs, own) {
+  return inputs.some(key => {
+    const file = inputFile(key);
+    if (!file) return false;
+    const name = ownerName(file);
+    return name !== null && name !== own && name.startsWith('@astryxdesign/');
+  });
+}
+
+/**
+ * The file a metafile input names: a file-namespace path is relative to the
+ * build's working folder, a page file's is absolute after its namespace;
+ * the build's own virtual modules name no file.
+ * @param {string} key
+ * @returns {string | null}
+ */
+function inputFile(key) {
+  const named = /^([a-z][a-z-]+):(.+)$/.exec(key);
+  if (!named) return path.resolve(key);
+  return named[1] === PAGE ? named[2] : null;
+}
+
+/** @type {Map<string, string | null>} */
+const ownerNames = new Map();
+
+/**
+ * The name of the package whose package.json holds `file`: the nearest
+ * package.json above it that has a name.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function ownerName(file) {
+  const dir = path.dirname(file);
+  if (ownerNames.has(dir)) return /** @type {string | null} */ (ownerNames.get(dir));
+  /** @type {string | null} */
+  let name = null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    if (typeof pkg?.name === 'string') name = pkg.name;
+  } catch {
+    // No package.json here, or one that is not JSON: look further up.
+  }
+  if (name === null) {
+    const up = path.dirname(dir);
+    name = up === dir ? null : ownerName(path.join(up, path.basename(dir)));
+  }
+  ownerNames.set(dir, name);
+  return name;
 }

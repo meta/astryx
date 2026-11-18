@@ -1781,7 +1781,7 @@ try {
   // The page's script is built first: it compiles every module the page
   // can load, a lazily imported one included, and their styles join the
   // stylesheet below.
-  /** @type {{code: string, modules: number} | null} */
+  /** @type {{code: string, modules: number, astryx: boolean} | null} */
   let script = null;
   if (workerData.buildScript) {
     reach("building the page's script");
@@ -1875,6 +1875,20 @@ try {
       }
     }
   }
+  // A page that uses nothing from Astryx is not what the command makes: its
+  // own app's build shares it. Its script's module graph (local components,
+  // re-exports and lazy imports included) and the package stylesheets it
+  // imports decide, before anything is fetched or written.
+  if (
+    script &&
+    !script.astryx &&
+    !packageCss.some(({spec}) => spec.startsWith('@astryxdesign/'))
+  ) {
+    fail(
+      'ERR_RENDER_NOT_ASTRYX',
+      `${describeFile(entry)} uses no Astryx components or styles, and \`astryx experimental export\` writes a page built with Astryx components as one HTML file. Build the page with Astryx components, or share it with your app's own build; nothing was written.`,
+    );
+  } else {
   parentPort?.postMessage({
     ok: true,
     markup,
@@ -1897,6 +1911,7 @@ try {
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
   });
+  }
 } catch (e) {
   if (e !== null) classify(e);
 }

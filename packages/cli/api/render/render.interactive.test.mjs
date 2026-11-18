@@ -228,6 +228,7 @@ describe("a render, which carries the page's script", () => {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/focus.tsx', {cwd: dir, out: 'focus.html'});
@@ -295,6 +296,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/form.tsx', {cwd: dir, out: 'form.html'});
@@ -372,6 +374,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
@@ -423,6 +426,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/pictured.tsx', {cwd: dir, out: 'pictured.html'});
@@ -506,6 +510,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
@@ -536,6 +541,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
@@ -656,6 +662,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
@@ -702,7 +709,7 @@ export default function Page() {
     put('src/lib-x.ts', 'export const a = 1;\n');
     put(
       'src/no-export.tsx',
-      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\n",
+      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const local = await errorOf(() =>
       render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
@@ -728,7 +735,7 @@ export default function Page() {
     );
     put(
       'src/lib-y.ts',
-      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\n',
+      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\nimport "@astryxdesign/core/astryx.css";\n',
     );
     const component = await errorOf(() =>
       render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}),
@@ -784,7 +791,7 @@ export default function Page() {
     );
     put(
       'src/re-and-raw.tsx',
-      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\n",
+      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
@@ -792,7 +799,7 @@ export default function Page() {
     put('src/lib-cjs.js', 'module.exports = {a: 1};\n');
     put(
       'src/from-cjs.tsx',
-      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\n",
+      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/from-cjs.tsx', {cwd: dir, out: 'from-cjs.html'});
     expect(fs.existsSync(path.join(dir, 'from-cjs.html'))).toBe(true);
@@ -803,7 +810,7 @@ export default function Page() {
     );
     put(
       'src/js-re.tsx',
-      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\n",
+      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const jsRe = await errorOf(() =>
       render('src/js-re.tsx', {cwd: dir, out: 'js-re.html'}),
@@ -840,7 +847,7 @@ export default function Page() {
     put('src/lib-load.ts', 'export const other = 1;\n');
     put(
       'src/load-call.tsx',
-      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\n",
+      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const atLoad = await errorOf(() =>
       render('src/load-call.tsx', {cwd: dir, out: 'load-call.html'}),
@@ -860,7 +867,7 @@ export default function Page() {
     );
     put(
       'src/script-only.tsx',
-      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\n",
+      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const scripted = await errorOf(() =>
       render('src/script-only.tsx', {cwd: dir, out: 'script-only.html'}),
@@ -879,11 +886,12 @@ export default function Page() {
   const [panel, setPanel] = useState('closed');
   return <button onClick={() => import('./panel').then(m => setPanel(m.default()))}>{panel}</button>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     put(
       'src/panel.tsx',
-      'export default function Panel() {\n  return "open";\n}\nconst broken = (;\n',
+      'export default function Panel() {\n  return "open";\n}\nconst broken = (;\nimport "@astryxdesign/core/astryx.css";\n',
     );
     let error;
     try {
@@ -926,7 +934,7 @@ export default function Page() {
   it('refuses a page whose script needs Node, naming the module, and writes nothing', async () => {
     put(
       'src/node-page.tsx',
-      `import {readFileSync} from 'node:fs';\nexport default function Page() {\n  return <button onClick={() => readFileSync('x')}>Read</button>;\n}\n`,
+      `import {readFileSync} from 'node:fs';\nexport default function Page() {\n  return <button onClick={() => readFileSync('x')}>Read</button>;\n}\nimport '@astryxdesign/core/astryx.css';\n`,
     );
     const error = await errorOf(() =>
       render('src/node-page.tsx', {cwd: dir, out: 'node-page.html'}),
@@ -944,7 +952,7 @@ export default function Page() {
   it('refuses a page whose lazily loaded module is missing, naming the page file as the page names it', async () => {
     put(
       'src/lazy-missing.tsx',
-      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./gone'));\nexport default function Page() {\n  return (\n    <Suspense fallback={<p>Loading</p>}>\n      <Panel />\n    </Suspense>\n  );\n}\n",
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./gone'));\nexport default function Page() {\n  return (\n    <Suspense fallback={<p>Loading</p>}>\n      <Panel />\n    </Suspense>\n  );\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const error = await errorOf(() =>
       render('src/lazy-missing.tsx', {cwd: dir, out: 'lazy-missing.html'}),
@@ -1020,7 +1028,7 @@ export default function Page() {
     );
     put(
       'src/ready.tsx',
-      "import {hasFs} from 'browser-ready';\nimport {EventEmitter} from 'events';\nexport default function Page() {\n  return <p>{String(hasFs)} {typeof EventEmitter}</p>;\n}\n",
+      "import {hasFs} from 'browser-ready';\nimport {EventEmitter} from 'events';\nexport default function Page() {\n  return <p>{String(hasFs)} {typeof EventEmitter}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const ready = /** @type {any} */ (
       await render('src/ready.tsx', {
@@ -1037,11 +1045,11 @@ export default function Page() {
   it('styles a module the page loads lazily, which the server render never imports', async () => {
     put(
       'src/panel.tsx',
-      "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({panel: {color: 'rgb(1, 2, 3)'}});\nexport default function Panel() {\n  return <p {...stylex.props(styles.panel)}>Panel</p>;\n}\n",
+      "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({panel: {color: 'rgb(1, 2, 3)'}});\nexport default function Panel() {\n  return <p {...stylex.props(styles.panel)}>Panel</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     put(
       'src/lazy.tsx',
-      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./panel'));\nexport default function Page() {\n  return (\n    <main>\n      <Suspense fallback={<p>Loading</p>}>\n        <Panel />\n      </Suspense>\n    </main>\n  );\n}\n",
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./panel'));\nexport default function Page() {\n  return (\n    <main>\n      <Suspense fallback={<p>Loading</p>}>\n        <Panel />\n      </Suspense>\n    </main>\n  );\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/lazy.tsx', {
       cwd: dir,
@@ -1081,7 +1089,7 @@ export default function Page() {
   it('says a chart the render could not draw is drawn by the script', async () => {
     put(
       'src/blank-chart.tsx',
-      'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\n',
+      'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\nimport "@astryxdesign/core/astryx.css";\n',
     );
     const live = /** @type {any} */ (
       await render('src/blank-chart.tsx', {

@@ -512,8 +512,9 @@ const CASES = [
     name: 'experimental export',
     args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
-    // A page with no imports, in a folder that can resolve React and Core, so
-    // the page gets Core's stylesheets in every runner.
+    // A page that imports only Core's stylesheet (export refuses a page with
+    // no Astryx), in a folder that can resolve React and Core, so the page
+    // gets Core's stylesheets in every runner.
     setup: dir => {
       fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'), {
         recursive: true,
@@ -530,7 +531,7 @@ const CASES = [
       );
       fs.writeFileSync(
         path.join(dir, 'page.jsx'),
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        "import '@astryxdesign/core/astryx.css';\nexport default function Page() { return <h1>Hello</h1>; }\n",
       );
     },
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
