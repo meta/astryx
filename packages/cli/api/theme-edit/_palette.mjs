@@ -36,6 +36,7 @@ import {
   PALETTE_GENERATOR_VERSION,
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPES,
   PALETTE_WHITE,
   generateTonalPalette,
   modesForStrategy,
@@ -69,6 +70,7 @@ import {splitTop} from './_css.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 
 export {readRegularFile};
 
@@ -1989,6 +1991,16 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
  * @returns {Candidate}
  */
 function generate(config, file = 'palette.config.json') {
+  // A palette made with a recipe this CLI does not know (one a newer CLI
+  // brings): said as such, with the file left as it is, never as a fault
+  // to fix by hand.
+  const recipe = config?.recipe;
+  if (recipe != null && !PALETTE_RECIPES.includes(recipe))
+    throw new AstryxError(
+      `${file}: this theme's colors were made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know; update the CLI to open it. The file is left as it is. Nothing was changed.`,
+      [{name: 'astryx upgrade', reason: 'update the CLI'}],
+      ERROR_CODES.ERR_PALETTE_GENERATION,
+    );
   try {
     return generateTonalPalette(config);
   } catch (e) {
