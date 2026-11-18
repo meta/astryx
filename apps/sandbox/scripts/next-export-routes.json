@@ -247,6 +247,7 @@
     "/templates/CodeInlineInParagraph/",
     "/templates/CodeShowcase/",
     "/templates/CodeVariousContent/",
+    "/templates/CollapsibleContentMotionUsage/",
     "/templates/CollapsibleControlledAccordion/",
     "/templates/CollapsibleDividedAccordion/",
     "/templates/CollapsibleGroupAccordion/",

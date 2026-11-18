@@ -3782,6 +3782,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-collapsible-content-motion-animated-details",
+      "path": "examples/use-collapsible-content-motion/animated-details",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
@@ -4194,6 +4199,11 @@
     {
       "name": "hook-use-collapsible",
       "path": "hooks/use-collapsible",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-collapsible-content-motion",
+      "path": "hooks/use-collapsible-content-motion",
       "aliases": []
     },
     {

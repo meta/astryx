@@ -7,6 +7,7 @@ import {
   Collapsible,
   CollapsibleGroup,
   useCollapsible,
+  useCollapsibleContentMotion,
 } from '@astryxdesign/core/Collapsible';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -434,6 +435,18 @@ const stepPanelClose = stylex.keyframes({
   to: {height: '0px', opacity: 0},
 });
 
+// Under Reduce Motion a touch screen cross-fades and any other pointer
+// changes at once (design:reduced-motion DR2, DR3).
+const stepPanelFadeIn = stylex.keyframes({
+  from: {opacity: 0},
+  to: {opacity: 1},
+});
+
+const stepPanelFadeOut = stylex.keyframes({
+  from: {opacity: 1},
+  to: {opacity: 0},
+});
+
 const stepStyles = stylex.create({
   list: {
     display: 'flex',
@@ -497,16 +510,50 @@ const stepStyles = stylex.create({
   },
   // The clip holds only while the height animates.
   entering: {
-    overflow: 'hidden',
-    animationName: stepPanelOpen,
-    animationDuration: durationVars['--duration-medium'],
-    animationTimingFunction: easeVars['--ease-entrance'],
+    overflow: {
+      default: 'hidden',
+      '@media (prefers-reduced-motion: reduce)': 'visible',
+    },
+    animationName: {
+      default: stepPanelOpen,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        stepPanelFadeIn,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
+    },
+    animationDuration: {
+      default: durationVars['--duration-medium'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        durationVars['--duration-fast'],
+    },
+    animationTimingFunction: {
+      default: easeVars['--ease-entrance'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        easeVars['--ease-standard'],
+    },
   },
   exiting: {
-    overflow: 'hidden',
-    animationName: stepPanelClose,
-    animationDuration: durationVars['--duration-exit'],
-    animationTimingFunction: easeVars['--ease-exit'],
+    overflow: {
+      default: 'hidden',
+      '@media (prefers-reduced-motion: reduce)': 'visible',
+    },
+    animationName: {
+      default: stepPanelClose,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        stepPanelFadeOut,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
+    },
+    animationDuration: {
+      default: durationVars['--duration-exit'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        durationVars['--duration-fast'],
+    },
+    animationTimingFunction: {
+      default: easeVars['--ease-exit'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        easeVars['--ease-standard'],
+    },
     animationFillMode: 'forwards',
   },
   output: {
@@ -529,10 +576,9 @@ const STEPS = Array.from({length: 200}, (_, index) => ({
 }));
 
 function StepRow({step}: {step: (typeof STEPS)[number]}) {
-  const row = useCollapsible({
-    isCollapsible: {defaultIsOpen: false},
-    hasContentAnimation: true,
-    contentHeightProperty: '--step-panel-height',
+  const row = useCollapsible({isCollapsible: {defaultIsOpen: false}});
+  const motion = useCollapsibleContentMotion(row, {
+    heightProperty: '--step-panel-height',
   });
   return (
     <div>
@@ -548,13 +594,13 @@ function StepRow({step}: {step: (typeof STEPS)[number]}) {
         <span {...stylex.props(stepStyles.clock)}>{step.seconds}s</span>
       </button>
       <div
-        {...row.contentProps}
+        {...motion.contentProps}
         {...stylex.props(
           stepStyles.panel,
-          row.isEntering && stepStyles.entering,
-          row.isExiting && stepStyles.exiting,
+          motion.isEntering && stepStyles.entering,
+          motion.isExiting && stepStyles.exiting,
         )}>
-        {row.isPresent && (
+        {motion.isPresent && (
           <p {...stylex.props(stepStyles.output)}>
             {Array.from(
               {length: step.lines},
@@ -573,7 +619,7 @@ export const HeadlessRows: Story = {
     docs: {
       description: {
         story:
-          'Each row is one button built with `useCollapsible`: the label, the chevron and the clock are the trigger. A closed row renders one empty content element, so the 200 rows mount no output. A row grows and fades in to the height the hook measures, and shrinks and fades out the same way. Reduce Motion opens and closes a row at once.',
+          'Each row is one button built with `useCollapsible`: the label, the chevron and the clock are the trigger. A closed row renders one empty content element, so the 200 rows mount no output. `useCollapsibleContentMotion` grows and fades a row in to the height it measures, and shrinks and fades it out the same way. Under Reduce Motion a touch screen cross-fades the row and any other pointer opens and closes it at once.',
       },
     },
   },

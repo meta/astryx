@@ -18,7 +18,11 @@ verified_by:
     packages/core/src/Collapsible/__tests__/Collapsible.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
   ]
-modules: [module:Collapsible/useCollapsible]
+modules:
+  [
+    module:Collapsible/useCollapsible,
+    module:Collapsible/useCollapsibleContentMotion,
+  ]
 families: []
 design_specs: []
 architecture:
@@ -73,9 +77,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - generic icon resolution or artwork customization;
 - sibling open-value coordination, group state, and the divided group wrapper
   — owned by `component:CollapsibleGroup`;
-- the headless trigger and content props, content presence, motion phases, and
-  height measurement of `useCollapsible` — owned by
+- the headless trigger and content props of `useCollapsible` — owned by
   `module:Collapsible/useCollapsible`;
+- the opt-in content motion of `useCollapsibleContentMotion`: presence through
+  the close, motion phases, and height measurement — owned by
+  `module:Collapsible/useCollapsibleContentMotion`;
 - a shared responsive or directional API; or
 - new content-reveal motion behavior. Existing behavior outside this decision stays
   unchanged until its own current authority changes it.
@@ -202,9 +208,15 @@ to the Group container anatomy here.
 - `architecture:component-theming-surface` owns anatomy qualification, target
   placement, visual-axis and state reflection, and delegated Icon ownership.
 - `module:Collapsible/useCollapsible` owns the public hook's trigger and content
-  props, content presence, motion phases, and height measurement; the hook's
-  open-state modes keep their consumer documentation. This component owns the
-  rendered trigger, chevron, and aggregate component/group protocol.
+  props; the hook's open-state modes keep their consumer documentation. This
+  component owns the rendered trigger, chevron, and aggregate component/group
+  protocol.
+- `module:Collapsible/useCollapsibleContentMotion` owns opt-in motion for
+  caller-rendered content. Collapsible and Banner import none of it. It reuses
+  the shared Reduce Motion policy. No shared engine plays a caller's CSS
+  keyframes: the animator and the `animatedLayout` glide play motion that Core
+  owns, so its phases watch the content element's own animations
+  (`architecture:react-component-runtime` INV19).
 - `architecture:public-component-api` owns reachability and compatibility of the
   admitted position prop and exported type.
 - `architecture:react-component-runtime` owns context identity/lifecycle; this

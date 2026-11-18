@@ -29,7 +29,7 @@ export default function CollapsibleHookUsage() {
           {...disclosure.contentProps}
           role="region"
           aria-label="Release checklist details">
-          {disclosure.isPresent && (
+          {disclosure.isOpen && (
             <Text type="body" color="secondary">
               Review docs, run visual checks, and confirm keyboard behavior
               before shipping the component update.

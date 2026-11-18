@@ -3,7 +3,8 @@
 
 /**
  * @file useCollapsible.a11y.test.tsx
- * @input Uses useCollapsible's trigger and content props and the disclosure contract
+ * @input Uses useCollapsible and useCollapsibleContentMotion props and the
+ *   disclosure contract
  * @output DOM evidence that a caller-rendered trigger and content form one disclosure
  * @position Hook binding: a whole-row button and a content element that
  *   mounts its children only while open. Button semantics stay with the caller.
@@ -21,6 +22,7 @@ import {
   type DisclosureStateFacts,
 } from '@astryxdesign/a11y-spec';
 import {useCollapsible} from '../useCollapsible';
+import {useCollapsibleContentMotion} from '../useCollapsibleContentMotion';
 
 interface HookDisclosureState {
   readonly id: string;
@@ -58,10 +60,9 @@ const HOOK_DISCLOSURE_STATES: ReadonlyArray<HookDisclosureState> = [
   },
 ];
 
-function Row({state}: {state: HookDisclosureState}) {
+function StaticRow({state}: {state: HookDisclosureState}) {
   const row = useCollapsible({
     isCollapsible: {defaultIsOpen: state.defaultIsOpen},
-    hasContentAnimation: state.hasContentAnimation,
   });
   return (
     <div>
@@ -69,9 +70,36 @@ function Row({state}: {state: HookDisclosureState}) {
       <button {...row.triggerProps}>
         <span>{state.label}</span> <span>12s</span>
       </button>
-      <div {...row.contentProps}>{row.isPresent && <p>Step output</p>}</div>
+      <div {...row.contentProps}>{row.isOpen && <p>Step output</p>}</div>
       <button type="button">After disclosure</button>
     </div>
+  );
+}
+
+function AnimatedRow({state}: {state: HookDisclosureState}) {
+  const row = useCollapsible({
+    isCollapsible: {defaultIsOpen: state.defaultIsOpen},
+  });
+  const motion = useCollapsibleContentMotion(row);
+  return (
+    <div>
+      {/* eslint-disable-next-line @eslint-react/dom-no-missing-button-type -- triggerProps carries type="button" */}
+      <button {...row.triggerProps}>
+        <span>{state.label}</span> <span>12s</span>
+      </button>
+      <div {...motion.contentProps}>
+        {motion.isPresent && <p>Step output</p>}
+      </div>
+      <button type="button">After disclosure</button>
+    </div>
+  );
+}
+
+function Row({state}: {state: HookDisclosureState}) {
+  return state.hasContentAnimation ? (
+    <AnimatedRow state={state} />
+  ) : (
+    <StaticRow state={state} />
   );
 }
 
