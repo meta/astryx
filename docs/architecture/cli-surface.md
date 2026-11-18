@@ -774,11 +774,12 @@ non-interactive guarantee.
   `unknown-prop-value` warning of `astryx experimental render`: each string a
   page writes for a Core component's prop whose type is a closed set of
   strings, checked against Core's docs for that component in the page's own
-  Core. Where Core lets a theme widen the prop by declaration merging (the
-  interfaces theme build reads from the same module), the keys the project's
-  own TypeScript files and its installed theme and integration packages'
-  declaration files add are values the prop has; a project that cannot be
-  read in full leaves such a prop unchecked.
+  Core. Where the prop's type in Core's source takes the keys of an interface
+  a theme can widen by declaration merging (the module theme build also
+  resolves its augmentations with), the keys the project's own TypeScript
+  files and its installed theme and integration packages' declaration files
+  add are values the prop has; a project that cannot be read in full leaves
+  such a prop unchecked.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).

@@ -74,9 +74,8 @@ import {
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {
-  AUGMENTATION_OVERRIDES,
   componentHasAugmentableInterface as componentDeclaresInterface,
-  overrideAugmentationPoint,
+  resolveAugmentationTarget as resolveCoreAugmentationTarget,
 } from '../../../foundation/discovery/core-augmentation-points.mjs';
 import {
   CLI_ROOT,
@@ -1854,22 +1853,6 @@ export function importSpecifier(relDir, base) {
     : `./${fromSrc}/${base}`;
 }
 
-/**
- * Convert a kebab-case component name to PascalCase.
- * e.g. 'button' → 'Button', 'progress-bar' → 'ProgressBar', 'avatar-status-dot' → 'AvatarStatusDot'
- * @param {string} name
- * @returns {string}
- */
-function toPascalCase(name) {
-  return name
-    .split('-')
-    .map(
-      (/** @type {string} */ part) =>
-        part.charAt(0).toUpperCase() + part.slice(1),
-    )
-    .join('');
-}
-
 /** @type {Promise<Record<string, Record<string, string[]>>> | null} */
 let _knownValuesIndexPromise = null;
 
@@ -1917,79 +1900,6 @@ function coreSrcPath() {
   return coreRoot ? path.join(coreRoot, 'src') : null;
 }
 
-/** @type {Map<string, Array<{moduleName: string, interfacePrefix: string}>>} */
-const _augmentationTargetCache = new Map();
-
-/**
- * Resolve a rendered theme class token (the key without `astryx-`) to candidate
- * public core subpaths and interface prefixes that may own its augmentable prop
- * maps. Some tokens are subtargets documented by a parent component
- * (`avatar-status-dot` augments `@astryxdesign/core/Avatar`). Component docs are
- * the source of truth for the target token → owning component relationship.
- *
- * @param {string} componentName
- * @returns {Promise<Array<{moduleName: string, interfacePrefix: string}>>}
- */
-async function resolveAugmentationTargetCandidates(componentName) {
-  if (_augmentationTargetCache.has(componentName)) {
-    return /** @type {Array<{moduleName: string, interfacePrefix: string}>} */ (
-      _augmentationTargetCache.get(componentName)
-    );
-  }
-
-  const fallback = [
-    {
-      moduleName: toPascalCase(componentName),
-      interfacePrefix: toPascalCase(componentName),
-    },
-  ];
-
-  const coreSrc = coreSrcPath();
-  if (!coreSrc || !fs.existsSync(coreSrc)) {
-    _augmentationTargetCache.set(componentName, fallback);
-    return fallback;
-  }
-
-  /** @type {Array<{moduleName: string, interfacePrefix: string}>} */
-  const matches = [];
-  /** @type {Set<string>} */
-  const seen = new Set();
-
-  /**
-   * @param {string} moduleName
-   * @param {string} interfacePrefix
-   */
-  function addCandidate(moduleName, interfacePrefix) {
-    const key = `${moduleName}:${interfacePrefix}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    matches.push({moduleName, interfacePrefix});
-  }
-
-  const {owners} = await coreThemeValues(coreSrc);
-  for (const {moduleName, components} of Object.hasOwn(owners, componentName)
-    ? owners[componentName]
-    : []) {
-    // Try the exact rendered token first for documented subtargets such as
-    // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
-    // component name (for example, ProgressBar for progress-bar-fill).
-    addCandidate(moduleName, toPascalCase(componentName));
-    addCandidate(moduleName, moduleName);
-    for (const name of components) addCandidate(moduleName, name);
-  }
-  // A target documented by a parent component may also have its own public
-  // subpath and augmentation interface (Heading is documented under Text but
-  // owns @astryxdesign/core/Heading). Keep the direct-name candidate after
-  // discovered owners so both shapes are reachable without guessing which one
-  // the source tree uses.
-  for (const candidate of fallback) {
-    addCandidate(candidate.moduleName, candidate.interfacePrefix);
-  }
-  const resolved = matches;
-  _augmentationTargetCache.set(componentName, resolved);
-  return resolved;
-}
-
 /**
  * Whether the Core beside the CLI declares `interfaceName` in
  * `@astryxdesign/core/<Component>` ({@link componentDeclaresInterface}).
@@ -2008,53 +1918,14 @@ function componentHasAugmentableInterface(pascalName, interfaceName, options) {
 }
 
 /**
- * Public augmentable maps whose axis requests artwork instead of styling.
- * `Icon.variant` selects a theme's icon artwork, so it has no component styling
- * map (architecture:component-theming-surface INV14): a `components` key on it
- * never enrolls a value or generates an augmentation of its map.
- */
-const ARTWORK_REQUEST_MAPS = new Set(['IconVariantMap']);
-
-/**
- * Whether a theme's component styling keys may enroll values in `interfaceName`
- * on `@astryxdesign/core/<Component>`.
- * @param {string} pascalName
- * @param {string} interfaceName
- * @returns {boolean}
- */
-function isComponentValueAugmentationPoint(pascalName, interfaceName) {
-  return (
-    !ARTWORK_REQUEST_MAPS.has(interfaceName) &&
-    componentHasAugmentableInterface(pascalName, interfaceName)
-  );
-}
-
-/**
- * Resolve the public module/interface that can widen a component prop value.
+ * The public module/interface that can widen a component prop value, in the
+ * Core beside the CLI ({@link resolveCoreAugmentationTarget}).
  * @param {string} component
  * @param {string} prop
  * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
  */
-async function resolveAugmentationTarget(component, prop) {
-  const pascalName = toPascalCase(component);
-  if (Object.hasOwn(AUGMENTATION_OVERRIDES, `${pascalName}.${prop}`)) {
-    return overrideAugmentationPoint(resolveCoreRoot(), pascalName, prop);
-  }
-
-  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-  const target = (await resolveAugmentationTargetCandidates(component)).find(
-    candidate =>
-      isComponentValueAugmentationPoint(
-        candidate.moduleName,
-        `${candidate.interfacePrefix}${propPascal}Map`,
-      ),
-  );
-  return target
-    ? {
-        moduleName: target.moduleName,
-        interfaceName: `${target.interfacePrefix}${propPascal}Map`,
-      }
-    : null;
+function resolveAugmentationTarget(component, prop) {
+  return resolveCoreAugmentationTarget(resolveCoreRoot(), component, prop);
 }
 
 /**

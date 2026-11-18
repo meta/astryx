@@ -193,6 +193,30 @@ declare module '@astryxdesign/core/Button' {
     'primary-muted': true;
   }
 }
+
+declare module '@astryxdesign/core/Card' {
+  interface CardVariantMap {
+    elevated: true;
+  }
+}
+
+declare module '@astryxdesign/core/Text' {
+  interface TextColorMap {
+    brand: true;
+  }
+}
+
+declare module '@astryxdesign/core/FieldStatus' {
+  interface FieldStatusVariantMap {
+    inline: true;
+  }
+}
+
+declare module '@astryxdesign/core/Avatar' {
+  interface AvatarStatusDotVariantMap {
+    away: true;
+  }
+}
 `,
       );
       // An installed theme package's published declarations.
@@ -220,6 +244,11 @@ declare module '@astryxdesign/core/Banner' {
         path.join(own, 'page.tsx'),
         `import {Button} from '@astryxdesign/core/Button';
 import {Banner} from '@astryxdesign/core/Banner';
+import {ClickableCard} from '@astryxdesign/core/ClickableCard';
+import {Link} from '@astryxdesign/core/Link';
+import {Heading} from '@astryxdesign/core/Heading';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {AvatarStatusDot} from '@astryxdesign/core/Avatar';
 export default function Page() {
   return (
     <main>
@@ -227,6 +256,17 @@ export default function Page() {
       <Button label="Delete" variant="danger" />
       <Banner status="neutral" title="Heads up" />
       <Banner status="notice" title="Heads up" />
+      <ClickableCard variant="elevated" onClick={() => {}}>Open</ClickableCard>
+      <Link href="#top" color="brand">Top</Link>
+      <Link href="#top" color="loud">Top</Link>
+      <Heading level={2} color="brand">Title</Heading>
+      <TextInput label="Name" statusVariant="inline" />
+      <AvatarStatusDot variant="away" label="Away" />
+      <Button label="Plain" tone="loud" />
+      <ClickableCard variant="glow" onClick={() => {}}>Open</ClickableCard>
+      <Heading level={2} color="loud">Title</Heading>
+      <TextInput label="Name" statusVariant="floating" />
+      <AvatarStatusDot variant="busy" label="Busy" />
     </main>
   );
 }
@@ -235,8 +275,48 @@ export default function Page() {
       const answer = /** @type {any} */ (await render('page.tsx', {cwd: own}));
       const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
       expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
-        'page.tsx:7: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive, primary-muted.',
-        'page.tsx:9: Banner has no status "notice"; its status values are info, warning, error, success, neutral.',
+        'page.tsx:12: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive, primary-muted.',
+        'page.tsx:14: Banner has no status "notice"; its status values are info, warning, error, success, neutral.',
+        'page.tsx:17: Link has no color "loud"; its colors are primary, secondary, disabled, placeholder, accent, inherit, brand.',
+        'page.tsx:22: ClickableCard has no variant "glow"; its variants are default, transparent, muted, blue, cyan, gray, green, orange, pink, purple, red, teal, yellow, elevated.',
+        'page.tsx:23: Heading has no color "loud"; its colors are primary, secondary, disabled, placeholder, accent, inherit, brand.',
+        'page.tsx:24: TextInput has no statusVariant "floating"; its statusVariants are attached, detached, tooltip, inline.',
+        'page.tsx:25: AvatarStatusDot has no variant "busy"; its variants are success, neutral, error, away.',
+      ]);
+    } finally {
+      removeLinkedFixture(own);
+    }
+  });
+
+  it("leaves a widenable prop unchecked when a dependency's declarations cannot be read", async () => {
+    const own = makeLinkedFixture('astryx-render-unread-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+    try {
+      const pkg = path.join(path.dirname(own), 'node_modules', '@acme', 'theme');
+      fs.mkdirSync(path.join(pkg, 'dist'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({name: '@acme/theme', version: '1.0.0', peerDependencies: {'@astryxdesign/core': '*'}}),
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'acme.variants.d.ts'),
+        "declare module '@astryxdesign/core/Button' {\n  interface ButtonVariantMap {\n",
+      );
+      const manifest = path.join(own, 'package.json');
+      const project = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+      project.dependencies = {...project.dependencies, '@acme/theme': '1.0.0'};
+      fs.writeFileSync(manifest, JSON.stringify(project));
+      fs.writeFileSync(
+        path.join(own, 'page.tsx'),
+        `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return <Button label="Delete" variant="danger" size="huge" />;
+}
+`,
+      );
+      const answer = /** @type {any} */ (await render('page.tsx', {cwd: own}));
+      const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+      expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+        'page.tsx:3: Button has no size "huge"; its sizes are sm, md, lg.',
       ]);
     } finally {
       removeLinkedFixture(own);
