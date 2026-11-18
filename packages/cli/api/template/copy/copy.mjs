@@ -28,7 +28,10 @@ import {
 } from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
 import {templateDestination} from '../../../foundation/discovery/template-destination.mjs';
-import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
+import {
+  commandInFolder,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {
   NO_ICON_SETS,
   mapTemplateIcons,
@@ -104,10 +107,11 @@ export function templateCopy(
       scratch = true;
     } else if (outsideProject) {
       // Outside the project and the temp folder there is nothing to write,
-      // so the refusal names a place inside the project and the print that
-      // writes nothing.
+      // so the refusal names a place inside the project, the same path run
+      // from its own folder, and the print that writes nothing.
       const folder = templateDestination(cwd, match.type, match.dirName);
       const [scratchFolder] = tempFolders();
+      const there = fromNearestFolder(targetPath);
       throw new AstryxError(
         `Invalid template target path "${given}": it is outside the project root (${path.resolve(cwd)}). ` +
           (scratchFolder
@@ -118,6 +122,17 @@ export function templateCopy(
             name: `${command} ${quoteCommandArgument(folder)}`,
             reason: `write the ${match.type} inside the project`,
           },
+          ...(there
+            ? [
+                {
+                  name: commandInFolder(
+                    there.dir,
+                    `${command} ${quoteCommandArgument(there.path)}`,
+                  ),
+                  reason: `write the ${match.type} where you named it, from its folder`,
+                },
+              ]
+            : []),
           {name: command, reason: 'print the source and write nothing'},
         ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
@@ -225,5 +240,33 @@ function inTempFolder(file, given, temp) {
       undefined,
       ERROR_CODES.ERR_PATH_TRAVERSAL,
     );
+  }
+}
+
+/**
+ * Where a command run from another folder writes `target`: the nearest folder
+ * of it that exists, and the path from there. From that folder the path is
+ * inside the current folder, so the copy writes it there. Null when only the
+ * disk's root exists, which is no place to run a project command from.
+ * @param {string} target the destination as named, absolute
+ * @returns {{dir: string, path: string} | null}
+ */
+function fromNearestFolder(target) {
+  let dir = path.dirname(target);
+  while (!isFolder(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  if (path.dirname(dir) === dir) return null;
+  const rel = path.relative(dir, target).split(path.sep).join('/');
+  return {dir, path: `./${rel}`};
+}
+
+/**
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isFolder(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
   }
 }

@@ -134,10 +134,7 @@ export function cliError(message, options = {}) {
   if (suggestions?.length) {
     lines.push('');
     for (const s of suggestions) {
-      // A suggested command stays bare in JSON and is prefixed here.
-      const name = /^astryx(\s|$)/.test(s.name)
-        ? formatCliCommand(s.name)
-        : s.name;
+      const name = shownCommand(s.name);
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       lines.push(tag);
     }
@@ -326,4 +323,22 @@ export function themeGroupUnknownSubcommand(group, word, names, loaded) {
       moved,
     ),
   };
+}
+
+/**
+ * A suggested command as printed: it stays bare in JSON and the run that
+ * answers is prefixed here. A command run in another folder
+ * (commandInFolder) keeps its change of folder in front.
+ * @param {string} name
+ * @returns {string}
+ */
+function shownCommand(name) {
+  const inFolder =
+    /^(cd (?:-LiteralPath )?(?:'(?:[^']|'\\''|'')*'|\S+)(?: -ErrorAction Stop;| &&) )(.*)$/su.exec(
+      name,
+    );
+  const [lead, command] = inFolder ? [inFolder[1], inFolder[2]] : ['', name];
+  return /^astryx(\s|$)/.test(command)
+    ? `${lead}${formatCliCommand(command)}`
+    : name;
 }
