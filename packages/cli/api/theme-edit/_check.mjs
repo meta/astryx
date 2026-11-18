@@ -3047,9 +3047,9 @@ function oneModeOfTheme(data) {
  * Whether any of the parts draws a line of that kind (a border, one side's
  * border, an outline) with a width, at rest or in the state named: then its
  * color alone can differ by mode. A width drawn with a style of none or
- * hidden in the same rule is no line; nor is a side drawn only between
- * siblings (a grouped button's join, cleared on the first or last child).
- * With a variant (`variant:primary`), a rule for another value of that
+ * hidden in the same rule is no line. A side cleared only on the first or
+ * last child (a list row's divider, a grouped button's join) is still
+ * drawn on the others, so it counts. With a variant (`variant:primary`), a rule for another value of that
  * prop does not count.
  * @param {any} C the part census
  * @param {string[]} parts
@@ -3076,14 +3076,6 @@ export function drawsLine(C, parts, prop, state, when) {
     const at = C.MAP[t]?.at ?? {};
     return keys.some(k => {
       const rules = /** @type {Record<string, string>} */ (at[k] ?? {});
-      // (A grouped button's join: cleared on the first or last child.)
-      if (
-        Object.entries(rules).some(
-          ([sel, w]) =>
-            /:(?:first|last|nth-last|nth)-child/.test(sel) && zero(w),
-        )
-      )
-        return false;
       const styles = /** @type {Record<string, string>} */ (
         at[k.replace(/-width$/, '-style')] ?? {}
       );
