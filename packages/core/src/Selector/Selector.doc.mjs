@@ -189,19 +189,21 @@ export const docs = {
     },
     {
       name: 'value',
-      type: 'string',
-      description: 'Currently selected value.',
+      type: 'string | null',
+      description:
+        'Currently selected value: a string, or undefined to show the placeholder; with hasClear, value is required and null means no selection. Without hasClear the type is string; with hasClear it is string | null.',
     },
     {
       name: 'onChange',
-      type: '(value: string) => void',
-      description: 'Callback fired when the selection changes.',
+      type: '(value: string | null) => void',
+      description:
+        'Called with the selected option value; it receives null only when hasClear is set and the user clears the selection. Without hasClear the type is (value: string) => void; with hasClear it is (value: string | null) => void, so a useState<string | null> setter fits.',
     },
     {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows a clear (×) button when a value is selected. When true, onChange also accepts null to signal the user cleared the selection.',
+        'Shows a clear (×) button when a value is selected; with it, value becomes required and accepts null, and onChange receives null when the user clears the selection.',
       default: 'false',
     },
     {
@@ -345,8 +347,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'Icon displayed at the start of the selector trigger.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the selector trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isLoading',

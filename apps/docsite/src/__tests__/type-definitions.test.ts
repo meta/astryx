@@ -209,7 +209,7 @@ describe('generated registry', () => {
   it('attaches typeRefs and matching typeDefs to a hook return field', () => {
     const entry = allEntries.find(e => e.name === 'useToast');
     expect(entry).toBeDefined();
-    const showToast = entry!.returns?.find(r => r.name === 'showToast');
+    const showToast = entry!.returns?.find(r => r.name === 'value');
     expect(showToast?.typeRefs).toEqual(['ToastOptions']);
     const def = entry!.typeDefs.find(d => d.name === 'ToastOptions');
     expect(def?.definition).toContain('export interface ToastOptions');

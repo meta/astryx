@@ -13,14 +13,72 @@
  * The workflow starts every page from a template, because a template already
  * has the frame, spacing, and section rhythm that a page composed from
  * components has to rediscover.
+ *
+ * The theme rule names the exact wiring for the project the call names, as
+ * `theme add` prints it: the import and the value `<Theme>` takes, or the
+ * provider an installed package names to take it. When no theme is added yet,
+ * a last step adds one, as a command. A rule that leaves the value open gets
+ * guessed as a theme name, and `<Theme>` with a name crashes on hydrate.
  */
+
+import {appThemeWiring} from '../_adapter.mjs';
+
+/**
+ * The rule that wires the app's theme, for one project's theme state.
+ * @param {import('../_adapter.mjs').AppThemeWiring} wiring
+ * @returns {string}
+ */
+export function themeRule(wiring) {
+  const module =
+    wiring.state === 'wired'
+      ? `the generated ${wiring.modulePath}`
+      : 'the astryx-themes module the theme step writes';
+  const notAName =
+    'The theme prop takes that theme object, never a name such as "light".';
+  /** The module's names some markup uses: `themeModes` only when it passes a mode. */
+  const names = (/** @type {string} */ markup) =>
+    markup.includes('themeModes[')
+      ? 'themes, defaultThemeSlug, themeModes'
+      : 'themes, defaultThemeSlug';
+  const {provider} = wiring;
+  if (provider) {
+    return `Pass the theme to the app's ${provider.export}, which wires it: ${provider.line} (import {${provider.export}} from '${provider.from}', and {${names(provider.line)}} from ${module}), and import core reset.css + astryx.css. ${notAName}`;
+  }
+  const modes = wiring.state !== 'none' && wiring.hasModes;
+  const mode = modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : '';
+  return `Wrap the app in <Theme theme={themes[defaultThemeSlug]}${mode}> (import {Theme} from '@astryxdesign/core/theme', and {${names(mode)}} from ${module}) and import core reset.css + astryx.css. ${notAName}`;
+}
+
+/**
+ * The step that adds the app's theme, when the project has none added yet.
+ * @param {import('../_adapter.mjs').AppThemeWiring} wiring
+ * @returns {import('../build.type.mjs').BuildPlaybookStep | null}
+ */
+export function themeStep(wiring) {
+  if (wiring.state === 'wired') return null;
+  return {
+    title:
+      wiring.state === 'none'
+        ? `Install ${wiring.package}, then add it as the app's theme (once)`
+        : "Add your installed theme as the app's theme (once)",
+    commands: [
+      {
+        command: `theme add ${wiring.slug}`,
+        purpose:
+          'write the astryx-themes module the app root takes its theme from',
+      },
+    ],
+  };
+}
 
 /**
  * The page-building playbook (emitted when `build` runs with no query).
  *
- * @returns {import('../build.type.mjs').BuildHelpResponse}
+ * @param {{cwd?: string}} [options] the project whose theme the rules wire
+ * @returns {Promise<import('../build.type.mjs').BuildHelpResponse>}
  */
-export function buildHelp() {
+export async function buildHelp(options = {}) {
+  const wiring = await appThemeWiring(options.cwd ?? process.cwd());
   return {
     type: 'build.help',
     data: {
@@ -56,6 +114,7 @@ export function buildHelp() {
             },
           ],
         },
+        ...[themeStep(wiring)].filter(step => step != null),
       ],
       rules: [
         'Start every page from a page template. Never lay out a page from scratch.',
@@ -63,7 +122,7 @@ export function buildHelp() {
         "Keep the template's page frame, gap, and padding values. Replace its data, copy, and sections.",
         'No <div>/raw HTML for layout — use VStack/HStack/Grid/Stack/Card etc.',
         'No style={{}} — use component props, and design tokens for values.',
-        "Wrap the app in <Theme theme={...}> (import {Theme} from '@astryxdesign/core/theme') and import core reset.css + astryx.css.",
+        themeRule(wiring),
       ],
       related: [
         {

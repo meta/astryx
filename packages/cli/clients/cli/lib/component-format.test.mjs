@@ -5,6 +5,7 @@ import {
   formatBestPractices,
   formatBrief,
   formatCompact,
+  shortUsage,
   formatFull,
   formatProps,
 } from './component-format.mjs';
@@ -78,6 +79,23 @@ describe('formatFull sub-component rendering', () => {
     expect(out).not.toContain('### XDSRadioListItem');
   });
 
+  it('names every bare sub-component in one batch read in the short answer', () => {
+    const docs = {
+      name: 'Table',
+      description: 'Rows and columns.',
+      components: [
+        {name: 'TableHeader'},
+        {name: 'TableRow', props: [{name: 'id', type: 'string'}]},
+        {name: 'useTableSortable'},
+      ],
+    };
+    const out = formatCompact(docs, 'Table', '');
+    expect(out).toContain('### TableRow');
+    expect(out).toMatch(
+      /^TableHeader, useTableSortable: read them in one call with `.* component TableHeader useTableSortable`\.$/m,
+    );
+  });
+
   it('names consecutive bare sub-components on one line, in order', () => {
     const docs = {
       name: 'Table',
@@ -90,7 +108,7 @@ describe('formatFull sub-component rendering', () => {
         {name: 'useTableSortable'},
       ],
     };
-    for (const out of [formatFull(docs), formatCompact(docs, 'Table', '')]) {
+    for (const out of [formatFull(docs)]) {
       const lines = out.split('\n');
       const shared = lines.filter(l => l.startsWith('Read each with'));
       expect(shared).toHaveLength(2);
@@ -486,5 +504,107 @@ describe('theming override example', () => {
     expect(formatFull(docs)).toContain(
       "Override in defineTheme: `components: {'table': {base: {/* CSS properties */}, 'density:value': {/* variant-specific */}}, 'table-cell': {base: {/* CSS properties */}, 'hover': {/* state-specific */}}}`",
     );
+  });
+});
+
+describe('short answer (compact)', () => {
+  const docs = {
+    name: 'Widget',
+    description: 'A widget.\n\nA second paragraph the short answer leaves out.',
+    props: [
+      {
+        name: 'label',
+        type: 'string',
+        required: true,
+        description:
+          'Visible label. More text that only the props read prints, long enough that cutting it saves more than the line that names that read costs.',
+      },
+      {
+        name: 'size',
+        type: "'sm' | 'md'",
+        default: "'md'",
+        description: 'Size.',
+      },
+      {name: 'children', type: 'ReactNode', required: true},
+    ],
+  };
+
+  it('prints the first paragraph, each prop with its first sentence, and the routes to the rest', () => {
+    const out = formatCompact(docs, 'Widget', '@acme/w/Widget', {
+      propsCommand: 'component Widget --props',
+      fullCommand: 'component Widget --detail full',
+    });
+    expect(out).toContain('A widget.');
+    expect(out).not.toContain('second paragraph');
+    expect(out).toContain("- `size`: `'sm' | 'md'` = `'md'` - Size.");
+    expect(out).toContain('Visible label.');
+    expect(out).not.toContain('More text that only the props read prints');
+    expect(out).toMatch(/component Widget --props`$/m);
+    expect(out).toMatch(/component Widget --detail full`$/m);
+  });
+
+  it('builds the usage from the required props when no short example exists', () => {
+    expect(shortUsage(docs, 'Widget')).toBe('<Widget label="...">...</Widget>');
+  });
+
+  it('uses a short demo example as the usage', () => {
+    const withExample = {
+      ...docs,
+      examples: [{code: '<Widget label="Save" />'}],
+    };
+    expect(shortUsage(withExample, 'Widget')).toBe('<Widget label="Save" />');
+  });
+
+  it('skips an example longer than the short answer allows', () => {
+    const long = Array.from({length: 30}, (_, i) => `line ${i}`).join('\n');
+    expect(shortUsage({...docs, examples: [{code: long}]}, 'Widget')).toBe(
+      '<Widget label="...">...</Widget>',
+    );
+  });
+
+  it('prints no usage for a component with no example and no required prop', () => {
+    const optional = {
+      name: 'Spacer',
+      props: [{name: 'size', type: "'sm' | 'md'"}],
+    };
+    expect(shortUsage(optional, 'Spacer')).toBeNull();
+    expect(formatCompact(optional, 'Spacer', '@acme/s')).not.toContain(
+      '## Usage',
+    );
+  });
+
+  it('prints no usage for a hook without examples', () => {
+    expect(shortUsage({name: 'useThing', props: []}, 'useThing')).toBeNull();
+  });
+});
+
+describe('a doc with returns (a hook)', () => {
+  const docs = {
+    name: 'useThing',
+    usage: {description: 'Reads a thing.'},
+    params: [],
+    returns: [{name: 'thing', type: 'Thing', description: 'The thing.'}],
+  };
+  const row = '| `thing` | `Thing` | The thing. |';
+
+  it('prints a Returns section in full output', () => {
+    expect(formatFull(docs)).toContain(
+      `## Returns\n\n| Field | Type | Description |\n|---|---|---|\n${row}`,
+    );
+  });
+
+  it('prints a Returns section in compact output', () => {
+    expect(formatCompact(docs, 'useThing')).toContain(row);
+  });
+
+  it('names the returns in the brief signature', () => {
+    expect(formatBrief(docs, 'useThing').split('\n')[0]).toBe(
+      'useThing(): { thing }',
+    );
+  });
+
+  it('prints no Returns section for a component', () => {
+    const out = formatFull({name: 'Box', description: 'A box.', props: []});
+    expect(out).not.toContain('## Returns');
   });
 });

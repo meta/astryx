@@ -47,7 +47,11 @@ export const doc = {
       flag: '--list',
       param: 'options.list',
       description:
-        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are refused',
+        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>',
+      pointers: [
+        {commands: ['template --skeleton'], text: ', --skeleton'},
+        ' and --overwrite are refused',
+      ],
     },
     {
       flag: '--type <type>',
@@ -58,8 +62,13 @@ export const doc = {
     {
       flag: '--package <pkg>',
       param: 'options.package',
-      description:
-        'Narrow to templates from a specific package. Use @astryxdesign/core to select an original hidden by an integration replacement.',
+      description: 'Narrow to templates from a specific package.',
+      pointers: [
+        {
+          commands: ['template shell-side-nav --package @astryxdesign/core'],
+          text: ' Use @astryxdesign/core to select an original hidden by an integration replacement.',
+        },
+      ],
     },
     {
       flag: '--skeleton',

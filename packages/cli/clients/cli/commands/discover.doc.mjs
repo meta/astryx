@@ -21,9 +21,9 @@ export const doc = {
     'Inside a project, integrations installed for the computer, beside the CLI installed for it, are listed as ones the project could add, with its install command; outside one they load. ' +
     'A package query shows one package: what it adds, every version a source knows, and the command that adds it. ' +
     "An @scope/name/Component path prints an installed component's doc; any other item path shows that item. " +
-    'Anything else, even an exact component name, searches every item and package and lists the matches. Discover only reads: your package manager installs, updates, and removes packages.',
+    'Anything else, even an exact component name, searches every item and package word by word, as `astryx search` does, and lists the matches; every word is part of the query. Discover only reads: your package manager installs, updates, and removes packages.',
   fn: 'discover',
-  args: [{name: 'query', param: 'query', required: false}],
+  args: [{name: 'query', param: 'query', required: false, variadic: true}],
   options: [
     {
       flag: '--components',

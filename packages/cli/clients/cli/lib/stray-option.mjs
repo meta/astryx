@@ -54,7 +54,7 @@ function pathOf(cmd) {
  * @param {(option: OptionLike) => boolean} keep
  * @returns {OptionLike[]}
  */
-function optionsInReach(cmd, keep) {
+export function optionsInReach(cmd, keep) {
   /** @type {OptionLike[]} */
   const options = [];
   for (
@@ -279,6 +279,19 @@ function runAsMeant(cmd, path, stray, message, words, offered) {
 }
 
 /**
+ * Options a command no longer takes, which older docs and agents still pass:
+ * each answers what to do instead, not only that it is unknown.
+ * @type {Record<string, Record<string, string>>}
+ */
+const REMOVED_OPTIONS = {
+  'experimental export': {
+    '--static': "--static is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
+    '--interactive':
+      "--interactive is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
+  },
+};
+
+/**
  * The answer to an option a command does not take.
  *
  * The message names the options the command takes, and a group's
@@ -303,6 +316,19 @@ export function strayOptionAnswer(
   const stray = /unknown option '([^']+)'/.exec(message)?.[1];
   if (!stray) return undefined;
   const path = pathOf(cmd);
+  const removed = REMOVED_OPTIONS[path.join(' ')]?.[stray.split('=')[0]];
+  if (removed) {
+    const run = words.filter(word => word.split('=')[0] !== stray.split('=')[0]);
+    return {
+      message: removed,
+      suggestions: [
+        {
+          name: formatCliCommand(run.map(w => quoteCommandArgument(w)).join(' ')),
+          reason: 'the same command without the flag',
+        },
+      ],
+    };
+  }
   const json = path.length === 0 || jsonSupported(path.join(' '));
   const offered = optionsInReach(
     cmd,

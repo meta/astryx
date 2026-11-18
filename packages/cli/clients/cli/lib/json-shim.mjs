@@ -1177,9 +1177,15 @@ async function answerStrayOption(err, rejected, message, exitCode) {
       first &&
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
     ) {
-      const answer = await unknownCommandAnswer(rejected, cleaned, {
-        findEntry,
-      });
+      /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
+      const withRun = a =>
+        a?.suggestions.some(s => s.name.startsWith('astryx ')) ? a : null;
+      // The whole run first: a command the words point at can take the
+      // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
+      // run, the run without the option.
+      const answer =
+        withRun(await unknownCommandAnswer(rejected, words, {findEntry})) ??
+        (await unknownCommandAnswer(rejected, cleaned, {findEntry}));
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),
