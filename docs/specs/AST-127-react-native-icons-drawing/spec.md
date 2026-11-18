@@ -26,13 +26,14 @@ An app built with `@astryxdesign/react-native` shows icons and simple vector
 drawings on every screen: a chevron in a list row, a close mark in a sheet, a
 theme's own image icons in a menu, a chart's lines and bars. A developer writes
 `<Icon icon="close" />` or `<LineChart … />` and gets a sharp, tinted drawing at
-the right size in the view's first frame. By default a built-in icon name shows
-the platform's system symbol, such as an SF Symbol on iOS; an icon the app or
-theme defines replaces it, and a drawn glyph stands in where no system symbol
-exists. Icons mirror in right-to-left layouts, are named or hidden for screen
-readers, enlarge in the iOS Large Content Viewer where a fixed-size control
-needs it. The package installs no icon font, SVG library, or image library; an
-app may still use such libraries beside these components (`spec:AST-140/FR9`).
+the right size in the view's first frame. On iOS a built-in icon name shows its
+SF Symbol by default. An icon the app or theme defines replaces it, and a drawn
+glyph stands in where no system symbol exists, which on Android is every
+built-in name (OQ1). Icons mirror in right-to-left layouts, are named or hidden
+for screen readers, and enlarge in the iOS Large Content Viewer where a
+fixed-size control needs it. The package installs no icon font, SVG library, or
+image library; an app may still use such libraries beside these components
+(`spec:AST-140/FR9`).
 
 This record details the icon and drawing pieces of the platform layer of
 `spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the capability
@@ -40,7 +41,8 @@ shape (`spec:AST-112/FR7`), and the mapping of Astryx icon names onto system
 symbols (`spec:AST-112/FR9`). It follows the shared platform rules of
 `spec:AST-140`: the missing piece (FR2), the result vocabulary (FR3), additive
 evolution (FR5), threading (FR6), conformance suites (FR7), and coexistence with
-other libraries (FR9). Icon names and theme icons follow `spec:AST-082/FR17`.
+other libraries (FR9). Icon names and theme icons follow `spec:AST-082/FR17`,
+apart from the Android departure listed under Current-state impact.
 
 ## Why this exists
 
@@ -134,7 +136,8 @@ All five contracts belong to the platform's core: every binary has them.
     rejects. Its reasons are `no-module`, `unsupported` (a binary without
     `prefetch`), `unavailable` (`isSupported()` answers false), `fetch-failed`
     (no missing mask loaded), and `error`. An empty list resolves `ok` with zero
-    counts and calls nothing.
+    counts and calls nothing; a list with nothing to download resolves `ok` with
+    `loaded: 0`.
   - `isAvailable()` is true only where the module has `prefetch` and
     `isSupported()` does not answer false.
   - `AstryxProvider` prefetches the active theme's image icons each time that
@@ -170,8 +173,9 @@ All five contracts belong to the platform's core: every binary has them.
   - An image the app registers for the name shows through `NativeIconView`.
   - A glyph the theme defines for the name draws as a vector scene (FR6).
   - Under the `platform` icon source, a built-in name shows its system symbol:
-    on iOS, the SF Symbol the library's name table gives it, where the symbol
-    view is present and the running iOS meets that symbol's minimum.
+    on iOS, the SF Symbol that `@astryxdesign/native`'s `NATIVE_ICON_DEFAULTS`
+    gives it (`spec:AST-082/FR17`), where the symbol view is present and the
+    running iOS meets that symbol's minimum.
   - Otherwise the shared drawn glyph for the built-in name draws as a vector
     scene, at the theme's stroke weight (OQ1).
   - An unknown built-in name stops a development build with a message that names
@@ -181,7 +185,8 @@ All five contracts belong to the platform's core: every binary has them.
   - The icon source is `platform` or `theme`. The `iconSource` preference of
     `AstryxCapabilitiesProvider`, a value or a function of the theme's name,
     decides; without it, the theme's own setting decides; without either, the
-    source is `platform`. Under `theme`, built-in names skip system symbols.
+    source is `platform`. The theme's setting is `native.iconSource` in its
+    definition. Under `theme`, built-in names skip system symbols.
 - **FR5 — The library applies Astryx's display rules before the views draw.**
   - Right-to-left: `chevronLeft`, `chevronRight`, `chevronsLeft`,
     `chevronsRight`, and `externalLink` mirror; `chevronDown`, `arrowUp`,
@@ -272,7 +277,8 @@ All five contracts belong to the platform's core: every binary has them.
   - The search for that enclosing view never leaves the view's own surface and
     changes only React Native views.
   - The library marks at most one glyph per control. For an icon shown as a
-    symbol or an image, the viewer shows only the control's title.
+    symbol or an image, the viewer shows only the control's title; under the
+    default icon source on iOS, that is every built-in name with an SF Symbol.
   - Android has no Large Content Viewer and ignores the prop.
 
 ### Behaviour across binaries
@@ -282,10 +288,11 @@ All five contracts belong to the platform's core: every binary has them.
   named feature (`spec:AST-140/FR5`).
 - **FR11 — Absence never throws.** Every probe answers false, every call
   resolves a result (`spec:AST-140/FR3`), and every absent view reports
-  `no-native-view` and draws its fallback (`spec:AST-140/FR2`). The
-  `isPlatformEnabled={false}` switch sends `SymbolView`, `NativeIconView`, and
-  `Vector` to their fallbacks; `Icon` then draws built-in names as drawn glyphs,
-  because the vector view is core.
+  `no-native-view` and draws its fallback (`spec:AST-140/FR2`). Setting the
+  `isPlatformEnabled` preference of `AstryxCapabilitiesProvider` (default true)
+  to false sends `SymbolView`, `NativeIconView`, and `Vector` to their
+  fallbacks; `Icon` then draws built-in names as drawn glyphs, because the
+  vector view is core.
 - **FR12 — Native code uses public platform API only.** The views and modules
   use the public APIs of UIKit, Core Graphics, Foundation, the Android SDK, and
   React Native. This group needs no exception.
@@ -300,12 +307,14 @@ All five contracts belong to the platform's core: every binary has them.
 | `AstryxVectorView` | Core Graphics drawing; the Large Content Viewer image | Canvas drawing; the Large Content Viewer prop ignored |
 | `AstryxVectorInfo` | Reports 2                                             | Reports 2                                             |
 
-- FR4 gap: no contract shows Android's system icons, so on Android every
-  built-in name without a defined icon draws its drawn glyph.
+- FR4 gap: against `spec:AST-082/FR17`, no contract shows Android's system
+  icons, so on Android every built-in name without a defined icon draws its
+  drawn glyph.
+- FR4 gap: the library reads its own SF Symbol table instead of
+  `NATIVE_ICON_DEFAULTS`, and that map records no minimum iOS per symbol.
 - Supported feature/engine floor: `spec:AST-112` Platform support (iOS at React
   Native's minimum, Android API level 24, New Architecture only); each SF
-  Symbol's minimum iOS in the library's name table; symbol effects by kind on
-  iOS 17, 18, or 26 (FR3).
+  Symbol's minimum iOS; symbol effects by kind on iOS 17, 18, or 26 (FR3).
 - Unsupported behavior: an absent view draws its fallback and reports
   `no-native-view`; an absent module answers `no-module`; a binary without a
   named feature keeps the revision-1 behavior, draws its fallback, or answers
@@ -322,9 +331,11 @@ All five contracts belong to the platform's core: every binary has them.
 - Changes `spec:AST-112/FR1`: the core's list gains `AstryxIconView`,
   `AstryxIcons`, `AstryxVectorView`, and `AstryxVectorInfo` beside system
   symbols.
-- Follows `spec:AST-112/FR9` and `spec:AST-082/FR17`: built-in names map onto
-  system symbols by default, and an icon the app or theme defines replaces the
-  default. The drawn glyph that stands in where no system symbol exists is OQ1.
+- Follows `spec:AST-112/FR9` and `spec:AST-082/FR17` on iOS: built-in names map
+  onto SF Symbols by default, and an icon the app or theme defines replaces the
+  default.
+- Departs from `spec:AST-082` FR17 and DEC-10 until OQ1 is ruled: Android has no
+  system icon map, and a built-in name without a symbol draws the drawn glyph.
 
 ## Verification
 
