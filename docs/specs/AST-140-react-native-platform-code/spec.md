@@ -371,9 +371,10 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
       engine implements it.
   - A native module `<Name>` has `<Name>Module`: one typed method per spec
     method. An asynchronous method takes a typed resolve and a reject (a
-    stable code and a message), and settles exactly once. The binding turns
-    a seam reject into FR3's result object, `error` with the code as its
-    reason, so JavaScript always receives a result value (DEC-2). An optional
+    stable code and a message), and settles exactly once. A reject's code is
+    one of the method's reasons (FR3), and the binding turns the reject into
+    FR3's result object with that code as its reason, so JavaScript always
+    receives a result value (DEC-2). An optional
     spec method is an optional member on iOS and, on Android, resolves `error`
     with reason `unsupported` by default. A module that emits events has `eventSink` and
     `<Name>ModuleEvents`. The constants method is `constants`.
@@ -415,9 +416,10 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     language. Inline C entry points per prop and command
     (`<Name>HostSet<Prop>(host, value)`, `<Name>Host<Command>(host, …)`) let a
     C caller reach a host directly.
-  - On Android the seam is Kotlin interfaces in one package, internal to the
-    platform module until an engine outside it binds them. A public class
-    adopts its seam through an internal host object over its own state.
+  - On Android the seam is public Kotlin interfaces in one package, as on iOS,
+    where the seam headers are public headers; an engine outside the platform
+    module binds them. A class adopts its seam directly or through a host
+    object it owns.
   - A class adopts its seam and keeps its behavior. For React Native, the
     Fabric component or view manager compares old and new props, writes the
     changed ones through the host, calls `didUpdateProps`, and sets
