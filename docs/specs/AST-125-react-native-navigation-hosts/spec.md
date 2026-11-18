@@ -42,24 +42,32 @@ applies `spec:AST-112/DEC-9`: Astryx owns navigation, routing included.
 
 ## Why this exists
 
-React Navigation and Expo Router, over react-native-screens, are mature: they
-give React Native apps a typed router, deep links, native stack containers, and
-system headers and tab bars. Astryx keeps their names and semantics where they
-fit (the navigator and option names, `navigate`, `usePreventRemove`). It does
-not build on them, for these reasons:
+Astryx owns navigation (`spec:AST-112/DEC-9`). Per piece, the gap that makes
+it build its own:
 
-| Piece                        | What the ecosystem does well                                                                                | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack host and screen        | react-native-screens wraps UINavigationController and Android fragments, with headers, transitions and back | Its headers, back gestures and transitions are built-in UI that Astryx cannot theme or replace, and its gestures couple to the platform's. Astryx's gesture and drag layer must decide ownership between a stack's back swipe, a sheet over the stack and a scroll view inside it (`spec:AST-112/DEC-9`); sheets over stacks go through Astryx's own presentation host. |
-| Header slot                  | react-native-screens hosts React subviews in the navigation bar                                             | No gap of its own: it exists because the stack screen exists, and it carries Astryx's measure and press rules into the bar.                                                                                                                                                                                                                                             |
-| Search and large title       | react-native-screens maps search bar options onto UISearchController                                        | Astryx needs one search model across a UIKit-level field (iOS) and its own drawn field (Android, drawn chrome) with one set of options and insets, and a large title that collapses with Astryx's scroll target.                                                                                                                                                        |
-| Tabs host, screen, accessory | react-native-screens and React Navigation's native bottom tabs wrap UITabBarController                      | The tab bar's minimize, the iOS 26 bottom accessory, re-select through the stack's own guard, and a Material bar or rail must follow Astryx's theme and insets and work with Astryx's stack host.                                                                                                                                                                       |
-| Android back                 | react-native-screens supports predictive back on its stack                                                  | Predictive back must respect Astryx's back registry (sheets, menus and search fields that consume back) and the router's prevent-remove guard before the gesture starts.                                                                                                                                                                                                |
-| Router protocol              | React Navigation exposes its state through its container and listeners                                      | Astryx Stage, the Astryx app's preview chrome, and a development inspector read one serialisable, revisioned snapshot and open paths through the app's own linking, the same in Stage and on devices (`spec:AST-112/FR12`).                                                                                                                                             |
+- **Stack host and screen.** Astryx's gesture and drag layer decides which of a
+  stack's back swipe, a sheet over the stack and a scroll view inside it owns a
+  touch, and the header, back gestures and transitions take Astryx's theme or
+  give way to Astryx's own chrome. A stack container whose built-in UI and
+  gestures the library cannot own allows neither.
+- **Header slot.** No gap of its own: it exists because the stack screen does.
+- **Search and large title.** One option set covers the system search field on
+  iOS and the router's drawn row elsewhere, with one set of insets, and the
+  large title collapses with the scroll view the library names.
+- **Tabs host, tab screen and tab accessory.** The tab bar's minimize, the iOS
+  26 bottom accessory, re-select through the stack's own guard, and a Material
+  bar or rail follow Astryx's theme and insets and work with Astryx's stack
+  host.
+- **Android back.** Predictive back gives way to Astryx's back consumers
+  (sheets, menus, search fields) and to the router's guard before the gesture
+  starts.
+- **Router protocol.** Astryx Stage, the Astryx app's preview and a
+  development inspector read one serialisable snapshot and open paths through
+  the app's own linking, the same in Astryx Stage and on devices. Whether it
+  belongs in this group is OQ3.
 
-One dependency set also matters: an app that navigates with the Astryx router
-runs no third-party native navigation code, and the package's only peers
-outside Astryx stay React and React Native (`spec:AST-112/FR2`).
+An app that navigates with the Astryx router runs no third-party native
+navigation code (`spec:AST-112/FR2`).
 
 ## Who uses it
 
@@ -103,9 +111,10 @@ no navigation host.
 - **FR1 — The router owns state and URLs; the hosts own the native containers.**
   - The router (`NavigationRoot`, `createStack`, `createTabs`) holds every
     route, its params, focus, linking and persistence. The hosts hold no route
-    list of their own: after each mount the stack host diffs its active screens
-    against the native stack and applies the difference (push, pop to a prefix,
-    or one replacement), and while a transition runs it waits, then diffs again.
+    list of their own: the native stack always ends up showing the router's
+    active screens in the router's order, with a push or pop animation where
+    one screen came or went, and a change that arrives during a transition
+    shows once the transition ends.
   - The hosts own what the system draws and moves: the native stack and tab
     containers, transitions, back gestures, bars, large titles, search fields,
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
@@ -118,8 +127,10 @@ no navigation host.
     imports the router, never a host.
 - **FR2 — The AstryxRouter protocol.** One serialisable, revisioned view of a
   root's routes for host-facing UI.
-  - `getRouterState()` returns the host root's snapshot, or `undefined` when no
-    root is mounted. `subscribeRouterState(listener)` calls the listener with
+  - The host root is the root a host (Astryx Stage, the Astryx app's preview)
+    names, else the outermost root that mounted first and is still mounted. In
+    every app, a host or none, `getRouterState()` returns the host root's
+    snapshot, or `undefined` while no root is mounted. `subscribeRouterState(listener)` calls the listener with
     each new snapshot, after each committed navigation change, and returns an unsubscribe
     function. `useRouterState()` is the hook form: inside a root, that root's;
     outside, the host root's.
@@ -136,8 +147,8 @@ no navigation host.
   - The same four functions exist per root on the root's handle and on
     `createNavigationRef()`. Astryx Stage's address bar and the Astryx app's
     preview chrome show the host root's routes and open paths in it through
-    this protocol. The host root is exposed to them only when the host asks for
-    it; an app's own mount never exposes it.
+    this protocol. They reach the app's routes only when the host asks for
+    them; an app's own mount never offers its routes to a host.
   - A change to the snapshot's shape or meaning, or to the protocol's members,
     changes `revision` (`RouterStateRevision`).
 - **FR3 — The stack host.** A native stack container whose children are
@@ -148,9 +159,10 @@ no navigation host.
     published by the router and default to false, so nothing pops natively until
     the router allows it.
   - The back button and the VoiceOver escape show when the stack is deeper than
-    one screen; they pop when `canPop` and otherwise emit `onBackPrevented`
-    with `source: 'button' | 'escape'`. A stack's root never shows a back
-    button.
+    one screen; they pop when `canPop` and otherwise emit `onBackPrevented`.
+    The event's `source` is `button` (the back button), `escape` (the VoiceOver
+    escape) or `reselect` (a tab re-select refused by `popToRootEnabled`,
+    FR8). A stack's root never shows a back button.
   - `onWillShow` and `onDidShow` (`animated`) mark a transition's start and
     end. `onGestureCancel` reports a cancelled interactive pop. `onNativePop`
     reports, once per settled transition, every route the system removed (back
@@ -163,8 +175,10 @@ no navigation host.
     before its transition begins, with `source`: `gesture` (the start of a
     back swipe or predictive back gesture), `key` (Android system back without
     a gesture, a hardware key, TalkBack, or the iOS VoiceOver escape) or
-    `button` (the back button or its menu). A pop or `onGestureCancel` follows
-    it. It never fires for a pop the router asked for, a prevented back, or a
+    `button` (the back button or its menu). Pop start groups backs by input
+    kind, so the VoiceOver escape counts as `key`, a back without a gesture or
+    a button; `onBackPrevented` keeps `escape` because it names the control the
+    person used. A pop or `onGestureCancel` follows it. It never fires for a pop the router asked for, a prevented back, or a
     tab re-select. The router passes it to the leaving screen as a navigation
     event: a handler can start work as the pop begins, and the pop does not
     wait for it.
@@ -202,8 +216,9 @@ no navigation host.
     colour; on Android also the colour and bottom line the bar takes when
     content scrolls under it).
   - Back: `headerBackVisible`, `headerBackTitle` (an empty string shows the
-    chevron alone), `headerBackButtonDisplayMode`,
-    `headerBackButtonMenuEnabled`.
+    chevron alone), `hasHeaderBackTitle` (whether `headerBackTitle` was given:
+    no title means the system's own back title, which differs from an empty
+    one), `headerBackButtonDisplayMode`, `headerBackButtonMenuEnabled`.
   - Items: `headerLeftItems`, `headerRightItems` and `toolbarItems` are lists
     of plain data, leading to trailing, each with a stable `id`. An item is a
     button, a menu, a spacer, a flexible spacer or a status text; its icon is a
@@ -304,9 +319,8 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     the system bars take on each edge, the navigation bar's bottom edge in
     window coordinates, and the edge where the system places a vertical bar
     (`none`, `leading`, `trailing`).
-  - The same numbers are the screen's layout state, written synchronously at
-    every native layout, so a pushed screen's first frame is laid out at its
-    real size; the event may trail that state by one frame.
+  - A pushed screen's first frame is laid out at its real size and insets; the
+    event may reach JavaScript one frame after the layout uses the numbers.
   - `safeAreaEdges` pads non-scrolling content natively and the reported insets
     on those edges are 0, so nothing pads twice.
   - The router exposes them as `useScreenInsets()`, `useContentWidth()` and
@@ -319,19 +333,17 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   an inset change. `onBarEdge` is delivered per frame only to an Animated
   native-driver binding, so the drawn search row follows the bar with no
   JavaScript per frame.
-- **FR12 — Navigation links by default; a missing host fails loudly.**
-  - The `navigation` capability is the native half of Astryx's own navigators,
-    so an app links it by default. A minimal opt-out may exist.
-  - The router probes the hosts before it renders through them. When they are
-    absent (an opted-out build, or a binary without them), a navigator with
-    system chrome fails at its first render with an error that names the
-    missing capability; inside a preview project it shows an in-place message,
-    announced as an alert, and a development error. It never renders a blank
-    screen.
+- **FR12 — A missing host fails loudly.**
+  - The navigation hosts are part of the library's default native set
+    (`spec:AST-112/FR3`).
+  - The router checks that the hosts are present before it renders through
+    them. When they are absent (an app that opted out of the default set, or a
+    binary without them), a navigator with system chrome fails at its first
+    render with an error that names the missing capability; inside a preview
+    project it shows an in-place message, announced as an alert, and a
+    development error. It never renders a blank screen.
   - Drawn tabs render without a host. The stack needs its host for transitions
     in both chrome modes (OQ2).
-  - FR12 gap: `spec:AST-112/FR3` makes `navigation` opt-in, so an app that
-    does not list it links none of the hosts.
 - **FR13 — Accessibility.**
   - The system bars, back buttons, tab items and menus keep the platform's own
     VoiceOver and TalkBack behaviour, including UIKit's Large Content Viewer
@@ -348,27 +360,28 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - After a push or pop, the system container moves VoiceOver and TalkBack
     focus to the incoming screen as the platform does; the hosts add no focus
     rule of their own.
-- **FR14 — Contract baseline and Astryx Stage.**
-  - Every contract in the group is at revision 1. A behaviour added after
-    revision 1 is a named feature, `<Contract>.<feature>`, that the binary
-    lists and the JavaScript checks with `hasContractFeature` before it uses it.
-    Without it the JavaScript keeps the revision-1 behaviour or answers
-    `unsupported`, and warns once in development and in release builds; it
-    never takes a silent weaker path.
-  - The group's named features are `AstryxStackHost.pop-start` (`onPopStart`,
-    FR3) and `AstryxStackScreen.appearance` (the screen's chrome, FR7). On a
-    binary without `pop-start`, a `popStart` listener hears no native pop and
-    the router warns once. Any further stack screen behaviour beyond the
-    revision-1 baseline is a named feature of `AstryxStackScreen` in the same
-    way.
+- **FR14 — Named features and Astryx Stage.**
+  - The group's native contracts follow `spec:AST-112/FR8`: each is at
+    revision 1, and behaviour added later is a named feature the JavaScript
+    checks before use. The group's named features are
+    `AstryxStackHost.pop-start` (`onPopStart`, FR3) and
+    `AstryxStackScreen.appearance` (the screen's chrome, FR7); any further
+    stack screen behaviour beyond the baseline is a named feature of
+    `AstryxStackScreen`. On a binary without `pop-start`, a `popStart` listener
+    hears no native pop and the router warns once, in development and in
+    release builds.
+  - `AstryxRouter` is JavaScript that ships with the router, so the protocol
+    and its callers never differ in version and it has no named features. Its
+    `revision` (FR2) tells a reader such as Astryx Stage's address bar which
+    snapshot shape it reads.
   - Astryx Stage renders every host in the group with iOS and Android looks,
-    and its address bar shows and opens the router's routes (FR2). Compatibility goes
-    through the library's Stage version floor: the package names the oldest
-    Stage that supports its contract set, and an older Stage refuses the
-    project with the gaps listed.
-- **FR15 — Native code uses public platform API only.** The hosts use the
-  public API of UIKit, the Android SDK, AndroidX and Material Components. Two
-  exceptions on Android, each with a public-API fallback:
+    and its address bar shows and opens the router's routes (FR2). Its
+    compatibility with a project follows the version floor of
+    `spec:AST-112/FR12`.
+- **FR15 — Public platform API, with two named exceptions.** The hosts follow
+  `spec:AST-112/FR4` and use the public API of UIKit, the Android SDK, AndroidX
+  and Material Components. The group's exceptions are on Android, each with a
+  public-API fallback:
   - Predictive back in a nested stack forwards the gesture's progress to the
     stack's own FragmentManager through AndroidX Fragment's package-private
     back members, because React Native's always-enabled back callback otherwise
@@ -399,7 +412,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 | Contract           | iOS                                                                                                                                                                                                                                                        | Android                                                                                                                                                                                                                                                                                                                                                                                                                                             | Astryx Stage                                     |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| AstryxStackHost    | UINavigationController, a child of the nearest view controller; interactive pop recognizers, the iOS 26 content pop, a full-width swipe below iOS 26                                                                                                       | An AndroidX FragmentManager back stack in a headless host fragment; predictive back through the back dispatcher with Material's shared-axis transition or the shrink preview                                                                                                                                                                                                                                                                        | Renders it with iOS and Android looks            |
+| AstryxStackHost    | UINavigationController; the edge swipe, the iOS 26 content pop, a full-width swipe below iOS 26                                                                                                                                                            | An AndroidX FragmentManager back stack; predictive back with Material's shared-axis transition or the shrink preview                                                                                                                                                                                                                                                                                                                                | Renders it with iOS and Android looks            |
 | AstryxStackScreen  | A view controller with its navigation item: bar button items, UIMenu, title menu (iOS 16+), subtitles (iOS 26), toolbar, UISearchController, scroll edge effects (iOS 26), vertical bars (iOS 27.1); ignores `backPreview` and the scrolled header colours | A fragment with a Material 3 top app bar (small, in-row, or medium collapsing); bar items, menus, header slots. No bottom toolbar (`toolbarItems`, `toolbarShown` and `toolbarHidesOnScroll` are no-ops); search is the library's drawn row, not a Material search bar. Other no-ops: back title and its menu, `headerLargeSubtitle`, scroll-edge effects, `fullScreenGestureEnabled`, `statusBarAnimation`, `autoHideHomeIndicator`, vertical bars | Renders it with iOS and Android looks            |
 | AstryxHeaderSlot   | The navigation item's title view and custom bar button views                                                                                                                                                                                               | Views placed in the Material app bar's start, title and end areas                                                                                                                                                                                                                                                                                                                                                                                   | Renders it with iOS and Android looks            |
 | AstryxTabsHost     | UITabBarController; UITab and UISearchTab (iOS 18+), the iPad sidebar (iOS 18+), minimize (iOS 26); ignores `tabBarBackgroundColor` and `tabBarActiveIndicatorColor`                                                                                       | Material 3 NavigationBarView below 600dp, NavigationRailView at 600dp and above; a More list beyond five destinations on the bar (seven on the rail). No-ops: `tabBarRole: 'search'`, `tabBarMinimizeBehavior: 'automatic'` (never)                                                                                                                                                                                                                 | Renders it with iOS and Android looks            |
@@ -420,36 +433,37 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 ## Current-state impact
 
-- `spec:AST-112/FR1` and `spec:AST-112/FR3` list `navigation` as an opt-in
-  capability. This record changes that: the navigation hosts link by default as
-  the native half of Astryx's own navigators (FR12), and only a minimal opt-out
-  remains.
-- `spec:AST-112/FR8`'s per-spec version history becomes the revision-1
-  baseline with named features (FR14) for this group's contracts.
-- Otherwise this record details `spec:AST-112/FR2` (router and hosts),
-  `spec:AST-112/FR5` (the `./navigation` entry holds the router),
-  `spec:AST-112/FR6` and `spec:AST-112/FR7` (FR12 here), `spec:AST-112/FR12`
-  (FR14 here), and `spec:AST-112/DEC-9`.
+- Relies on `spec:AST-112` FR3 (amended): the library's own native pieces,
+  the navigation hosts included, link by default.
+- Relies on `spec:AST-112` FR8 (amended): native contracts start at revision 1
+  and grow by named features.
+- Relies on `spec:AST-112` FR12 (amended): Astryx Stage pairs with a project
+  through the package's version floor.
+- Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
+  only, and a record names its exceptions (FR15 here).
+- Details `spec:AST-112/FR2` (router and hosts), `spec:AST-112/FR5` (the
+  `./navigation` entry holds the router), `spec:AST-112/FR6` and
+  `spec:AST-112/FR7` (FR12 here), and `spec:AST-112/DEC-9`.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                                             | Representative states                                                                                   | Mutation or failure expectation                                                                                  |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                 | a push during a transition; a reset; a native pop of two routes                                         | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
-| FR2      | Unit tests of the snapshot, its shape fingerprint, and each declared consumer's reads; Astryx Stage contract checks of the address bar                                                                   | no root; nested roots; a URL the config fails on; an unchanged commit                                   | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
-| FR3      | Astryx Stage contract checks with iOS and Android looks; Simulator and emulator checks of each event                                                                                                     | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop                       | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
-| FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                         | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back                         | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
-| FR5      | Astryx Stage contract checks per option, with iOS and Android looks; Simulator and emulator captures                                                                                                     | each bar item kind; menus; header slots; large title collapse; scroll edge effects                      | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
-| FR6      | Unit tests of the option mapping; Simulator checks of the system field; Stage checks of the drawn row                                                                                                    | each placement; scopes; controlled text; Android                                                        | The two renderings disagree on an option's meaning, or the drawn row's motion runs JavaScript per frame          |
-| FR7      | Unit tests of the scoped options; Simulator and emulator frame captures of push, pop and a cancelled back                                                                                                | a dark screen over a light stack; a tab bar under it; a presented sheet                                 | The chrome changes outside the transition, or a cancelled back changes it                                        |
-| FR8      | Astryx Stage contract checks of the tabs, with iOS and Android looks; Simulator and emulator selection and re-select checks                                                                              | a refused tab; re-select with a guard; six tabs on Android; a lazy stack tab                            | The router pops on a system re-select, a refused tab is selected, or a selected tab goes blank                   |
-| FR9      | Stage and Simulator checks of placement events; emulator docked accessory                                                                                                                                | iOS 26 minimize; below iOS 26; `isChromeHidden`                                                         | No placement event at first layout, or hiding the chrome remounts the content                                    |
-| FR10     | Unit tests of the inset hooks; Simulator and emulator first-frame captures                                                                                                                               | a push's first frame; `safeAreaEdges`; a vertical bar pose                                              | A pushed screen's first frame is laid out at a wrong size, or an edge is padded twice                            |
-| FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                                               | Any JavaScript work per frame during these motions                                                               |
-| FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; a preview project; drawn tabs                                                             | A blank screen, a silent fallback, or an error that does not name the capability                                 |
-| FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                                            | The escape pops while `canPop` is false, or a badge is not read                                                  |
-| FR14     | The platform's spec rules check; unit tests of `hasContractFeature` with older and current binary shapes; an older Astryx Stage refusing the project                                                     | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`; a Stage below the floor | A contract above revision 1, a feature used without the check, or an older Stage that runs the project           |
-| FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                                              | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
+| Contract | Verification                                                                                                                                                                                                            | Representative states                                                                                   | Mutation or failure expectation                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                                | a push during a transition; a reset; a native pop of two routes                                         | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
+| FR2      | Unit tests of the snapshot, its shape fingerprint, and each declared consumer's reads; Astryx Stage contract checks of the address bar                                                                                  | no root; nested roots; a URL the config fails on; an unchanged commit                                   | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
+| FR3      | Astryx Stage contract checks with iOS and Android looks; Simulator and emulator checks of each event                                                                                                                    | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop                       | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
+| FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                                        | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back                         | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
+| FR5      | Astryx Stage contract checks per option, with iOS and Android looks; Simulator and emulator captures                                                                                                                    | each bar item kind; menus; header slots; large title collapse; scroll edge effects                      | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
+| FR6      | Unit tests of the option mapping; Simulator checks of the system field; Stage checks of the drawn row                                                                                                                   | each placement; scopes; controlled text; Android                                                        | The two renderings disagree on an option's meaning, or the drawn row's motion runs JavaScript per frame          |
+| FR7      | Unit tests of the scoped options; Simulator and emulator frame captures of push, pop and a cancelled back                                                                                                               | a dark screen over a light stack; a tab bar under it; a presented sheet                                 | The chrome changes outside the transition, or a cancelled back changes it                                        |
+| FR8      | Astryx Stage contract checks of the tabs, with iOS and Android looks; Simulator and emulator selection and re-select checks                                                                                             | a refused tab; re-select with a guard; six tabs on Android; a lazy stack tab                            | The router pops on a system re-select, a refused tab is selected, or a selected tab goes blank                   |
+| FR9      | Stage and Simulator checks of placement events; emulator docked accessory                                                                                                                                               | iOS 26 minimize; below iOS 26; `isChromeHidden`                                                         | No placement event at first layout, or hiding the chrome remounts the content                                    |
+| FR10     | Unit tests of the inset hooks; Simulator and emulator first-frame captures                                                                                                                                              | a push's first frame; `safeAreaEdges`; a vertical bar pose                                              | A pushed screen's first frame is laid out at a wrong size, or an edge is padded twice                            |
+| FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                                        | a push; an interactive back; a scroll under a large title                                               | Any JavaScript work per frame during these motions                                                               |
+| FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                                           | hosts absent; a preview project; drawn tabs                                                             | A blank screen, a silent fallback, or an error that does not name the capability                                 |
+| FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                                | the escape gesture; a tab long press; a badge; Reduce Motion                                            | The escape pops while `canPop` is false, or a badge is not read                                                  |
+| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `revision` changes with its shape; an older Astryx Stage refusing the project | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`; a Stage below the floor | A contract above revision 1, a feature used without the check, or an older Stage that runs the project           |
+| FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled                | a resolved AndroidX or Material version without the member                                              | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
 
 ## Decision log
 
