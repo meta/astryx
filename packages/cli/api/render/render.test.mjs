@@ -18,6 +18,7 @@ import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -2104,6 +2105,90 @@ describe('render(): refusals', () => {
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
   }, 30_000);
 
+  it("gives the run folder's integration line only for a page in the run folder's package", async () => {
+    put('acme-app/package.json', '{"name":"acme-app","private":true}');
+    put('acme-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('acme-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    put('guided.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    recordDeclaredSettings(dir, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let own;
+      try {
+        await render('guided.tsx', {cwd: dir});
+      } catch (e) {
+        own = e;
+      }
+      expect(own?.suggestions?.[0]?.name).toBe('acme add not-real-a-xyz');
+      /** @type {any} */
+      let other;
+      try {
+        await render('acme-app/page.tsx', {cwd: dir});
+      } catch (e) {
+        other = e;
+      }
+      expect(other?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(other?.suggestions ?? []).toEqual([]);
+      expect(other?.message).toBe(
+        'The page imports not-real-a-xyz, which is not installed. Install it in acme-app, the package that holds this page: from there, run pnpm add not-real-a-xyz',
+      );
+    } finally {
+      recordDeclaredSettings(dir, []);
+    }
+  }, 60_000);
+
+  it("suggests one install line for every missing package, in the project's package manager", async () => {
+    put('pnpm-app/package.json', '{"name":"pnpm-app","private":true}');
+    put('pnpm-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('pnpm-app/page.tsx', "import a from 'not-real-a-xyz';\nimport b from 'not-real-b-xyz';\nexport default () => <p>{String(a)}{String(b)}</p>;\n");
+    put('npm-app/package.json', '{"name":"npm-app","private":true}');
+    put('npm-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any[]} */
+    const errors = [];
+    // Rendered from the page's own package, the line runs as printed.
+    for (const [page, cwd] of [
+      ['page.tsx', path.join(dir, 'pnpm-app')],
+      ['page.tsx', path.join(dir, 'npm-app')],
+      // Rendered from the package above, the same line would add the packages
+      // there, so the message names the page's package instead.
+      ['pnpm-app/page.tsx', dir],
+    ]) {
+      try {
+        await render(page, {cwd});
+      } catch (e) {
+        errors.push(e);
+      }
+    }
+    expect(errors.map(e => [e.code, e.message, e.suggestions?.[0]?.name ?? null])).toEqual([
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed', 'pnpm add not-real-a-xyz not-real-b-xyz'],
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz, which is not installed', 'npm install not-real-a-xyz'],
+      [
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed. Install them in pnpm-app, the package that holds this page: from there, run pnpm add not-real-a-xyz not-real-b-xyz',
+        null,
+      ],
+    ]);
+  }, 60_000);
+
+  it('gives no install line when the project\'s lockfiles disagree, naming their folder from where the render runs', async () => {
+    put('two-locks/package.json', '{"name":"two-locks","private":true}');
+    put('two-locks/package-lock.json', '{}\n');
+    put('two-locks/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('two-locks/src/app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('src/app/page.tsx', {cwd: path.join(dir, 'two-locks')});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(error.message).toBe(
+      'The page imports not-real-a-xyz, which is not installed. Install missing dependencies: not-real-a-xyz. No install command: . has pnpm-lock.yaml and package-lock.json, and nothing there says which package manager to use.',
+    );
+    expect(error.suggestions ?? []).toEqual([]);
+  }, 60_000);
+
   it('names the file and the line a compile error points at', async () => {
     put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
     put('broken/page.tsx', "import {Card} from './Card';\nexport default function Page() { return <Card />; }\n");
@@ -2512,7 +2597,7 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
-  it('names every package the page and its own modules need in one refusal, with one install line', () => {
+  it('names every package the page and its own modules need in one refusal, with no install line outside a project', () => {
     fs.writeFileSync(
       path.join(away, 'many-deps.tsx'),
       "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
@@ -2523,8 +2608,13 @@ console.log(JSON.stringify({inside, outside}));
     );
     const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(run.json.error).toBe('The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed');
-    expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
+    // No package.json holds this folder, so an install would make it a
+    // project: the message names the packages for the project that uses the
+    // page, with no install line.
+    expect(run.json.error).toBe(
+      'The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+    expect(run.json.suggestions ?? []).toEqual([]);
   }, 60_000);
 
   it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
@@ -2538,7 +2628,9 @@ console.log(JSON.stringify({inside, outside}));
     );
     const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(run.json.error).toBe('The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed');
+    expect(run.json.error).toBe(
+      'The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed. Install them in the project that uses this page.',
+    );
   }, 60_000);
 
   it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
@@ -2548,7 +2640,9 @@ console.log(JSON.stringify({inside, outside}));
     );
     const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(run.json.error).toBe('The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed');
+    expect(run.json.error).toBe(
+      'The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed. Install them in the project that uses this page.',
+    );
   }, 60_000);
 
   it('counts a re-export of a package whose type the module also imports without `import type`', () => {
@@ -2558,7 +2652,7 @@ console.log(JSON.stringify({inside, outside}));
     );
     const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed. Install it in the project that uses this page.');
   }, 60_000);
 
   it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
@@ -2568,7 +2662,9 @@ console.log(JSON.stringify({inside, outside}));
     );
     const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(run.json.error).toBe('The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed');
+    expect(run.json.error).toBe(
+      'The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
   }, 60_000);
 
   it("uses only the project's own packages inside a project", async () => {
