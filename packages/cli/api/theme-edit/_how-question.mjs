@@ -885,6 +885,38 @@ const NOT_COLORS = new Set([
  */
 const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?)`;
 
+/**
+ * The status a hue reads as: red the danger, amber to yellow the warning,
+ * green the success, cyan to blue the info; none for a gray or a purple.
+ * @param {string} color
+ * @returns {string | null}
+ */
+function statusOfHue(color) {
+  const rgb = parseColor(color);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.slice(0, 3).map(v => v / 255);
+  const hi = Math.max(r, g, b);
+  const lo = Math.min(r, g, b);
+  if (hi - lo < 0.15) return null;
+  const d = hi - lo;
+  const h =
+    (hi === r
+      ? ((g - b) / d) % 6
+      : hi === g
+        ? (b - r) / d + 2
+        : (r - g) / d + 4) * 60;
+  const hue = (h + 360) % 360;
+  return hue < 20 || hue >= 330
+    ? 'danger'
+    : hue < 65
+      ? 'warning'
+      : hue < 170
+        ? 'success'
+        : hue < 260
+          ? 'info'
+          : null;
+}
+
 /** Lengths written in a clause, in order. @param {string} c */
 const lengthsIn = c =>
   [...c.matchAll(/(?<![\w#.])-?(\d*\.?\d+)(px|rem|em)\b/g)].map(m => m[0]);
@@ -3239,7 +3271,14 @@ function clausesOf(q, partWords, words = null) {
       const afterPart = rest.slice((m.index ?? 0) + m[0].length);
       if (
         new RegExp(String.raw`^\s+${PRODUCT_WORDS}\b`).test(afterPart) ||
-        new RegExp(String.raw`^[a-z' -]*\b${PRODUCT_WORDS}\s*:`).test(afterPart)
+        // ("cards in the admin dashboard: 8px corners": a part placed in a
+        // screen owns the list after it; the screen is where it is.)
+        (!/^\s+(?:in|on|inside|within|across|throughout|of)\b/.test(
+          afterPart,
+        ) &&
+          new RegExp(String.raw`^[a-z' -]*\b${PRODUCT_WORDS}\s*:`).test(
+            afterPart,
+          ))
       ) {
         rest = rest.replace(re, ' ');
         continue;
@@ -4601,9 +4640,10 @@ export function draftAnswer(ctx, env, question) {
       '',
     )
     // ("magenta for highlights": the color that marks what stands out is
-    // the accent.)
+    // the accent. A color ON a part, "white on the CTA", is that part's
+    // text, read as said.)
     .replace(
-      /(?<![\w#-])([a-z]+(?:\s+#[0-9a-f]{3,8})?|#[0-9a-f]{3,8})\s+(?:for|on)\s+(?:the\s+)?(?:highlights?|accents?|emphasis|calls? to action|ctas?)\b/gi,
+      /(?<![\w#-])([a-z]+(?:\s+#[0-9a-f]{3,8})?|#[0-9a-f]{3,8})\s+for\s+(?:the\s+)?(?:highlights?|accents?|emphasis|calls? to action|ctas?)\b/gi,
       (m, color) =>
         colorsIn(String(color).toLowerCase()).length ? `accent ${color}` : m,
     )
@@ -4615,10 +4655,18 @@ export function draftAnswer(ctx, env, question) {
     // ("amber warnings", "red errors": a role's color said before it.)
     .replace(
       /(?<![\w#-])([a-z]+|#[0-9a-f]{3,8})\s+(warnings|errors|alerts)\b(?!\s+(?:badges?|banners?|toasts?|text|icons?|messages?|borders?|states?))/gi,
-      (m, color, role) =>
-        colorsIn(String(color).toLowerCase()).length
-          ? `${/^warn/i.test(role) ? 'warning' : 'danger'} color ${color}`
-          : m,
+      (m, color, role) => {
+        const found = colorsIn(String(color).toLowerCase());
+        if (!found.length) return m;
+        // (Alerts said in a color are the alerts of that color's status,
+        // "blue alerts" the info ones; errors are always the danger color.)
+        const r = /^warn/i.test(role)
+          ? 'warning'
+          : /^err/i.test(role)
+            ? 'danger'
+            : statusOfHue(String(found[0]));
+        return r ? `${r} color ${color}` : m;
+      },
     )
     // ("make it brighter and more cheerful": a livelier, more colorful
     // theme.)
@@ -9516,6 +9564,23 @@ export function draftAnswer(ctx, env, question) {
   // card with white text"); one with values but no aspect takes the aspect
   // of a neighbor ("cards: 8px radius; buttons: 4px").
   const fillAspect = () => {
+    // ("white on the CTA", "white on accent buttons"): a color said ON a
+    // part, with no look named, is that part's text, never its fill.
+    for (const c of clauses) {
+      const on =
+        /^\s*(?:(?:make|use|set)\s+)?(?:the\s+)?([#a-z0-9][#a-z0-9-]*(?:\s+[#a-z0-9-]+)?)\s+on\s+/i.exec(
+          c.text,
+        );
+      if (
+        c.parts.length &&
+        !c.aspects.length &&
+        on &&
+        colorsIn(on[1].toLowerCase()).length
+      ) {
+        c.aspects.push('text');
+        c.colors = colorsIn(on[1].toLowerCase());
+      }
+    }
     // A part whose paint is a line (the part data records it drawn by a
     // line inside it: a divider) taken away with no aspect named ("remove
     // the dividers") is its line taken away.
