@@ -4669,6 +4669,11 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
     // ("slate blue-gray": the tinted gray reader takes blue-gray.)
     .replace(/\bslate\s+(?=blue[- ]gr[ae]y\b)/gi, '')
+    // ("works in light and dark"): both modes.
+    .replace(
+      /\b(?:works?|working)\s+in\s+(?:both\s+)?light\s+and\s+dark(?:\s+modes?)?\b/gi,
+      'light and dark modes',
+    )
     // ("…, 13px text, light and dark": the two modes said as a clause of
     // their own are the theme's modes, never a light and a dark color.)
     .replace(
@@ -4827,7 +4832,22 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("a confident, modern look: deep navy, …"): the list after a look's
     // colon is pieces of their own.
-    .replace(/\b(look|feel|theme|vibe|style|palette)\s*:\s*/gi, '$1, ')
+    // (Never a part's style, "heading style: bold": that is the part's
+    // look, read as said.)
+    .replace(
+      /\b(look|feel|theme|vibe|style|palette)\s*:\s*/gi,
+      (m, w, at, whole) => {
+        const prev = /([a-z]+)\s+$/i.exec(
+          String(whole).slice(0, Number(at)),
+        )?.[1];
+        return prev &&
+          partLexicon(ctx).parts.some(([re]) =>
+            re.test(` ${prev.toLowerCase()} `),
+          )
+          ? `${w} `
+          : `${w}, `;
+      },
+    )
     // ("sunny yellow highlights"): a highlight color with no part that
     // draws it is no part's fill; the color is named in the answer as not
     // taken, never carried onto the part before.
@@ -4856,8 +4876,17 @@ export function draftAnswer(ctx, env, question) {
     // taken.
     .replace(
       /(?<![\w#-])((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+for\s+(?:the\s+|all\s+)?((?:[a-z]+\s+){0,2}[a-z]+)/gi,
-      (m, color, thing) => {
+      (m, color, thing, at, whole) => {
         if (!colorsIn(String(color).toLowerCase()).length) return m;
+        // (A part said in or before the color, "make the delete button red
+        // for destructive actions", is that part's color in the role's
+        // look, never the role's color.)
+        const before = `${String(whole)
+          .slice(0, Number(at))
+          .split(/[,;.:!?]/)
+          .at(-1)} ${color}`.toLowerCase();
+        if (partLexicon(ctx).parts.some(([re]) => re.test(` ${before} `)))
+          return m;
         const words = String(thing).toLowerCase().split(/\s+/);
         const role = ROLE_VOCAB.find(([, vocab]) =>
           words.some(
@@ -4876,11 +4905,6 @@ export function draftAnswer(ctx, env, question) {
         on
           ? `font-variant-numeric tabular-nums${on}`
           : 'font-variant-numeric tabular-nums on app-shell ',
-    )
-    // ("works in light and dark"): both modes.
-    .replace(
-      /\b(?:works?|working)\s+in\s+(?:both\s+)?light\s+and\s+dark(?:\s+modes?)?\b/gi,
-      'mode both',
     )
     // ("amber warnings", "red errors": a role's color said before it.)
     .replace(
@@ -5054,13 +5078,25 @@ export function draftAnswer(ctx, env, question) {
         String.raw`\b(dark|light)(?:[- ]mode)?\s+((?:(?!(?:of|for|in|on|at|the|a|an|and|or|with|to|by)\s)[a-z-]+\s+){0,3}?)(${PRODUCT_WORDS})\b(?!\s*(?:only\b|:))`,
         'gi',
       ),
-      (m, w, between, n, _at, whole) =>
-        /^(?:views?|pages?|screens?|layouts?)$/i.test(n) ||
-        /\b(?:light and dark|dark and light|light\s*[+/&]\s*dark|dark\s*[+/&]\s*light|both modes)\b/i.test(
-          String(whole),
-        )
+      (m, w, between, n, at, whole) => {
+        // (A part said after the product, "the dark dashboard sidebar", "a
+        // light dashboard with a dark sidebar", is the part's look, never
+        // the theme's mode.)
+        const after = String(whole)
+          .slice(Number(at) + m.length)
+          .split(/[,;.:!?]/)[0]
+          .toLowerCase();
+        const partFollows = partLexicon(ctx).parts.some(([re]) =>
+          re.test(` ${after} `),
+        );
+        return partFollows ||
+          /^(?:views?|pages?|screens?|layouts?)$/i.test(n) ||
+          /\b(?:light and dark|dark and light|light\s*[+/&]\s*dark|dark\s*[+/&]\s*light|both modes)\b/i.test(
+            String(whole),
+          )
           ? m
-          : `${String(w).toLowerCase()}-only theme, ${between}${n},`,
+          : `${String(w).toLowerCase()}-only theme, ${between}${n},`;
+      },
     )
     .replace(
       /\b(dark|light)(?:[- ]mode)?\s+(theme|look|ui|interface|design)\b(?!\s*(?:only\b|:))/gi,
@@ -28114,7 +28150,7 @@ export function draftAnswer(ctx, env, question) {
   // start from; what the words beside it ask is kept.
   const pictureLook =
     /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/.test(q) ||
-    /\b(?:like|match(?:es|ing)?|copy|from|as in|the look of|looks? of)\s+(?:this|that|the|my|our|a|an|these|those)\s+(?:pictures?|screenshots?|images?|photos?|mock-?ups?|png|jpe?g|screen ?caps?|snapshots?)\b/.test(
+    /\b(?:like|match(?:es|ing)?|copy|as in|the look of|looks? of|(?:look|style|colou?rs?|palette|theme|vibe)\s+from)\s+(?:this|that|the|my|our|a|an|these|those)\s+(?:pictures?|screenshots?|images?|photos?|mock-?ups?|png|jpe?g|screen ?caps?|snapshots?)\b/.test(
       q,
     );
   {
@@ -28157,8 +28193,9 @@ export function draftAnswer(ctx, env, question) {
   // way, parts among them or not: "page loud and fast: black background,
   // …, heavy condensed headings" names "fast".)
   const lookAsk =
-    /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
-    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
+    /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b|\b[a-z]+-like\b|\blooks?\s+(?:like|as)\b/.test(
+      q,
+    ) || q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
     const answeredText = result
       .map(d => `${d.text} ${JSON.stringify(d.options)}`)
@@ -28210,7 +28247,7 @@ export function draftAnswer(ctx, env, question) {
       w =>
         !lookWrites &&
         new RegExp(
-          String.raw`\b${w.replace(/-like$/, '')}(?:-like)?\s+${LOOK_NOUNS}\b|\b(?:like|as)\s+${w}\b`,
+          String.raw`\b${w.replace(/-like$/, '')}-like\b|\b(?:like|as)\s+${w}\b`,
         ).test(q.toLowerCase()),
     );
     if (namedFor.length)

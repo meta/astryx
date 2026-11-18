@@ -373,7 +373,14 @@ describe('code colors and the overlay follow the look', () => {
   }, 240_000);
 
   it('lets a syntax color set by hand win', async () => {
-    await themeEditSet('code', '--color-syntax-keyword', '#123456', {cwd});
+    const hand = /** @type {any} */ (
+      await themeEditSet('code', '--color-syntax-keyword', '#123456', {cwd})
+    );
+    // (A code color set by hand is named by itself, never counted as moved
+    // with the look.)
+    expect(hand.data.changedTokens.join('\n')).toMatch(
+      /^--color-syntax-keyword\b.*#123456/m,
+    );
     await themeEditSet('code', 'accent', '#b91c1c', {cwd});
     expect(css('code')).toMatch(/--color-syntax-keyword: #123456/);
   }, 240_000);
