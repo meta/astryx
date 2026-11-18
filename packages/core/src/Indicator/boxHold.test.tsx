@@ -203,7 +203,10 @@ describe('a finger held on a control’s box', () => {
     const onChange = vi.fn();
     const onOpenChange = vi.fn();
     render(
-      <ContextMenu items={[{label: 'Cut'}]} onOpenChange={onOpenChange}>
+      <ContextMenu
+        items={[{label: 'Cut'}]}
+        onOpenChange={onOpenChange}
+        presentation="popover">
         <CheckboxList label="Notifications" value={[]} onChange={onChange}>
           <CheckboxListItem label="Email" value="email" />
           <CheckboxListItem label="SMS" value="sms" />
