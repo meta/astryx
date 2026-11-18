@@ -136,7 +136,7 @@ describe("a render, which carries the page's script", () => {
     );
     expect(note).not.toContain('It runs no script');
     expect(note).toMatch(
-      /experimental render counter-restored\/counter\.tsx --out counter\.html\n/,
+      /experimental export counter-restored\/counter\.tsx --out counter\.html\n/,
     );
     expect(note).toContain("before the page's script");
   });
@@ -177,7 +177,7 @@ describe("a render, which carries the page's script", () => {
     const {stdout, status} = await runCli(
       [
         'experimental',
-        'render',
+        'export',
         '--reverse',
         'counter.html',
         '--out',
@@ -187,7 +187,7 @@ describe("a render, which carries the page's script", () => {
     );
     expect(status).toBe(0);
     expect(stdout).not.toMatch(/^interactive:/m);
-    expect(stdout).toMatch(/^Render it again: .* --out counter\.html$/m);
+    expect(stdout).toMatch(/^Export it again: .* --out counter\.html$/m);
   }, 120_000);
 
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
@@ -799,7 +799,7 @@ export default function Page() {
 
   it('shows the script in the CLI output, and has no option to leave it out', async () => {
     const page = await runCli(
-      ['experimental', 'render', 'src/counter.tsx', '--out', 'cli.html'],
+      ['experimental', 'export', 'src/counter.tsx', '--out', 'cli.html'],
       dir,
     );
     expect(page.status).toBe(0);
@@ -807,7 +807,7 @@ export default function Page() {
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(
-        ['--json', 'experimental', 'render', 'src/counter.tsx', flag],
+        ['--json', 'experimental', 'export', 'src/counter.tsx', flag],
         dir,
       );
       expect(refused.status, flag).toBe(1);
@@ -816,7 +816,7 @@ export default function Page() {
       expect(error.error, flag).toBe(
         `${flag} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
       );
-      const help = await runCli(['experimental', 'render', '--help'], dir);
+      const help = await runCli(['experimental', 'export', '--help'], dir);
       expect(help.stdout).not.toContain(flag);
     }
   }, 120_000);
@@ -882,7 +882,7 @@ export default function Page() {
     const {stdout} = await runCli(
       [
         'experimental',
-        'render',
+        'export',
         '--reverse',
         'titled.html',
         '--out',

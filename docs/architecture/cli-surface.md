@@ -88,7 +88,10 @@ rather than left to the command author.
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
    uses it and no word is a command or a command's plural. The answer only
-   suggests: it runs nothing and never names an experimental command.
+   suggests: it runs nothing and names no experimental command, except that a
+   share word (`export`, `render`, `share`, `bundle`, `snapshot`,
+   `standalone`) names `experimental export` under `spec:AST-017` FR27's
+   shareable-page exception.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -319,7 +322,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15). The one HTML file `astryx experimental render` writes may also go
+  (DEC-15). The one HTML file `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
   replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -794,7 +797,7 @@ non-interactive guarantee.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
-- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental render` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
+- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental export` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
@@ -1095,7 +1098,7 @@ app builds, typechecks and lints).
 Agents that make a page to share often keep it with other files to upload, in
 a folder outside the page's project, and name that folder's file by an
 absolute path. A path the caller names absolutely is their choice of place, so
-`astryx experimental render` writes its one HTML file there instead of
+`astryx experimental export` writes its one HTML file there instead of
 refusing it (INV10). The file it writes there is still never one a render did
 not write: an existing file is replaced only when its head shows that a render
 wrote it, as everywhere else. A relative `--out` stays inside the current

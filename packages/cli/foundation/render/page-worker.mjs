@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Worker for `astryx experimental render`: loads one page module from
+ * @file Worker for `astryx experimental export`: loads one page module from
  * the project (TypeScript, JSX and StyleX compiled in memory) and renders its
  * default export to static markup with the project's own React.
  *

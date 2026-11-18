@@ -84,6 +84,7 @@ async function searchRead(query, options) {
     const icons = await searchIconSection(query, {
       cwd: options.cwd ?? process.cwd(),
       declaredNames: declaredNames(catalog.all),
+      resultDomains: response.data.results.map(result => result.domain),
       limit: options.limit ?? 20,
     });
     if (icons) response.data.icons = icons;

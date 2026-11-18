@@ -14,16 +14,16 @@ export const doc = {
   namespace: 'cli/commands',
   stability: 'experimental',
   summary:
-    'Try features that may change in a patch release: icon sets, page rendering, checked theme editing',
+    'Try features that may change in a patch release: icon sets, a page as one shareable HTML file, checked theme editing',
   description:
     'The experimental command group. Every command under it is experimental: its arguments, options, output, and JSON may change or be removed in any patch release, with no deprecation period. A feature leaves this group when it becomes stable. Nothing here changes what any other command does unless you use it.',
-  subcommands: ['icon', 'render', 'theme'],
+  subcommands: ['icon', 'export', 'theme'],
   examples: [
     {label: 'List the experiments', cli: 'astryx experimental'},
     {label: 'Find an icon by meaning', cli: 'astryx experimental icon delete'},
     {
-      label: 'Render a page to one HTML file',
-      cli: 'astryx experimental render page.tsx',
+      label: 'Export a page as one HTML file',
+      cli: 'astryx experimental export page.tsx',
     },
     {
       label: 'Change a theme, checked',

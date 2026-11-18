@@ -36,13 +36,26 @@ export const ICON_SECTION_LIMIT = 3;
  * @param {string} query
  * @param {{setNames: string[], read: () => Promise<InstalledIcons>}} source
  *   the installed sets' names, and a read of the sets
- * @param {string[]} declaredNames the names of the components and hooks
- *   search reads
- * @param {number} limit the search's limit
+ * @param {{declaredNames: string[], resultDomains: string[], limit: number}} search
+ *   the names of the components and hooks search reads, the domains of its
+ *   results, and its limit
  * @returns {Promise<import('./search.type.mjs').SearchIconSection | null>}
  */
-export async function iconSection(query, source, declaredNames, limit) {
-  if (!asksForIcon(query, {setNames: source.setNames, declaredNames})) {
+export async function iconSection(
+  query,
+  source,
+  {declaredNames, resultDomains, limit},
+) {
+  const answersEntry = resultDomains.some(
+    domain => domain === 'component' || domain === 'template',
+  );
+  if (
+    !asksForIcon(query, {
+      setNames: source.setNames,
+      declaredNames,
+      answersEntry,
+    })
+  ) {
     return null;
   }
   const {sets, withdrawn, choice} = await source.read();

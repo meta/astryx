@@ -259,31 +259,51 @@ const FILLER_WORDS = new Set([
   ...ICON_WORDS,
 ]);
 
+/** Words that may sit between `with` and the icon word of a feature. */
+const ARTICLES = new Set(['a', 'an', 'the']);
+
+/** Words after an icon word that describe the glyph itself. */
+const GLYPH_WORDS = new Set(['of', 'for']);
+
+/**
+ * Whether the icon word at `at` names a feature of something else: it comes
+ * right after `with`, with only articles between (`card with an icon`), and
+ * no `of` or `for` follows it to describe the glyph (`with an icon of a
+ * star`).
+ * @param {string[]} words the query's lower-case words
+ * @param {number} at
+ */
+function featureIconWord(words, at) {
+  let before = at - 1;
+  while (before >= 0 && ARTICLES.has(words[before])) before--;
+  return words[before] === 'with' && !GLYPH_WORDS.has(words[at + 1]);
+}
+
 /**
  * Whether a query asks for an icon: one word as typed is `icon` or `icons` in
  * any case, names a set in `setNames`, or is written as an icon export name
  * (`SearchIcon`). A word that is the exact name of a component or hook in
  * `declaredNames` asks for that entry, not an icon, so `Icon`, `NavIcon` and
- * `IconButton` stay lookups.
+ * `IconButton` stay lookups. When the answer already holds a component or a
+ * template (`answersEntry`), an icon word that names a feature of it asks for
+ * nothing: `card with an icon` asks for a card.
  * @param {string} query
- * @param {{setNames: string[], declaredNames: string[]}} names the installed
- *   sets' names, and the names of the components and hooks search reads
+ * @param {{setNames: string[], declaredNames: string[], answersEntry: boolean}} context
+ *   the installed sets' names, the names of the components and hooks search
+ *   reads, and whether search's answer holds a component or a template
  */
-export function asksForIcon(query, {setNames, declaredNames}) {
+export function asksForIcon(query, {setNames, declaredNames, answersEntry}) {
   const sets = new Set(setNames.map(name => name.toLowerCase()));
   const declared = new Set(declaredNames);
-  return query
-    .trim()
-    .split(/\s+/u)
-    .some(word => {
-      if (declared.has(word)) return false;
-      const lower = word.toLowerCase();
-      return (
-        ICON_WORDS.has(lower) ||
-        sets.has(lower) ||
-        ICON_EXPORT_NAME_RE.test(word)
-      );
-    });
+  const words = query.trim().split(/\s+/u);
+  const lower = words.map(word => word.toLowerCase());
+  return words.some((word, at) => {
+    if (declared.has(word)) return false;
+    if (ICON_WORDS.has(lower[at])) {
+      return !(answersEntry && featureIconWord(lower, at));
+    }
+    return sets.has(lower[at]) || ICON_EXPORT_NAME_RE.test(word);
+  });
 }
 
 /**

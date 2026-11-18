@@ -134,7 +134,7 @@ export function fontStylesheetOf(fontsCss) {
 
 /**
  * Turns a rendered page into a preview document. It drops the embedded
- * source, which only `render --reverse` reads, and the page's script, since a
+ * source, which only `export --reverse` reads, and the page's script, since a
  * preview is a picture of the page; it loads the theme's fonts.
  * It makes the page fill its frame, and lets the URL fragment set the color
  * mode. Search engines must not index the file.
@@ -179,7 +179,7 @@ export default function Preview() {
 
 /**
  * The markup of a rendered page that the landing page shows: the body,
- * without the embedded source that only `render --reverse` reads, or the
+ * without the embedded source that only `export --reverse` reads, or the
  * page's script. The site's
  * own stylesheet styles it, so the page's styles are not kept. Its images
  * load at low priority.

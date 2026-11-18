@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Colocated types for `astryx experimental render`: the source of truth
+ * @file Colocated types for `astryx experimental export`: the source of truth
  * for its response shapes.
  *
  * @position api/render — typedefs for api/render/render.mjs
@@ -38,7 +38,7 @@
  */
 
 /**
- * `astryx --json experimental render <page>`.
+ * `astryx --json experimental export <page>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderPageResponse
  * @property {'render.page'} type
@@ -68,7 +68,7 @@
  */
 
 /**
- * `astryx --json experimental render --reverse <file.html>`.
+ * `astryx --json experimental export --reverse <file.html>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderReverseResponse
  * @property {'render.reverse'} type

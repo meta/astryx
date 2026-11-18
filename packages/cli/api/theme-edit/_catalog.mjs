@@ -4,7 +4,7 @@
  * @file The pages `astryx experimental theme` renders: a catalog of every
  * component (to learn what each part reads, and for the contact sheet) and a
  * sample app page (the preview). Each page is written as a page module and
- * rendered by the same machinery as `astryx experimental render`, with the
+ * rendered by the same machinery as `astryx experimental export`, with the
  * project's own React and Core.
  *
  * Pages are element trees (`{__element, props, children}`), the shape of a

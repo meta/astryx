@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file FunctionDoc for `render()` / `astryx experimental render`.
+ * @file FunctionDoc for `render()` / `astryx experimental export`.
  * @position packages/cli/api/render — function documentation
  */
 
@@ -119,6 +119,6 @@ export const doc = {
     {label: 'Render a page', code: "const {data} = await render('src/app/page.tsx', {out: 'page.html'});"},
     {label: 'Give it back', code: "await render('page.html', {reverse: true, out: 'page.tsx'});"},
   ],
-  command: 'experimental render',
+  command: 'experimental export',
   related: ['template', 'build'],
 };

@@ -538,7 +538,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
             ],
             [
               '`astryx search`',
-              "A search with no `--type` that asks for an icon (a word `icon` or `icons`, an installed set's name, or an export name such as `SearchIcon`) lists up to three installed icons in an `icons` block after its results, ranked as `astryx experimental icon <words>` ranks them, each with its import line and the command that reads it. The results and their count never hold an icon, and a search with `--type` lists none.",
+              "A search with no `--type` that asks for an icon (a word `icon` or `icons`, an installed set's name, or an export name such as `SearchIcon`) lists up to three installed icons in an `icons` block after its results, ranked as `astryx experimental icon <words>` ranks them, each with its import line and the command that reads it. An `icon` or `icons` right after `with`, with only `a`, `an` or `the` between, that no `of` or `for` follows names a feature of a component or template the search answers, so `card with an icon` lists no icons and `card with an icon of a star` does. The results and their count never hold an icon, and a search with `--type` lists none.",
             ],
             [
               '`astryx discover`',

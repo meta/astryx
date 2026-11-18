@@ -148,7 +148,26 @@
  * how its wiring changes, with `line` the provider's opening JSX (passing
  * the mode when it takes one and an added theme has one color mode). No
  * receipt reads app source.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
+ * `copy` is present when `theme add` was given a shared theme (a folder, a
+ * `.tgz` archive, or an https URL to one) instead of a slug: `from` as it
+ * was given, `folder` where the theme sat in it, `outputDir` and `files`
+ * the copy in the app's local themes root, `installed` the Astryx package
+ * specs installed for what the theme imports, `installCommand` the command
+ * that installs the other packages it imports that the app lacks (never run
+ * for the theme; null when there are none), `installError` why the Astryx
+ * install did not run or failed and `installRetryCommand` the command that
+ * installs those Astryx packages, `previousDefault` the app's default before
+ * the add (`theme use` it before `theme remove` undoes the add), `written` every file the add wrote (the
+ * copy, its receipt, the generated module, and `package.json` and its
+ * lockfile when it installed), and `config` the module, the default and the
+ * dependencies it added.
+ * `undo` is present when `theme remove` removed a theme `theme add` copied
+ * from a shared theme: `removed` the files of the copy it deleted, `kept`
+ * those changed since the add (left as they are), `uninstalled` the packages
+ * the add installed that no theme still in the record is owned by or
+ * imports, and `uninstallError`
+ * why that uninstall failed.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installCommand: string | null, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**
