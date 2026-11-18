@@ -197,7 +197,7 @@ export const docs = {
 export const docsZh = {
   name: 'ChatComposer',
   displayName: 'Chat Composer',
-  description: '聊天编写器布局外壳。排列命名插槽（附件、标题栏、输入、页脚、发送），带有页面圆角容器和同心内圆角。',
+  description: '聊天编写器布局外壳。排列命名插槽（附件、标题栏、输入、页脚、发送），带有聊天圆角容器和同心内圆角。',
   propDescriptions: {
     onSubmit: '用户提交消息时调用。',
     onStop: '用户请求停止生成时调用。',

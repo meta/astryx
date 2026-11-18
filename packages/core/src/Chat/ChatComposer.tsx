@@ -147,7 +147,8 @@ const styles = stylex.create({
     // The drawer, the status bar and the buttons inside read this copy.
     '--_chat-composer-radius': radiusVars['--radius-chat'],
     '--_chat-composer-padding': spacingVars['--spacing-3'],
-    // Concentric radius: buttons follow the outer shell's curvature.
+    // Concentric radius: buttons follow the outer shell's curvature. The
+    // send button keeps its circle.
     // Sets --_button-radius (not --radius-element) so only buttons are
     // affected — other components in slots keep their own radius.
     // A corner no larger than the padding leaves buttons at --radius-element.

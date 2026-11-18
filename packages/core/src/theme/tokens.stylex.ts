@@ -255,9 +255,7 @@ export const radiusDefaults = {
   '--radius-element': '8px',
   '--radius-container': '12px',
   '--radius-page': '28px',
-  // Chat surfaces (bubbles, composer, drawer) take the container radius by
-  // default. A distinct token, so a theme can make chat rounder or squarer
-  // than its cards.
+  // A distinct token, so a theme can make chat rounder or squarer than its cards.
   '--radius-chat': 'var(--radius-container)',
   '--radius-full': '9999px',
 } as const;

@@ -520,10 +520,9 @@ function joinDeclarations(
 /**
  * Public tokens whose canonical default references another public token: the
  * status roles, `--duration-exit` and `--radius-chat`. StyleX owns the
- * document defaults. A
- * theme that authors a source repeats its omitted token at the theme root so
- * nested Theme regions bind the alias locally without changing authored-token
- * metadata.
+ * document defaults. A theme that authors a source repeats its omitted token
+ * at the theme root so nested Theme regions bind the alias locally without
+ * changing authored-token metadata.
  *
  * Conditional scopes repeat an omitted alias only when the source changes on
  * that scope. Explicit adaptation role writes are replayed after generated
