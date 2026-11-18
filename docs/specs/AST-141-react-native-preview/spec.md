@@ -203,7 +203,7 @@ project away from the app's own identity and data.
     project, and the host reads it from the dev server or the bundle before
     anything of the project runs.
   - The manifest's shape and its types are Preview's own and experimental
-    (DEC-6). They ship with Preview's command-line tooling (FR12), never in
+    (DEC-6). They ship in `@astryxdesign/react-native-preview` (FR12), never in
     `@astryxdesign/react-native`, and a project's code neither imports nor
     reads them.
 
@@ -235,10 +235,10 @@ project away from the app's own identity and data.
 ### The commands
 
 - **FR12 — `astryx experimental rn preview` makes what a Preview host opens.**
-  Preview's own command-line tooling contributes the group to the Astryx CLI
-  as an experimental group (DEC-6), with the manifest's types (FR9). It
-  releases apart from `@astryxdesign/react-native`, which contributes none of
-  it. The group sits under the
+  `@astryxdesign/react-native-preview`, an experimental package, contributes
+  the group's command functions to the Astryx CLI (DEC-6), with the
+  manifest's types (FR9). It releases apart from `@astryxdesign/react-native`
+  and `@astryxdesign/cli`, which carry none of it. The group sits under the
   `astryx experimental` command group, the CLI's experimental namespace
   (`spec:AST-017/FR27`, `spec:AST-084` FR0); no stable command gains a
   Preview subcommand or option, its help text and its documentation say that
@@ -309,6 +309,9 @@ project away from the app's own identity and data.
 - `spec:AST-112` points to this record for Preview in the Astryx app;
   Astryx React Native carries nothing of Preview, its manifest types and its
   prelude included (FR6, FR9).
+- `spec:AST-042` FR1 and FR2 extend to the functions that
+  `@astryxdesign/react-native-preview` exports for the
+  `astryx experimental rn preview` commands (FR12).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states what a Preview project reaches of them (FR5).
 
