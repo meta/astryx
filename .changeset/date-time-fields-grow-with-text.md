@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] DateInput, TimeInput, DateTimeInput and DateRangeInput: the field grows with larger text instead of cutting its line. At the default text size each size keeps its height (28, 32 and 36 px).
+[fix] DateInput, TimeInput, DateTimeInput and DateRangeInput: a standalone field grows to hold its text line when text is enlarged, instead of the line running across its borders. At the default text size each size keeps its height (28, 32 and 36 px).
 
 @cixzhang

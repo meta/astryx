@@ -95,11 +95,6 @@ const sizeStyles = stylex.create({
 });
 
 const styles = stylex.create({
-  // The native input keeps its own line box rather than the body line, so the
-  // row's minimum height centres it with no block padding.
-  wrapperBlock: {
-    paddingBlock: 0,
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -391,7 +386,6 @@ export function TouchTimeField({
           inputWrapperStyles.textField,
           sizeStyles[size],
           inputRowSizeStyles[size],
-          styles.wrapperBlock,
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],

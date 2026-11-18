@@ -93,50 +93,38 @@ export const inputWrapperStyles = stylex.create({
 });
 
 /**
- * The row height of a one-line text field, by size. The size token is the
- * height at the theme's default text size: the block padding is what is left
- * after the text line and the two borders, so the row is exactly the size
- * there, and `inputRowPadStyles` applies it. Larger text grows the row
- * instead of being cut. The coarse-pointer line follows the iOS 16px floor the
- * input's own font size has.
+ * The row height of a one-line text field, by size: the larger of the size
+ * and one bordered body text line. At the theme's default text size that is
+ * the size, as before; larger text grows the row to hold its line inside the
+ * borders. The height stays definite, so a theme's block padding cannot grow
+ * the row at the default text size, and group members can still fill a row.
+ * The coarse-pointer line follows the iOS 16px floor the input's own font
+ * size has.
  */
 export const inputRowSizeStyles = stylex.create({
   sm: {
-    minHeight: sizeVars['--size-element-sm'],
-    '--_field-row-pad': {
-      default: `max(0px, calc((${sizeVars['--size-element-sm']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+    height: {
+      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-sm']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       },
     },
   },
   md: {
-    minHeight: sizeVars['--size-element-md'],
-    '--_field-row-pad': {
-      default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+    height: {
+      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       },
     },
   },
   lg: {
-    minHeight: sizeVars['--size-element-lg'],
-    '--_field-row-pad': {
-      default: `max(0px, calc((${sizeVars['--size-element-lg']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+    height: {
+      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-lg']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
       },
     },
-  },
-});
-
-/**
- * The block padding the row size leaves, for a field that applies its own
- * per-side padding (NumberInput's stepper column cancels it edge by edge).
- */
-export const inputRowPadStyles = stylex.create({
-  pad: {
-    paddingBlock: 'var(--_field-row-pad)',
   },
 });
 

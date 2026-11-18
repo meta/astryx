@@ -38,6 +38,7 @@ import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
+  sizeVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
@@ -84,9 +85,7 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 // layout metric and would resize every themed field). Built as chained const
 // strings — no function calls — so StyleX can statically analyze them; same
 // shape as the card/section/dialog chains in Layout/container.stylex.ts.
-// The row size sets `--_field-row-pad` beside its minimum height: the block
-// padding left after the text line and the borders.
-const FIELD_PAD_BLOCK = `var(--_field-row-pad, ${spacingVars['--spacing-1']})`;
+const FIELD_PAD_BLOCK = spacingVars['--spacing-1'];
 const FIELD_PAD_INLINE = spacingVars['--spacing-2'];
 const padBlockAll = `var(--astryx-number-input-padding, ${FIELD_PAD_BLOCK})`;
 const padInlineAll = `var(--astryx-number-input-padding, ${FIELD_PAD_INLINE})`;
@@ -211,6 +210,42 @@ const styles = stylex.create({
 });
 
 const sizeStyles = inputRowSizeStyles;
+
+// The stepper icons' size (Icon `xsm`). They grow with the text, so at a
+// larger text size their column, two icons and the divider between them, can
+// be taller than the text line; the row then takes the column's height so
+// the icons are not cut. Steppers are hidden under a coarse pointer, where
+// the row is the plain field row.
+const STEPPER_ICON_SIZE = '0.75rem';
+const stepperRowSizeStyles = stylex.create({
+  sm: {
+    height: {
+      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  md: {
+    height: {
+      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+  lg: {
+    height: {
+      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
+      '@media (pointer: coarse)': {
+        default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
+      },
+    },
+  },
+});
 
 export type NumberInputSize = keyof typeof sizeStyles;
 
@@ -1384,6 +1419,7 @@ export function NumberInput({
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
+          hasNumberSteppers && stepperRowSizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],

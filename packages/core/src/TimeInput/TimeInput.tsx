@@ -32,10 +32,7 @@ import {
   type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
 import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
@@ -832,7 +829,6 @@ function TimeField({
           inputWrapperStyles.textField,
           sizeStyles[size],
           inputRowSizeStyles[size],
-          inputRowPadStyles.pad,
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.withinRing,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],

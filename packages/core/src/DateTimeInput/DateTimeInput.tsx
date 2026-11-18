@@ -33,10 +33,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
 import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
@@ -1800,7 +1797,6 @@ function PointerDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
-              inputRowPadStyles.pad,
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
@@ -1966,7 +1962,6 @@ function PointerDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
-              inputRowPadStyles.pad,
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
