@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] Theme editor: a change (set, undo) runs about twice as fast. The editor reads the built theme once per change instead of once for every part and scope it checks.
+[experimental] Theme editor: a change (set, undo) parses the built theme once instead of once for every part and scope it checks, so changes on a theme that styles many parts run faster. The file is still read on every check.
 
 @josephfarina
