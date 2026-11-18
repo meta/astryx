@@ -714,8 +714,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   surface built on `useLayer` in context mode (Tooltip, HoverCard, Popover,
   DropdownMenu, ContextMenu, Selector's and MultiSelector's lists, and the
   date pickers) mounts its layer on its first show, not with its trigger, and
-  keeps it mounted after that first show. A closed trigger renders only the
-  trigger. This uses `useLayer`'s existing `lazyMount` internally and adds no
+  keeps it mounted after that first show. The exception is Selector's list:
+  every close removes it, so a closed Selector holds no option list
+  (`component:Selector` PR3). A closed trigger renders only the trigger. This uses `useLayer`'s existing `lazyMount` internally and adds no
   public prop (DEC-2).
 
 This record does not make future eligible-owner, branch-association, global-host,
