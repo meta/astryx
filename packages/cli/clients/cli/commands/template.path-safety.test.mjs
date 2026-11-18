@@ -130,6 +130,47 @@ describe('template path safety', () => {
     },
   );
 
+  it('refuses a `..` path out of the project with the same commands as an absolute one', async () => {
+    const root = fs.realpathSync(tmpDir);
+    const cwd = path.join(root, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    fs.mkdirSync(path.join(root, 'outside'));
+
+    const err = await templateApi('blank', {
+      targetPath: '../outside/app',
+      cwd,
+    }).catch(e => e);
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.message).toContain(
+      'Invalid template target path "../outside/app": it is outside the project root',
+    );
+    expect(err.suggestions).toEqual([
+      {
+        name: 'astryx template blank src/pages/blank.tsx',
+        reason: 'write the page inside the project',
+      },
+      {
+        name: `cd ${path.join(root, 'outside')} && astryx template blank ./app`,
+        reason: 'write the page where you named it, from its folder',
+      },
+      {
+        name: 'astryx template blank',
+        reason: 'print the source and write nothing',
+      },
+    ]);
+    expect(fs.readdirSync(path.join(root, 'outside'))).toEqual([]);
+  });
+
+  it('never takes a `..` path into the temp folder as a scratch copy', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const err = await templateApi('blank', {targetPath: '../scratch', cwd}).catch(
+      e => e,
+    );
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(fs.existsSync(path.join(tmpDir, 'scratch'))).toBe(false);
+  });
+
   it('names no folder to run from when only the disk root exists', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});

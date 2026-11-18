@@ -91,11 +91,15 @@ export function templateCopy(
     });
   } catch (err) {
     if (!(err instanceof PathSafetyError)) throw err;
+    // A path that leaves the project, absolute or through `..`; a link that
+    // carries it out is refused as before.
     const outsideProject =
-      path.isAbsolute(targetPath) &&
-      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
-      !err.viaSymlink;
-    const temp = outsideProject ? tempFolderOf(targetPath) : null;
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL && !err.viaSymlink;
+    // Only a path named absolutely in the temp folder is a scratch copy.
+    const temp =
+      outsideProject && path.isAbsolute(targetPath)
+        ? tempFolderOf(targetPath)
+        : null;
     if (temp) {
       outputFilePath = inTempFolder(fileTarget, targetPath, temp);
       scratch = true;
@@ -105,7 +109,7 @@ export function templateCopy(
       // from its own folder, and the print that writes nothing.
       const folder = templateDestination(cwd, match.type, match.dirName);
       const [scratchFolder] = tempFolders();
-      const there = fromNearestFolder(targetPath);
+      const there = fromNearestFolder(path.resolve(cwd, targetPath));
       throw new AstryxError(
         `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
           (scratchFolder
