@@ -2,7 +2,7 @@
 
 /**
  * @file utils.ts
- * @output Server-safe re-exports of pure Table utility functions
+ * @output Server-safe re-exports of Table utility functions
  * @position Subpath entry point: `@astryxdesign/core/Table/utils`
  */
 
@@ -14,6 +14,8 @@ export {
   resolveColumnWidths,
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
+
+export {registerFixedHeightColumn} from './tableColumnAdmission';
 
 export type {
   ColumnWidth,
