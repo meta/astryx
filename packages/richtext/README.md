@@ -25,7 +25,8 @@ edited.
 Server rendering outputs no document content: `RichTextView` and
 `RichTextEditor` fill their blocks on the client. For content that must be in
 the server HTML, render it with core `Markdown`, which renders the same
-document the same way, or convert it with `@astryxdesign/richtext/markdown`.
+Markdown document on the server (affordances only RichText draws appear in
+their Markdown form), or convert it with `@astryxdesign/richtext/markdown`.
 
 ## Built on Lexical
 
