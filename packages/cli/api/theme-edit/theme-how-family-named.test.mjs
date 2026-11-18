@@ -85,6 +85,22 @@ describe('a family said by name', () => {
       240_000,
     );
 
+  for (const ask of [
+    'Navbar text white',
+    'Page titles 32px',
+    'Dialog titles smaller',
+    'Primary text darker',
+  ])
+    it(`a capitalized part, place or role is no family: ${ask}`, async () => {
+      expect(
+        writes(await how('q0', ask)).some(line =>
+          /^set q0 (?:font|font-family) (?:Navbar|Page|Dialog|Primary)\b/.test(
+            line,
+          ),
+        ),
+      ).toBe(false);
+    }, 240_000);
+
   it('a capitalized word the readers know keeps its reading', async () => {
     expect(writes(await how('q0', 'Bold headings'))[0]).toBe(
       'set q0 headings bold',
