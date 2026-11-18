@@ -1018,6 +1018,11 @@ describe('rows and columns windowing together', () => {
     expect(cell).not.toBeNull();
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
+    // The scroll owner drops a scroll event while a measurement frame is
+    // pending (focusing the cell can schedule one), and the window then
+    // follows that frame's measurement. A second scroll report and two more
+    // frames let every scheduled measurement land before the rows are read.
+    await viewport.landWrites();
     const rows = mountedRows(container);
     // Row 1 stays as the island before the window from row 47.
     expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
@@ -1027,6 +1032,7 @@ describe('rows and columns windowing together', () => {
     expect(document.activeElement).toBe(cell);
     expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
     await viewport.scrollBoth(0, 0);
+    await viewport.landWrites();
     expect(document.activeElement).toBe(cell);
     expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });
