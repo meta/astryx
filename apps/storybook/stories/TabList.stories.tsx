@@ -2,6 +2,7 @@
 
 import {useRef, useState, type CSSProperties} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Button} from '@astryxdesign/core/Button';
 import {
@@ -1190,6 +1191,59 @@ export const PressedState: Story = {
           value="unavailable"
           label="Unavailable — no pressed state"
           aria-disabled="true"
+        />
+      </TabList>
+    );
+  },
+};
+
+const wrappedLabelStyles = stylex.create({
+  tab: {
+    whiteSpace: 'normal',
+    flexShrink: 1,
+    minWidth: 0,
+    height: 'auto',
+  },
+});
+
+export const WrappedLabel: Story = {
+  name: 'Wrapped label',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A Tab whose `xstyle` lets its label wrap. On a phone the long labels take two or three lines. The label stays centered in its tab, selected or not, so selection does not move it.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('overview');
+    return (
+      <TabList value={value} onChange={setValue}>
+        <Tab
+          value="overview"
+          label="Overview"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="eligibility"
+          label="Eligibility and registration requirements"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="documents"
+          label="Supporting documents to upload"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="contacts"
+          label="Emergency contact information"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="review"
+          label="Review and submit your application"
+          xstyle={wrappedLabelStyles.tab}
         />
       </TabList>
     );
