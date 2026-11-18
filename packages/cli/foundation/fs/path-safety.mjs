@@ -181,6 +181,24 @@ export function tempFolders() {
 }
 
 /**
+ * The absolute path a home-relative path (`~`, or `~/` and a path in the home
+ * folder) names, as a shell expands it; null for any other path. A caller
+ * that does not expand `~` passes it as text, and a write would then make a
+ * folder named `~` in the current folder.
+ *
+ * @param {string} value
+ * @param {string} [home] the home folder
+ * @returns {string | null}
+ */
+export function homeRelativePath(value, home = os.homedir()) {
+  if (value === '~') return home;
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(home, value.slice(2));
+  }
+  return null;
+}
+
+/**
  * The temp folder of {@link tempFolders} that holds the absolute path
  * `target`, or null. The path is read as written and through the temp
  * folder's own links, as `assertWithin` reads a project folder (macOS keeps
