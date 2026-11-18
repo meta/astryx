@@ -355,8 +355,8 @@ shared icon names under FR17.
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
   never silently wrong. A contract has no revision number: its baseline is its
-  shape in the first release after the package leaves the canary channel that
-  carries it, release candidates included, and later behavior is a named
+  shape in the first release that carries it after the package leaves the
+  canary channel, release candidates included, and later behavior is a named
   feature (DEC-14). `spec:AST-140/FR5` owns the rules
   and the check that enforces them.
   - FR6, FR7, and FR8 are internal conventions while the package is
@@ -713,8 +713,11 @@ record depends on an ask whose owner has not agreed to it.
   `--dev-server-port`, each requiring that step (FR13).
 - `spec:AST-114` FR2's resolution order gains one rule for the reserved `rn`
   group: `astryx rn` reads `@astryxdesign/react-native` as its base as if
-  `--base` named it, in a project that also installs Core. Its DEC-5 gains
-  that exception to "another base only through `--base`" (FR13).
+  `--base` named it, wherever FR2 finds the package installed (the project,
+  the package set that serves the run, or the computer), a project that also
+  installs Core included. Where the package is installed nowhere, `astryx rn`
+  refuses with `ERR_BASE_COMMAND`. Its DEC-5, which reaches a base other than
+  Core only through `--base`, gains that exception (FR13).
 - `spec:AST-114` FR6's check, FR7's help and manifest, and FR8's refusal also
   cover the reserved `rn` group: `ERR_BASE_COMMAND`, checked after
   `ERR_BASE_NOT_FOUND` and `ERR_BASE_AMBIGUOUS` and before any `requires`.
@@ -972,8 +975,8 @@ app would have to know which component needs which capability.
 **Reference:** `spec:AST-112/DEC-14`
 **Decider:** imdreamrunner, 2026-11-17
 
-A contract's baseline is its shape in the first release after the package
-leaves the canary channel that carries it, release candidates included. Behavior added after that baseline is a named
+A contract's baseline is its shape in the first release that carries it after
+the package leaves the canary channel, release candidates included. Behavior added after that baseline is a named
 feature. A named feature says which behavior a binary has, so JavaScript asks
 for the behavior it is about to use and an older binary answers with a fallback
 or a loud refusal. No contract carries a revision number. A canary release is not
