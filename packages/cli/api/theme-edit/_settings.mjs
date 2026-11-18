@@ -8213,7 +8213,7 @@ const MODULE_EXTENSIONS = [
 /**
  * The file a relative import names, resolved as TypeScript resolves it: a
  * JavaScript extension names its TypeScript source (`.js` → `.ts`/`.tsx`,
- * `.jsx` → `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
+ * `.jsx` → `.tsx`/`.ts`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
  * written, with each module extension, and as a folder's index file.
  * @param {string} dir
  * @param {string} spec
