@@ -43,7 +43,8 @@ links them. Every asynchronous call resolves the result vocabulary of
 `spec:AST-112/FR6`, every module has the capability shape of
 `spec:AST-112/FR7`, every interface evolves additively under
 `spec:AST-112/FR8`, and Astryx Stage answers each module's calls as iOS and
-Android do, as the contract developers build against (`spec:AST-112/FR12`).
+Android do; it conforms to these contracts and never defines them
+(`spec:AST-112/FR12`).
 
 ## Why this exists
 
