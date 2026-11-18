@@ -2206,6 +2206,18 @@ function pictureColors(file, cwd, at, count) {
 }
 
 /**
+ * The aspect a setting changes, so a dial and the tokens it writes count as
+ * one: corners (the corners dial and every radius token) and the control
+ * size (its size tokens). Anything else is its own aspect.
+ * @param {string} thing
+ */
+function aspectOf(thing) {
+  if (thing === 'corners' || /^--radius-/.test(thing)) return 'corners';
+  if (/^--size-element-/.test(thing)) return 'control-size';
+  return thing;
+}
+
+/**
  * The commands that make a picture's measured look, each checked as `set`
  * checks it: one result per trait, saying where it was read and how sure.
  * A trait the theme already sets keeps the theme's own value (what was typed
@@ -2226,9 +2238,14 @@ async function pictureLook(cwd, name, read) {
   }));
   for (const tr of read.traits) {
     const step = tr.step;
-    // What the theme sets itself, for the whole theme or on the same part,
-    // wins over a reading.
-    const kept = own.find(s => s.thing === step.thing && (!s.on || s.on === step.on));
+    // What the theme sets itself wins over a reading of the same aspect
+    // (the corners dial and the radius tokens are one aspect, as are the
+    // control size tokens), unless the two are on different parts.
+    const kept = own.find(
+      s =>
+        aspectOf(s.thing) === aspectOf(step.thing) &&
+        (!s.on || !step.on || s.on === step.on),
+    );
     if (kept) {
       unsure.push({
         text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
@@ -2250,7 +2267,7 @@ async function pictureLook(cwd, name, read) {
     look: {
       source: 'picture',
       scale: read.scale,
-      traits: read.traits.map(({step, ...tr}) => tr),
+      traits: read.traits.map(({step: _step, ...tr}) => tr),
       slots: read.slots,
     },
     results,

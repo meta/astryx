@@ -246,6 +246,15 @@ describe('traits from a picture', () => {
     expect(unsure[0].why).toMatch(/too grainy to read boxes from/);
   });
 
+  it('writes a whole line height ratio with no trailing dot', () => {
+    // Two wrapped lines of 13px text (9px capitals) 26px apart: a ratio of 2.
+    const c = canvas(520, 120);
+    for (const y of [20, 46])
+      for (let x = 10; x < 470; x += 8) c.box({x, y, w: 3, h: 9, fill: [20, 20, 20]});
+    const leading = readTraits(c.png()).traits.find(t => t.trait === 'leading');
+    expect(leading?.step).toEqual({verb: 'set', thing: '--text-body-leading', value: '2'});
+  });
+
   it('never names a typeface', () => {
     const {unsure} = readTraits(controlsPage());
     expect(unsure.find(u => u.trait === 'font')?.why).toMatch(/not read from pictures/);
@@ -331,6 +340,16 @@ describe('how <picture>', () => {
     expect(d.colors.length).toBeGreaterThan(0);
     expect(d.results).toEqual([]);
     expect(d.unsure[0].text).toMatch(/^look on theme: the picture is too grainy/);
+  });
+
+  it('keeps the corners the theme sets with the corners dial', async () => {
+    // (A fresh theme: the one above already sets a radius token.)
+    await themeEditNew('pc', {cwd, like: 'neutral'});
+    await themeEditSet('pc', 'corners', '12px', {cwd});
+    const d = /** @type {any} */ ((await themeEditHow('look.png', {cwd, theme: 'pc'})).data);
+    const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
+    expect(commands.some((/** @type {string} */ c) => /--radius-element/.test(c))).toBe(false);
+    expect(d.unsure.some((/** @type {any} */ u) => /^corners on button-like: the picture reads 4px .* sets corners 12px already, which stays/.test(u.text))).toBe(true);
   });
 
   it('reads points with --at as before, with no traits', async () => {

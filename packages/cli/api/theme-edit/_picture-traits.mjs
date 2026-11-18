@@ -886,14 +886,16 @@ export function readTraits(pic, scale = 1) {
       if (next) pitches.push((next.baseline - l.baseline) / scale);
     }
     const p = agreed(pitches, 1);
+    // The line height as a ratio, at most four decimals, no trailing dot.
+    const leading = String(Number((p.value / body).toFixed(4)));
     if (p.n >= 1 && p.n >= pitches.length * 0.6 && p.value >= body)
       traits.push({
         trait: 'leading',
         on: 'theme',
-        value: (p.value / body).toFixed(4).replace(/0+$/, ''),
+        value: leading,
         read: `${p.n + 1} stacked lines of body text, ${p.value}px apart`,
         sure: p.n >= 2 ? 'sure' : 'about',
-        step: {verb: 'set', thing: '--text-body-leading', value: (p.value / body).toFixed(4).replace(/0+$/, '')},
+        step: {verb: 'set', thing: '--text-body-leading', value: leading},
       });
     else unsure.push({trait: 'leading', on: 'theme', why: 'no wrapped paragraph to measure line spacing from; a single line shows no leading'});
     // Headings: weight from stroke against height.
