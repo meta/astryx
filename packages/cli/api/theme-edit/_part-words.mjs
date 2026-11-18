@@ -102,7 +102,7 @@ export const OVERRIDES = [
     {on: 'top-nav-heading'},
   ],
   [
-    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav(?:igation)? ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? (?:windows? )?(?:with (?:an? )?(?:[a-z#0-9]+ ){0,2})?)\b(header|top ?bar|(?:window )?title ?bars?|nav(?:igation)? ?bar|app ?bar|masthead)\b(?!\s+(?:on|in|of|for)\s+(?:the\s+)?(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s?\b)/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],

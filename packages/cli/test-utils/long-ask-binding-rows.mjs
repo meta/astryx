@@ -550,8 +550,8 @@ export const LOCK = [
   ],
   [
     'bold headings, rounder cards, compact tables, red #c8102e and blue #003da5 accents',
-    ['accent'],
-    [],
+    ['accent', 'headings'],
+    ['card', 'table-row'],
   ],
   [
     'big touch targets, rounder cards, compact tables, large bold text, thick borders',
