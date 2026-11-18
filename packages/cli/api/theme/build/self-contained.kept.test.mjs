@@ -10,7 +10,8 @@
  *   are unchanged; it equals a fresh compile byte for byte; any change to one
  *   of those compiles again; a failed compile keeps nothing; it is read back
  *   after a CLI upgrade that leaves the compiling module and Babel's files as
- *   they are, and compiled again after one that changes either
+ *   they are, and compiled again after one that changes either; no browserslist
+ *   setting changes or breaks it; no file of the CLI's own is stamped
  */
 
 import {
@@ -125,6 +126,9 @@ let selfContained;
 let files;
 const savedCache = process.env.XDG_CACHE_HOME;
 const savedBabelEnv = process.env.BABEL_ENV;
+const savedBrowserslist = process.env.BROWSERSLIST;
+/** The CLI's own folder, as this checkout holds it. */
+const CLI_SOURCE = path.resolve(import.meta.dirname, '../../..');
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
 const THEME = path.join(TEMP_ROOT, 'theme');
 const BUILD_ID = path.join(
@@ -242,6 +246,8 @@ beforeEach(() => {
   for (const name of fs.readdirSync(STORE)) fs.rmSync(path.join(STORE, name));
   if (savedBabelEnv === undefined) delete process.env.BABEL_ENV;
   else process.env.BABEL_ENV = savedBabelEnv;
+  if (savedBrowserslist === undefined) delete process.env.BROWSERSLIST;
+  else process.env.BROWSERSLIST = savedBrowserslist;
   reinstalled.now = false;
   relinked.now = false;
   rewritten.now = false;
@@ -510,6 +516,34 @@ describe('the JavaScript a theme build compiles', () => {
       reinstalled.now = false;
       babelMoved.now = false;
       setBuildId('kept-compile-test');
+    }
+  }, 60_000);
+
+  it('compiles the same bytes whatever browserslist setting the project has, an invalid one included', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    const plain = fresh();
+    // Read by browserslist wherever it is asked for a project's setting.
+    process.env.BROWSERSLIST = 'this is not a valid query';
+    const first = build();
+    expect(first.modules).toEqual(plain);
+    expect(build().asked).toBe(0);
+  }, 60_000);
+
+  it("stamps no file of the CLI's own, so an upgrade that leaves Babel as it is reads it back", async () => {
+    await sleep(SETTLE_WAIT_MS);
+    build();
+    for (const name of keptCompiles()) {
+      const {stamps} = JSON.parse(
+        fs.readFileSync(path.join(STORE, name), 'utf8'),
+      );
+      const own = stamps
+        .map((/** @type {[string, string]} */ [file]) => file)
+        .filter(
+          (/** @type {string} */ file) =>
+            file.startsWith(CLI_SOURCE + path.sep) &&
+            !file.includes(`${path.sep}node_modules${path.sep}`),
+        );
+      expect(own).toEqual([]);
     }
   }, 60_000);
 });
