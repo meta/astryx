@@ -81,6 +81,23 @@ describe('a text color asked with a fill for one mode', () => {
 
 describe('a tint word', () => {
   it(
+    'tints a part named before the clause the tint word is in',
+    async test => {
+      needsBases(test);
+      const all = await sets(
+        'Secondary button hover, in dark mode only: a slightly blue tint. Light mode untouched.',
+      );
+      const hover = all.filter(c =>
+        /^background(?:-color)? .*--on button .*--state hover/.test(c),
+      );
+      expect(hover.length).toBeGreaterThan(0);
+      for (const c of hover)
+        expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%/);
+    },
+    T,
+  );
+
+  it(
     'tints the color it modifies on every line, and leaves another color solid',
     async test => {
       needsBases(test);

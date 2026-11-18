@@ -25823,6 +25823,14 @@ export function draftAnswer(ctx, env, question) {
           return new RegExp(`\\b${word}`).test(text.slice(0, at));
         }),
     );
+    // (A clause that names no part before the tint word, "secondary
+    // button hover, in dark mode only: a slightly blue tint", takes the
+    // part its own lines are on.)
+    if (parts.size === 0)
+      for (const p of c.parts.length
+        ? c.parts.map(x => x.on)
+        : d.options.flat().map(st => st.on))
+        if (p) parts.add(p);
     if (colors.length && parts.size) tints.push({parts, colors});
   }
   for (const d of tints.length ? result : [])
