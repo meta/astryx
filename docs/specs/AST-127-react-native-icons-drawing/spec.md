@@ -38,9 +38,9 @@ This record details the icon and drawing pieces of the platform layer of
 `spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the result
 vocabulary (`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`),
 additive evolution (`spec:AST-112/FR8`), the mapping of Astryx icon names onto
-system symbols (`spec:AST-112/FR9`), and Astryx Stage as the contract developers
-build against (`spec:AST-112/FR12`). Icon names and theme icons follow
-`spec:AST-082/FR17`.
+system symbols (`spec:AST-112/FR9`), and Astryx Stage, which conforms to these
+contracts and never defines them (`spec:AST-112/FR12`). Icon names and theme
+icons follow `spec:AST-082/FR17`.
 
 ## Why this exists
 
