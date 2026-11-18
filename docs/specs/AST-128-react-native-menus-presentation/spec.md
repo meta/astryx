@@ -39,8 +39,9 @@ This record details the platform layer of `spec:AST-112` for this group. It
 uses the result vocabulary of `spec:AST-112/FR6`, the capability shape of
 `spec:AST-112/FR7`, the additive evolution of `spec:AST-112/FR8`, the host
 wiring of `spec:AST-112/FR9`, and the Astryx Stage contract of
-`spec:AST-112/FR12`. It applies `spec:AST-082/FR11` and
-`spec:AST-093/FR2` (native-first sheets and menus) to React Native on iOS.
+`spec:AST-112/FR12`. It applies `spec:AST-082/FR11`, `spec:AST-093/FR2`
+(native-first sheets and menus), and `spec:AST-093/FR3` (the Apple Human
+Interface Guidelines) to React Native on iOS.
 The menu, action sheet, presentation, and modal hosts belong to the platform's
 core (`spec:AST-112/FR1`) and link in every app.
 
@@ -65,13 +66,13 @@ core (`spec:AST-112/FR1`) and link in every app.
 
 ## Who uses it
 
-| Native piece                                        | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | What a person sees                                                                                                                               |
-| --------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AstryxSystemMenu` (`nativeSystemMenu`)             | native component (Fabric Native Component) | `DropdownMenu`, `MoreMenu`, `ContextMenu`, `Selector` (an iOS menu style over a short plain list), `FileInput`'s source menu, and the components built on DropdownMenu's menu button (`PlaybackRateMenu`, `TopNav`'s menus) or on `DropdownMenu` (`Header` and its composed parts, `Table`, `BarButton`). Custom triggers reach it through the `useSystemMenuHost()` hook on `.`.                                                                                                                        | In a notes app, a tap on "More" opens the system pull-down menu; a long press on a note lifts it over a dimmed backdrop with its menu beside it. |
-| `AstryxActionSheet` (`nativeActionSheet`)           | native module (Turbo Native Module)        | `ActionSheet`; through it `FileInput`'s source menu where the system menu is absent, and `Item`'s swipe actions that carry a menu.                                                                                                                                                                                                                                                                                                                                                                       | Swiping away a draft in a chat screen asks "Discard draft?" in the system action sheet, with Cancel apart at the bottom.                         |
-| `AstryxPresentationHost` (`nativePresentationHost`) | native component (Fabric Native Component) | `BottomSheet` (the system sheet), and every surface that opens one: `ActionSheet`'s drawn form, `Popover`'s, `DropdownMenu`'s and `ContextMenu`'s sheet forms, `Selector`'s picker, `DateInput`, `DateRangeInput`, `Tokenizer`, `PowerSearch`, `TopNav`'s mega menu. `Dialog`, `AlertDialog`, `CommandPalette`, and the modal `Drawer` open in its over-full-screen window. The router's stack navigator presents its `modal`, `formSheet`, `fullScreenModal`, and `transparentModal` routes through it. | A photo viewer's info sheet rests at half height in Liquid Glass, drags to full height, and a confirm dialog opened from it comes up on top.     |
-| `AstryxModalHost`                                   | native component (Fabric Native Component) | `BottomSheet`'s drawn form on iOS and the router's drawn sheet routes: each drawn sheet opens in its own window.                                                                                                                                                                                                                                                                                                                                                                                         | A drawn sheet opened from a second tab while another drawn sheet is up appears over it, and each closes on its own.                              |
-| `AstryxOverlayWindowHost` (`OverlayWindow`)         | native component (Fabric Native Component) | No Astryx component. It is part of the Astryx app's Preview host (`spec:AST-139`), outside this record; the Preview route draws its exit control in it.                                                                                                                                                                                                                                                                                                                                                  | While previewing a project in the Astryx app, the exit control floats above everything the project shows, its own sheets included.               |
+| Native piece                                        | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | What a person sees                                                                                                                               |
+| --------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AstryxSystemMenu` (`nativeSystemMenu`)             | native component (Fabric Native Component) | `DropdownMenu`, `MoreMenu`, `ContextMenu`, `Selector` (an iOS menu style over a short plain list), `FileInput`'s source menu, and the components built on DropdownMenu's menu button (`PlaybackRateMenu`, `TopNav`'s menus) or on `DropdownMenu` (`Header` and its composed parts, `Table`, `BarButton`). Custom triggers reach it through the `useSystemMenuHost()` hook on `.`.                                                                                                                                                                         | In a notes app, a tap on "More" opens the system pull-down menu; a long press on a note lifts it over a dimmed backdrop with its menu beside it. |
+| `AstryxActionSheet` (`nativeActionSheet`)           | native module (Turbo Native Module)        | `ActionSheet`; through it `FileInput`'s source menu where the system menu is absent, and `Item`'s swipe actions that carry a menu.                                                                                                                                                                                                                                                                                                                                                                                                                        | Swiping away a draft in a chat screen asks "Discard draft?" in the system action sheet, with Cancel apart at the bottom.                         |
+| `AstryxPresentationHost` (`nativePresentationHost`) | native component (Fabric Native Component) | `BottomSheet` (the system sheet), and every surface that opens one: `ActionSheet`'s drawn form, `Popover`'s, `DropdownMenu`'s and `ContextMenu`'s sheet forms, `Selector`'s picker, `MultiSelector`, `ComplexSelector`, `Typeahead`, `DateInput`, `DateRangeInput`, `Tokenizer`, `PowerSearch`, `TopNav`'s mega menu. `Dialog`, `AlertDialog`, `CommandPalette`, and the modal `Drawer` open in its over-full-screen window. The router's stack navigator presents its `modal`, `formSheet`, `fullScreenModal`, and `transparentModal` routes through it. | A photo viewer's info sheet rests at half height in Liquid Glass, drags to full height, and a confirm dialog opened from it comes up on top.     |
+| `AstryxModalHost`                                   | native component (Fabric Native Component) | `BottomSheet`'s drawn form on iOS and the router's drawn sheet routes: each drawn sheet opens in its own window.                                                                                                                                                                                                                                                                                                                                                                                                                                          | A drawn sheet opened from a second tab while another drawn sheet is up appears over it, and each closes on its own.                              |
+| `AstryxOverlayWindowHost` (`OverlayWindow`)         | native component (Fabric Native Component) | No Astryx component. It is part of the Astryx app's Preview host (`spec:AST-139`), outside this record; the Preview route draws its exit control in it.                                                                                                                                                                                                                                                                                                                                                                                                   | While previewing a project in the Astryx app, the exit control floats above everything the project shows, its own sheets included.               |
 
 ## Non-goals
 
@@ -122,7 +123,7 @@ core (`spec:AST-112/FR1`) and link in every app.
     under `spec:AST-082/FR17`: the icon the app or theme defines for the name
     (a system symbol or an image the app ships), else the platform's default
     symbol. A row and an `Icon` with the same name therefore show the same
-    image, and a name with neither shows no image. A glyph (an emoji or a few
+    image. A glyph (an emoji or a few
     characters) is drawn as the image of a row without an icon.
   - `useAnySystemMenuOpen()` and `isAnySystemMenuOpen()` tell whether any of
     the package's system menus is open in the current JavaScript runtime.
@@ -197,6 +198,9 @@ core (`spec:AST-112/FR1`) and link in every app.
   value of the detent the sheet opens at, and a new value moves it there.
   `onDetentChange({detent})` reports the value of the detent the person moved
   to. No prop or event of a presentation sheet takes or reports an index.
+  `large` is always the largest detent, and `fit` takes its place in the
+  order by the content's measured height. The wrapper's `sheet` option
+  carries the same values as these native props.
   `sheetGrabber` and `sheetScrollExpands` are on by default, and a negative
   `sheetCornerRadius` keeps the system's radius.
   - `sheetCovered` holds a sheet at the large detent while another modal
@@ -253,7 +257,10 @@ core (`spec:AST-112/FR1`) and link in every app.
   Native's `Modal`. When the system removes a window that is still meant to be
   visible, the host reports it, and the surface that opened it closes. No
   modal window stays on screen after the component that owns it unmounts,
-  even during a transition.
+  even during a transition. That guarantee rests on FR16's one exception:
+  where React Native changes the state it depends on, React Native's own
+  behaviour applies, and a window whose owner unmounts during a transition
+  can stay on screen, taking touches, until something else dismisses it.
 - **FR12 — Accessibility.**
   - The system menu, action sheet, and presentation hosts take no
     accessibility props. The trigger or the presented content supplies the
@@ -329,6 +336,8 @@ resolves `{index, reason, message}`; `show` is its positional form.
   draws its alert in the over-full-screen window.
 - FR5 gap: the presentation host presents no popover; `Popover` draws its
   anchored surface, and an iPad gets no UIPopoverPresentationController.
+- `spec:AST-082/FR11` gap: on Android, menus, sheets, and dialogs are drawn
+  by the library, not presented by the platform (OQ6).
 - FR3 gap: in Astryx Stage the context menu does not play the lift
   animation, a held finger cannot slide onto a row, and `medium` row elements
   draw as a list.
@@ -345,11 +354,11 @@ resolves `{index, reason, message}`; `show` is its positional form.
 - None beyond `spec:AST-112`. This record details its FR1 (the presentation,
   menu, and action-sheet hosts in the core), FR6 to FR9, and FR12 for this
   group.
-- Relies on `spec:AST-112` FR3 (amended): the core, with the native half of
+- Relies on `spec:AST-112` FR3: the core, with the native half of
   every library component, links by default.
-- Relies on `spec:AST-112` FR8 (amended): every native contract is at
+- Relies on `spec:AST-112` FR8: every native contract is at
   revision 1, and later behaviour is a named feature that JavaScript checks.
-- Relies on `spec:AST-112` FR12 (amended): Astryx Stage refuses a project
+- Relies on `spec:AST-112` FR12: Astryx Stage refuses a project
   below its version floor and lists the missing contracts.
 
 ## Verification
@@ -370,7 +379,7 @@ resolves `{index, reason, message}`; `show` is its positional form.
 | FR12     | Simulator accessibility tree checks; device checks with VoiceOver                                                                           | focus in and back; the escape; a sheet over a full-screen route; Reduce Motion                                                  | Focus stays behind, the escape is lost, or a sheet is missing from the tree                                                                         |
 | FR13     | UI-thread frame checks during drags and menu tracking                                                                                       | a detent drag; a pull-down drag                                                                                                 | A JavaScript event per frame                                                                                                                        |
 | FR14     | Unit tests through the `./testing` doubles                                                                                                  | each host absent                                                                                                                | A throw, a rejection, or a silent no-op                                                                                                             |
-| FR15     | The platform's spec rules check; Astryx Stage version floor check                                                                           | a contract hash change; an older Stage                                                                                          | A changed contract without a named feature, or an older Stage that runs the project                                                                 |
+| FR15     | The platform's spec rules check; Astryx Stage version floor check                                                                           | a changed contract; an older Stage                                                                                              | A changed contract without a named feature, or an older Stage that runs the project                                                                 |
 | FR16     | Source review of the native code against the public headers                                                                                 | a React Native version that renames the modal host's state                                                                      | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault                                       |
 
 ## Decision log
