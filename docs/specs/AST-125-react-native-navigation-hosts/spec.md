@@ -33,11 +33,13 @@ six native components that hold the stack and tab containers, and one
 JavaScript protocol through which host-facing UI reads and drives the router's
 state.
 
-This record details `spec:AST-112` for one group of the platform layer. It
-uses the platform layer and its capability loader (`spec:AST-112/FR1`,
-`spec:AST-112/FR2`), the result vocabulary (`spec:AST-112/FR6`), the capability
-shape (`spec:AST-112/FR7`), additive evolution (`spec:AST-112/FR8`), and Astryx
-Stage, which conforms to these contracts and never defines them
+This record details `spec:AST-112` for one group of the platform layer and
+follows the shared platform rules of `spec:AST-140`. It uses the platform layer
+and its capability loader (`spec:AST-112/FR1`, `spec:AST-112/FR2`),
+registration and exposure (`spec:AST-140/FR1`), the missing-piece rule
+(`spec:AST-140/FR2`), the result vocabulary (`spec:AST-140/FR3`), the
+capability shape (`spec:AST-112/FR7`), additive evolution
+(`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and Astryx Stage, which conforms to these contracts and never defines them
 (`spec:AST-139`). It applies `spec:AST-112/DEC-9`: Astryx owns navigation, routing included.
 
 ## Why this exists
@@ -67,7 +69,7 @@ it build its own:
 
 Astryx takes no third-party native navigation dependency, and an app may use
 react-native-screens, react-native-gesture-handler or another router beside
-these components without conflict.
+these components without conflict (`spec:AST-140/FR9`).
 
 ## Who uses it
 
@@ -340,7 +342,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - The router exposes them as `useScreenInsets()`, `useContentWidth()` and
     `useVerticalBarEdge()`. Every value comes from the system's own
     measurement of the screen, not from the device or its orientation.
-- **FR11 — Threading and motion.** Transitions, back gestures, large-title
+- **FR11 — Threading and motion.** Under `spec:AST-140/FR6`: transitions, back gestures, large-title
   collapse, scroll-edge effects, tab bar minimize and the accessory's placement
   run on the UI thread under the system, with no JavaScript per frame.
   JavaScript hears an event at a transition's start, a settled pop, a press, or
@@ -351,7 +353,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - The navigation hosts are part of the library's default native set
     (`spec:AST-112/FR3`).
   - The router checks that the hosts are present before it renders through
-    them. When they are absent (an app that opted out of the default set, or a
+    them (`spec:AST-140/FR2`). When they are absent (an app that opted out of the default set, or a
     binary without them), a navigator with system chrome fails at its first
     render with an error that names the missing capability. It never renders
     a blank screen.
@@ -374,7 +376,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     focus to the incoming screen as the platform does; the hosts add no focus
     rule of their own.
 - **FR14 — Named features.**
-  - The group's native contracts follow `spec:AST-112/FR8`: each is at
+  - The group's native contracts follow `spec:AST-140/FR5`: each is at
     revision 1, and behaviour added later is a named feature the JavaScript
     checks before use. The group's named features are
     `AstryxStackHost.pop-start` (`onPopStart`, FR3) and
@@ -444,13 +446,14 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces,
   the navigation hosts included, link by default.
-- Relies on `spec:AST-112` FR8 (amended): native contracts start at revision 1
-  and grow by named features.
+- Relies on `spec:AST-140/FR5`: native contracts start at revision 1 and grow
+  by named features.
 - Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
   only, and a record names its exceptions (FR15 here).
 - Details `spec:AST-112/FR2` (router and hosts), `spec:AST-112/FR5` (the
-  `./navigation` entry holds the router), `spec:AST-112/FR6` and
-  `spec:AST-112/FR7` (FR12 here), and `spec:AST-112/DEC-9`.
+  `./navigation` entry holds the router), `spec:AST-112/FR7` (FR12 here) and
+  `spec:AST-112/DEC-9`, and applies `spec:AST-140/FR2`, `spec:AST-140/FR3`
+  (FR12 here) and `spec:AST-140/FR6` (FR11 here).
 
 ## Verification
 
