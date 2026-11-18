@@ -2471,7 +2471,7 @@ export function acceptedContrastCheck(themes) {
     for (const a of Array.isArray(data?.accepted) ? data.accepted : [])
       if (a && typeof a.part === 'string' && typeof a.reason === 'string')
         lines.push(
-          `${theme.slug}: ${a.part} on ${a.ground} in ${a.mode} at ${a.ratio}:1 (${a.reason})`,
+          `${theme.slug}: ${a.part}${typeof a.when === 'string' && a.when ? ` (${a.when.replace(':', ' ')})` : ''} on ${a.ground} in ${a.mode} at ${a.ratio}:1 (${a.reason})`,
         );
   }
   if (!lines.length) return null;
