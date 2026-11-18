@@ -5,13 +5,21 @@ import {judgeAgainstControl} from './busyMotionJudge';
 
 const FRAME_MS = 16.5;
 
-/** A screencast of `deltas.length + 1` frames in which the control moves 10 px on every frame. */
+/**
+ * A screencast of `deltas.length + 1` frames in which the control moves 10 px
+ * on every frame. Each frame changes every pixel of the alert's region by its
+ * delta, so their mean luma moves by it too.
+ */
 function cast(alertDeltas: ReadonlyArray<number>) {
-  const alert = [{t: 0, luma: 182}];
+  const alert = [{t: 0, luma: 182, change: -1}];
   const control = [{box: {x: 0, y: 0, width: 20, height: 20}}];
   alertDeltas.forEach((delta, k) => {
     const i = k + 1;
-    alert.push({t: i * FRAME_MS, luma: alert[k].luma + delta});
+    alert.push({
+      t: i * FRAME_MS,
+      luma: alert[k].luma + delta,
+      change: Math.abs(delta),
+    });
     control.push({box: {x: i * 10, y: 0, width: 20, height: 20}});
   });
   return {alert, control, window: {from: 0, to: alert.length * FRAME_MS}};
@@ -49,6 +57,20 @@ describe('judgeAgainstControl', () => {
       missed: 1,
       longestAlertStall: 1,
       longestControlStall: 0,
+    });
+  });
+
+  it('counts a frame whose pixels change while their mean luma barely moves as motion', () => {
+    const {alert, control, window} = cast([-0.28, -0.002, -0.25]);
+    // Text crossing the region's edge cancels most of the fade's change of
+    // the region's mean luma. Its pixels still change, by 0.05 here.
+    const cancelled = alert.map((frame, k) =>
+      k === 2 ? {...frame, change: 0.05} : frame,
+    );
+    expect(judgeAgainstControl(cancelled, control, window)).toMatchObject({
+      controlMoved: 3,
+      missed: 0,
+      longestAlertStall: 0,
     });
   });
 
