@@ -182,11 +182,36 @@ function walkAst(value, visit) {
 }
 
 /**
+ * The string values a source file holds, object keys included, read from its
+ * syntax tree, so a commented-out copy never counts. A config names a plugin
+ * package this way (`plugins: {'@acme/postcss': {}}`).
+ * @param {string} source
+ * @returns {Set<string>}
+ */
+export function stringValues(source) {
+  const values = new Set();
+  walkAst(parseModule(source), node => {
+    if (node.type === 'StringLiteral') values.add(node.value);
+    if (
+      node.type === 'TemplateLiteral' &&
+      node.expressions?.length === 0 &&
+      typeof node.quasis?.[0]?.value?.cooked === 'string'
+    ) {
+      values.add(node.quasis[0].value.cooked);
+    }
+  });
+  return values;
+}
+
+/**
+ * The module specifiers a source file imports, re-exports, or loads with
+ * `import()` or `require()`, read from its syntax tree, so a commented-out
+ * or quoted copy never counts.
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
  */
-function moduleSpecifiers(source, options = {}) {
+export function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -1008,9 +1033,9 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
- * The fix line for a project with no installed theme: the install command in
- * the project's package manager, or `npm install` with a note when its
- * lockfiles disagree.
+ * The fix line for a project with no installed theme: the install guidance
+ * its integrations give, else the install command in the project's package
+ * manager, or `npm install` with a note when its lockfiles disagree.
  * @param {string} cwd
  * @param {string} run the CLI invocation stem
  * @returns {string}
@@ -1719,7 +1744,8 @@ export async function checkAppThemes(cwd) {
                 '; ',
               )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
             fix: [
-              install?.installCommand ??
+              install?.installGuidance ??
+                install?.installCommand ??
                 install?.noCommandReason ??
                 `Install ${packages.join(', ')}.`,
               ...refresh,

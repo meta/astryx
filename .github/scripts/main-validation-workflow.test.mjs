@@ -9,6 +9,7 @@
  *   Vitest routing over the same lanes is pinned in ci-test-routing.test.mjs.
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -28,6 +29,18 @@ describe('main validation legs', () => {
     expect(job['timeout-minutes']).toBe(15);
     expect(job['runs-on']).toBe('ubuntu-latest');
   };
+
+  it("test-node draws the theme editor's pages as a pull request does", () => {
+    const job = workflow.jobs['test-node'];
+    const run = job.steps.find(step =>
+      /pnpm test:node --shard=/.test(step.run ?? ''),
+    );
+    // The legs are planned from times measured without real drawing
+    // everywhere, so they run that way too.
+    expect(run.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(job.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(workflow.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+  });
 
   it('test-ui runs 6 legs at once, each inside the job budget', () => {
     const job = workflow.jobs['test-ui'];
@@ -335,5 +348,41 @@ describe('main validation dispatch', () => {
     await expect(
       resolve({eventName: 'workflow_dispatch', sha}),
     ).rejects.toThrow('full 40-character commit SHA');
+  });
+});
+
+describe("main validation's Node watchdog", () => {
+  it('names the files still running before the job limit without ending the leg, so an overrun stays incomplete and is run again', () => {
+    const job = workflow.jobs['test-node'];
+    const step = job.steps.find(each =>
+      /pnpm test:node --shard=/.test(each.run ?? ''),
+    );
+    expect(step.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ');
+    expect(step.run).toContain('export VITEST_SHARD_WATCHDOG_SECONDS');
+    expect(step.run).toContain(
+      '--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs',
+    );
+    // Name-only: the reporter warns and the job limit cancels the leg.
+    expect(step.env.VITEST_SHARD_WATCHDOG_NAME_ONLY).toBe('1');
+    // The script holds only shell: an environment entry that slipped into it
+    // would run as a command after the tests and fail every leg.
+    const script = step.run.replace(/\$\{\{[^}]*\}\}/g, 'X');
+    expect(
+      script.split('\n').filter(line => /^\s*[A-Z_]+:\s/.test(line)),
+    ).toEqual([]);
+    const bash = spawnSync('bash', ['-n'], {input: script, encoding: 'utf8'});
+    expect(bash.status, bash.stderr).toBe(0);
+    expect(script.trim().split('\n').at(-1)).toMatch(
+      /^pnpm test:node --shard=/,
+    );
+    expect(job['timeout-minutes']).toBe(15);
+    // A cancelled unit run is incomplete to the scheduler, which dispatches
+    // the next one and reports it (spec:AST-030 FR21).
+    const heavy = fs.readFileSync(
+      new URL('../workflows/main-heavy-lanes.yml', import.meta.url),
+      'utf8',
+    );
+    const incomplete = /const INCOMPLETE = \[([^\]]+)\]/.exec(heavy)?.[1] ?? '';
+    expect(incomplete).toContain("'cancelled'");
   });
 });

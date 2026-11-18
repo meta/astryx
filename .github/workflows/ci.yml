@@ -68,7 +68,8 @@ permissions: {}
 # classifier) and skips its work, reporting success, when nothing in its scope
 # changed; anything undecidable runs everything. The one scope job,
 # swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
-# start only when the change proves a target.
+# start only when the change proves a target, and on a pull request only with
+# the `ci:run-swizzle` label: the proof runs on main (spec:AST-110/DEC-3).
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -206,8 +207,7 @@ jobs:
         continue-on-error: true
         working-directory: .ci-admission
         run: |
-          node scripts/vitest-node-legs.mjs plan --github-output \
-            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+          node scripts/vitest-node-legs.mjs plan --github-output
 
       # Another run's admission reads from this step's name how many jobs this
       # run adds at full width (count.mjs).
@@ -222,11 +222,11 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}
 
@@ -289,11 +289,11 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}
 
@@ -1211,19 +1211,21 @@ jobs:
               .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). Vitest walks the module graph once, for the list; a
+            # second `--changed` walk would cost each leg as long again.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/ui-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/ui-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -1383,12 +1385,14 @@ jobs:
             # share of guards.
             # The lists go through files so a failing lister fails the step.
             # Every leg splits the same list, so a leg that cannot list the
-            # tests fails rather than split a different one.
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
             .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
@@ -1502,6 +1506,19 @@ jobs:
           pnpm -F @astryxdesign/build build
           pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
 
+      # render-interaction-parity.browser.test.mjs builds one page into a Vite
+      # app and renders it to one file, then takes the same clicks, keys and
+      # typing in both in Chromium, the file inside a sandboxed frame under a
+      # strict content security policy, and compares what shows after each
+      # step. It needs the build package's Vite plugin, built in the step
+      # before. The Node legs skip it; with ASTRYX_RENDER_PARITY_BROWSER set,
+      # a missing browser fails it.
+      - name: Render interaction parity browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_PARITY_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/render-interaction-parity.browser.test.mjs --maxWorkers=1
+
       # template-noscript-first-paint.browser.test.mjs renders the page
       # templates people share as a file to static HTML and checks their
       # first paint with script off at a phone's and a desktop's width. The
@@ -1538,15 +1555,19 @@ jobs:
           fi
           exit "$rc"
 
-  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
-  # each, beside the Node legs rather than inside them. When a change reaches
-  # every copy, its slices take about 2,300 s of test time, more than the Node
-  # legs hold under their limit with the rest of the suite. This job reads the
-  # proof's scope first, with Node alone and nothing installed; the legs start
-  # only when the change proves a target, as each slice decides. `test`
-  # requires this job, and the legs whenever the scope is not `none`.
+  # The swizzle proof (spec:AST-110 FR7) runs on main: Main's Node legs prove
+  # the targets each validated main commit affects, and the release re-check
+  # proves every target before a cut (spec:AST-110/DEC-3). A pull request runs
+  # it only with the `ci:run-swizzle` label (run-labels), for a change to the
+  # swizzle tooling; it then runs in legs of its own, one slice each, beside
+  # the Node legs rather than inside them. When a change reaches every copy,
+  # its slices take about 2,300 s of test time, more than the Node legs hold
+  # under their limit with the rest of the suite. This job reads the proof's
+  # scope first, with Node alone and nothing installed; the legs start only
+  # when the change proves a target, as each slice decides. `test` requires
+  # this job, and the legs whenever the scope is not `none`.
   swizzle-proof-scope:
-    needs: [admission, heavy-ci]
+    needs: [admission, heavy-ci, run-labels]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1570,17 +1591,23 @@ jobs:
 
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: (github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
 
-      # A docsite-only or spec-only change runs no Node test, so no slice.
+      # A pull request without the ci:run-swizzle label proves no target here:
+      # main proves them. A docsite-only or spec-only change runs no Node
+      # test, so no slice.
       - name: Decide the proof's scope
         id: proof
         env:
+          OPTED_OUT: ${{ github.event_name == 'pull_request' && needs.run-labels.outputs.swizzle != 'true' }}
           SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
         run: |
-          if [ "$SPECIALIZED" = true ]; then
+          if [ "$OPTED_OUT" = true ]; then
+            echo "The swizzle proof runs on main: Main's Node legs prove the targets each main commit affects, and the release re-check proves every target. A pull request that changes the swizzle tooling runs it here with the ci:run-swizzle label."
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          elif [ "$SPECIALIZED" = true ]; then
             echo "Specialized PR lane: the swizzle proof proves no target"
             echo 'mode=none' >> "$GITHUB_OUTPUT"
           else
@@ -1593,10 +1620,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # All eight legs at once when admission found room for them, else two
-      # at a time, as the Node legs (admission's `leg-widths`).
-      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
-      # One leg per swizzle-proof.<n>.test.mjs file.
+      # One leg per swizzle-proof.<n>.test.mjs file. The ci:run-swizzle label
+      # adds all eight legs to the run's admission (label-legs), so they start
+      # together.
       matrix:
         slice: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
@@ -1604,12 +1630,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Another run's admission counts at most this many live legs of this
-      # matrix: GitHub lists the legs max-parallel holds back as queued, but
-      # they hold no runner (count.mjs AT_ONCE_STEP).
-      - name: Run at most ${{ strategy.max-parallel }} legs at once
-        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
-
       - uses: actions/checkout@v7
         timeout-minutes: 8
         with:
@@ -1640,6 +1660,44 @@ jobs:
       - name: Check the recorded time of this slice
         if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
+
+  # Every release proves every swizzle target (spec:AST-110 FR7, DEC-3): the
+  # release-check of the commit a release is cut from runs the full swizzle
+  # proof, Chromium included, one slice per leg, and release-check requires
+  # every leg. A pull request runs the proof only with ci:run-swizzle
+  # (swizzle-proof, above), and Main's Node legs prove the targets each main
+  # commit affects; this is the one run that proves them all before a cut.
+  release-swizzle-proof:
+    name: release-swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+    strategy:
+      fail-fast: false
+      # One leg per swizzle-proof.<n>.test.mjs file, as swizzle-proof.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    # Every target and its Chromium render: longer than a pull request's slice.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Install Chromium for the swizzle proof
+        run: npx playwright install chromium
+
+      - name: Prove every swizzle target in this slice
+        env:
+          SWIZZLE_PROOF_ALL: '1'
+          SWIZZLE_PROOF_BROWSER: '1'
+        run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
   # this decides on a free slim runner whether native Swift changed, and
@@ -1885,13 +1943,15 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
-      # join still runs: it requires the release bump's own validation.
+      # join still runs: it requires the release bump's own validation. So
+      # does a change only to the recorded Node test times: the Node leg
+      # plan's check, which fails test-node, is the check that gates it.
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -1939,6 +1999,7 @@ jobs:
       visual: ${{ steps.decide.outputs.visual }}
       a11y: ${{ steps.decide.outputs.a11y }}
       rtl: ${{ steps.decide.outputs.rtl }}
+      swizzle: ${{ steps.decide.outputs.swizzle }}
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
@@ -6106,6 +6167,7 @@ jobs:
         a11y-contracts,
         pr-a11y-audit,
         pr-rtl,
+        release-swizzle-proof,
       ]
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' }}
     runs-on: ubuntu-slim
@@ -6123,7 +6185,7 @@ jobs:
         with:
           script: |
             const needs = JSON.parse(process.env.RELEASE_NEEDS);
-            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl']) {
+            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl', 'release-swizzle-proof']) {
               if (needs[name]?.result !== 'success') {
                 throw new Error(`Required release job ${name} did not succeed: ${needs[name]?.result}`);
               }

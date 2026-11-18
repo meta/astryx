@@ -134,6 +134,45 @@ export function withoutOtherNames(all, named = all) {
 }
 
 /**
+ * The catalog's docs, each doc that opens a level (a docs-tree namespace such
+ * as `layout`) holding the docs beneath it (`_summarizes`: the pages under its
+ * route and their sections). Such a page sums up the docs below it: a word its
+ * text shares with one of them is that doc's evidence, which the reader opens
+ * at its own grain, so the page does not answer it through that text
+ * (`scoreCandidate`, _candidate-score.mjs). Its name, title, description and
+ * declared keywords stay its own. Entries with nothing beneath them are
+ * returned as they are.
+ * @param {import('./_lexical.mjs').Candidate[]} all
+ * @returns {import('./_lexical.mjs').Candidate[]}
+ */
+function withSummarized(all) {
+  /** @type {Map<string, import('./_lexical.mjs').Candidate[]>} */
+  const below = new Map();
+  for (const c of all) {
+    const topic = c.domain === 'doc' ? /** @type {any} */ (c)._topic : null;
+    if (typeof topic !== 'string') continue;
+    for (let at = topic.indexOf('/'); at > 0; at = topic.indexOf('/', at + 1)) {
+      const route = topic.slice(0, at);
+      const list = below.get(route);
+      if (list) list.push(c);
+      else below.set(route, [c]);
+    }
+  }
+  if (below.size === 0) return all;
+  return all.map(c => {
+    const topic = c.domain === 'doc' ? /** @type {any} */ (c)._topic : null;
+    const docs = typeof topic === 'string' ? below.get(topic) : undefined;
+    if (!docs) return c;
+    const view = Object.create(
+      Object.getPrototypeOf(c),
+      Object.getOwnPropertyDescriptors(c),
+    );
+    Object.defineProperty(view, '_summarizes', {value: docs});
+    return view;
+  });
+}
+
+/**
  * Each gathered catalog's search views, one per set of naming catalogs.
  * @type {WeakMap<object, {others: object[], view: object}[]>}
  */
@@ -141,7 +180,8 @@ const views = new WeakMap();
 
 /**
  * The gathered catalog as search reads it: its entries with
- * {@link withoutOtherNames} applied. Names come from the catalog and from
+ * {@link withoutOtherNames} applied, and each doc that opens a level read at
+ * its own grain ({@link withSummarized}). Names come from the catalog and from
  * `others`, further gathered catalogs (a search for one `type` passes the
  * other of components and hooks, so `type` never changes which keywords
  * count). A reused gather, with the same others, gets the same view back.
@@ -158,11 +198,13 @@ export function searchView(catalog, others = []) {
       v.others.every((o, i) => o === others[i]),
   );
   if (hit) return /** @type {T} */ (hit.view);
-  const all = withoutOtherNames(
-    catalog.all,
-    others.length === 0
-      ? catalog.all
-      : [catalog.all, ...others.map(o => o.all)].flat(),
+  const all = withSummarized(
+    withoutOtherNames(
+      catalog.all,
+      others.length === 0
+        ? catalog.all
+        : [catalog.all, ...others.map(o => o.all)].flat(),
+    ),
   );
   const swap = new Map(catalog.all.map((c, i) => [c, all[i]]));
   const view = {

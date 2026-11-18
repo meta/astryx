@@ -590,14 +590,17 @@ export function baseFontsSheet(ctx, data) {
     return null;
   }
   const faces = fontFaceRules(text);
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
+  // The families the sheet loads, each once (a family can have a face per
+  // character subset); with the theme's build at hand, the sheet is
+  // imported only while the build still names one of them.
   const families = [
-    ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-      decodeURIComponent(m[1].replace(/\+/g, ' ')),
-    ),
-    // A `@font-face` rule names its family itself.
-    ...faces.map(face => face.family).filter(Boolean),
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      // A `@font-face` rule names its family itself.
+      ...faces.map(face => face.family).filter(Boolean),
+    ]),
   ];
   /** @type {string | null} */
   let built = null;

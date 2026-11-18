@@ -95,6 +95,15 @@ export {
 } from './agent-docs-target.mjs';
 
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/**
+ * The block's last line: how an agent removes the block. `--remove-agents`
+ * clears the project root and the working folder (cli-surface INV31); a copy
+ * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
+ */
+export const REMOVE_LINE =
+  'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -745,6 +754,10 @@ export function generateCompressedIndex(
       }
     }
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes whole agent files or cuts one copy by hand
+  // and leaves the others.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');

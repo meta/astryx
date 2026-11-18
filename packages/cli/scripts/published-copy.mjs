@@ -5,11 +5,14 @@
  *   generators that store at `prepack` what the CLI's own files give
  *   (scripts/generate-self-audit.mjs, scripts/generate-docs-routes.mjs): what
  *   they read there, folders included, is what an installed package holds.
+ *   Also what keeps Node's module resolution out of what those generators
+ *   record in the copy.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {copyPublishedFiles} from './published-files.mjs';
 
@@ -50,4 +53,28 @@ export function withPublishedCopy(prefix, fn) {
   } finally {
     fs.rmSync(stage, {recursive: true, force: true});
   }
+}
+
+/**
+ * Source for a generator's runner in the copy: it keeps Node's resolution of
+ * module imports out of what the copy's recorder records. Whether resolution
+ * reaches the recorder depends on how the machine's Node resolves modules,
+ * so a folder that holds only modules would be stored by one machine and not
+ * by another. A module's content is still recorded when it loads. Before
+ * module.registerHooks (Node 22.15) the run records as it always did.
+ * @param {string} pkg the copy's package folder
+ * @returns {string}
+ */
+export function resolutionUnrecorded(pkg) {
+  const readRecord = JSON.stringify(
+    pathToFileURL(path.join(pkg, 'foundation', 'fs', 'read-record.mjs')).href,
+  );
+  return `{
+  const {registerHooks} = await import('node:module');
+  const {withoutRecording} = await import(${readRecord});
+  registerHooks?.({
+    resolve: (specifier, context, next) =>
+      withoutRecording(() => next(specifier, context)),
+  });
+}`;
 }

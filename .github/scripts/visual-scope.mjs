@@ -77,9 +77,13 @@ export function classifyVisualScope(
   const stableVisualInfrastructure =
     paths.length === 0 ||
     surfaces.some(surface =>
-      ['shared-or-unknown', 'storybook-visual', 'runtime:build'].includes(
-        surface,
-      ),
+      [
+        'shared-or-unknown',
+        'storybook-visual',
+        'runtime:build',
+        // Test configuration beside other paths, as change-scope counts it.
+        'node-times',
+      ].includes(surface),
     ) ||
     paths.includes('packages/core/package.json');
   // The gate's probe theme: a private fixture that styles every theming

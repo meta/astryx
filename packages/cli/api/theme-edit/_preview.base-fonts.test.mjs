@@ -6,6 +6,7 @@ import path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 import {fontFaceRules} from '../../foundation/fonts/font-stylesheet.mjs';
 import {baseFontsSheet} from './_preview.mjs';
+import {fontNotes} from './_context.mjs';
 
 /** A project whose base theme package ships `fonts.css`. @param {string} css */
 function projectWithBaseFonts(css) {
@@ -72,6 +73,32 @@ describe('baseFontsSheet', () => {
       'https://fonts.example/f.woff2',
       'https://fonts.example/m.woff2',
     ]);
+  });
+});
+
+describe('fontNotes over Neutral\u2019s own fonts.css', () => {
+  it('names the remote Figtree once, though the sheet has a face per character subset', () => {
+    const neutralSheet = fs.readFileSync(
+      new URL('../../../themes/neutral/fonts.css', import.meta.url),
+      'utf8',
+    );
+    // The real sheet loads Figtree through more than one face.
+    expect(
+      fontFaceRules(neutralSheet).filter(face => face.family === 'Figtree')
+        .length,
+    ).toBeGreaterThan(1);
+    const cwd = projectWithBaseFonts(neutralSheet);
+    try {
+      const notes = fontNotes(
+        /** @type {any} */ ({project: {cwd}}),
+        /** @type {any} */ ({like: 'neutral', name: 'mine', settings: []}),
+      );
+      expect(
+        notes.filter(note => note.startsWith('"Figtree" comes from')),
+      ).toHaveLength(1);
+    } finally {
+      fs.rmSync(cwd, {recursive: true, force: true});
+    }
   });
 });
 

@@ -100,7 +100,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_LOAD',
-      when: 'the file cannot be loaded or parsed into a defineTheme() result, or its extension is not one a theme source has (.mjs, .js, .mts, .ts, .tsx, .jsx, .cjs, .cts), which is refused before loading',
+      when: 'the file cannot be loaded or parsed into a defineTheme() result, or its extension is not one a theme source has (.mjs, .js, .mts, .ts, .tsx, .jsx, .cjs, .cts), which is refused before loading. A theme that imports a stylesheet or an asset (an .svg, a picture, a font) needs Node 22.15 or later, or 23.5 or later; on an older Node its load is refused, naming the file, and nothing is written',
     },
     {
       code: 'ERR_THEME_INVALID',
