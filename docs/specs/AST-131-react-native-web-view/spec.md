@@ -96,8 +96,7 @@ Notes on the `web` capability's other modules, each part of the platform package
 - The full contracts of `AstryxWebSessions`, `AstryxWebData`,
   `AstryxWebBundles`, `AstryxAuthSession`, and `AstryxPageSnapshots`. Each is
   part of the platform package's `web` capability and has its own record.
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`) are separate products; they conform to this record's contracts.
 - Browser features the view does not offer: downloads, file upload pickers,
   geolocation, WebRTC, pop-up windows, and pull-to-refresh.
 - Equivalent internal implementations remain valid when they satisfy this
