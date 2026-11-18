@@ -917,6 +917,19 @@ function statusOfHue(color) {
           : null;
 }
 
+/**
+ * Whether a color is an ink: white or black, or a gray near either end,
+ * the colors text is set in.
+ * @param {string} color
+ */
+function isInk(color) {
+  const rgb = parseColor(color);
+  if (!rgb) return false;
+  const hi = Math.max(...rgb.slice(0, 3));
+  const lo = Math.min(...rgb.slice(0, 3));
+  return hi - lo < 24 && (lo > 225 || hi < 40);
+}
+
 /** Lengths written in a clause, in order. @param {string} c */
 const lengthsIn = c =>
   [...c.matchAll(/(?<![\w#.])-?(\d*\.?\d+)(px|rem|em)\b/g)].map(m => m[0]);
@@ -4574,18 +4587,20 @@ export function draftAnswer(ctx, env, question) {
         // (A hue may carry its status's label, "green #15803d stable";
         // an item that names a look or a role of its own, "8px corners",
         // "a blue accent", is no status.)
+        // (A status may lead with its label, "approved green #15803d".)
         const it =
-          /^\s*(green|amber|yellow|orange|red|blue)(?:\s+(#[0-9a-f]{3,8}))?\b(.*)$/i.exec(
+          /^\s*((?:[a-z]+\s+){0,2}?)(green|amber|yellow|orange|red|blue)(?:\s+(#[0-9a-f]{3,8}))?\b(.*)$/i.exec(
             items[k],
           );
+        const label = it ? `${it[1]} ${it[4]}` : '';
         if (
           !it ||
-          ROLE_WORDS.test(it[3]) ||
-          /\d/.test(it[3]) ||
-          aspectsOf(it[3]).length
+          ROLE_WORDS.test(label) ||
+          /\d/.test(it[4]) ||
+          aspectsOf(label).length
         )
           break;
-        parts.push(`${ROLE[it[1].toLowerCase()]} color ${it[2] ?? it[1]}`);
+        parts.push(`${ROLE[it[2].toLowerCase()]} color ${it[3] ?? it[2]}`);
       }
       if (!parts.length) return m;
       const rest = items
@@ -9564,21 +9579,27 @@ export function draftAnswer(ctx, env, question) {
   // card with white text"); one with values but no aspect takes the aspect
   // of a neighbor ("cards: 8px radius; buttons: 4px").
   const fillAspect = () => {
-    // ("white on the CTA", "white on accent buttons"): a color said ON a
-    // part, with no look named, is that part's text, never its fill.
-    for (const c of clauses) {
+    // ("white on the CTA", "white on accent buttons"): an ink said ON a
+    // part, white or black with no look named, is that part's text, never
+    // its fill. A hue on a part, "yellow on badges", or the last of a list
+    // of fills, "green, blue, red, yellow on badges", is still its fill.
+    for (const [ci, c] of clauses.entries()) {
       const on =
         /^\s*(?:(?:make|use|set)\s+)?(?:the\s+)?([#a-z0-9][#a-z0-9-]*(?:\s+[#a-z0-9-]+)?)\s+on\s+/i.exec(
           c.text,
         );
-      if (
-        c.parts.length &&
-        !c.aspects.length &&
-        on &&
-        colorsIn(on[1].toLowerCase()).length
-      ) {
+      const said = on ? colorsIn(on[1].toLowerCase()) : [];
+      const ink = said.length === 1 && isInk(String(said[0]));
+      const prev = clauses[ci - 1];
+      const inList =
+        prev &&
+        !prev.parts.length &&
+        !prev.aspects.length &&
+        prev.colors.length > 0 &&
+        joinOf.get(c)?.sep !== 'break';
+      if (c.parts.length && !c.aspects.length && ink && !inList) {
         c.aspects.push('text');
-        c.colors = colorsIn(on[1].toLowerCase());
+        c.colors = said;
       }
     }
     // A part whose paint is a line (the part data records it drawn by a
