@@ -18780,9 +18780,11 @@ export function draftAnswer(ctx, env, question) {
     // the piece even where a look word is part of its name (a tab's
     // underline); "no" or "without" does so only with no look asked
     // ("cards without borders" is a border).
+    // ("un-hide", "stop hiding": a hide said negated is a show.)
+    const shown = /\bun-?hid(?:e|den|ing)\b|\b(?:stop|quit|no longer)\s+hid(?:e|ing)\b/.test(c.text);
     if (
       c.parts.length &&
-      (/\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
+      (shown || /\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
     ) {
       const names = c.parts.map(p => one(p.on));
       // (An owner and its piece said apart, "alerts without icons": the
@@ -18800,6 +18802,18 @@ export function draftAnswer(ctx, env, question) {
           ctx.project.components?.[String(TARGET.get(k)?.component)]
             ?.targets?.[0]?.className !== `astryx-${k}`,
       );
+      if (pieces.length === 1 && C.MAP[pieces[0]] && shown) {
+        const own = pieces[0];
+        seenPart(own);
+        const hidden = env.data.settings.some(st => st.thing === 'display' && st.on === own);
+        push({
+          text: hidden
+            ? `${own} shown again: the theme's display none on it is taken back`
+            : `${own} is shown already (the theme does not hide it), so nothing changes`,
+          options: hidden ? [[/** @type {Step} */ ({verb: 'undo', thing: 'display', on: own})]] : [],
+        });
+        continue;
+      }
       if (pieces.length === 1 && C.MAP[pieces[0]]) {
         const own = pieces[0];
         seenPart(own);

@@ -13,7 +13,12 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {
+  themeEditHow,
+  themeEditNew,
+  themeEditSet,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -173,6 +178,38 @@ describe("a piece the ask says not to take away", () => {
         const data = await answer(q);
         expect(first(data), q).toEqual([]);
         expect(JSON.stringify(data.results), q).toMatch(/asks for no change/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a hide said negated', () => {
+  it(
+    'is a show: never display none; it takes back a hide the theme has',
+    async () => {
+      const piece = 'code-block-copy-button';
+      for (const q of [
+        "don't hide the code block copy button",
+        'stop hiding the code block copy button',
+        'un-hide the code block copy button',
+        'never remove the copy button on code blocks',
+      ]) {
+        const data = await answer(q);
+        expect(first(data), q).toEqual([]);
+        expect(JSON.stringify(data.results), q).not.toMatch(/display none/);
+      }
+      await themeEditSet('t', 'display', 'none', {cwd, on: piece});
+      try {
+        for (const q of [
+          'stop hiding the code block copy button',
+          'un-hide the code block copy button',
+        ])
+          expect(first(await answer(q)), q).toEqual([
+            `undo t display --on ${piece}`,
+          ]);
+      } finally {
+        await themeEditUndo('t', {cwd, thing: 'display', on: piece});
       }
     },
     T,
