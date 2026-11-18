@@ -168,6 +168,16 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     expect(lines).toEqual([
       "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button-like",
     ]);
+    // The answer names the widening: the family and every member it reaches.
+    const {data} = /** @type {any} */ (
+      await themeEditHow('buttons with a gradient from #ffffff to #e6e6e6', {
+        cwd,
+        theme: 'b',
+      })
+    );
+    expect(String(data.results[0].text)).toMatch(
+      /\(on button-like: every part of that family that draws alike, [^)]*\bbutton\b[^)]*\btoggle-button\b/,
+    );
     await themeEditSet('b', 'background', 'linear-gradient(#ffffff, #e6e6e6)', {
       cwd,
       on: 'button-like',
