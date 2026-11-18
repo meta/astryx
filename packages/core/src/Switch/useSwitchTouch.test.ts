@@ -333,3 +333,99 @@ describe('the track geometry', () => {
     expect(boxReads.filter(element => element === track)).toHaveLength(2);
   });
 });
+
+describe('the first value change before any measurement', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+    animators.length = 0;
+  });
+
+  /** The track's rendered box and the thumb's circle, as a browser lays them out. */
+  function layOut(track: HTMLElement, thumbSize: number) {
+    const thumb = track.firstElementChild as HTMLElement;
+    thumb.style.width = `${thumbSize}px`;
+    thumb.style.height = `${thumbSize}px`;
+  }
+
+  function trackReads(track: HTMLElement): () => number {
+    const reads: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        reads.push(this);
+        return this === track
+          ? DOMRect.fromRect({x: 0, y: 0, width: 40, height: 24})
+          : DOMRect.fromRect();
+      },
+    );
+    return () => reads.filter(element => element === track).length;
+  }
+
+  it('animates the thumb from the previous default circle, then uses the measured one', () => {
+    const {controller, track} = mount();
+    const reads = trackReads(track);
+    controller.setDefaultThumb({off: 16, on: 20});
+    const thumbElement = track.firstElementChild as HTMLElement;
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    thumb.values.scaleX = 1;
+    thumb.values.scaleY = 1;
+    expect(reads()).toBe(0);
+
+    // An app-driven value, a label tap and a key all reach this change.
+    layOut(track, 20);
+    render(controller, track, true);
+    const scales = () =>
+      thumb.calls.filter(
+        call =>
+          call.name === 'play' &&
+          (call.args[0] as Record<string, unknown>).scaleX != null,
+      ).length;
+    // The 16 px circle grows into the 20 px one CSS now renders.
+    expect(scales()).toBe(1);
+    expect(reads()).toBe(1);
+
+    // The second change starts from the measured circle.
+    layOut(track, 16);
+    render(controller, track, false);
+    expect(scales()).toBe(2);
+    expect(
+      (controller as unknown as {geometry: {thumbWidth: number}}).geometry
+        .thumbWidth,
+    ).toBe(16);
+  });
+
+  it('flips a mouse drag after a toggle at the current circle, not the mounted one', () => {
+    const surface = document.createElement('div');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    const track = document.createElement('div');
+    const thumbElement = document.createElement('div');
+    track.append(thumbElement);
+    surface.append(input, track);
+    document.body.append(surface);
+    trackReads(track);
+    layOut(track, 16);
+    const controller = new SwitchTouchController(
+      false,
+      switchTouchGeometry(40, 24),
+    );
+    controller.attach({surface, input, thumb: thumbElement, track}, 'pointer');
+
+    layOut(track, 20);
+    controller.setValue(true);
+    const press = controller as unknown as {
+      onControlEvent(event: string, touch: {x: number; startX: number}): void;
+      geometry: {flipDistance: number};
+    };
+    press.onControlEvent('touchDown', {x: 0, startX: 0});
+    // Track width less the 20 px circle the switch shows now.
+    expect(press.geometry.flipDistance).toBe(20);
+  });
+});
