@@ -78,7 +78,7 @@ const styles = stylex.create({
   trigger: {
     position: 'relative',
     // The hover layer sits under the label and chevron, inside this stacking
-    // context. Above them, a tinted or strong overlay would wash them out.
+    // context. A strong overlay above them hides them.
     isolation: 'isolate',
     // Keeps its label's width in a strip that scrolls, as a hugging tab does.
     flexShrink: 0,

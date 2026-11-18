@@ -112,7 +112,7 @@ const styles = stylex.create({
   base: {
     position: 'relative',
     // The hover and press layer sits under the label, inside this stacking
-    // context. Above the label, a tinted or strong overlay would wash it out.
+    // context. A strong overlay above the label hides it.
     isolation: 'isolate',
     display: 'inline-flex',
     alignItems: 'center',

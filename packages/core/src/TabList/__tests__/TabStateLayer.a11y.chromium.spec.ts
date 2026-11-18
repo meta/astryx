@@ -4,9 +4,9 @@
  * @file TabStateLayer.a11y.chromium.spec.ts
  * @input Built TabList stories in real Chromium (desktop, mouse), with the
  *   hover overlay set to an opaque colour
- * @output Browser evidence that a hovered Tab's and a hovered TabMenu
- *   trigger's state layer paints under the label: the label's pixels stay
- *   visible through an opaque overlay
+ * @output Browser evidence that a hovered or held Tab's state layer paints
+ *   under its label, and a hovered TabMenu trigger's under its chevron: their
+ *   pixels stay visible through an opaque overlay
  * @position Real-engine proof for design:user-states (the overlay composes
  *   over the fill without covering content); jsdom does not paint
  */
@@ -32,20 +32,24 @@ test.afterAll(async () => {
 const OVERLAY = 'rgb(255, 0, 255)';
 
 /**
- * Hovers `control` and counts the pixels in its label's box (or `part`'s)
- * that are not the overlay colour. A label above the layer keeps its glyphs; one under it
+ * Hovers `control` (and holds a press on it when `held`) and counts the
+ * pixels in its label's box (or `part`'s) that are not the overlay colour. A label above the layer keeps its glyphs; one under it
  * leaves a box of overlay colour only.
  */
 async function labelPixelsThroughOverlay(
   page: Page,
   control: string,
-  part?: string,
+  {part, held = false}: {part?: string; held?: boolean} = {},
 ) {
+  const overlay = held ? '--color-overlay-pressed' : '--color-overlay-hover';
   await page.addStyleTag({
-    content: `#storybook-root * { --color-overlay-hover: ${OVERLAY} !important; transition: none !important; }`,
+    content: `#storybook-root * { ${overlay}: ${OVERLAY} !important; transition: none !important; }`,
   });
   const target = page.locator(control).first();
   await target.hover();
+  if (held) {
+    await page.mouse.down();
+  }
   await page.evaluate(
     async () =>
       new Promise<void>(resolve => {
@@ -69,6 +73,9 @@ async function labelPixelsThroughOverlay(
     animations: 'disabled',
     type: 'png',
   });
+  if (held) {
+    await page.mouse.up();
+  }
   return page.evaluate(async bytes => {
     const blob = new Blob([new Uint8Array(bytes)], {type: 'image/png'});
     const bitmap = await createImageBitmap(blob);
@@ -104,6 +111,19 @@ test('a hovered tab keeps its label visible through an opaque hover overlay', as
   expect(visible).toBeGreaterThan(20);
 });
 
+test('a held tab keeps its label visible through an opaque press overlay', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-tablist--default&viewMode=story`,
+  );
+  const tab = '#storybook-root [data-tab-value]:not([aria-current="true"])';
+  await expect(page.locator(tab).first()).toBeVisible();
+  const visible = await labelPixelsThroughOverlay(page, tab, {held: true});
+  test.info().annotations.push({type: 'held tab', description: `${visible}`});
+  expect(visible).toBeGreaterThan(20);
+});
+
 test('a hovered tab menu trigger keeps its label and chevron visible through an opaque hover overlay', async ({
   page,
 }) => {
@@ -113,7 +133,9 @@ test('a hovered tab menu trigger keeps its label and chevron visible through an 
   const trigger = '#storybook-root [aria-haspopup="menu"]';
   await expect(page.locator(trigger).first()).toBeVisible();
   const visible = await labelPixelsThroughOverlay(page, trigger);
-  const chevron = await labelPixelsThroughOverlay(page, trigger, 'svg');
+  const chevron = await labelPixelsThroughOverlay(page, trigger, {
+    part: 'svg',
+  });
   test.info().annotations.push({
     type: 'trigger',
     description: `label ${visible}, chevron ${chevron}`,
