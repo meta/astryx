@@ -198,9 +198,9 @@ the larger of the two block gutters — so a bar declared on one block edge keep
 a layer the same distance from the opposite edge.
 
 The layer box is capped to the viewport minus both gutters on both axes, never
-to the span of viewport beside the trigger, and never exceeds that cap. An
+to the span of viewport beside the anchor, and never exceeds that cap. An
 explicit size renders at its size up to the cap; a content-sized layer wraps to
-the room beside its trigger when its content can wrap and keeps its size up to
+the room beside its anchor when its content can wrap and keeps its size up to
 the cap when it cannot. Content that cannot fit the cap overflows inside the
 layer box, where the composing component scrolls or clips it (Popover scrolls
 once it measures overflow); the box itself stays on screen. A consumer caps its
@@ -211,15 +211,15 @@ expression, because a CSS minimum otherwise wins over a maximum.
 The fallback order is the runtime's: preferred position; flip across the
 placement axis; flip across the alignment axis; both; then, while the anchor is
 in view, the slide: named `@position-try` options (`Layer/layerSlideRules.ts`)
-whose area spans the whole alignment axis, same side of the trigger first,
+whose area spans the whole alignment axis, same side of the anchor first,
 opposite side second, each carrying the gutter on both alignment-axis edges and
 the clearance-and-gutter pair of the side it lands on, which the browser's
 overflow alignment shifts the least distance that brings the margin box inside
 the viewport. Centered layers keep their one-sided spans ahead of the full
 span. The slide is its own option because a layer wider than the room on either
-side of its trigger overflows every flipped option on the alignment axis, and
+side of its anchor overflows every flipped option on the alignment axis, and
 the browser would otherwise keep the base option and never move the layer to
-the side of the trigger with room on the placement axis. The rules are one
+the side of the anchor with room on the placement axis. The rules are one
 static style sheet the runtime installs in the layer's document head before
 the layer's first paint — never inside the layer, where a role-bearing layer's
 text would name them to assistive technology, and never beside it, where they
@@ -600,7 +600,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   each layer carries the overflow its surface takes under it, so a surface
   that reads it scrolls from the frame the cap lands, and its content never
   paints past the capped box. A layer the keyboard does not reach, a layer
-  placed above its trigger, and a layer in custom or fixed mode stay as they
+  placed above its anchor, and a layer in custom or fixed mode stay as they
   are. A layer that reads the keyboard inset and was placed while a keyboard is
   reported keeps its top until it closes: when the cap lifts it grows downward
   in place; when the keyboard rises it moves up above it and then holds.
@@ -847,7 +847,7 @@ it on the surface inside the layer and run no layout while it plays.
 - `Layer/useLayer.tsx` owns Popover API lifecycle, state reconciliation,
   anchor/fixed/custom rendering, trigger source, and current same-gesture memory.
 - `Layer/layerHost.ts` owns safe inline versus nearest corrective portal placement.
-- `Layer/anchorName.ts` owns composition of anchor names on one trigger.
+- `Layer/anchorName.ts` owns composition of anchor names on one anchor.
 - `Layer/layerTextReset.stylex.ts` owns the text baseline and
   `Layer/layerStructureReset.stylex.ts` owns the named structural custom-property
   reset applied on layer content roots.

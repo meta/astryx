@@ -155,7 +155,7 @@ where it is.
 - **FR14 — A role-neutral popup keeps its child's Tab model.** With
   `role: 'none'`, `isModal` sets containment only; a menu still closes on Tab
   and a listbox keeps focus in its input (`component:Popover` DEC-9).
-- **FR15 — A non-modal popover takes Escape only while it holds focus.** A
+- **FR15 — A non-modal popover takes Escape only while focus is in its scope.** A
   modal popover keeps the shared topmost Escape (`family:overlay-dismissal`).
   A non-modal popover takes Escape only while focus is inside it, or on or
   inside its anchor or trigger; otherwise the press passes to the layer or page beneath.
@@ -163,7 +163,7 @@ where it is.
   sheet, `isModal: true` presents the released modal sheet
   (`component:Popover` DEC-8). `isModal: false` presents a non-modal sheet:
   no scrim, the page stays interactive and focus is not contained. It closes
-  by a swipe down and by Escape while it holds focus; its fallback close stays
+  by a swipe down and by Escape under FR15; its fallback close stays
   hidden (`component:Popover` DEC-8), and a press on the page does not close
   it. Either
   sheet returns focus through FR17–FR21, as an anchored Popover does.
@@ -235,12 +235,13 @@ Dialog and DropdownMenu.
   notes name each change, its old and new behavior, and its target:
   - `isModal: false` stops containing Tab (FR12): the page's controls stay
     reachable in page order while a non-modal popover is open (WCAG 2.2 SC
-    2.4.3, Focus Order). Its Escape applies only while it holds focus (FR15),
+    2.4.3, Focus Order). Its Escape applies only while focus is inside it, or on or inside its anchor
+    or trigger (FR15),
     so Escape reaches the layer or control the person is using (SC 2.1.1,
     Keyboard).
   - An `isModal: false` popover shown as a sheet is a non-modal sheet (FR16):
-    no scrim, and the page stays reachable (SC 2.4.3). A swipe down and Escape
-    still close it.
+    no scrim, and the page stays reachable (SC 2.4.3). A swipe down closes it,
+    and Escape closes it under FR15; a tap on the page no longer does.
   - Popover, Dialog and DropdownMenu move focus only when the close strands it
     (FR17–FR20; SC 2.4.3, Focus Order): focus that used to fall to the body
     goes to the opener or its stand-in; a Dialog no longer takes back focus a
@@ -288,11 +289,11 @@ Dialog and DropdownMenu.
 - `component:Dialog` FR4 and AR2 and `component:DropdownMenu` FR6 point to
   FR17–FR20 for the return target and its fallbacks. Dialog's AV4 and its
   "modal close" state follow FR20 when the invoker is gone, its FR4 fallback
-  clause is an `FR4 gap:` line until it ships (FR19 and FR20 gaps), and its
+  clause and its FR17 condition carry an `FR4 gap:` line (FR17, FR19 and FR20), and its
   Released default and Migration decision lines note the FR22 change.
 - `component:DropdownMenu`: its Released default line notes the FR22 change,
-  and FR6's inheritance and fallback clauses carry an `FR6 gap:` line until
-  FR19 and FR20 ship.
+  FR6 gains FR17's condition, and its condition, inheritance and fallback
+  clauses carry an `FR6 gap:` line (FR17, FR19 and FR20 gaps).
 - `component:BottomSheet` keeps its own `finalFocusRef` rule (FR11); FR17–FR21
   do not cover a BottomSheet used directly.
 - `architecture:layer-runtime`: the anchor-visibility observation also drives
@@ -322,15 +323,18 @@ Dialog and DropdownMenu.
 FR1 gap: `usePopover` anchors only to the element `triggerRef` receives, with
 no separate anchor and no function anchor; Popover's `anchorRef` that names an
 element holding no button warns in development and never anchors.
-FR15 gap: Escape on a non-modal popover closes it through the browser's own
-`popover="auto"` handling, wherever focus is.
-FR16 gap: every sheet is the modal sheet; `isModal` does not apply there.
 FR7 gap: an anchor scrolled out of a scrolling panel leaves the surface held
 over unrelated content.
 FR9 gap: outside presses close the popover through native light dismiss, which
 no caller can cancel.
 FR12 gap: focus containment is active whenever the popover is open, whatever
 `isModal` says.
+FR15 gap: Escape on a non-modal popover closes it through native auto light
+dismiss or the shared dismissal stack, wherever focus is.
+FR16 gap: every sheet is the modal sheet; `isModal` does not apply there.
+FR17 gap: a Dialog takes focus back to its invoker even when a caller moved it
+outside, and a DropdownMenu focuses its trigger at close whenever focus is on
+the body, even when focus never entered the menu.
 FR19 gap: a Dialog opened from a menu row returns focus to the row, which the
 closed menu removed, so focus falls to the body.
 FR20 gap: a Popover whose opener was removed while it was open leaves focus on
