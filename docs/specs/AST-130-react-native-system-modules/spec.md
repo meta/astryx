@@ -90,8 +90,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
 - The data and security modules (files, secure storage) and their records.
   This record names only the parts of `AstryxNetwork` the library depends on
   (OQ2).
-- Modules outside the core: client identity, crash reports, daily metrics,
-  the frame recorder, and image markup. Their own records own them.
+- Client identity, crash reports, daily metrics, the frame recorder, and
+  image markup. Each is part of the platform package and has its own record.
 - Camera capture. The `camera` capability owns it, the camera source of a
   picker included.
 - Sharing, opening links and Settings, keep-awake, and orientation lock. None
@@ -201,10 +201,10 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     iOS as the window's user interface style before the window shows, on
     Android as AppCompat's default night mode at process start. React Native's
     `Appearance` and `useColorScheme` then report the chosen scheme, so the
-    theme follows it. The launch screen and the splash follow the system's
-    choice, because the system draws them before app code runs; the Android 12
-    and later splash follows the saved choice through the night mode the system
-    keeps per app.
+    theme follows it. The system draws the iOS launch screen before any of the
+    app's code runs, so it keeps the system's appearance; on Android 12 and
+    later the splash uses the night mode the system stores for the app, which
+    is the saved choice.
   - `setOverride(value, {persist: false})` (feature `persist-false`) applies the
     choice for this run only and saves nothing. `getOverride()` and the next
     launch keep the saved choice, and `setOverride(getOverride())` restores
@@ -219,11 +219,11 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     arrival on a warm one (feature `launch-link`). Nothing is saved.
   - In a Preview project's runtime, `getOverride()` answers `'system'`,
     `getRunOverride()` answers `null`, and `setOverride` answers `not-allowed`:
-    the host app's appearance is not a project's to change.
+    a project cannot change the appearance of the app that hosts it.
 
 - **FR5 — `AstryxAccessibilitySettings` publishes one settings snapshot.**
-  - The snapshot has seven booleans, each always present and false where the
-    OS version lacks the setting: `isReduceTransparency`,
+  - The snapshot has seven booleans. Every answer carries all seven, and a key
+    reads false on an OS version without that setting: `isReduceTransparency`,
     `isIncreaseContrast`, `isReduceMotion`, `prefersCrossFadeTransitions`,
     `isBoldText`, `isReduceBrightEffects` (iOS 26.4 and later), and
     `isShowBorders` (Show Borders on iOS 26.1 and later, Button Shapes before).
@@ -234,8 +234,9 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     React Native's `AccessibilityInfo`: Reduce Motion everywhere, high text
     contrast as `isIncreaseContrast` on Android, and the iOS settings it reads.
     Keys `AccessibilityInfo` cannot read stay false.
-  - The snapshot does not report Liquid Glass's Clear or Tinted appearance: no
-    public API reads it, so native glass follows it and drawn chrome does not.
+  - The snapshot has no key for Liquid Glass's Clear or Tinted look, because the
+    system gives apps no way to read that setting. Native glass follows it;
+    drawn chrome does not.
 
 - **FR6 — `AstryxHaptics` plays the platform's feedback kinds.**
   - `play(kind)` plays one of UIKit's nine kinds: `selection`, `impactLight`,
@@ -243,9 +244,9 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     `notificationSuccess`, `notificationWarning`, `notificationError`. iOS plays
     it with a prepared feedback generator; `prepare(kind)` warms the generator
     so the next `play` has no delay.
-  - Android plays a chain of `HapticFeedbackConstants` names, preferred first,
-    on the current activity's root view: the first name the device's API level
-    has. Each kind has a default chain; `play(kind, {android})` passes another.
+  - Android plays a chain of `HapticFeedbackConstants` names, in order of
+    preference, on the root view of the activity in front: the first name the
+    device's API level knows. Each kind has a default chain; `play(kind, {android})` passes another.
   - `isAvailable()` is false where the module is absent or `isSupported()` is
     false (no haptic hardware, or no window). `play` and `prepare` do nothing
     then.
@@ -263,8 +264,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     (`PasteButton`); copy buttons never read.
   - `detectPatterns(['webURL' | 'webSearch' | 'number'])` answers whether the
     pasteboard probably holds each pattern, without reading the content and
-    without a paste notice. A key the platform cannot tell is left out: Android
-    has no web-search or number test, and has none before Android 12.
+    without a paste notice. The answer omits every pattern the platform cannot
+    test: Android tests only for a web URL, and only from Android 12.
   - `isAvailable()` is false where the module is absent or `isSupported()` is
     false; calls then answer `no-module` or `unavailable`.
 
@@ -283,13 +284,13 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     self-checks of the platform internals the package relies on (`compat`).
     `supports(name)` reads a feature row from the last answer and is `null`
     while it is unknown.
-  - `memory()` answers the process's memory in bytes, each platform's own
-    measure (iOS `phys_footprint`, Android total PSS), not comparable across
-    platforms. `bundleSize()` answers the installed app's size on disk, read
+  - `memory()` answers the process's memory in bytes, counted the way each
+    platform counts it (iOS `phys_footprint`, Android total PSS); the iOS and
+    Android numbers do not compare. `bundleSize()` answers the installed app's size on disk, read
     off the main thread.
   - A Preview project's runtime gets no `launch`, an empty `installedAt`, and
-    `not-allowed` from `memory()` and `bundleSize()`: the host's process and
-    install are not a project's to read.
+    `not-allowed` from `memory()` and `bundleSize()`: a project cannot read
+    facts about the app that hosts it.
 
 - **FR9 — `AstryxPermissions` reads and asks explicitly.**
   - `get(name)` never prompts. `request(name)` shows the system prompt only for
@@ -298,8 +299,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     (`spec:AST-112/FR7`).
   - `name` is a closed set (`camera`). The states are `granted`,
     `undetermined`, `denied` (refused; the app may ask again) and `blocked`
-    (only Settings changes it: iOS `denied` or `restricted`, Android "don't ask
-    again").
+    (the person can change it in Settings only: iOS `denied` or `restricted`,
+    Android "don't ask again").
   - `hasHardware` says whether the device has the hardware: false on the iOS
     Simulator and an emulator without a camera; `null` where the platform does
     not say.
@@ -315,10 +316,11 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     `ethernet`, `other`, `none`, `unknown`), `isMetered`, and `isConstrained`
     (iOS Low Data Mode, Android Data Saver for this app). `connected`,
     `expensive` and `constrained` are deprecated aliases.
-  - `isConnected` has one meaning on every platform: a default route to the
-    internet exists (iOS: the path monitor's path is satisfied; Android: the
-    default network has INTERNET). It is not validated connectivity: a captive
-    portal before sign-in reads connected, and a request can still fail.
+  - `isConnected` is true when the device has a default route to the
+    internet: on iOS a satisfied path from the path monitor, on Android a
+    default network with the INTERNET capability. It says nothing about whether
+    a server answers: it is true behind a captive portal, where requests still
+    fail.
   - On Android the reads need `ACCESS_NETWORK_STATE`, which the configuration
     plugin writes for the core; without it, `getState()` answers `unavailable`
     and names the permission.
@@ -339,16 +341,17 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     can go back. The shell activity enables its one back callback only then.
   - With nothing to consume, the system takes the press and plays its
     back-to-home animation (Android 16 predictive back).
-  - Before the first call, and after the runtime ends, the activity sends every
-    press to React Native, as React Native's own activity does.
+  - Until the library reports for the first time, and after its runtime stops,
+    back presses go to React Native unchanged.
   - The registry sends a value only when it changes. A Preview project's
     runtime changes nothing. iOS has no module: back is native there.
 
 - **FR12 — `AstryxLaunch` hands Android's cold launch to the first content.**
   - The shell activity keeps the system's launch window (the splash screen on
     API 31 and later, the window background before) until the library calls
-    `firstContent()`, instead of drawing an empty root while the bundle loads.
-    It lets go after a time bound (2.5 seconds) when no call arrives.
+    `firstContent()`, so no blank frame appears between the launch window and
+    the first screen. When no call arrives within 2.5 seconds, it shows the app
+    anyway.
   - The library calls it once per runtime: from the router's first focused
     screen's first content layout, or from `AstryxPerformance.markFirstFrame`,
     whichever comes first. Later calls do nothing.
@@ -366,8 +369,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     `camera` capability's (`./camera` entry), never a source of the core
     picker, so the core needs no camera permission or usage string.
   - `pick({source, isMultiple?, limit?, media?, accept?})` presents one picker
-    over the calling surface and resolves `{ok: true, files}` (never an empty
-    list), `cancelled` when the person backs out, or a reason: a source the
+    over the calling surface and resolves `{ok: true, files}` with at least
+    one file, `cancelled` when the person backs out, or a reason: a source the
     device does not offer answers `unsupported-source` at once with the
     platform's message, and a second picker while one is open answers `busy`.
     Each file has `uri`, `name`, `size` (`-1` when the provider does not say)
@@ -382,9 +385,7 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     URIs the pickers grant are returned as they are.
   - Defaults: one file, the platform's limit, the media `accept` allows (else
     all), and any file type.
-  - The library's `FileInput` reaches it through `useFilePicker()`, which
-    fills in the calling surface and waits for a leaving sheet before it
-    presents.
+  - The library's `FileInput` reaches it through `useFilePicker()`.
   - FR13 gap: on iOS the core picker offers a `camera` source
     (`UIImagePickerController`) and answers its `permission-denied` and
     `restricted` reasons.
@@ -400,8 +401,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
     its own for each Preview project, so a project never reads the app's data
     or another project's.
   - Values are kept across launches: one file per key in Application Support
-    on iOS and in the app's internal files directory on Android. No size limit
-    is the package's own: free space bounds a value.
+    on iOS and in the app's internal files directory on Android. The package
+    sets no size limit; only the device's free space limits a value.
   - `clearProjectData(bundleUrl)` is for the app's runtime only: it removes
     everything one Preview project stored, in every store that registers a
     clearer with the core, and answers the cleared namespace. A project's web
@@ -415,7 +416,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
   - `randomBytes(byteLength)`, `getRandomValues(array)` and `randomUUID()`
     take their bytes from the system's secure generator (iOS
     `SecRandomCopyBytes`, Android `java.security.SecureRandom`). They are
-    synchronous, because portable code calls `crypto.getRandomValues` inline.
+    synchronous, because Web Crypto's `getRandomValues` is, and code written for
+    it expects the bytes at once.
   - They follow Web Crypto's rules and errors: at most 65,536 bytes per call
     (`QuotaExceededError`), integer typed arrays only (`TypeMismatchError`).
     Where the module is absent they throw `NotSupportedError`; there is never
@@ -545,9 +547,8 @@ Preview policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
   for the crypto installer's module, FR6 and FR7 for each module's results and
   probes, FR8 for the revision-1 baseline and named features, FR9 for the
   haptic moment mapping, and FR12 for Astryx Stage's simulation.
-- It changes `spec:AST-112/FR1` in two places: client identity leaves the
-  list of generic core capabilities, and the `camera` capability gains camera
-  capture, the camera source of the file picker included (FR13).
+- It changes `spec:AST-112/FR1` in one place: the `camera` capability gains
+  camera capture, the camera source of the file picker included (FR13).
 - `spec:AST-112/FR1` and FR3 gain one rule: the core links no web engine, and
   the `web` capability carries web view data and its cookie store (FR20).
 - The rest of the split between core and opt-in capabilities does not change
