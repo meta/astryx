@@ -223,17 +223,26 @@ works on is `spec:AST-040` FR9's.
     and in a machine-readable result `meta.answeredBy.copy` is `fallback`.
     No other release answers, and nothing falls back while the matched
     release can be obtained. A failed install is recorded in the per-user
-    cache, by release, and no copy using that cache starts it again for 2
-    minutes after a first failure, or 10 minutes after a second failure in a
-    row; a successful install forgets it. So an offline run prints at most one
-    line saying it installs, and the warning says when it was last tried.
+    cache, by release and with npm's registry settings at the time (the
+    `@astryxdesign` scope's registry and npm's registry), and no copy using
+    that cache starts it again for 2 minutes after a first failure, or 10
+    minutes after a second failure in a row with those settings; a successful
+    install forgets it, and a run whose settings differ from the recorded ones
+    installs at once. So an offline run prints at most one line saying it
+    installs, the reason names the registry npm failed to reach, and the
+    warning says when it was last tried and that changing the registry tries
+    again.
     `ERR_VERSIONS_UNAVAILABLE` is for a run nothing can answer, such as a
     command that needs Core outside a project that cannot install it (FR3).
 - **FR3 — Outside a project, the running release answers as a new project
   would.** Outside a project, every copy answers itself, the global copy
   included (FR6, FR9). The answering release MUST answer as it would in a new
   project that installs only that release of Core, the computer-level
-  integrations (FR12), and any integration a programmatic host approves (FR1).
+  integrations (FR12), any integration a programmatic host approves (FR1),
+  and, in a hosted run, each package that the `package.json` of the root that
+  serves the run lists in `dependencies` or `optionalDependencies`: a page that
+  `render` renders takes those packages, and `template`, `build` and
+  `theme eject` do not name them as missing.
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
   command that needs Core answers from the carried Core when the run's base is
@@ -253,7 +262,9 @@ works on is `spec:AST-040` FR9's.
   `upgrade` judge or change a project and MUST NOT read the carried Core.
   Output outside a project MUST NOT give advice that works only inside one, such
   as a step that sets up, configures, or refreshes a project the folder does not
-  have.
+  have. So in a folder that no `package.json` holds, `template`, `build` and
+  `theme eject` name a package a page needs that nothing provides as missing,
+  with no install command, for the project that uses the page.
 - **FR4 — Every command declares what it does outside a project.** Every
   command and subcommand MUST declare one of three values in its command doc,
   and `astryx manifest` MUST publish that value as the command's
@@ -422,7 +433,10 @@ works on is `spec:AST-040` FR9's.
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
     record), the CLI's own docs tree, each stored doc's checked contents,
-    keyed by its text, and doctor's
+    keyed by its text, discover's record of the integrations a project loads
+    and what each adds, and what it searches in its sources' saved copies
+    (which `search` reads for its discover line), and
+    doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
@@ -693,7 +707,8 @@ works on is `spec:AST-040` FR9's.
     lists each computer-level integration the project does not install, whose
     peer range admits the release that answers there and whose manifest loads,
     among the packages the project could add, with source
-    `installed for this computer` and the project's install command. Those are
+    `installed for this computer` and the project's install command, or the
+    install guidance a loaded integration gives (`spec:AST-039` FR16). Those are
     the integrations beside the copy that answers when it was installed outside
     the project, otherwise beside the first `astryx` on the search path that is
     installed for the computer. The command name a door passes still applies
@@ -706,7 +721,7 @@ works on is `spec:AST-040` FR9's.
   - `doctor` outside a project lists each computer-level integration it uses and
     each the folder loads its own copy of, and warns about each it skips or
     cannot load, naming why; inside a project, it lists the ones `discover`
-    lists as available, with the project's install command.
+    lists as available, with the same install command or guidance.
 
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
   Code and Codex plugins.** The repository MAY ship one plugin skill, shared

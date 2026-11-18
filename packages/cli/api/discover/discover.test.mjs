@@ -28,7 +28,7 @@ vi.mock('./_adapter.mjs', async orig => {
           name: '@acme/widgets',
           category: '@acme/widgets',
           version: '1.0.0',
-          components: ['Alpha', 'Beta'],
+          components: ['AlphaWidget', 'BetaWidget'],
           dir: '/virtual/widgets',
           astryx: {},
           docsDir: '/virtual/widgets/docs',
@@ -66,19 +66,19 @@ describe('discover() dispatcher routing', () => {
   });
 
   it('free-text query with multiple matches -> discover.search envelope', async () => {
-    // 'a' is a substring of both Alpha and Beta (no exact match), so the search
-    // leaf returns the multi-match discover.search envelope. Proves free-text
-    // routing reaches the search leaf and projects its envelope. Search also
-    // matches package names, so the package itself is listed after them.
-    // Official packages' components can match too, so only this fixture's
-    // package is compared.
-    const r = await discover('a');
+    // 'widget' is a word of AlphaWidget and BetaWidget (no exact match), so the
+    // search leaf returns the multi-match discover.search envelope. Proves
+    // free-text routing reaches the search leaf and projects its envelope.
+    // Search also matches package names, so the package itself is listed after
+    // them. Official packages' components can match too, so only this
+    // fixture's package is compared.
+    const r = await discover('widget');
     expect(r.type).toBe('discover.search');
     expect(
       r.data.matches
         .filter(m => m.kind === 'component' && m.package === '@acme/widgets')
         .map(m => m.component),
-    ).toEqual(['Alpha', 'Beta']);
+    ).toEqual(['AlphaWidget', 'BetaWidget']);
     expect(r.data.matches).toContainEqual({
       package: '@acme/widgets',
       component: '@acme/widgets',

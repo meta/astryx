@@ -578,10 +578,14 @@ describe('peaks', () => {
     expect(stepOf(ci.jobs.admission).with['leg-widths']).toBe(
       "${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}",
     );
-    const other = JSON.parse(/--other-widths '([^']*)'/.exec(planStep.run)[1]);
+    // Room plans the Node legs alone (no other widening matrix).
+    const other = JSON.parse(
+      /--other-widths '([^']*)'/.exec(planStep.run)?.[1] ?? '{}',
+    );
     const outputs = stepOutputs(nodePlan, other);
     const widths = JSON.parse(outputs['leg-widths']);
-    expect(Object.keys(widths).sort()).toEqual(['swizzle-proof', 'test-node']);
+    // The swizzle proof's legs run only with their label (label-legs).
+    expect(Object.keys(widths).sort()).toEqual(['test-node']);
     expect(widths['test-node'].full).toBe(nodePlan.legs);
     expect(ci.jobs['test-node'].strategy.matrix.shard).toBe(
       `\${{ fromJSON(needs.room.outputs.node-shards || '${JSON.stringify(Array.from({length: MAX_NODE_LEGS}, (_, i) => i + 1)).replaceAll(',', ', ')}') }}`,
@@ -636,8 +640,8 @@ describe('peaks', () => {
     const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);
-    // The widening matrices start with the first jobs: test-node needs only
-    // the waits, and swizzle-proof one slim scope job.
+    // The widening matrix starts with the first jobs: test-node needs only
+    // the waits.
     const startedAt = mode =>
       Object.values(widths).reduce((sum, width) => sum + width[mode], others);
     const widen = Object.values(widths).reduce(
@@ -688,7 +692,10 @@ describe('peaks', () => {
         pull('pr-a11y-plan') +
         planLegsMax() +
         pull('pr-a11y'),
+      // Every swizzle-proof leg at once: the matrix holds none back.
+      'ci:run-swizzle': pull('swizzle-proof'),
     });
+    expect(ci.jobs['swizzle-proof'].strategy['max-parallel']).toBeUndefined();
   });
 });
 
@@ -698,7 +705,7 @@ describe('matrix legs held back', () => {
       ([, job]) => job.strategy?.['max-parallel'] != null,
     );
     expect(limited.map(([id]) => id).sort()).toEqual(
-      expect.arrayContaining(['swizzle-proof', 'test-node', 'test-ui']),
+      expect.arrayContaining(['test-node', 'test-ui']),
     );
     for (const [id, job] of limited) {
       const [first] = job.steps;
@@ -1981,7 +1988,7 @@ describe('ci admission', () => {
 
   it('queues waiting main runs by when they began, so two never block each other', async () => {
     // Two main dispatches waiting at once each counted the other's whole peak
-    // (39), so neither fit beside a quiet CI and both waited their two hours.
+    // (47), so neither fit beside a quiet CI and both waited their two hours.
     const mainSince = (id, minutes) => {
       const run = waitingRun(id, {event: 'workflow_dispatch'});
       run.jobs[0].steps[0].started_at = new Date(
@@ -2004,7 +2011,7 @@ describe('ci admission', () => {
       'ci 70 workflow_dispatch: 1 waiting',
     );
     // A main run that began waiting earlier still goes first: its whole peak
-    // counts. 2 x 12 + 39 + 18 + 37 = 118 does not fit.
+    // counts. 2 x 12 + 47 + 18 + 37 = 126 does not fit.
     const younger = await admit({
       active: look =>
         look < 2
@@ -2017,7 +2024,7 @@ describe('ci admission', () => {
     });
     expect(younger.looks).toBeGreaterThan(1);
     expect(younger.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 39 waiting',
+      'ci 70 workflow_dispatch: 47 waiting',
     );
   });
 
@@ -2057,7 +2064,7 @@ describe('ci admission', () => {
       maxLooks: 30,
     });
     expect(second.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 0 workflow_dispatch: 39 waiting',
+      'ci 0 workflow_dispatch: 47 waiting',
     );
   });
 
@@ -2071,7 +2078,7 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(result.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 39 waiting',
+      'ci 70 workflow_dispatch: 47 waiting',
     );
   });
 

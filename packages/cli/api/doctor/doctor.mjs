@@ -55,7 +55,9 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {
   chooseDeclaredCliCommand,
+  chooseDeclaredValue,
   declaredCliCommandsOf,
+  declaredValuesOf,
 } from '../../foundation/env/cli-command.mjs';
 import {
   findConfigPath,
@@ -111,6 +113,8 @@ import {
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
+  packageInstallCommand,
+  packageInstallStep,
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
@@ -343,6 +347,34 @@ export function checkNodeVersion(ctx) {
 }
 
 /**
+ * An install step as fix text: the line in backticks, then its note.
+ * @param {{line: string, note: string | null}} step
+ */
+function stepText({line, note}) {
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
+ * The fix text for peers to install: the project's integration guidance when
+ * it gives one, followed by the versions the peers need, else one install
+ * command with each range.
+ * @param {string} cwd
+ * @param {string[]} names every peer to install, by name
+ * @param {string[]} targets the same peers, each with its range when it has one
+ * @returns {string}
+ */
+function peerInstallText(cwd, names, targets) {
+  const {installGuidance} = packageInstallCommand(names, cwd);
+  if (installGuidance) {
+    const versioned = targets.filter(t => !names.includes(t));
+    return versioned.length
+      ? `\`${installGuidance}\`, at these versions: ${versioned.join(', ')}`
+      : `\`${installGuidance}\``;
+  }
+  return stepText(packageInstallStep(targets, cwd));
+}
+
+/**
  * Check 2 — @astryxdesign/core is installed and resolvable from the project.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
@@ -368,7 +400,7 @@ export function checkCoreInstalled(ctx) {
       : {
           fix: install
             ? `Install the project's dependencies: \`${install}\`.`
-            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+            : `Install the design system: ${stepText(packageInstallStep(['@astryxdesign/core'], ctx.cwd))}.`,
         }),
   };
 }
@@ -1261,7 +1293,14 @@ export function checkPeerDeps(ctx) {
       label: '@astryxdesign/core peer dependencies',
       status: 'warn',
       message: `Peer dependency issues — ${problems.join('; ')}.`,
-      fix: `Install compatible peers: \`npm install ${targets.join(' ')}\`.`,
+      fix: `Install compatible peers: ${peerInstallText(
+        ctx.cwd,
+        [
+          ...missing.map(spec => spec.replace(/^(@?[^@]+)@.*$/, '$1')),
+          ...mismatched.map(m => m.name),
+        ],
+        targets,
+      )}.`,
     };
   }
 
@@ -2256,6 +2295,46 @@ export function checkCliCommand(ctx) {
   };
 }
 
+/**
+ * Install guidance: whether the loaded integrations agree on how this app
+ * adds a dependency. Left out when none gives any.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkInstallGuidance(ctx) {
+  const id = 'install-guidance';
+  const label = 'Install guidance';
+  const {
+    value: guidance,
+    conflict,
+    declared,
+  } = chooseDeclaredValue(
+    declaredValuesOf(ctx.integrations ?? [], 'installGuidance'),
+  );
+  if (conflict) {
+    const claims = declared
+      .map(entry => `${entry.package} (\`${entry.value}\`)`)
+      .join(', ');
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `Loaded integrations give different install guidance: ${claims}. Neither is used, so install steps use the package manager's command.`,
+      fix: 'Remove the integration that does not belong here, or have every package give the same `installGuidance` in its astryx.integration manifest.',
+    };
+  }
+  if (guidance) {
+    const packages = declared.map(entry => entry.package).join(', ');
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `Install steps follow the installGuidance of ${packages}: \`${guidance}\`.`,
+    };
+  }
+  return null;
+}
+
 /* ── outside a project: the computer ─────────────────────────────────── */
 
 /**
@@ -2754,7 +2833,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2782,6 +2861,7 @@ export const SYNC_CHECKS = [
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkInstallGuidance,
   checkGatherCache,
 ];
 

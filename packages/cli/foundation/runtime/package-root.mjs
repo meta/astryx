@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {relativeWithin, samePath} from '../fs/path-compare.mjs';
 
 /**
@@ -165,6 +166,25 @@ export function resolvedPackages() {
     version,
     source: source ?? sourceOf(dir),
   }));
+}
+
+/**
+ * The packages that the root holding the copy that started the hosted run
+ * declares in its `package.json`: what its host installed there, such as an
+ * icon library its pages import. Outside a project that root serves the run
+ * (INV30). Empty with no hosted run.
+ * @returns {string[]}
+ */
+export function servingRootPackages() {
+  if (!active?.startingRoot) return [];
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(active.startingRoot, 'package.json'), 'utf8'),
+    );
+    return Object.keys({...pkg?.dependencies, ...pkg?.optionalDependencies});
+  } catch {
+    return [];
+  }
 }
 
 /** Forget the hosted run. Tests only. */

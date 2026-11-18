@@ -217,7 +217,10 @@ they are separately named.
   suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
-  confirm that runs nothing. A label runs only its own suite. A Lab-only pull
+  confirm that runs nothing. A label runs only its own suite. The swizzle
+  proof (`swizzle-proof`, `spec:AST-110` FR7) follows the same rule under
+  `ci:run-swizzle`: a pull request runs it only with that label, and no
+  default check replaces it. A Lab-only pull
   request (FR26) runs no default touched-components check and no contract
   job; its labels still
   run their suites. Without a label, a pull request update
@@ -308,7 +311,7 @@ they are separately named.
   module it imports; a computed `import()`, a child process, or a library that
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
-  by the package's name or a path into its `dist/`. When a pull request runs
+  by the package's name or a path into its `dist/`. A pull request's test run, scoped or full, leaves out the swizzle proof unless the pull request carries `ci:run-swizzle` (FR12); the proof runs on `main` after merge and in full at release (`spec:AST-110` FR7, DEC-3). When a pull request runs
   them at their opted-in scope (FR12: only with their `ci:run-visual` or
   `ci:run-rtl` label), the visual and RTL owners audit one affected set of
   component folders: the changed components

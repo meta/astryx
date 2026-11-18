@@ -85,8 +85,9 @@
  *   the official list; `installed for this computer` for an integration
  *   installed beside the CLI that the project does not install (spec AST-081
  *   FR12).
- * @property {string} [install] The package-manager command that adds it to
- *   this project; discover prints it and never runs it.
+ * @property {string} [install] How to add it to this project: the
+ *   project's integration install guidance when one gives it, else the
+ *   package-manager command; discover prints it and never runs it.
  */
 
 /**
@@ -117,8 +118,9 @@
  *   versions?: import('../../authoring/discover/type').DiscoverVersion[],
  * }} data `installed` says whether the project has the package;
  *   `installedVersion` is set when it has another version than the one shown.
- *   `install` is the package-manager command that adds a package the project
- *   does not have; discover prints it and never runs it. `installedAs` names
+ *   `install` says how to add a package the project does not have: the
+ *   project's integration install guidance when one gives it, else the
+ *   package-manager command; discover prints it and never runs it. `installedAs` names
  *   the package the project has instead, when this one is an alias of it.
  *   `versions` (newest first) comes from a discover source.
  */

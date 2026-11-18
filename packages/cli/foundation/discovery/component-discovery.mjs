@@ -16,6 +16,7 @@ import {
   withListingCache,
 } from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
@@ -264,27 +265,23 @@ function hasOwnFolder(srcDir, name) {
 
 /**
  * Member names read in this process, by doc path, reused while the file keeps
- * its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, members: string[]}>}
+ * its stamp (`fileStamp`).
+ * @type {Map<string, {stamp: string, members: string[]}>}
  */
 const memberReads = new Map();
 
 /**
- * The names a doc lists as `components` members (see docMemberNames).
+ * The names a doc lists as `components` members (see docMemberNames). Kept
+ * names still count as a read of the doc, so a kept catalog sees an edit.
  * @param {string} docPath
  * @returns {string[]}
  */
 function readDocMembers(docPath) {
-  let stat;
-  try {
-    stat = fs.statSync(docPath);
-  } catch {
-    return [];
-  }
+  recordContentRead(docPath);
+  const stamp = fileStamp(docPath);
+  if (stamp === '-') return [];
   const cached = memberReads.get(docPath);
-  if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-    return cached.members;
-  }
+  if (cached?.stamp === stamp) return cached.members;
   /** @type {string[]} */
   let members;
   try {
@@ -292,7 +289,7 @@ function readDocMembers(docPath) {
   } catch {
     members = [];
   }
-  memberReads.set(docPath, {size: stat.size, mtimeMs: stat.mtimeMs, members});
+  memberReads.set(docPath, {stamp, members});
   return members;
 }
 
@@ -1106,20 +1103,6 @@ export function findExternalComponentDoc(docsDir, name) {
 /** @type {Map<string, {stamp: string, value: Record<string, any> | null}>} doc reads, reused while the doc file is unchanged */
 const docReads = new Map();
 
-/**
- * A file's identity for a cache: ctime and inode change on a rewrite even when
- * npm stamps the same size and mtime.
- * @param {string} file
- */
-function fileStamp(file) {
-  try {
-    const {size, mtimeMs, ctimeMs, ino} = fs.statSync(file);
-    return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
-  } catch {
-    return 'missing';
-  }
-}
-
 /** UTF-16 code-unit order, the same in every locale. @param {string} a @param {string} b */
 function byCodeUnit(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -1131,11 +1114,15 @@ function byCodeUnit(a, b) {
  * @returns {Record<string, any> | null}
  */
 function docObject(docPath) {
+  // A kept value still counts as a read of the doc (see readDocMembers).
+  recordContentRead(docPath);
   const stamp = fileStamp(docPath);
   const cached = docReads.get(docPath);
   if (cached?.stamp === stamp) return cached.value;
   const value = staticExportObject(docPath, DOC_EXPORTS.components);
-  docReads.set(docPath, {stamp, value});
+  // A file that appeared after its stamp is not kept: the entry would
+  // outlive its removal.
+  if (stamp !== '-') docReads.set(docPath, {stamp, value});
   return value;
 }
 
