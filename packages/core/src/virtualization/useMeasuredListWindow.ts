@@ -344,11 +344,11 @@ function createMeasuredListEngine() {
   }
 
   /**
-   * Takes the position the browser shows now. Two moves are the browser's,
-   * not a writer's, and the reader saw the position before them: a clamp
-   * onto the end of a shorter range, and WebKit's move up by the height of
-   * rows removed above the position, which it makes when the same frame
-   * lays out the scroller's ancestors again.
+   * Takes the position the browser shows now. Two browser moves are not
+   * writes, and the reader saw the position before them. One is a clamp
+   * onto the end of a shorter range. The other is WebKit's move up by the
+   * height of rows removed above the position. WebKit makes it when the
+   * same frame lays out the scroller's ancestors again.
    */
   function takePosition(geometry: Geometry, unmountedAbove = 0) {
     if (Math.abs(geometry.top - scrollTop) < 1) {
