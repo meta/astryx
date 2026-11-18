@@ -526,8 +526,8 @@ works on is `spec:AST-040` FR9's.
     `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
     use Astryx keeps its current UI stack unless the user asks for Astryx (then
     it adds both), and a project that already installs Core adds the CLI at that
-    Core's version; run `astryx init` there; then start from a template, check,
-    and deliver the built project.
+    Core's version; a project that has or adds Astryx runs `astryx init`, starts
+    from a template, checks, and delivers the built project.
     When it names `astryx`, it ends with
     ``If `astryx` is not found, run `<install step>` first.``, where the
     step installs the CLI for the computer with the package manager and folder
