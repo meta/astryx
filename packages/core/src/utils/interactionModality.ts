@@ -54,8 +54,8 @@ type InteractionModalityStore = {
 
 // The ring switch's custom property: `var(--name)` at runtime.
 const FOCUS_RING_PROPERTY =
-  /var\((--[^,)]+)/.exec(focusRingVars['--astryx-focus-ring'])?.[1] ??
-  '--astryx-focus-ring';
+  /var\((--[^,)]+)/.exec(focusRingVars['--_focus-ring'])?.[1] ??
+  '--_focus-ring';
 
 /**
  * Turn the shared focus rings off after a pointer press, and back on (by

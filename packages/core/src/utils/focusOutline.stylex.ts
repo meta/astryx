@@ -32,9 +32,9 @@ const FOCUS_OUTLINE_OFFSET = focusVars['--focus-outline-offset'];
  * server markup or before any input, it is 1.
  */
 export const focusRingVars = stylex.defineVars({
-  '--astryx-focus-ring': stylex.types.number(1),
+  '--_focus-ring': stylex.types.number(1),
 });
-const RING_ON = focusRingVars['--astryx-focus-ring'];
+const RING_ON = focusRingVars['--_focus-ring'];
 const GATED_OUTLINE_WIDTH = `calc(${FOCUS_OUTLINE_WIDTH} * ${RING_ON})`;
 const GATED_OUTLINE = `${GATED_OUTLINE_WIDTH} ${FOCUS_OUTLINE_STYLE} ${FOCUS_OUTLINE_COLOR}`;
 

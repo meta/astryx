@@ -16,7 +16,7 @@ import {focusRingVars} from '../utils/focusOutline.stylex';
 // `:focus-visible` on a text field whatever the input, so the ring fades out
 // by the shared ring switch: its border mixes back to the rest color and its
 // inset shadow has no width.
-const RING_ON = focusRingVars['--astryx-focus-ring'];
+const RING_ON = focusRingVars['--_focus-ring'];
 const RING_BORDER = `color-mix(in srgb, ${colorVars['--color-accent']} calc(${RING_ON} * 100%), ${colorVars['--color-border-emphasized']})`;
 const RING_SHADOW = `inset 0px 0px 0px calc(2px * ${RING_ON}) ${colorVars['--color-accent-muted']}`;
 

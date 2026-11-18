@@ -119,7 +119,7 @@ describe('interactionModality', () => {
     tracker.__startInteractionModalityTrackingForTest();
     tracker.__trackInteractionModalityInForTest(secondDocument);
     const ring = (target: Document) =>
-      target.documentElement.style.getPropertyValue('--astryx-focus-ring');
+      target.documentElement.style.getPropertyValue('--_focus-ring');
     // No input yet: no override, so the rings read their keyboard default.
     expect(ring(pageDocument)).toBe('');
     pageDocument.dispatchEvent(new Event('pointerdown'));

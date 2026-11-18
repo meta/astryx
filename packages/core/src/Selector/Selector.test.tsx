@@ -381,7 +381,7 @@ describe('Selector', () => {
           ring: {
             boxShadow: {
               default: null,
-              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
+              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

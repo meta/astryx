@@ -107,7 +107,7 @@ const NESTED_RING = stylex
       ring: {
         boxShadow: {
           default: null,
-          ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
+          ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
         },
       },
     }).ring,

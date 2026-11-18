@@ -405,11 +405,11 @@ describe('DateTimeInput', () => {
           ring: {
             borderColor: {
               default: colorVars['--color-border-emphasized'],
-              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(${focusRingVars['--astryx-focus-ring']} * 100%), ${colorVars['--color-border-emphasized']})`,
+              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(${focusRingVars['--_focus-ring']} * 100%), ${colorVars['--color-border-emphasized']})`,
             },
             boxShadow: {
               default: 'none',
-              ':focus-within': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
+              ':focus-within': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,
