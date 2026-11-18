@@ -54,7 +54,7 @@ function pathOf(cmd) {
  * @param {(option: OptionLike) => boolean} keep
  * @returns {OptionLike[]}
  */
-function optionsInReach(cmd, keep) {
+export function optionsInReach(cmd, keep) {
   /** @type {OptionLike[]} */
   const options = [];
   for (

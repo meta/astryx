@@ -46,10 +46,10 @@ import {
   type CastFrame,
   type Point,
   type TouchDriver,
-  type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 import {cubicBezier} from '../../motion/bezier';
 import {parseCssEasing, parseMotionRoleValue} from '../../motion/roles';
+import {judgeAgainstControl} from './busyMotionJudge';
 
 const storybook = withStorybook(test);
 
@@ -480,29 +480,19 @@ async function closeMidPresentation(page: Page) {
   });
 }
 
-/**
- * How much `region` changes in each cast frame. It is the mean absolute change
- * of its pixels' luma from the frame before, or -1 on the first frame. The
- * region's mean luma can stand still in a frame where its content moves. It
- * is read in a scratch page.
- */
-async function trackChange(
+/** The mean luma of `region` in each cast frame, read in a scratch page. */
+async function trackLuma(
   page: Page,
   castFrames: ReadonlyArray<CastFrame>,
   region: {x: number; y: number; width: number; height: number},
-): Promise<{t: number; change: number}[]> {
+): Promise<{t: number; luma: number}[]> {
   const scratch = await page.context().newPage();
   try {
-    const out: {t: number; change: number}[] = [];
+    const out: {t: number; luma: number}[] = [];
     for (let i = 0; i < castFrames.length; i += 12) {
       const batch = castFrames.slice(i, i + 12);
       const values = await scratch.evaluate(
         async ({items, box}) => {
-          // The previous frame's luma stays on the scratch page from one
-          // batch to the next.
-          const scratchWindow = window as unknown as {
-            __previous?: Float32Array;
-          };
           const results: number[] = [];
           for (const item of items) {
             const blob = await (
@@ -522,22 +512,12 @@ async function trackChange(
               Math.max(1, Math.round(box.width * scale)),
               Math.max(1, Math.round(box.height * scale)),
             );
-            const luma = new Float32Array(data.length / 4);
+            let sum = 0;
             for (let o = 0; o < data.length; o += 4) {
-              luma[o / 4] =
+              sum +=
                 0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2];
             }
-            const previous = scratchWindow.__previous;
-            if (previous == null || previous.length !== luma.length) {
-              results.push(-1);
-            } else {
-              let sum = 0;
-              for (let p = 0; p < luma.length; p += 1) {
-                sum += Math.abs(luma[p] - previous[p]);
-              }
-              results.push(sum / luma.length);
-            }
-            scratchWindow.__previous = luma;
+            results.push(sum / (data.length / 4));
           }
           return results;
         },
@@ -550,53 +530,12 @@ async function trackChange(
           box: region,
         },
       );
-      values.forEach((change, k) => out.push({t: batch[k].t, change}));
+      values.forEach((luma, k) => out.push({t: batch[k].t, luma}));
     }
     return out;
   } finally {
     await scratch.close();
   }
-}
-
-/**
- * Judges the alert against the compositor control in one busy window. Both
- * are read from the same screencast frames. The alert changes on every frame
- * the control moved, and stalls no longer than the control does. On a
- * two-core runner the block's spin starves the compositor and the screencast
- * alike, so a frame rate is no reference there.
- */
-function judgeAgainstControl(
-  alert: ReadonlyArray<{t: number; change: number}>,
-  control: ReadonlyArray<TrackedFrame>,
-  window: {from: number; to: number},
-) {
-  let controlMoved = 0;
-  let missed = 0;
-  let alertStall = 0;
-  let controlStall = 0;
-  let longestAlertStall = 0;
-  let longestControlStall = 0;
-  for (let i = 1; i < alert.length; i += 1) {
-    if (alert[i].t < window.from || alert[i].t > window.to) {
-      continue;
-    }
-    const before = control[i - 1].box;
-    const now = control[i].box;
-    const controlMoves =
-      before != null && now != null && Math.abs(now.x - before.x) > 0.5;
-    const alertMoves = alert[i].change > 0.05;
-    controlStall = controlMoves ? 0 : controlStall + 1;
-    alertStall = alertMoves ? 0 : alertStall + 1;
-    longestControlStall = Math.max(longestControlStall, controlStall);
-    longestAlertStall = Math.max(longestAlertStall, alertStall);
-    if (controlMoves) {
-      controlMoved += 1;
-      if (!alertMoves) {
-        missed += 1;
-      }
-    }
-  }
-  return {controlMoved, missed, longestAlertStall, longestControlStall};
 }
 
 /** Records when the dialog loses `open`: the end of the alert's fade. */
@@ -1186,7 +1125,7 @@ test.describe('under a finger', () => {
         height: rest.height * 0.4,
       };
       proofs[phase] = judgeAgainstControl(
-        await trackChange(page, castFrames, region),
+        await trackLuma(page, castFrames, region),
         await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
         {
           from: block.from + 20,

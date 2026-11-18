@@ -915,11 +915,9 @@ export function forkNeeds(outputDir, files, cwd) {
       }
     })
     .join('\n');
-  const {missingPackages, installCommand} = analyzeTemplateNeeds(
-    source,
-    findPackageRoot(cwd) ?? path.resolve(cwd),
-  );
-  return {missingPackages, installCommand};
+  const {missingPackages, installCommand, installGuidance} =
+    analyzeTemplateNeeds(source, findPackageRoot(cwd) ?? path.resolve(cwd));
+  return {missingPackages, installCommand, installGuidance};
 }
 
 /** @param {unknown} error */
