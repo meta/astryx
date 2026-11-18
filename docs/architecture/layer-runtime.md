@@ -714,8 +714,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
   mounts its layer on its first show, not with its trigger, and keeps it
   mounted after that first show. This list of surfaces is exhaustive. A
   closed trigger renders only the trigger and its layer's inert marker. This
-  uses `useLayer`'s internal `lazyMount` and `keepsMountAfterShow` and adds no
-  public prop (DEC-2). INV24 gap: Tooltip and the `usePopover` surfaces mount
+  uses `useLayer`'s `lazyMount` with the internal `keepsMountAfterShow` and
+  adds no public prop (DEC-2). INV24 gap: Tooltip and the `usePopover` surfaces mount
   their layer with the trigger, and HoverCard unmounts its layer on every
   hide, as `component:Tooltip` AR1, `component:Popover`, `component:HoverCard`
   FR8 and `component:ComplexSelector` FR2 state.
