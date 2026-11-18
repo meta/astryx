@@ -3,6 +3,7 @@
 'use client';
 
 import type {CSSProperties} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -11,6 +12,14 @@ import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {useToast} from '@astryxdesign/core/Toast';
+
+const styles = stylex.create({
+  // The empty half keeps the hero text to a readable width on a wide screen.
+  // On a phone it would squeeze the title until a word breaks, so it goes.
+  heroSpacer: {
+    display: {default: null, '@media (max-width: 640px)': 'none'},
+  },
+});
 
 const previewCard: CSSProperties = {
   borderRadius: 'var(--radius-element)',
@@ -237,7 +246,7 @@ export default function DocumentationOverviewPage() {
                     </HStack>
                   </VStack>
                 </StackItem>
-                <StackItem size="fill" />
+                <StackItem size="fill" xstyle={styles.heroSpacer} />
               </HStack>
             </Card>
 
