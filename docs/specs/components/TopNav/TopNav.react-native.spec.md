@@ -121,11 +121,6 @@ for it, and the drawn header shows its theme's look in its place.
 - Icon resolution and drawn glyphs — owned by `spec:AST-127`; glass and
   material views and paint selection — owned by `spec:AST-123`.
 - The bottom tab bar and its accessory — the tab bar component's.
-- Navigation and chrome of another router, such as Expo Router (FR17).
-- Web's AppShell render modes (`default`, `mobile-bar`, `drawer`) and the
-  drawer: a stack screen's header has none of them.
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
-  are separate products; they conform to this record and never define it.
 
 ## Public concepts
 
@@ -345,9 +340,6 @@ call it a header, so React Native exports TopNav as `Header`. It keeps
 TopNav's slot names (`heading`, `startContent`, `endContent`), so a builder
 writes start and end, never left and right, on both the web and a phone.
 
-Rejected: a separate component with no core record, because it would invent a
-second vocabulary for the same bar.
-
 ### DEC-2 — Composed parts author the header; a plain record carries it
 
 **Reference:** `component:react-native/TopNav/DEC-2`
@@ -359,9 +351,6 @@ register is a plain header record, the wire format the system bar and the
 drawn header both read. This matches the platforms' own model, a navigation
 item record that the bar renders, and lets an app put its own components in
 the bar while the router keeps a serialisable form.
-
-Rejected: the flat record as app API, because an app could not place a
-component in the bar or compose the header from its own components.
 
 ### DEC-3 — One rendering setting; `auto` is the system header on iOS and the drawn header on Android
 
@@ -404,9 +393,6 @@ A `Header` outside a stack screen of Astryx's router draws the drawn header
 where the app places it and reports its height through `onHeightChange`; the
 content pads itself by that height. A sheet or another router's screen can then
 have an Astryx bar without Astryx's router.
-
-Rejected: rendering nothing outside the router, because sheets and other
-routers' screens would have no Astryx bar.
 
 ## Open questions
 
