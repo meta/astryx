@@ -269,6 +269,9 @@ const INPUT_STATUS_VARS = {
   },
 } as const;
 
+/** The color modes butter draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const butterTheme = defineTheme({
   name: 'butter',
 
