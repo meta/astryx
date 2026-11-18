@@ -30,16 +30,19 @@ and a thumbnail view that never prompts.
 
 This record details the photo library pieces of `spec:AST-112`: the photo
 library module (`AstryxPhotoLibrary`) and the photo thumbnail view
-(`AstryxPhotoThumbnailView`). They are part of the core package and need no
-opt-in, because `FileInput`'s photo picker uses them. They follow the platform
-layer (`spec:AST-112/FR1`), the result vocabulary (`spec:AST-140/FR3`), the
+(`AstryxPhotoThumbnailView`). They are the core package's opt-in `photos`
+capability, because `FileInput`'s photo picker uses them. Without the opt-in,
+`FileInput`'s photo source uses the system photo picker, which needs no
+permission (`spec:AST-130/FR12`). They follow the platform layer and its
+opt-in capabilities (`spec:AST-112/FR1`, `spec:AST-112/FR3`), the result vocabulary (`spec:AST-140/FR3`), the
 capability shape (`spec:AST-112/FR7`), and additive evolution
 (`spec:AST-140/FR5`).
 
 ## Why this exists
 
 `FileInput`'s photo picker uses `AstryxPhotoLibrary` and
-`AstryxPhotoThumbnailView`, so they ship in the core package (DEC-1).
+`AstryxPhotoThumbnailView`, so they ship in the core package as its opt-in
+`photos` capability (DEC-1).
 Capabilities that no Astryx component uses are outside the core package
 (`spec:AST-112/FR20`). These
 pieces take no third-party native dependency; apps may use third-party
@@ -88,18 +91,22 @@ Scope notes: these pieces are specified elsewhere.
 
 ## Requirements
 
-- **FR1 — The photo pieces are part of the core package.**
-  `AstryxPhotoLibrary` and `AstryxPhotoThumbnailView` are part of the core
-  package and need no opt-in.
-  - They link PhotoKit on iOS (Photos, PhotosUI, ImageIO, AVFoundation) and
-    the MediaStore readers on Android. The generated native project carries
+- **FR1 — `photos` is an opt-in capability of the core package.**
+  `AstryxPhotoLibrary` and `AstryxPhotoThumbnailView` are the core package's
+  `photos` capability, which an app opts in (`spec:AST-112/FR3`). Without it,
+  `FileInput`'s photo source uses the system photo picker, which needs no
+  permission (`spec:AST-130/FR12`).
+  - `photos` links PhotoKit on iOS (Photos, PhotosUI, ImageIO, AVFoundation)
+    and the MediaStore readers on Android. When the app opts it in, the
+    generated native project carries
     the photo library purpose string on iOS (`NSPhotoLibraryUsageDescription`,
     overridable) and, on Android, `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO`
     (13 and later), `READ_MEDIA_VISUAL_USER_SELECTED` (14 and later, for
     limited access), and `READ_EXTERNAL_STORAGE` up to API level 32
     (`spec:AST-112/FR4`).
   - The `./photos` entry exports `AstryxPhotoLibrary`, `PhotoThumbnail`, and
-    `isPhotoThumbnailAvailable()`.
+    `isPhotoThumbnailAvailable()`. The library reaches the capability only
+    through `AstryxPlatform.capability('photos')` (`spec:AST-112/FR2`).
 - **FR2 — The native contract.**
 
   | Contract             | Kind                                | Methods                                                                                            | Events                                | Platforms    |
@@ -170,7 +177,9 @@ onProgress})` writes each asset, in the order given, to a file in the
     platforms, re-encoding a video stored in another container, and the video's file also has `poster`, the `file://` URI of a
     JPEG of its first frame in the same cache.
     `format: 'original'` writes the stored bytes, metadata included; a HEIC
-    image stays HEIC.
+    image stays HEIC. On Android 10 and later an `original` carries no
+    location: the system strips it, because the package does not declare
+    `ACCESS_MEDIA_LOCATION`.
   - With `allowsNetwork` (default true), iOS downloads an iCloud-only original
     first, and the progress counts the download. A download that makes no
     progress for ten minutes fails that asset `download-failed`. With
@@ -182,9 +191,10 @@ onProgress})` writes each asset, in the order given, to a file in the
   - `onProgress` receives `{id, index, count, fraction}` at most about ten
     times a second per asset. Aborting `signal` stops the export: queued
     assets never start, and the asset in flight stops and deletes what it
-    wrote. The export answers `cancelled` with the files already written.
-  - The files are the caller's: it removes each with the file cache's
-    `remove(name)`, and the cache's `clear` removes them all (`spec:AST-130/FR14`).
+    wrote. The export then resolves `ok` with the files already written in
+    `files`, and lists each id not written as `cancelled` in `failures`.
+  - The files last until the system reclaims the cache location
+    (`spec:AST-130/FR14`).
 - **FR6 — `PhotoThumbnail` draws one asset natively.**
   - Its props are `assetId` (an id `listAssets` answered; `''` draws
     nothing), `resizeMode` (`cover`, the default, fills and crops;
@@ -204,6 +214,9 @@ onProgress})` writes each asset, in the order given, to a file in the
   - No call throws. Every asynchronous call resolves an `AstryxResult` and
     never rejects (`spec:AST-140/FR3`); a reason the JavaScript does not know
     reads `error`.
+  - Not opted in: the capability's JavaScript still loads, `isAvailable()`
+    and `isPhotoThumbnailAvailable()` answer false, and calls answer
+    `not-linked` (`spec:AST-112/FR3`).
   - Without the native side (Jest, the web), `isAvailable()` and
     `isPhotoThumbnailAvailable()` answer false and calls answer `no-module`.
     A binary without a method answers `unsupported`.
@@ -248,14 +261,14 @@ onProgress})` writes each asset, in the order given, to a file in the
 
 ## Current-state impact
 
-- This record details `spec:AST-112`: its FR1 (the photo pieces among the
-  app-level modules), FR4 (the host declarations written for the photo
-  pieces), FR5 (the `./photos` entry), and FR7 (the probes and a view that
-  never prompts); and `spec:AST-140`: its FR3 (the group's closed reasons)
+- This record details `spec:AST-112`: its FR3 (opt-in capabilities), FR4
+  (the host declarations written for `photos`), and FR7 (the probes and a
+  view that never prompts); and `spec:AST-140`: its FR3 (the group's closed reasons)
   and FR5 (the revision-1 baseline and named features).
-- It places the photo pieces in the core package with no opt-in, for
-  `FileInput`'s photo picker. It amends `spec:AST-112/FR1`, which lists
-  `photos` among the opt-in capabilities.
+- It amends `spec:AST-112` FR1, which places the photo library and its
+  thumbnails in the core with no opt-in, and FR5, whose opt-in entries are
+  `./camera`, `./media`, and `./web`: here the photo pieces are the core
+  package's opt-in `photos` capability, with the `./photos` entry.
 - It refines `spec:AST-112/FR7`'s explicit permissions for photo access:
   photo access is read and asked for through `AstryxPhotoLibrary`, whose
   states include `limited` (OQ1).
@@ -264,13 +277,13 @@ onProgress})` writes each asset, in the order given, to a file in the
 
 | Contract | Verification                                                                                                           | Representative states                                                                                                         | Mutation or failure expectation                                                                                                                                                     |
 | -------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built apps with the core package only; unit tests of the entry                                                         | a core-only app                                                                                                               | A core-only app lacks the photo library purpose string or permissions, or the `./photos` entry misses an export                                                                     |
+| FR1      | Built apps with the core package only and with `photos` opted in; unit tests of the loader                             | `photos` opted out; opted in                                                                                                  | An opted-out app links PhotoKit or declares a photo permission or purpose string, an opted-in app lacks them, or the library imports `photos` outside its loader                    |
 | FR2      | The platform's spec rules check; the contracts list against the codegen specs                                          | each module method; each view prop, command, and event                                                                        | A listed member is missing, a shipped member changes, or a method rejects                                                                                                           |
 | FR3      | The photos contract suite over the `./testing` double (`mockPhotosCapability`); Simulator, emulator, and device checks | each access state; `canAsk` true and false; limited picker on and off the supported versions                                  | A read prompts, `requestAccess` prompts without `canAsk` or opens Settings, or the picker runs without `limited`                                                                    |
 | FR4      | Unit tests of paging; JVM tests of the cursor and selection rules; hosted iOS tests over a seeded library              | first, middle, and last page; limited selection; a change between pages on each platform                                      | An asset repeats or is skipped, an iOS cursor survives a change, an Android cursor goes stale, or a page size is refused                                                            |
 | FR5      | Unit tests of export through the double; hosted iOS tests; emulator and device checks                                  | `jpeg` and `original`; `maxPixels`; a photo with location; a video; an iCloud-only asset; one missing id; a cancel mid-export | One failure fails the batch, a cancelled asset leaves a file, progress arrives faster than its bound, a JPEG keeps the stored orientation or its location, or a video has no poster |
 | FR6      | Library tests of `PhotoThumbnail`; hosted iOS tests; emulator checks                                                   | `cover` and `contain`; a scrolled grid; a removed asset; no access                                                            | A picture crosses to JavaScript, a cell decodes twice at one size, a hidden cell keeps decoding, or the view prompts                                                                |
-| FR7      | Unit tests through the doubles in their absent, older, and current shapes                                              | the module absent; the view absent                                                                                            | A call throws, a reason falls outside the set, or `no-native-view` repeats                                                                                                          |
+| FR7      | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                  | `photos` not opted in; the module absent; the view absent                                                                     | A call throws, a reason falls outside the set, or `no-native-view` repeats                                                                                                          |
 | FR8      | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                   | a labelled and an unlabelled thumbnail                                                                                        | A thumbnail has no image role, or an unlabelled one is read                                                                                                                         |
 | FR9      | Review of each platform source against the platform SDKs                                                               | each piece                                                                                                                    | A piece calls an API outside the platform's public SDK                                                                                                                              |
 | FR10     | Contract baseline check                                                                                                | a binary without a named feature                                                                                              | The JavaScript uses a feature the binary does not list                                                                                                                              |
@@ -283,8 +296,10 @@ onProgress})` writes each asset, in the order given, to a file in the
 **Decider:** imdreamrunner, 2026-11-17
 
 `FileInput`'s photo picker uses `AstryxPhotoLibrary` and
-`AstryxPhotoThumbnailView`, so they ship in the core package and need no
-opt-in. Astryx ships the native code an app would otherwise get from a library
+`AstryxPhotoThumbnailView`, so they ship in the core package, as its opt-in
+`photos` capability: an app that never shows the library declares no photo
+permission or purpose string and links no photo framework, and `FileInput`'s
+photo source then uses the system photo picker. Astryx ships the native code an app would otherwise get from a library
 (`spec:AST-112/FR2`, `spec:AST-112/DEC-16`). Apps also reach both pieces as
 app API through the `./photos` entry.
 
