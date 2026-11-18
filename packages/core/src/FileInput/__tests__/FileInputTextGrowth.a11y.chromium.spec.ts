@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/FileInput/|packages/core/src/Field/inputStyles|apps/storybook/stories/FileInput)
+// @pr-a11y scope ^(packages/core/src/FileInput/|apps/storybook/stories/FileInput)
 
 /**
  * @file FileInputTextGrowth.a11y.chromium.spec.ts
@@ -9,8 +9,8 @@
  * @output Real-browser proof of spec:AST-102 FR4 for input mode: at the
  *   default text size the field is 32 px; at 200% text the field grows so its
  *   prompt stays inside its borders, wrapped or not.
- * @position Runs in pr-a11y when FileInput, the shared input row styles or
- *   FileInput stories change. jsdom has no layout.
+ * @position Runs in pr-a11y when FileInput or its stories change. jsdom has
+ *   no layout.
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
