@@ -47,7 +47,6 @@ import {selectorPresentationStyles} from '../Selector/selectorPresentation.style
 import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 
 /**
@@ -286,7 +285,7 @@ describe('MultiSelector', () => {
           ring: {
             boxShadow: {
               default: null,
-              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
+              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

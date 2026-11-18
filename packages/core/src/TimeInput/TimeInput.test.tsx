@@ -15,7 +15,6 @@ import userEvent from '@testing-library/user-event';
 import React, {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 import {TimeInput, type TimeInputEntryError} from './TimeInput';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
@@ -200,11 +199,11 @@ describe('TimeInput', () => {
           ring: {
             borderColor: {
               default: colorVars['--color-border-emphasized'],
-              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(${focusRingVars['--_focus-ring']} * 100%), ${colorVars['--color-border-emphasized']})`,
+              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(var(--_focus-ring, 1) * 100%), ${colorVars['--color-border-emphasized']})`,
             },
             boxShadow: {
               default: 'none',
-              ':focus-within': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
+              ':focus-within': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

@@ -25,7 +25,6 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 import {DateRangeInput} from './DateRangeInput';
 import type {DateRange, DateRangeInputProps} from './DateRangeInput';
 import {Icon} from '../Icon';
@@ -173,11 +172,11 @@ describe('DateRangeInput', () => {
           ring: {
             borderColor: {
               default: colorVars['--color-border-emphasized'],
-              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(${focusRingVars['--_focus-ring']} * 100%), ${colorVars['--color-border-emphasized']})`,
+              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(var(--_focus-ring, 1) * 100%), ${colorVars['--color-border-emphasized']})`,
             },
             boxShadow: {
               default: 'none',
-              ':focus-within': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
+              ':focus-within': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

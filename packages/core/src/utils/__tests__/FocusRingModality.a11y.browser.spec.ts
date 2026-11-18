@@ -81,6 +81,34 @@ test.describe('a disabled text field', () => {
     await expect.poll(async () => fieldRing(input)).toBeGreaterThan(0);
   });
 
+  test('keyboard focus rings it in forced colors', async ({
+    page,
+    browserName,
+  }) => {
+    await page.emulateMedia({forcedColors: 'active'});
+    await mount(page, 'core-textinput--disabled');
+    const input = page.locator('input[aria-disabled="true"]').first();
+    await input.waitFor();
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(input).toBeFocused();
+    // Forced colors keep the border, repainted in the system Highlight.
+    await expect
+      .poll(async () =>
+        input.evaluate(element => {
+          const probe = document.createElement('span');
+          probe.style.color = 'Highlight';
+          document.body.append(probe);
+          const highlight = getComputedStyle(probe).color;
+          probe.remove();
+          return (
+            getComputedStyle(element.parentElement!).borderTopColor ===
+            highlight
+          );
+        }),
+      )
+      .toBe(true);
+  });
+
   test.describe('under touch', () => {
     test.use({hasTouch: true, viewport: {width: 390, height: 844}});
 

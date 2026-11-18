@@ -35,7 +35,6 @@ import {
   type RefObject,
 } from 'react';
 import {isTextEntryControl} from '../keyboard/keyboardHeight';
-import {focusRingVars} from './focusOutline.stylex';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -60,10 +59,9 @@ type InteractionModalityStore = {
   onKeyDown: (event: KeyboardEvent) => void;
 };
 
-// The ring switch's custom property: `var(--name)` at runtime.
-const FOCUS_RING_PROPERTY =
-  /var\((--[^,)]+)/.exec(focusRingVars['--_focus-ring'])?.[1] ??
-  '--_focus-ring';
+// Core's private ring switch, which the shared rings in focusOutline.stylex.ts
+// read as `var(--_focus-ring, 1)`.
+const FOCUS_RING_PROPERTY = '--_focus-ring';
 
 /**
  * Turn the shared focus rings off after a pointer press, and back on (by

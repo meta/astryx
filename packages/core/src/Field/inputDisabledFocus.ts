@@ -10,13 +10,14 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 
 // A tap or a click on a disabled field moves focus in, and browsers match
 // `:focus-visible` on a text field whatever the input, so the ring fades out
 // by the shared ring switch: its border mixes back to the rest color and its
 // inset shadow has no width.
-const RING_ON = focusRingVars['--_focus-ring'];
+// `--_focus-ring` is Core's private ring switch: the modality store sets it
+// to 0 on the document root after a pointer press; unset, it is 1.
+const RING_ON = 'var(--_focus-ring, 1)';
 const RING_BORDER = `color-mix(in srgb, ${colorVars['--color-accent']} calc(${RING_ON} * 100%), ${colorVars['--color-border-emphasized']})`;
 const RING_SHADOW = `inset 0px 0px 0px calc(2px * ${RING_ON}) ${colorVars['--color-accent-muted']}`;
 
