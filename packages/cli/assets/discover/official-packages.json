@@ -303,6 +303,14 @@
         {
           "kind": "template",
           "name": "ListInputShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "SelectableCardGroupShippingSpeed"
+        },
+        {
+          "kind": "template",
+          "name": "SelectableCardGroupShowcase"
         }
       ]
     },
