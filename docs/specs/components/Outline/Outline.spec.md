@@ -27,6 +27,7 @@ architecture:
     architecture:component-theming-surface,
     architecture:interaction-modality,
     architecture:public-component-api,
+    architecture:react-component-runtime,
   ]
 contributing: []
 system_specs: [spec:AST-009, spec:AST-020]
@@ -145,7 +146,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **PR1 — Scroll tracking.** While uncontrolled, Outline listens to scroll on
   its scroll root while mounted; navigation waits for scroll end with a timeout
-  fallback; Outline installs the shared press controller.
+  fallback; Outline installs the shared press controller. Its scroll module
+  is larger than `architecture:react-component-runtime` INV19 allows and
+  builds on no shared engine, because none of the engines INV19 lists tracks
+  which heading has passed a line in a scroll root or waits for a navigation
+  scroll to settle.
 
 ## Accessibility contract
 
