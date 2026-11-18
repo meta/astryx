@@ -289,8 +289,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
       check reports it (`theme build --check`, `settingIssues`): a setting
       another rule of the theme layer beats where it reaches is a warning,
       never a failure, naming the theme, the setting with its line, and its
-      fix; the check passes only when every local theme's build check ran,
-      and names a local theme whose check did not run (info).
+      fix; the settings a file writes that says a tool generates it are one
+      note (info) per file instead, with their count and that tool; the
+      check passes only when every local theme's build check ran, and names
+      a local theme whose check did not run (info).
 
   Each failure names the exact command that fixes it.
 
@@ -662,7 +664,10 @@ browser does not show as written (`theme build` reads it from the rules Core
 generates) as a warning with its fix, never a failure: such a theme still
 builds and renders, so the check never fails an app, and a saved theme with
 such a setting still opens. The check passes only when every local theme's
-build check ran.
+build check ran. A file that says a tool generates it (a marker in its
+leading comments) is not where such a fix goes: its settings are one note
+per file, with their count and the tool, in `theme build` and in this check
+alike, and `settingIssues` still lists each.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
