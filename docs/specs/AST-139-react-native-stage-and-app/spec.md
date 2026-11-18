@@ -47,12 +47,14 @@ same native requirements, and get the same limits on what they may reach.
 
 ## Why this exists
 
-| Tool                                              | What it does well                                                                                | The gap Astryx Stage and the Astryx app fill                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| iOS Simulator and Android emulator                | The real system frameworks; the source of truth for native behavior (`spec:AST-112/FR15`).       | The Simulator needs a Mac, the emulator a virtual machine, and each needs a native build per change. Neither gives an agent a picture, the accessibility tree, and a step report as data in one command. Stage runs headless on macOS, Linux, and Windows and answers in a report.                               |
-| Expo Go and development builds                    | Open a project on a phone from a QR code; a development build carries the app's own native code. | Expo Go cannot load the platform's native code (`spec:AST-112/FR11`), and a development build is one more native build per app. The Astryx app already carries the whole platform, so a project that uses only Astryx's native pieces opens on a phone with no build at all.                                     |
-| Storybook and web previews (React Native for Web) | Fast, browser-based review of components and screens.                                            | A web preview renders web components, not the native contracts: no system bars, sheets, menus, gestures, keyboard, or native accessibility tree. Stage runs the app's own code against the platform's native contracts and shows the platform's bars, sheets, menus, gestures, keyboard, and accessibility tree. |
-| A hand-made gallery app per design system         | Shows components on a phone.                                                                     | The Astryx app is that gallery for every Astryx component, kept with the library, and the same binary hosts a developer's own project.                                                                                                                                                                           |
+Simulators and emulators need a native build per change and a Mac or a
+virtual machine, and they give an agent no picture, accessibility tree, and
+step report as data in one command. Expo Go cannot load the platform's native
+code (`spec:AST-112/FR11`), and web previews render web components instead of
+the native contracts. Astryx Stage gives developers and agents the app's real
+screens and behavior on the platform's contracts from any desktop, headless or
+in a window, and the Astryx app opens a project that uses only Astryx's native
+code on a real phone with no build.
 
 ## Who uses it
 
