@@ -38,9 +38,7 @@ capability shape (`spec:AST-112/FR7`), and additive evolution
 (`spec:AST-140/FR5`). It specifies the
 audio module (`AstryxAudio`), the video view (`AstryxVideoView`), and the
 camera view (`AstryxCameraView`), and how the library's `VideoView`,
-`useVideoPlayer`, and `useAudioPlayer` use them. The capabilities' other
-modules and views belong to the platform package and are specified in their own
-records.
+`useVideoPlayer`, and `useAudioPlayer` use them.
 
 ## Why this exists
 
@@ -59,7 +57,8 @@ records.
 | `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (DEC-5)                           | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
 
 Scope notes: the photo library pieces are specified in `spec:AST-135`.
-Capabilities that no Astryx component uses are outside the core package.
+Capabilities that no Astryx component uses are outside the core package
+(`spec:AST-112/FR20`).
 
 ## Non-goals
 
@@ -67,15 +66,14 @@ Capabilities that no Astryx component uses are outside the core package.
   are separate products; they conform to this record's contracts.
 - The contract of the library's `VideoView` beyond how it uses the platform
   (FR12); its own record and `spec:AST-082/FR3` own it. The media controls an
-  app draws, such as the template kit's `MediaScrubber` and
-  `PlaybackRateMenu` (`spec:AST-138/FR7`), are the app's own.
+  app draws are the app's own.
 - Streaming formats beyond what the platform's players open from a URL, DRM,
   captions and subtitle tracks, advertising, playlists, and offline downloads.
 - Video recording, live photos, depth, RAW, HDR control, frame processors, and
   per-frame image access from the camera.
 - Still-image code decoding, recording sound, PDF documents, image markup, and
   screen capture: no Astryx component uses them, so they are outside the core
-  package. The photo library is `spec:AST-135`'s.
+  package (`spec:AST-112/FR20`). The photo library is `spec:AST-135`'s.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -100,7 +98,7 @@ Capabilities that no Astryx component uses are outside the core package.
     the optional camera hardware feature. It holds the camera view and camera
     capture:
     `CameraView`'s `takePhoto` (FR9) is the capture, and the core file
-    picker has no camera source (`spec:AST-130/FR13`). The `./camera` entry
+    picker has no camera source (`spec:AST-130/FR12`). The `./camera` entry
     exports `CameraView`, `isCameraViewAvailable()`, `CODE_TYPES`, and
     `createCodeDetector`.
   - The library reaches each capability only through
@@ -296,7 +294,7 @@ isPossible})`.
 - **FR13 — Results and fallbacks.**
   - No call throws. `open` and the player's controls answer at once; `levels`
     and `takePhoto` resolve and never reject (`spec:AST-140/FR3`). `open`
-    fails with `busy` or `bad-source` or a common reason; a reason the
+    fails with `bad-source` or a common reason; a reason the
     JavaScript does not know reads `error`. `message` never carries a URL's
     query.
   - Not opted in: the capability's JavaScript still loads,
@@ -356,7 +354,7 @@ isPossible})`.
   and a camera view that never prompts), and `spec:AST-140`'s FR3 (the
   group's closed reasons) and FR5 (the group's revision-1 baseline).
 - `spec:AST-130` FR8 (`AstryxPlatformInfo`), FR9 (`AstryxPermissions`), and
-  FR13 (camera capture belongs to `camera`) apply unchanged.
+  FR12 (camera capture belongs to `camera`) apply unchanged.
 - `spec:AST-093/FR5` (every native component is tested and validated the same
   way) applies to `VideoView` unchanged.
 
@@ -423,9 +421,8 @@ then cannot explain the request first.
 **Reference:** `spec:AST-132/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
 
-The core package ships the native code that Astryx's components and create
-templates use. `AstryxCameraView` stays in the core package's `camera`
-capability, because the `camera` create template's screens use it, and
+`spec:AST-112/DEC-16` applies to these three pieces. `AstryxCameraView`
+stays in the core package's `camera` capability, because the `camera` create template's screens use it, and
 `AstryxAudio` and `AstryxVideoView` stay in its `media` capability for
 `VideoView`, `useAudioPlayer`, and `useVideoPlayer`.
 
