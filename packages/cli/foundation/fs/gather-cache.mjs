@@ -49,7 +49,9 @@
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
- *   session's next command) uses them; doctor never makes it. A run through
+ *   session's next command) uses them. doctor never makes it, nor do
+ *   `component` and `template` in a project with no integration: they keep
+ *   their gathers only once it exists. A run through
  *   the host entry keeps them too, keyed on what the host passed
  *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
@@ -107,17 +109,18 @@ import {
 
 /**
  * The kept commands whose kept gathers are worth recording only where an
- * integration can load (its check results, and template discovery, whose
- * records hold Core's templates too but which costs little without one): a
- * project with no integration records none of them.
+ * integration can load (its check results): a project with no integration
+ * records none of them.
  */
-const INTEGRATION_COMMANDS = new Set([
-  'component',
-  'template',
-  'theme',
-  'discover',
-  'docs',
-]);
+const INTEGRATION_COMMANDS = new Set(['theme', 'discover', 'docs']);
+
+/**
+ * The kept commands that run template discovery, which reads each of the
+ * CLI's template docs with or without an integration. In a project with no
+ * integration they record only into a catalogs folder that exists already,
+ * and never make it.
+ */
+const TEMPLATE_COMMANDS = new Set(['component', 'template']);
 
 /** The run's commands whose gathers are kept. */
 const KEPT_COMMANDS = new Set([
@@ -312,20 +315,22 @@ export async function recordRunFor(argv, fn) {
     !KEPT_COMMANDS.has(command) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null ||
-    // Last, being a few file checks: those commands keep what is worth
-    // keeping only where an integration can load, so a project with none
-    // records nothing.
-    (INTEGRATION_COMMANDS.has(command) &&
-      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
+    withoutRecording(buildId) == null
   ) {
     return fn();
   }
-  // The first recorded run on a machine (search, build, component, template,
-  // theme, discover or docs) makes the folder and keeps its gathers at once.
-  // Once the per-user cache folder exists doctor uses it; it never makes it,
-  // so a doctor alone changes nothing on the machine (nor its own cache row).
-  if (command !== 'doctor') makeGatherCacheDir();
+  // Last, being a few file checks: whether an integration can load.
+  const bare =
+    (INTEGRATION_COMMANDS.has(command) || TEMPLATE_COMMANDS.has(command)) &&
+    !withoutRecording(() => mayHaveIntegrations(process.cwd()));
+  if (bare && !TEMPLATE_COMMANDS.has(command)) return fn();
+  // The first recorded run on a machine (search, build, or component,
+  // template, theme, discover or docs where an integration can load) makes
+  // the folder and keeps its gathers at once. Once the per-user cache folder
+  // exists doctor uses it, and so do component and template in a project
+  // with no integration; they never make it, so such a run alone changes
+  // nothing on the machine (nor doctor's own cache row).
+  if (command !== 'doctor' && !bare) makeGatherCacheDir();
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
