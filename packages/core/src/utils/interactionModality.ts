@@ -98,12 +98,13 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     },
     onKeyDown: event => {
       // Modifier-only presses are not navigation — holding Shift before a
-      // click must not turn that click into "keyboard". Tab is navigation
-      // whatever is held: Safari moves focus with Option+Tab.
-      if (
-        (event.metaKey || event.altKey || event.ctrlKey) &&
-        event.key !== 'Tab'
-      ) {
+      // click must not turn that click into "keyboard". They leave the
+      // modality alone; Tab with them still moves focus (Safari moves it with
+      // Option+Tab), so it shows the rings again.
+      if (event.metaKey || event.altKey || event.ctrlKey) {
+        if (event.key === 'Tab') {
+          setFocusRings(targetDocument, true);
+        }
         return;
       }
       store.modality = 'keyboard';

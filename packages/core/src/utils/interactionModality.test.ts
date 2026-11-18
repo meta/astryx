@@ -130,7 +130,8 @@ describe('interactionModality', () => {
       new KeyboardEvent('keydown', {key: 'Tab', altKey: true}),
     );
     expect(ring(pageDocument)).toBe('');
-    expect(tracker.getInteractionModality(pageDocument)).toBe('keyboard');
+    // A modifier press leaves the modality alone.
+    expect(tracker.getInteractionModality(pageDocument)).toBe('pointer');
     // Any key that makes the modality keyboard shows them, typing included.
     pageDocument.dispatchEvent(new Event('pointerdown'));
     expect(ring(pageDocument)).toBe('0');
