@@ -422,8 +422,10 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    each integration's components with the doc parts the not-found matcher
-    scores, integrations' theme records, what `theme build` checks a theme
+    whether the installed Core matches the component list the CLI was
+    published with, Core's and each integration's components with the doc
+    parts the not-found matcher scores, Core hooks' declared keywords for the
+    not-found hint, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the JavaScript `theme build` compiles
     from a theme's local TypeScript or JSX modules, what `theme build` finds
     when it checks a theme's pseudo-class keys and token names, the lookup

@@ -387,10 +387,24 @@ export function themeFactsEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds a summary (kept-tree.mjs), such as the check
+ * that the stored component list matches the installed Core, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function summaryEntry(file) {
+  try {
+    return readKept(file).summary === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
  * (a value derived from a catalog, search's entry table, is not a catalog;
  * nor is the CLI's own docs tree, which every project shares, nor theme
- * build's facts from Core's docs).
+ * build's facts from Core's docs, nor a summary).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -406,7 +420,8 @@ export function entries(tmp) {
       issuesEntry(file) ||
       templatesEntry(file) ||
       docsTreeEntry(file) ||
-      themeFactsEntry(file)
+      themeFactsEntry(file) ||
+      summaryEntry(file)
     )
       continue;
     const {ino, mtimeMs} = fs.statSync(file);
