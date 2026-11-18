@@ -40,14 +40,15 @@ capability shape (`spec:AST-112/FR7`), and additive evolution
 
 `FileInput`'s photo picker uses `AstryxPhotoLibrary` and
 `AstryxPhotoThumbnailView`, so they ship in the core package (DEC-1).
-Capabilities that no Astryx component uses are outside the core package. These
+Capabilities that no Astryx component uses are outside the core package
+(`spec:AST-112/FR20`). These
 pieces take no third-party native dependency; apps may use third-party
 libraries beside these components without conflict.
 
 - `AstryxPhotoLibrary`: `FileInput`'s photo picker and an app that shows the
   library inside its own screens need a native module. Choosing a few photos
   in the system's photo picker does not: the core file picker presents it
-  with no permission (`spec:AST-130/FR13`).
+  with no permission (`spec:AST-130/FR12`).
 - `AstryxPhotoThumbnailView`: iOS has no way to draw a library asset without
   native code. On Android, React Native's `Image` draws an asset's content URI
   with none, so one view serves both platforms with the library module's ids.
@@ -62,11 +63,11 @@ libraries beside these components without conflict.
 Scope notes: these pieces are specified elsewhere.
 
 - The system photo and document pickers are the core file picker's
-  (`spec:AST-130/FR13`); permissions other than photo access are
+  (`spec:AST-130/FR12`); permissions other than photo access are
   `AstryxPermissions`' (`spec:AST-130/FR9`).
 - Audio and video playback and the camera view belong to the `media` and
   `camera` capabilities (`spec:AST-132`).
-- The file cache that exports write into belongs to `spec:AST-130`.
+- The file cache that exports write into belongs to `spec:AST-130/FR14`.
 
 ## Non-goals
 
@@ -157,7 +158,7 @@ nextCursor}`: the photos and videos the app can see (only the selection
 - **FR5 — Assets are exported to files.**
   - `exportAssets(ids, {format, maxPixels, quality, allowsNetwork, signal,
 onProgress})` writes each asset, in the order given, to a file in the
-    app's file cache (`spec:AST-130`) and answers
+    app's file cache (`spec:AST-130/FR14`) and answers
     `{files, failures}`. Each file has `id`, a `file://` URI, its cache
     `name`, `mimeType`, `mediaType`, pixel `width` and `height`, `size` in
     bytes, and the asset's `creationDate` and `duration` as `listAssets`
@@ -183,7 +184,7 @@ onProgress})` writes each asset, in the order given, to a file in the
     assets never start, and the asset in flight stops and deletes what it
     wrote. The export answers `cancelled` with the files already written.
   - The files are the caller's: it removes each with the file cache's
-    `remove(name)`, and the cache's `clear` removes them all (`spec:AST-130`).
+    `remove(name)`, and the cache's `clear` removes them all (`spec:AST-130/FR14`).
 - **FR6 — `PhotoThumbnail` draws one asset natively.**
   - Its props are `assetId` (an id `listAssets` answered; `''` draws
     nothing), `resizeMode` (`cover`, the default, fills and crops;
