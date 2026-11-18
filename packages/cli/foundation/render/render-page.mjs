@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render`, forward: one page module to ONE
+ * @file `astryx experimental export`, forward: one page module to ONE
  * self-contained static HTML file. The page renders on the server with the
  * project's own React and Astryx components; its own StyleX compiles in
  * memory; Core's stylesheets are cut to the rules the markup uses; local
@@ -1575,6 +1575,7 @@ export async function renderPage(entry, options = {}) {
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
+      ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
       markup: {
         sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),

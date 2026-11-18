@@ -2,7 +2,7 @@
 
 /**
  * @file The page source a rendered file carries, so `astryx experimental
- * render --reverse` can give it back byte for byte. It is one
+ * export --reverse` can give it back byte for byte. It is one
  * `<script type="application/x-astryx-source">` data block: browsers never run
  * it, and its JSON holds each file base64-encoded with its SHA-256, so no text
  * in the source (`</script>` included) can end the block early.
@@ -80,6 +80,7 @@ export function formatFor(files) {
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
  * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
+ * @property {string[]} [notCarried] - The files the page uses that the render could not carry, by their paths from the folder that holds the carried files, so a reverse names each one as missing.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
@@ -115,6 +116,7 @@ export function sourceBlock(entry, files, record = {}) {
     ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
     ...(record.aliases ? {aliases: record.aliases} : {}),
+    ...(record.notCarried?.length ? {notCarried: record.notCarried} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),

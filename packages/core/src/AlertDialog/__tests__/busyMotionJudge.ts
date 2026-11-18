@@ -12,12 +12,11 @@ import type {TrackedFrame} from '@astryxdesign/interaction-harness';
 /**
  * The smallest change of the alert region's pixels that counts as motion. It
  * is the mean absolute change of their luma from the frame before. The cast is
- * lossless, so a frame that repeats the alert's pixels reads 0 exactly. This
- * change is never less than the change of the pixels' mean luma, which text
- * crossing the region's edge can cancel. In 400 busy runs that mean changed by
- * at least 0.039 for the entrance and 0.075 for the exit, on a frame the
- * control moved. A cut near zero therefore tells a frozen alert from a slow
- * one, with a wide margin.
+ * lossless, so a frame that repeats the alert's pixels reads 0 exactly. A cut
+ * near zero therefore tells a frozen alert from a slow one. The proof draws
+ * the alert so that the region follows the alert's opacity alone and has no
+ * stationary point. So a moving alert changes the region's pixels by about 1.4
+ * or more on every frame, far above the cut.
  */
 export const ALERT_MOTION_LUMA = 0.005;
 

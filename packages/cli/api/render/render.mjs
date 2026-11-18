@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Programmatic API for `astryx experimental render`: a page module to
+ * @file Programmatic API for `astryx experimental export`: a page module to
  * one self-contained HTML file, and back.
  *
  *   render('page.tsx')                      render.page: write page.html
@@ -10,7 +10,7 @@
  * @input a page module or a rendered HTML file, and options
  * @output render.page | render.reverse envelope
  * @position api/render — leaf; command wrapper in
- *   clients/cli/commands/experimental/render.mjs
+ *   clients/cli/commands/experimental/export.mjs
  */
 
 import * as path from 'node:path';
@@ -36,8 +36,8 @@ export async function render(file, options = {}) {
       reverse ? 'A rendered HTML file is required' : 'A page file is required',
       [
         reverse
-          ? {name: 'astryx experimental render --reverse page.html', reason: 'turn a rendered file back into a page'}
-          : {name: 'astryx experimental render page.tsx', reason: 'render a page to one HTML file'},
+          ? {name: 'astryx experimental export --reverse page.html', reason: 'turn a rendered file back into a page'}
+          : {name: 'astryx experimental export page.tsx', reason: 'export a page as one HTML file'},
       ],
       ERROR_CODES.ERR_MISSING_ARGUMENT,
     );
@@ -58,7 +58,7 @@ export async function render(file, options = {}) {
     if (!/\.html?$/i.test(input)) {
       throw new AstryxError(
         `--reverse reads a rendered .html file; ${file} is not one`,
-        [{name: `astryx experimental render ${file}`, reason: 'render the page instead'}],
+        [{name: `astryx experimental export ${file}`, reason: 'export the page instead'}],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
@@ -90,7 +90,7 @@ export async function render(file, options = {}) {
         ? `${file} is already HTML; pass --reverse to turn it back into a page`
         : `render reads a page module (${PAGE_EXTENSIONS.join(', ')}); ${file} is not one`,
       /\.html?$/i.test(input)
-        ? [{name: `astryx experimental render --reverse ${file}`, reason: 'turn it back into a page'}]
+        ? [{name: `astryx experimental export --reverse ${file}`, reason: 'turn it back into a page'}]
         : [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );

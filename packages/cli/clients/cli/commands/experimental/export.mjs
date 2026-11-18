@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx experimental render` — a page to one self-contained HTML
+ * @file `astryx experimental export` — a page to one self-contained HTML
  * file, and back. Experimental (spec:AST-017 FR27): it is registered only
  * under the `experimental` group.
  *
@@ -9,8 +9,8 @@
  * `defineCommand`; this file reads flags, calls `render()`, and prints.
  *
  * Usage:
- *   astryx experimental render page.tsx --out page.html
- *   astryx experimental render --reverse page.html --out page.tsx
+ *   astryx experimental export page.tsx --out page.html
+ *   astryx experimental export --reverse page.html --out page.tsx
  */
 
 import * as path from 'node:path';
@@ -23,7 +23,7 @@ import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {render as renderApi} from '../../../../api/render/render.mjs';
 import {freeRestoreFolder} from '../../../../foundation/render/restore-folder.mjs';
-import {doc as renderCommand} from '../experimental-render.doc.mjs';
+import {doc as renderCommand} from '../experimental-export.doc.mjs';
 import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 
 /** @param {number} n */
@@ -76,11 +76,11 @@ const restoreHere = d =>
     : '';
 
 /**
- * Register `render` under the `experimental` group.
+ * Register `export` under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
  */
-export function registerExperimentalRender(group, program) {
+export function registerExperimentalExport(group, program) {
   defineCommand(group, renderCommand, {
     fn: renderFn,
     action: async (
@@ -128,7 +128,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),
-          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}${restoreHere(d)}`),
+          text(`Give it back: ${run} experimental export --reverse ${shellArg(d.output)}${restoreHere(d)}`),
         );
         return answered;
       }
@@ -194,7 +194,7 @@ export function registerExperimentalRender(group, program) {
         ...(d.mode === 'embedded'
           ? [
               text(
-                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
+                `Export it again: ${run} experimental export ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
               ),
             ]
           : []),

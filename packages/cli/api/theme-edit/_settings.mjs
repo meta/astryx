@@ -119,7 +119,6 @@ import {
   syncPaletteRefs,
   refuseIfLockLost,
   lockHeld,
-  removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
   readRecordIn,
@@ -127,6 +126,7 @@ import {
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
