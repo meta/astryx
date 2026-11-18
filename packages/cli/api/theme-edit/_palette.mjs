@@ -290,6 +290,7 @@ export function tempFor(file) {
  * @property {string} [alpha] - Two hex digits of opacity.
  * @property {string} [family] - The family the stop is from when it is not the token's own: `neutral` for text on a fill, or `black` / `white`, the palette's own ends.
  * @property {boolean} [exact] - The stop holds the seed's exact color (an exact anchor).
+ * @property {boolean} [base] - The half is the base theme's own value in that mode (family `literal`): the generated module reads it from the base, so the mode follows the base theme.
  */
 
 /**
@@ -1817,7 +1818,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const {tokens} = mapping;
   // An accent set as a token for one mode moves that mode only: the other
   // mode keeps what the theme's palette gives it without that accent (its
-  // other colors, a warm gray, still drawn), else the base theme's value.
+  // other colors, a warm gray, still drawn), else follows the base theme.
   const only = fams.find(f => f.id === 'accent')?.only;
   if (only) {
     const other = only === 'light' ? 'dark' : 'light';
@@ -1865,9 +1866,11 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         delete tokens[k];
         continue;
       }
+      // (The base theme's own value: the module reads it from the base,
+      // so the mode keeps following it.)
       tokens[k] = {
         ...v,
-        [other]: {stop: 0, color: String(kept), family: 'literal'},
+        [other]: {stop: 0, color: String(kept), family: 'literal', base: true},
       };
     }
   }
