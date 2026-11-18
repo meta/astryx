@@ -22,6 +22,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
+import {focusRingVars} from '../utils/focusOutline.stylex';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import {DateTimeInput, type DateTimeInputProps} from './DateTimeInput';
 import type {ISODateTimeString} from './DateTimeInput';
@@ -404,11 +405,11 @@ describe('DateTimeInput', () => {
           ring: {
             borderColor: {
               default: colorVars['--color-border-emphasized'],
-              ':focus-within': colorVars['--color-accent'],
+              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(${focusRingVars['--astryx-focus-ring']} * 100%), ${colorVars['--color-border-emphasized']})`,
             },
             boxShadow: {
               default: 'none',
-              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+              ':focus-within': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

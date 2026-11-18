@@ -34,6 +34,7 @@ import {
   type RefObject,
 } from 'react';
 import {isTextEntryControl} from '../keyboard/keyboardHeight';
+import {focusRingVars} from './focusOutline.stylex';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -50,6 +51,27 @@ type InteractionModalityStore = {
   onPointerDown: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
 };
+
+// The ring switch's custom property: `var(--name)` at runtime.
+const FOCUS_RING_PROPERTY =
+  /var\((--[^,)]+)/.exec(focusRingVars['--astryx-focus-ring'])?.[1] ??
+  '--astryx-focus-ring';
+
+/**
+ * Turn the shared focus rings off after a pointer press, and back on (by
+ * dropping the override) after a navigation key.
+ */
+function setFocusRings(targetDocument: Document, isOn: boolean): void {
+  const root = targetDocument.documentElement as HTMLElement | null;
+  if (root?.style == null) {
+    return;
+  }
+  if (isOn) {
+    root.style.removeProperty(FOCUS_RING_PROPERTY);
+  } else {
+    root.style.setProperty(FOCUS_RING_PROPERTY, '0');
+  }
+}
 
 const interactionModalityStoreKey = Symbol.for(
   '@astryxdesign/core/interaction-modality/v1',
@@ -74,6 +96,7 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     onPointerDown: () => {
       store.modality = 'pointer';
       store.isTextEntrySincePointer = true;
+      setFocusRings(targetDocument, false);
     },
     onKeyDown: event => {
       // Modifier-only presses are not navigation — holding Shift before a
@@ -84,6 +107,9 @@ function getStore(targetDocument: Document): InteractionModalityStore {
       store.modality = 'keyboard';
       if (!isTextEntryKey(event)) {
         store.isTextEntrySincePointer = false;
+        // Typing into a field a pointer focused keeps the rings hidden; a
+        // navigation key shows them again.
+        setFocusRings(targetDocument, true);
       }
     },
   };

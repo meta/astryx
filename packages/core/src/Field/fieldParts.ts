@@ -23,6 +23,7 @@ import type {BaseProps} from '../BaseProps';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
 /** Root styling props a Field-composed input does not accept. */
 export type FieldInputForbiddenStyleProp = 'xstyle' | 'className' | 'style';
@@ -124,6 +125,10 @@ export function useFieldInputStyling<R extends object>(
   restProps: R,
   containerProps: FieldContainerStyleProps,
 ): FieldInputStyling<R> {
+  // Hears pointer and keyboard input on the page, so a disabled field's ring,
+  // which `:focus-visible` alone shows after a tap or a click, shows for
+  // keyboard focus only.
+  useInteractionModalityTracking();
   const inputGroup = useInputGroup();
   const {direction} = use(FormLayoutContext);
   const hasFieldBox = inputGroup == null && direction !== 'horizontal-labels';

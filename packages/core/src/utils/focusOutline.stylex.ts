@@ -24,6 +24,21 @@ const FOCUS_OUTLINE_COLOR = focusVars['--focus-outline-color'];
 const FOCUS_OUTLINE_OFFSET = focusVars['--focus-outline-offset'];
 
 /**
+ * Whether the rings show: 1 while the last input was not a pointer press, 0
+ * after one. Browsers match `:focus-visible` on a text field, or on an
+ * element focused by script, even right after a tap or a click, so every
+ * ring scales its width (or mixes its color) by this. The modality store in
+ * `interactionModality.ts` sets it on each document's root; unset, as in
+ * server markup or before any input, it is 1.
+ */
+export const focusRingVars = stylex.defineVars({
+  '--astryx-focus-ring': stylex.types.number(1),
+});
+const RING_ON = focusRingVars['--astryx-focus-ring'];
+const GATED_OUTLINE_WIDTH = `calc(${FOCUS_OUTLINE_WIDTH} * ${RING_ON})`;
+const GATED_OUTLINE = `${GATED_OUTLINE_WIDTH} ${FOCUS_OUTLINE_STYLE} ${FOCUS_OUTLINE_COLOR}`;
+
+/**
  * The ring as a single `outline` value, for reading it at runtime — an
  * assertion, or an element styled imperatively.
  *
@@ -92,7 +107,7 @@ export const focusOutlineStyles = stylex.create({
   focusVisible: {
     outlineWidth: {
       default: '0',
-      ':focus-visible': focusOutlineLonghands.outlineWidth,
+      ':focus-visible': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -107,7 +122,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithin: {
     outlineWidth: {
       default: '0',
-      ':has(:focus-visible)': focusOutlineLonghands.outlineWidth,
+      ':has(:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -136,7 +151,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithinFirstChild: {
     outlineWidth: {
       default: '0',
-      ':has(> :first-child:focus-visible)': focusOutlineLonghands.outlineWidth,
+      ':has(> :first-child:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -160,8 +175,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithinCombobox: {
     outlineWidth: {
       default: '0',
-      ':has(> [role="combobox"]:focus-visible)':
-        focusOutlineLonghands.outlineWidth,
+      ':has(> [role="combobox"]:focus-visible)': GATED_OUTLINE_WIDTH,
     },
     outlineStyle: {
       default: 'none',
@@ -195,7 +209,7 @@ export const focusOutlineStyles = stylex.create({
   publishFocusVisibleVars: {
     '--_focus-outline': {
       default: 'none',
-      ':focus-visible': FOCUS_OUTLINE,
+      ':focus-visible': GATED_OUTLINE,
     },
     '--_focus-outline-offset': {
       default: '0',
@@ -205,7 +219,7 @@ export const focusOutlineStyles = stylex.create({
   focusWithinOrPublished: {
     outline: {
       default: 'var(--_focus-outline, none)',
-      ':has(:focus-visible)': FOCUS_OUTLINE,
+      ':has(:focus-visible)': GATED_OUTLINE,
     },
     outlineOffset: {
       default: 'var(--_focus-outline-offset, 0)',

@@ -111,6 +111,34 @@ describe('interactionModality', () => {
     expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
   });
 
+  it("switches each document's focus rings off after a pointer press and on after a navigation key", async () => {
+    const pageDocument = document.implementation.createHTMLDocument();
+    const secondDocument = document.implementation.createHTMLDocument();
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    tracker.__startInteractionModalityTrackingForTest();
+    tracker.__trackInteractionModalityInForTest(secondDocument);
+    const ring = (target: Document) =>
+      target.documentElement.style.getPropertyValue('--astryx-focus-ring');
+    // No input yet: no override, so the rings read their keyboard default.
+    expect(ring(pageDocument)).toBe('');
+    pageDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(pageDocument)).toBe('0');
+    expect(ring(secondDocument)).toBe('');
+    // Typing into a text field a pointer focused keeps the rings off.
+    const field = pageDocument.createElement('input');
+    pageDocument.body.append(field);
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'a', bubbles: true, composed: true}),
+    );
+    expect(ring(pageDocument)).toBe('0');
+    pageDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+    expect(ring(pageDocument)).toBe('');
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(secondDocument)).toBe('0');
+    expect(ring(pageDocument)).toBe('');
+  });
+
   it("releases a second document's listeners with its last consumer", async () => {
     const secondDocument = document.implementation.createHTMLDocument();
     const tracker = await loadTracker();

@@ -46,6 +46,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {Theme} from '../theme/Theme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
+import {focusRingVars} from '../utils/focusOutline.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
@@ -380,7 +381,7 @@ describe('Selector', () => {
           ring: {
             boxShadow: {
               default: null,
-              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+              ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

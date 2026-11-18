@@ -12,6 +12,7 @@ import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
+import {focusRingVars} from '../utils/focusOutline.stylex';
 import {Selector} from './Selector';
 
 type Handler = () => void;
@@ -103,7 +104,7 @@ describe('Selector disabled (spec:AST-085)', () => {
         ring: {
           boxShadow: {
             default: null,
-            ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+            ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--astryx-focus-ring']}) ${colorVars['--color-accent-muted']}`,
           },
         },
       }).ring,

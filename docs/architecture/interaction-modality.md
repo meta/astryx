@@ -178,7 +178,11 @@ work.
   documented focus and activation behavior.
 - **INV6 — Modality remains internal.** Components derive modality from shared
   browser input state. A public focus-visibility or modality prop requires a
-  separate public-API decision.
+  separate public-API decision. The shared rings read the state through one
+  private custom property, `--astryx-focus-ring` (`focusRingVars` in
+  `utils/focusOutline.stylex.ts`), which the modality store sets to 0 on each
+  document's root after a pointer press and clears on a navigation key; unset,
+  it is 1, so server markup and a page with no input yet show keyboard rings.
 - **INV7 — Essential actions remain reachable.** At the interaction point where a
   component offers an essential action's controlled context, every supported
   modality has a perceivable and operable path to that action. Layout, scrolling,
