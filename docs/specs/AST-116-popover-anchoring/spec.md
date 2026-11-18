@@ -111,7 +111,8 @@ where it is.
   `anchorRef` the caller passed holds no element, or holds one that is not in
   the document, an open popover renders no visible surface, whether or not a person is using
   it (AR1). It shows on the frame a later read (FR3) finds an anchor in the
-  document.
+  document. A `show()` while the ref holds no such element does not open the
+  popover: it opens, and reports `onShow`, when a later read finds one.
 
 ### Showing an open popover again
 
@@ -317,11 +318,12 @@ Dialog and DropdownMenu.
   - The rich text editor's link form, a dialog popover in a published package.
   - The `LayerSamePress` story and Popover's own tests.
 
-FR1 gap: `usePopover` anchors only to the element `triggerRef` receives, with
-no separate anchor; Popover's `anchorRef` that names an element holding no
-button warns in development and never anchors.
-FR9 gap: `usePopover` has no separate anchor to move to (FR1 gap), so a
-`show()` in the same press moves the layer only to another trigger.
+FR6 gap: an anchor that leaves the document with no render of the caller's
+component and no `show()` leaves the surface shown.
+FR9 gap: the browser's light dismiss closes the popover before a `show()` in
+the same press runs. With a new anchor element the popover shows again,
+reports `onShow` again and runs its initial focus again; with the same
+element it stays closed and reports `onHide`.
 FR12 gap: focus containment is active whenever the popover is open, whatever
 `isModal` says.
 FR15 gap: Escape on a non-modal popover closes it through native auto light
@@ -336,6 +338,8 @@ FR20 gap: a Popover whose opener was removed while it was open leaves focus on
 the body.
 FR21 gap: no development warning names a layer whose focus return finds no
 candidate.
+AR1 gap: when FR6 hides a surface that holds focus, focus is not moved to the
+trigger or through FR20's chain.
 AR4 gap: a dialog popover opened from code is not announced.
 
 ## Verification
