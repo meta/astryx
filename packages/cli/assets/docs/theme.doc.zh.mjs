@@ -17,6 +17,16 @@ export const docsZh = {
       ],
     },
     {
+      section: 'Start with the whole-theme dials',
+      title: '先用整个主题的调节项',
+      content: [
+        {
+          type: 'prose',
+          text: '先用调节项。每个调节项一次改变整个主题，并让各个部件保持一致：`editor set <name> accent \'#…\'`（品牌色）、`neutral`（灰色和表面）、`corners`、`surfaces`、`spacing`、`type`、`font` 和 `text-size`。`astryx experimental theme editor how --list dials` 列出每个调节项及其档位，`editor how "<你想要的效果>"` 会为用文字描述的外观给出对应的调节项。只有当没有调节项能做到时，才深入修改某一个部件。',
+        },
+      ],
+    },
+    {
       section: 'Look after each change',
       title: '每次修改后查看',
       content: [
@@ -37,12 +47,12 @@ export const docsZh = {
       ],
     },
     {
-      section: 'One kind of part',
-      title: '某一类部件',
+      section: 'Drill into one part',
+      title: '深入修改某一个部件',
       content: [
         {
           type: 'prose',
-          text: '修改某一类部件（侧边栏、它的选中项、表单中的间距）也是主题修改，而不是某个页面上的属性或样式：`astryx experimental theme editor how "<要求>"` 会给出对应的 `set … --on <part>` 命令。',
+          text: '用过调节项之后，修改某一类部件（侧边栏、它的选中项、表单中的间距）也是主题修改，而不是某个页面上的属性或样式：`astryx experimental theme editor how "<要求>"` 会给出对应的 `set … --on <part>` 命令。在某个部件上设置的 CSS 属性或令牌（`--on`）会覆盖该部件上的调节项，使它不再跟随调节项：只在调节项无法做到的地方使用。',
         },
       ],
     },

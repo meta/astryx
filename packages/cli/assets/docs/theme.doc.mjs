@@ -36,6 +36,16 @@ export const docs = {
       ],
     },
     {
+      id: 'start-with-the-dials',
+      title: 'Start with the whole-theme dials',
+      content: [
+        {
+          type: 'prose',
+          text: 'Start with the dials. Each one changes the whole theme at once and keeps its parts in step: `editor set <name> accent \'#…\'` (the brand color), `neutral` (the grays and the surfaces), `corners`, `surfaces`, `spacing`, `type`, `font` and `text-size`. `astryx experimental theme editor how --list dials` lists each dial and its rungs, and `editor how "<what you want>"` names the dial for a look said in words. Drill into one part only when no dial makes the change.',
+        },
+      ],
+    },
+    {
       id: 'look-after-each-change',
       title: 'Look after each change',
       content: [
@@ -57,11 +67,11 @@ export const docs = {
     },
     {
       id: 'one-kind-of-part',
-      title: 'One kind of part',
+      title: 'Drill into one part',
       content: [
         {
           type: 'prose',
-          text: 'A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line.',
+          text: 'After the dials, a change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line. A CSS property or a token set on one part (`--on`) wins over the dials for that part, so it no longer follows them: use it only where a dial cannot reach.',
         },
       ],
     },

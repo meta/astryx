@@ -17,6 +17,16 @@ export const docsDense = {
       ],
     },
     {
+      section: 'Start with the whole-theme dials',
+      title: 'Start with the whole-theme dials',
+      content: [
+        {
+          type: 'prose',
+          text: "start with whole-theme dials (each moves every part in step): editor set <name> accent '#…' | neutral | corners | surfaces | spacing | type | font | text-size; how --list dials lists them; drill into one part only when no dial does it.",
+        },
+      ],
+    },
+    {
       section: 'Look after each change',
       title: 'Look after each change',
       content: [
@@ -37,12 +47,12 @@ export const docsDense = {
       ],
     },
     {
-      section: 'One kind of part',
-      title: 'One kind of part',
+      section: 'Drill into one part',
+      title: 'Drill into one part',
       content: [
         {
           type: 'prose',
-          text: 'one kind of part (sidebar, its selected item, form gaps) = theme too: editor how "<ask>" names set … --on <part>.',
+          text: 'after the dials: one kind of part (sidebar, its selected item, form gaps) = theme too: editor how "<ask>" names set … --on <part>; a part setting wins over the dials for that part, so use it only where no dial reaches.',
         },
       ],
     },
