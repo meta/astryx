@@ -457,7 +457,8 @@ those contracts.
   of main-thread work with no task over 100 ms. Such a control runs no layer,
   tooltip, or transition work for a feature that instance does not use (DEC-1).
   INV21 gap: no harness measures the budget, so no control is shown to meet
-  it.
+  it. INV21 gap: Button and Avatar run `useTooltip` and its layer on every
+  instance, with or without a tooltip.
 - **INV22 — Long lists render rows near the viewport.** List rows outside the
   viewport skip rendering through
   `content-visibility: auto` with an intrinsic size, so a long list stays
