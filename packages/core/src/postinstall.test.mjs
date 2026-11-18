@@ -147,7 +147,7 @@ describe('core postinstall — inside a monorepo package', () => {
   it('still nudges when no folder up to the repository root ran init', () => {
     const r = install();
     expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/finish setup and install the Astryx agent prompt/);
+    expect(r.stdout).toMatch(/prints the getting-started steps, and saves the Astryx guide to AGENTS\.md/);
   });
 });
 
@@ -190,7 +190,7 @@ describe('core postinstall — shouldNudge', () => {
 describe('core postinstall — the nudge names the command the CLI would print', () => {
   it('words the nudge around the stem it is given', () => {
     expect(setupNudge('pnpm exec astryx')).toContain(
-      'run `pnpm exec astryx init` to finish setup',
+      'run `pnpm exec astryx init` now, before you write Astryx code',
     );
     expect(SETUP_NUDGE).toContain('run `npx @astryxdesign/cli init`');
   });

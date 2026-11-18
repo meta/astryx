@@ -154,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "3241e02aec55b756c2dd55f6311b8e60f3b1f70b6cf76b3bc4661e7fb9410a4b",
+      "skeleton": "e0a2a3ca8c5e424d77bba6b0e13e87340bf2b6b4e45dbb08ed3fcd766460a93e",
       "mentions": []
     },
     "icons": {
@@ -305,7 +305,7 @@
         "mcp-server",
         "global-mode"
       ],
-      "skeleton": "b057b20cbb930cb0be447779af25976d0e00989c07a361717f7552beeff66107",
+      "skeleton": "712ebe16f9b4feced0722c6ee99d718798ced1e237d94dfeddc2ab0334250394",
       "mentions": []
     }
   }
