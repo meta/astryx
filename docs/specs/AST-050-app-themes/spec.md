@@ -389,6 +389,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   the app lacks, with the app's package manager at the version of the app's
   installed Core and with install scripts off, and MUST NOT install any other
   package: it names the other packages with the command that installs them.
+  In a project whose loaded integration gives `installGuidance`, it runs no
+  package manager: its receipt says the install did not run and names that
+  integration's step, read the way `theme eject` and `init` read it
+  (`spec:AST-039`), for the Astryx packages and the others.
   It reports every file it writes, the lockfile the install rewrites
   included, and the record and dependency it changes. A
   bare word is always a slug, and a URL MUST be https, redirects included. It
@@ -675,7 +679,8 @@ by the app (`maintained: false`). `theme add` makes that copy when it is given
 the shared theme instead of a slug, so receiving a theme is one command, and
 it makes the theme the default so an app wired once (DEC-2) shows it at once.
 It installs only Astryx packages for the theme, at the app's Core version and
-with install scripts off, because those are the theme's base; a package from
+with install scripts off, because those are the theme's base (a project whose
+integration says how it adds packages gets that line instead); a package from
 anywhere else is the builder's call, so it is named, never installed. Nothing
 of the theme runs while it is added, so a theme arrives built, and the add is
 a copy the builder can see in full and undo with `theme remove`.
