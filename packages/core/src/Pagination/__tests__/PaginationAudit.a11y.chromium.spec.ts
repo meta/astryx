@@ -107,7 +107,9 @@ async function axe(page: Page) {
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
   return results.violations.flatMap(violation =>
-    violation.nodes.map(node => `${violation.id}: ${node.target.join(' ')}`),
+    violation.nodes.map(
+      node => `${violation.id}: ${node.target.join(' ')} ${node.html}`,
+    ),
   );
 }
 
@@ -319,12 +321,10 @@ for (const mode of ['light', 'dark'] as const) {
         // and Next reach every page with full-size targets, so the WCAG 2.5.8
         // equivalent exception applies; the audit records it, not fails it.
         const allViolations = await axe(page);
-        const targetSize = allViolations.filter(v =>
-          v.startsWith('target-size:'),
-        );
-        const violations = allViolations.filter(
-          v => !v.startsWith('target-size:'),
-        );
+        const isDotTargetSize = (v: string) =>
+          v.startsWith('target-size:') && v.includes('role="radio"');
+        const targetSize = allViolations.filter(isDotTargetSize);
+        const violations = allViolations.filter(v => !isDotTargetSize(v));
         check(violations.length === 0, `axe: ${violations.join(' | ')}`);
         await frame('rest', {dots: rest, violations, targetSize});
 
@@ -453,8 +453,22 @@ addCase({
   pointer: 'coarse',
   reducedMotion: 'reduce',
   run: async (page, check, frame) => {
-    // The shared hit area measures after layout settles.
-    await page.waitForTimeout(300);
+    // The shared hit area measures after layout settles; wait for its inset.
+    await page.waitForFunction(
+      () => {
+        const dot = document.querySelectorAll<HTMLElement>(
+          '#storybook-root [role="radio"]',
+        )[2];
+        return (
+          dot != null &&
+          parseFloat(
+            getComputedStyle(dot).getPropertyValue('--astryx-hit-inset-top'),
+          ) > 0
+        );
+      },
+      undefined,
+      {timeout: 5000},
+    );
     const rest = await dots(page);
     const above = await dotAt(page, 2, 0, -12);
     const below = await dotAt(page, 2, 0, 12);

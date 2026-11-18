@@ -1733,30 +1733,21 @@ describe('Pagination', () => {
   // ---------------------------------------------------------------------------
 
   describe('page size selector', () => {
-    it('renders page size selector when pageSizeOptions provided', () => {
-      render(
+    it('shows an "Items per page" field only with pageSizeOptions', () => {
+      const {rerender} = render(
+        <Pagination page={1} onChange={() => {}} totalItems={100} />,
+      );
+      expect(screen.queryByText('Items per page')).not.toBeInTheDocument();
+      rerender(
         <Pagination
           page={1}
           onChange={() => {}}
           totalItems={100}
-          pageSize={10}
-          pageSizeOptions={[10, 20, 50]}
+          pageSizeOptions={[10, 20]}
           onPageSizeChange={() => {}}
         />,
       );
-      // The selector should be present (hidden label "Items per page")
-      const nav = screen.getByRole('navigation');
-      expect(nav).toBeInTheDocument();
-    });
-
-    it('does not render page size selector when pageSizeOptions not provided', () => {
-      render(<Pagination page={1} onChange={() => {}} totalPages={5} />);
-      // No selector trigger should be present
-      const nav = screen.getByRole('navigation');
-      // Only prev/next + page buttons should exist
-      const buttons = within(nav).getAllByRole('button');
-      // 2 nav buttons + page buttons
-      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText('Items per page')).toBeInTheDocument();
     });
   });
 
@@ -2641,25 +2632,6 @@ describe('Pagination', () => {
     });
   });
 
-  describe('page size selector presence', () => {
-    it('shows an "Items per page" field only with pageSizeOptions', () => {
-      const {rerender} = render(
-        <Pagination page={1} onChange={() => {}} totalItems={100} />,
-      );
-      expect(screen.queryByText('Items per page')).not.toBeInTheDocument();
-      rerender(
-        <Pagination
-          page={1}
-          onChange={() => {}}
-          totalItems={100}
-          pageSizeOptions={[10, 20]}
-          onPageSizeChange={() => {}}
-        />,
-      );
-      expect(screen.getByText('Items per page')).toBeInTheDocument();
-    });
-  });
-
   describe('ellipsis', () => {
     it('hides each ellipsis from assistive technology', () => {
       const {container} = render(
@@ -2702,7 +2674,7 @@ describe('Pagination', () => {
           onChange={() => {}}
           totalPages={3}
           label="Results pages"
-          {...{'aria-label': 'Caller name'}}
+          aria-label="Caller name"
         />,
       );
       expect(

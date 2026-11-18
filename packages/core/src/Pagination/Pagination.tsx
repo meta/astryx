@@ -545,7 +545,7 @@ export function Pagination({
   const dotsRef = useMergedRefs(dotsListRef, modalityRef);
   // Under a coarse pointer each dot's target grows toward 44 px, clamped to
   // half the gap to its neighbours. One ref watches every dot.
-  const dotHitAreaRef = useTouchHitArea(variant === 'dots');
+  const dotHitAreaRef = useTouchHitArea(variant === 'dots' && !isDisabled);
 
   const computedTotalPages =
     totalPagesProp ??
@@ -819,7 +819,7 @@ export function Pagination({
                     }),
                     focusOutlineProps.focusVisible(
                       styles.dot,
-                      touchHitAreaStyles.layer,
+                      !isDisabled && touchHitAreaStyles.layer,
                       isSm && styles.dotSm,
                       isActive && styles.dotActive,
                       isDisabled && styles.dotDisabled,

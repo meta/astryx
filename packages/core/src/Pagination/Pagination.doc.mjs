@@ -281,13 +281,13 @@ export const docsZh = {
       name: 'totalItems',
       type: 'number',
       description:
-        '总项目数。用于计算页数。同时提供时优先于 totalPages。',
+        '总项目数。未提供 totalPages 时用于计算页数。',
     },
     {
       name: 'totalPages',
       type: 'number',
       description:
-        '总页数。当你知道页数但不知道项目数时使用。',
+        '总页数。当你知道页数但不知道项目数时使用。同时提供时优先于 totalItems。',
     },
     {
       name: 'hasMore',
