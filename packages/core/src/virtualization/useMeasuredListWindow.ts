@@ -220,6 +220,8 @@ function createMeasuredListEngine() {
   let pendingHold: Hold | undefined;
 
   const elements = new Map<ListWindowKey, HTMLElement>();
+  // The rows the last commit left mounted.
+  let mounted = new Set<ListWindowKey>();
   const fresh = new Set<ListWindowKey>();
   const queued = new Map<ListWindowKey, number>();
   let isFlushQueued = false;
@@ -342,21 +344,47 @@ function createMeasuredListEngine() {
   }
 
   /**
-   * Takes the position the browser shows now. A clamp onto the end of a
-   * shorter range is not a writer: the reader saw the position before it.
+   * Takes the position the browser shows now. Two moves are the browser's,
+   * not a writer's, and the reader saw the position before them: a clamp
+   * onto the end of a shorter range, and WebKit's move up by the height of
+   * rows removed above the position, which it makes when the same frame
+   * lays out the scroller's ancestors again.
    */
-  function takePosition(geometry: Geometry) {
+  function takePosition(geometry: Geometry, unmountedAbove = 0) {
     if (Math.abs(geometry.top - scrollTop) < 1) {
       return;
     }
     const isClamp =
       scrollTop > geometry.max + EPSILON &&
       Math.abs(geometry.top - geometry.max) < 1;
-    if (!isClamp) {
+    const isRemovalShift =
+      unmountedAbove > 0 &&
+      Math.abs(geometry.top - (scrollTop - unmountedAbove)) < 1;
+    if (!isClamp && !isRemovalShift) {
       noteMove();
       scrollTop = geometry.top;
       updateAnchor();
     }
+  }
+
+  /**
+   * The height of the rows the last commit left mounted that this commit
+   * unmounted above the scroll position, sized before the change.
+   */
+  function heightUnmountedAbove(): number {
+    const viewTop = scrollTop - listTop + debt;
+    let height = 0;
+    for (const key of mounted) {
+      const index = indices.get(key);
+      if (
+        index !== undefined &&
+        !elements.has(key) &&
+        offsets[index + 1] <= viewTop + EPSILON
+      ) {
+        height += offsets[index + 1] - offsets[index];
+      }
+    }
+    return height;
   }
 
   /**
@@ -665,6 +693,8 @@ function createMeasuredListEngine() {
       return;
     }
     connect(scroller, content, options);
+    const unmountedAbove = hasOpened ? heightUnmountedAbove() : 0;
+    mounted = new Set(elements.keys());
     if (rendered.isMountingHistory) {
       isBusy = true;
       cancelAnimationFrame(busyFrame);
@@ -682,6 +712,7 @@ function createMeasuredListEngine() {
       hasOpened &&
       !hasKeyChange &&
       fresh.size === 0 &&
+      unmountedAbove === 0 &&
       isRevealWritten &&
       debtChange === 0 &&
       pendingHold === undefined
@@ -690,7 +721,7 @@ function createMeasuredListEngine() {
     }
     const geometry = measure(scroller, content);
     if (hasOpened) {
-      takePosition(geometry);
+      takePosition(geometry, unmountedAbove);
     }
     const hold = pendingHold ?? (hasOpened ? captureHold() : undefined);
     pendingHold = undefined;

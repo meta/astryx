@@ -850,6 +850,50 @@ describe('ChatMessageList windowing while the reader scrolls', () => {
   });
 });
 
+describe('ChatMessageList windowing where the browser moves the position for a row removed above it', () => {
+  // WebKit moves a scroll position up by the height of a row removed above
+  // it when the same frame lays out the scroller's ancestors again.
+  let removeChild: typeof Node.prototype.removeChild;
+  beforeEach(() => {
+    removeChild = Node.prototype.removeChild;
+    Node.prototype.removeChild = function <T extends Node>(
+      this: Node,
+      child: T,
+    ): T {
+      if (child instanceof Element && isRow(child)) {
+        const scroller = scrollerOf(child);
+        const top = scroller == null ? 0 : (scrollTops.get(scroller) ?? 0);
+        if (scroller != null && rowTop(child) + heightOf(child) <= top) {
+          scrollTops.set(scroller, top - heightOf(child));
+        }
+      }
+      return removeChild.call(this, child) as T;
+    };
+  });
+  afterEach(() => {
+    Node.prototype.removeChild = removeChild;
+  });
+
+  it('keeps the end and the follow when the follow moves the window past rows above', async () => {
+    const {scroller} = await mount(messages(5000));
+    layout.sizes.set('m4999', 1100);
+    await resized(['m4999']);
+    await scrolled(scroller);
+    expect(distanceFromEnd(scroller)).toBe(0);
+    await scrolled(scroller);
+    expect(isFollowingNewest(scroller)).toBe(true);
+  });
+
+  it('keeps the reader’s position when the window unmounts rows above it', async () => {
+    const {scroller} = await mount(messages(5000));
+    await readerScrollsTo(scroller, scroller.scrollTop - 3000);
+    const target = scroller.scrollTop + 450;
+    await readerScrollsTo(scroller, target);
+    expect(scroller.scrollTop).toBe(target);
+    expect(isFollowingNewest(scroller)).toBe(false);
+  });
+});
+
 describe('ChatMessageList windowing when ChatLayout scrolls the page', () => {
   beforeEach(() => {
     layout.page = true;
@@ -877,7 +921,9 @@ describe('ChatMessageList windowing when ChatLayout scrolls the page', () => {
       vi.advanceTimersByTime(150);
     });
     await flushMicrotasks();
-    expect(layout.bodyReads).toBe(1);
+    // One correction pass, and one read by the commit that unmounts the row
+    // above that the shorter scrollport no longer needs.
+    expect(layout.bodyReads).toBe(2);
     expect(distanceFromEnd(scroller)).toBe(0);
   });
 });
