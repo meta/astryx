@@ -4413,6 +4413,18 @@ export function draftAnswer(ctx, env, question) {
   // beside the text it is for, is a font family, as "font Lora" is: set
   // takes any family, so how names it too.
   {
+    // (A known part, place or role is never a family: "Navbar text white",
+    // "Page titles 32px", "Primary text darker". Parts and places come
+    // from the part lexicon, the looks a part renders in (variant=primary)
+    // from the census, the theme's color roles from their words.)
+    const parts = partLexicon(ctx).parts;
+    /** @type {Set<string>} */
+    const lookWords = new Set();
+    for (const part of Object.values(ctx.C?.MAP ?? {}))
+      for (const byLook of Object.values(/** @type {any} */ (part)?.at ?? {}))
+        for (const look of Object.keys(byLook ?? {}))
+          for (const m of look.matchAll(/[a-z-]+[=:]([a-z-]+)/g))
+            lookWords.add(m[1]);
     const asWord = (/** @type {string} */ w) => {
       const x = w.toLowerCase();
       return (
@@ -4420,7 +4432,10 @@ export function draftAnswer(ctx, env, question) {
         Object.hasOwn(DIALS, x) ||
         colorsIn(x).length > 0 ||
         DESIGN_WORDS.includes(x) ||
-        NOT_FAMILY_WORDS.test(x)
+        NOT_FAMILY_WORDS.test(x) ||
+        lookWords.has(x) ||
+        ROLE_WORDS.test(x) ||
+        parts.some(([re]) => re.test(` ${x} `) || re.test(` ${x}s `))
       );
     };
     const fam = String.raw`((?:[A-Z][a-z]+(?:\s+|$)){1,3})`;
