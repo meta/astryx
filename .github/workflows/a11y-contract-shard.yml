@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       a11y-shard:
-        description: The leg to run, 1 to 6, as the release-check splits them
+        description: The leg to run, 1 to 6; it matches the release-check's leg at a commit that splits the contracts six ways
         required: true
         type: string
       repeat:
@@ -84,7 +84,8 @@ jobs:
     # check's paid 4-core-ubuntu pool.
     runs-on: ubuntu-latest
     # About 12 minutes of tests a pass, after about 20 of install and build.
-    timeout-minutes: ${{ 20 + 13 * fromJSON(inputs.repeat) }}
+    # Expressions have no arithmetic, so the limit steps with `repeat`.
+    timeout-minutes: ${{ fromJSON(inputs.repeat) > 5 && 150 || fromJSON(inputs.repeat) > 2 && 90 || 60 }}
     permissions:
       contents: read
     steps:

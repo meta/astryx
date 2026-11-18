@@ -42,7 +42,7 @@ describe('the single contract-leg dispatch', () => {
     expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
   });
 
-  it('waits for room under the CI ceiling as a pull-request run does, so a main check or release re-check fits first', () => {
+  it('waits for room under the CI ceiling, yielding to a waiting main check or release re-check', () => {
     expect(job.needs).toEqual(['room']);
     // The inputs are checked before the wait.
     expect(room.steps[0].name).toBe('Check the inputs');
@@ -139,10 +139,22 @@ describe('the single contract-leg dispatch', () => {
     );
   });
 
-  it('gives each repeat of the leg its own time', () => {
-    expect(job['timeout-minutes']).toBe(
-      '${{ 20 + 13 * fromJSON(inputs.repeat) }}',
-    );
+  it('gives the leg time for its repeats, with no arithmetic, which expressions lack', () => {
+    const limit = job['timeout-minutes'];
+    expect(limit).not.toMatch(/[+*/]|\s-\s/);
+    // Evaluated as Actions would: && and || return an operand.
+    const minutes = repeat =>
+      new Function(
+        'inputs',
+        'fromJSON',
+        `return ${limit.replace(/^\$\{\{\s*|\s*\}\}$/g, '')};`,
+      )({repeat: String(repeat)}, JSON.parse);
+    // About 20 minutes of install and build, then about 12 a pass.
+    for (let repeat = 1; repeat <= 10; repeat += 1)
+      expect(minutes(repeat), `repeat ${repeat}`).toBeGreaterThanOrEqual(
+        20 + 12.5 * repeat,
+      );
+    expect(minutes(10)).toBeLessThanOrEqual(360);
   });
 
   it("keeps the leg's Playwright results, passing or failing", () => {
