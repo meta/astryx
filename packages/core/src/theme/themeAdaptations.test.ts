@@ -74,9 +74,7 @@ describe('width breakpoint metadata', () => {
       lg: 1100,
     });
     expect(generateAdaptationCSS(theme)).toEqual({prose: '', component: ''});
-    expect(generateThemeCSS(theme).component).not.toMatch(
-      /@media \((?:min|max)-width/,
-    );
+    expect(generateThemeCSS(theme).component).not.toMatch(/@media \(width/);
   });
 
   it('validates built breakpoint metadata even when there are no rules to emit', () => {

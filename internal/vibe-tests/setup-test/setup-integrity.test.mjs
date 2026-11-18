@@ -737,6 +737,7 @@ describe('setup integrity', () => {
           '[data-astryx-media="dark"] { color-scheme: light; }',
           '[data-astryx-media="light"], :root { color-scheme: light; }',
           '[data-astryx-media="light"] .card { color-scheme: light; }',
+          'body:not([data-astryx-media="light"]) { color-scheme: light; }',
           '',
         ].join('\n'),
         exempt: [],

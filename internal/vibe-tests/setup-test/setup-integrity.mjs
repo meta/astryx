@@ -501,6 +501,18 @@ function splitTopLevel(text, separator) {
   return parts;
 }
 
+/** A compound with everything inside its parentheses removed. */
+function topLevelOnly(compound) {
+  let depth = 0;
+  let out = '';
+  for (const ch of compound) {
+    if (ch === '(') depth += 1;
+    if (depth === 0) out += ch;
+    if (ch === ')') depth = Math.max(0, depth - 1);
+  }
+  return out;
+}
+
 /**
  * Whether a declaration sets an Astryx media surface's own scheme: every
  * selector of its rule ends at an element that names the surface's side, and
@@ -515,7 +527,9 @@ function isSurfaceSideArm(declaration, mode) {
     selectors.length > 0 &&
     selectors.every(selector => {
       const compounds = splitTopLevel(selector.replace(/[>+~]/g, ' '), /\s/);
-      const side = SURFACE_SIDE.exec(compounds.at(-1) ?? '');
+      // Only the compound's own attributes count: one inside a functional
+      // pseudo-class (`:not(...)`, `:is(...)`) does not name the element.
+      const side = SURFACE_SIDE.exec(topLevelOnly(compounds.at(-1) ?? ''));
       return side !== null && side[1].toLowerCase() === mode;
     })
   );
