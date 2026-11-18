@@ -726,7 +726,7 @@ describe('DropdownMenu', () => {
     await user.tab();
     expect(screen.getByRole('button', {name: 'Bump (0)'})).toHaveFocus();
     await user.keyboard('{Enter}');
-    await act(() => nextFrames(3));
+    await act(async () => nextFrames(3));
 
     expect(screen.getByRole('button', {name: 'Bump (1)'})).toHaveFocus();
   });
@@ -770,11 +770,11 @@ describe('DropdownMenu', () => {
         screen.getByRole('button', {name: 'Bump (0)'}),
       ).toBeInTheDocument(),
     );
-    await act(() => nextFrames(3));
+    await act(async () => nextFrames(3));
     const bump = screen.getByRole('button', {name: /^Bump/});
     bump.focus();
     await user.keyboard('{Enter}');
-    await act(() => nextFrames(3));
+    await act(async () => nextFrames(3));
 
     expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
   });
@@ -5733,7 +5733,7 @@ describe('DropdownMenu trigger refs across renders', () => {
   });
 });
 
-function nextFrames(count: number): Promise<void> {
+async function nextFrames(count: number): Promise<void> {
   return new Promise(resolve => {
     const step = (left: number) => {
       if (left === 0) {
