@@ -1,20 +1,26 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The types a component's documented props name, read from the
- *   declaration files its own package publishes.
- * @input A package folder, the subpath a component is imported from, and the
- *   prop type texts its doc writes.
- * @output One entry per type name those texts use that the package itself
- *   declares: its name, the public `import type` line, and its declaration
- *   one level deep (members, or the alias text), each capped in length.
+ * @file The types a component's documented props, or a hook's parameters
+ *   and return, name, read from the declaration files its own package
+ *   publishes.
+ * @input A package folder, the subpath a component or hook is imported from,
+ *   the type texts its doc writes, and for a hook its exported name.
+ * @output One entry per type name those texts (and a hook's declared
+ *   signature) use that the package itself declares: its name, the public
+ *   `import type` line, and its declaration one level deep (members, or the
+ *   alias text), each capped in length; a string-literal union is never cut.
+ *   A type a prop names only as a callback's parameter, and a brand whose
+ *   members are all `never`, get no entry.
  * @position Read by the component adapter (api/component/_adapter.mjs) for
- *   `component.detail` and `component.detail.props`. The files are the ones
- *   the package's `exports` map names under `types`, followed through their
- *   relative imports and re-exports; a name that comes from another package,
- *   React, the DOM or TypeScript itself is never declared there, so it gets no
- *   entry. Each answer is kept in the user's cache folder
- *   (gather-cache.mjs persistedSummary) while every file it read is the same.
+ *   `component.detail` and `component.detail.props`, and by the hook adapter
+ *   (api/hook/_adapter.mjs) for `hook.detail` and `hook.detail.params`. The
+ *   files are the ones the package's `exports` map names under `types`,
+ *   followed through their relative imports and re-exports; a name that comes
+ *   from another package, React, the DOM or TypeScript itself is never
+ *   declared there, so it gets no entry. Each answer is kept in the user's
+ *   cache folder (gather-cache.mjs persistedSummary) while every file it read
+ *   is the same.
  */
 
 import * as fs from 'node:fs';
@@ -34,6 +40,13 @@ export const MAX_MEMBERS = 24;
 
 /** The longest member type, or alias text, a type prints. */
 export const MAX_TYPE_TEXT = 240;
+
+/**
+ * A union of string literals: printed whole however long, since a caller
+ * picks one of its members by name.
+ */
+const STRING_UNION =
+  /^\s*(?:'[^'\\]*'|"[^"\\]*")(?:\s*\|\s*(?:'[^'\\]*'|"[^"\\]*"))*\s*$/;
 
 /** What marks a type text cut at {@link MAX_TYPE_TEXT}. */
 export const CUT_MARK = ' ...';
@@ -98,15 +111,20 @@ const KEYWORDS = new Set([
 
 /**
  * The type names a type text uses, in order, once each: identifiers not
- * inside a string, not after a dot, and not a keyword.
+ * inside a string, not after a dot, and not a keyword. With
+ * `skipCallbackArgs`, names inside the parameter list of a function type are
+ * left out: a prop's callback hands those values to the caller, who writes
+ * none of them.
  * @param {string} text
+ * @param {{skipCallbackArgs?: boolean}} [options]
  * @returns {string[]}
  */
-export function typeNamesIn(text) {
-  const bare = String(text ?? '').replace(
+export function typeNamesIn(text, {skipCallbackArgs = false} = {}) {
+  let bare = String(text ?? '').replace(
     /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g,
     "''",
   );
+  if (skipCallbackArgs) bare = withoutCallbackArgs(bare);
   /** @type {string[]} */
   const names = [];
   for (const m of bare.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*/g)) {
@@ -117,6 +135,28 @@ export function typeNamesIn(text) {
     names.push(name);
   }
   return names;
+}
+
+/**
+ * A type text with the parameter list of each function type in it blanked:
+ * a parenthesized group followed by `=>`.
+ * @param {string} text
+ * @returns {string}
+ */
+function withoutCallbackArgs(text) {
+  const chars = [...text];
+  /** @type {number[]} */
+  const open = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (chars[i] === '(') open.push(i);
+    else if (chars[i] === ')' && open.length) {
+      const start = /** @type {number} */ (open.pop());
+      if (/^\s*=>/.test(text.slice(i + 1))) {
+        for (let j = start + 1; j < i; j++) chars[j] = ' ';
+      }
+    }
+  }
+  return chars.join('');
 }
 
 /**
@@ -256,9 +296,11 @@ class DeclarationReader {
    * @param {string} file
    * @param {string} name
    * @param {Set<string>} [seen]
+   * @param {(node: any, name: string) => any} [match] - the declaration
+   *   node a statement holds for `name`, or null; by default a type's
    * @returns {{file: string, node: any} | null}
    */
-  binding(file, name, seen = new Set()) {
+  binding(file, name, seen = new Set(), match = typeDeclarationNamed) {
     const key = `b\0${file}\0${name}`;
     if (seen.has(key)) return null;
     seen.add(key);
@@ -270,9 +312,8 @@ class DeclarationReader {
         statement.type === 'ExportDefaultDeclaration'
           ? statement.declaration
           : statement;
-      if (isTypeDeclaration(node) && node.id?.name === name) {
-        return {file, node};
-      }
+      const found = match(node, name);
+      if (found) return {file, node: found};
     }
     for (const statement of entry.ast.program.body) {
       if (statement.type !== 'ImportDeclaration') continue;
@@ -283,7 +324,7 @@ class DeclarationReader {
         if (!target) return null;
         const imported =
           specifier.imported?.name ?? specifier.imported?.value ?? name;
-        return this.exported(target, imported, seen);
+        return this.exported(target, imported, seen, match);
       }
     }
     return null;
@@ -294,9 +335,10 @@ class DeclarationReader {
    * @param {string} file
    * @param {string} name
    * @param {Set<string>} [seen]
+   * @param {(node: any, name: string) => any} [match] - as for `binding`
    * @returns {{file: string, node: any} | null}
    */
-  exported(file, name, seen = new Set()) {
+  exported(file, name, seen = new Set(), match = typeDeclarationNamed) {
     const key = `e\0${file}\0${name}`;
     if (seen.has(key)) return null;
     seen.add(key);
@@ -305,17 +347,15 @@ class DeclarationReader {
     const body = entry.ast.program.body;
     for (const statement of body) {
       if (statement.type !== 'ExportNamedDeclaration') continue;
-      const node = statement.declaration;
-      if (isTypeDeclaration(node) && node.id?.name === name) {
-        return {file, node};
-      }
+      const found = match(statement.declaration, name);
+      if (found) return {file, node: found};
       for (const specifier of statement.specifiers ?? []) {
         const exported = specifier.exported?.name ?? specifier.exported?.value;
         if (exported !== name) continue;
         const local = specifier.local?.name ?? specifier.local?.value ?? name;
-        if (!statement.source) return this.binding(file, local, seen);
+        if (!statement.source) return this.binding(file, local, seen, match);
         const target = this.resolve(statement.source.value, file);
-        return target ? this.exported(target, local, seen) : null;
+        return target ? this.exported(target, local, seen, match) : null;
       }
     }
     for (const statement of body) {
@@ -323,7 +363,7 @@ class DeclarationReader {
         continue;
       }
       const target = this.resolve(statement.source?.value, file);
-      const found = target ? this.exported(target, name, seen) : null;
+      const found = target ? this.exported(target, name, seen, match) : null;
       if (found) return found;
     }
     return null;
@@ -377,6 +417,48 @@ function isOpaqueAlias(node) {
 /** @param {string} file */
 function isDeclarationFile(file) {
   return DECLARATION_EXTENSIONS.some(ext => file.endsWith(ext));
+}
+
+/**
+ * A type declaration named `name`, or null.
+ * @param {any} node
+ * @param {string} name
+ */
+function typeDeclarationNamed(node, name) {
+  return isTypeDeclaration(node) && node.id?.name === name ? node : null;
+}
+
+/**
+ * A declared function named `name` (`declare function`, or a `declare const`
+ * with a function type), or null.
+ * @param {any} node
+ * @param {string} name
+ */
+function functionDeclarationNamed(node, name) {
+  if (node?.type === 'TSDeclareFunction' && node.id?.name === name) return node;
+  if (node?.type === 'VariableDeclaration') {
+    return (
+      node.declarations.find(
+        (/** @type {any} */ d) =>
+          d.id?.name === name && d.id.typeAnnotation != null,
+      )?.id.typeAnnotation ?? null
+    );
+  }
+  return null;
+}
+
+/**
+ * Whether a declaration is a brand: an object type whose every member is
+ * typed `never`, which a caller never writes or reads.
+ * @param {Omit<DeclaredType, 'name' | 'import'>} described
+ */
+function isBrand(described) {
+  return (
+    Array.isArray(described.members) &&
+    described.members.length > 0 &&
+    !described.more &&
+    described.members.every(m => m.type === 'never')
+  );
 }
 
 /** @param {any} node */
@@ -446,6 +528,7 @@ function plain(text) {
  */
 function capped(raw) {
   const text = plain(raw);
+  if (STRING_UNION.test(text)) return text;
   return text.length <= MAX_TYPE_TEXT
     ? text
     : `${text.slice(0, MAX_TYPE_TEXT - CUT_MARK.length).trimEnd()}${CUT_MARK}`;
@@ -601,12 +684,19 @@ function describeDeclaration(text, node) {
  * @param {DeclarationReader} reader
  * @param {string} subpath - the entry the component is imported from
  * @param {string[]} names
+ * @param {string} [declaredFunction] - a function the entry exports whose
+ *   declared parameter and return types add names
  * @returns {DeclaredType[]}
  */
-function readDeclaredTypes(reader, subpath, names) {
+function readDeclaredTypes(reader, subpath, names, declaredFunction) {
   const entry = reader.entryFile(subpath);
   if (!entry) return [];
   const files = reader.reexportGraph(entry);
+  if (declaredFunction) {
+    for (const name of signatureNames(reader, entry, declaredFunction)) {
+      if (!names.includes(name)) names.push(name);
+    }
+  }
   /** @type {DeclaredType[]} */
   const out = [];
   for (const name of names) {
@@ -642,6 +732,8 @@ function readDeclaredTypes(reader, subpath, names) {
       const root = reader.entryFile('.');
       if (root && same(reader.exported(root, name))) from = '.';
     }
+    const described = describeDeclaration(src, declared.node);
+    if (isBrand(described)) continue;
     out.push({
       name,
       ...(from
@@ -649,10 +741,44 @@ function readDeclaredTypes(reader, subpath, names) {
             import: `import type { ${name} } from '${reader.packageName}${from === '.' ? '' : from.slice(1)}';`,
           }
         : {}),
-      ...describeDeclaration(src, declared.node),
+      ...described,
     });
   }
   return out;
+}
+
+/**
+ * The type names a declared function's parameters and return type use, as
+ * the entry exports it.
+ * @param {DeclarationReader} reader
+ * @param {string} entry
+ * @param {string} name
+ * @returns {string[]}
+ */
+function signatureNames(reader, entry, name) {
+  const found = reader.exported(
+    entry,
+    name,
+    new Set(),
+    functionDeclarationNamed,
+  );
+  if (!found) return [];
+  const text = reader.read(found.file)?.text ?? '';
+  const node = found.node;
+  /** @type {any[]} */
+  const parts = [];
+  if (node.type === 'TSDeclareFunction') {
+    for (const param of node.params ?? []) {
+      if (param.typeAnnotation) parts.push(param.typeAnnotation);
+      if (param.left?.typeAnnotation) parts.push(param.left.typeAnnotation);
+    }
+    if (node.returnType) parts.push(node.returnType);
+  } else {
+    parts.push(node);
+  }
+  return parts.flatMap(part =>
+    typeNamesIn(text.slice(part.start, part.end).replace(/^:\s*/, '')),
+  );
 }
 
 /**
@@ -671,20 +797,25 @@ function entrySubpaths(pkg) {
 }
 
 /**
- * The types a component's documented props name that its own package
- * declares, from the package's published declaration files. Empty when the
- * package ships none for the component's entry, or its props name no type it
- * declares.
- * @param {{packageDir: string, packageName: string, importSpecifier: string, typeTexts: string[]}} input
- *   `importSpecifier`: what the component is imported from, e.g.
- *   `@astryxdesign/core/Table`; `typeTexts`: the doc's prop types.
+ * The types a component's documented props, or a hook's parameters and
+ * return, name that its own package declares, from the package's published
+ * declaration files. Empty when the package ships none for the entry, or the
+ * texts name no type it declares.
+ * @param {{packageDir: string, packageName: string, importSpecifier: string, typeTexts?: string[], wholeTexts?: string[], declaredFunction?: string}} input
+ *   `importSpecifier`: what the component or hook is imported from, e.g.
+ *   `@astryxdesign/core/Table`; `typeTexts`: prop types, whose callback
+ *   parameters are left out; `wholeTexts`: types read whole (a hook's
+ *   parameters and return); `declaredFunction`: a function the entry
+ *   exports, whose declared parameter and return types are read whole too.
  * @returns {DeclaredType[]}
  */
 export function declaredTypes({
   packageDir,
   packageName,
   importSpecifier,
-  typeTexts,
+  typeTexts = [],
+  wholeTexts = [],
+  declaredFunction,
 }) {
   if (
     !packageDir ||
@@ -698,12 +829,17 @@ export function declaredTypes({
   const subpath = `.${importSpecifier.slice(packageName.length)}`;
   /** @type {string[]} */
   const names = [];
-  for (const text of typeTexts) {
-    for (const name of typeNamesIn(text)) {
-      if (!names.includes(name)) names.push(name);
+  for (const [texts, skipCallbackArgs] of /** @type {const} */ ([
+    [typeTexts, true],
+    [wholeTexts, false],
+  ])) {
+    for (const text of texts) {
+      for (const name of typeNamesIn(text, {skipCallbackArgs})) {
+        if (!names.includes(name)) names.push(name);
+      }
     }
   }
-  if (names.length === 0) return [];
+  if (names.length === 0 && !declaredFunction) return [];
   let dir = packageDir;
   try {
     dir = fs.realpathSync(packageDir);
@@ -711,7 +847,15 @@ export function declaredTypes({
     return [];
   }
   return persistedSummary(
-    ['declared-types', dir, packageName, subpath, names, fileStamp(OWN_FILE)],
+    [
+      'declared-types',
+      dir,
+      packageName,
+      subpath,
+      names,
+      declaredFunction ?? null,
+      fileStamp(OWN_FILE),
+    ],
     () => {
       /** @type {[string, string][]} */
       const stamps = [];
@@ -726,7 +870,14 @@ export function declaredTypes({
       }
       const reader = new DeclarationReader(dir, packageName, pkg, stamps);
       return {
-        value: {types: readDeclaredTypes(reader, subpath, names)},
+        value: {
+          types: readDeclaredTypes(
+            reader,
+            subpath,
+            [...names],
+            declaredFunction,
+          ),
+        },
         stamps,
       };
     },

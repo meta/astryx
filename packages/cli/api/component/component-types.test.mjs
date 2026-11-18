@@ -4,7 +4,8 @@
  * @file A component read carries the types its props name that Core itself
  * declares, read from Core's published declaration files (`types` on
  * `component.detail`, on `component.detail.props` beside `data`, and on each
- * batch row), and a piece imported from another entry names it. A read whose
+ * batch row), and a piece imported from another entry names it. A hook read,
+ * by `hook` or by `component`, carries the types its API names. A read whose
  * props name no Core type has neither field. Core's declarations exist once
  * Core is built, as it is before the CLI's tests run in CI.
  */
@@ -14,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {component} from './component.mjs';
+import {hook} from '../hook/hook.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -107,6 +109,44 @@ describe.skipIf(!BUILT)('component types from Core declarations', () => {
         );
         expect(Object.keys(props)).toEqual(['type', 'package', 'data']);
       }
+    },
+    SLOW,
+  );
+
+  it(
+    'leaves out a brand and a callback-only type, and keeps a string union whole',
+    async () => {
+      const table = /** @type {any} */ (await component('Table', {cwd}));
+      const names = table.data.types.map((/** @type {any} */ t) => t.name);
+      expect(names).toContain('TableColumn');
+      expect(names).not.toContain('TableVirtualizationCapability');
+      const icon = /** @type {any} */ (await component('Icon', {cwd}));
+      const iconName = icon.data.types.find(
+        (/** @type {any} */ t) => t.name === 'IconName',
+      );
+      expect(iconName.text.endsWith(' ...')).toBe(false);
+      expect(iconName.text).toContain("'close'");
+    },
+    SLOW,
+  );
+
+  it(
+    'gives a hook read the types its API names, by hook and by component',
+    async () => {
+      const read = /** @type {any} */ (await hook('useToast', {cwd}));
+      expect(read.type).toBe('hook.detail');
+      const names = read.data.types.map((/** @type {any} */ t) => t.name);
+      expect(names).toEqual(
+        expect.arrayContaining(['ToastOptions', 'ShowToastFn']),
+      );
+      const params = /** @type {any} */ (
+        await hook('useToast', {cwd, params: true})
+      );
+      expect(params.types).toEqual(read.data.types);
+      const asComponent = /** @type {any} */ (
+        await component('useToast', {cwd})
+      );
+      expect(asComponent.data.types).toEqual(read.data.types);
     },
     SLOW,
   );

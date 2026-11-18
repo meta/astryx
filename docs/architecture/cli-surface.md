@@ -156,7 +156,9 @@ and remains available through explicit Core package selection.
   Types section lists each type the props name that the component's own
   package declares, with its import line and its members or alias text, read
   from the declaration files that package publishes; `--props` and
-  `--detail full` print it too. `component <Name> --props` prints each prop
+  `--detail full` print it too. A hook read, by `hook <name>` or
+  `component <hook>`, prints the same section for the types its parameters,
+  its return and its declared signature name. `component <Name> --props` prints each prop
   description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
   The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and

@@ -681,8 +681,9 @@ function ownerImport(docs, owner, componentName, coreDir) {
 /**
  * The types a component's documented props, and its pieces' props, name that
  * its own package declares, read from the declaration files that package
- * publishes. Empty for a package this read has no folder for, one that ships
- * no declarations, or props that name none of its types.
+ * publishes; for a hook doc, the types its parameters, its return and its
+ * declared signature name. Empty for a package this read has no folder for,
+ * one that ships no declarations, or props that name none of its types.
  * @param {LoadedComponentDoc & {import?: string}} docs
  * @param {OwnershipSubject} owner
  * @param {string} componentName
@@ -697,20 +698,29 @@ export function componentTypes(docs, owner, componentName, coreDir) {
   if (!packageDir) return [];
   /** @type {any} */
   const doc = docs;
+  /** @param {unknown} list @returns {string[]} */
+  const texts = list =>
+    (Array.isArray(list) ? list : [])
+      .map(item => item?.type)
+      .filter(type => typeof type === 'string');
   const typeTexts = [
-    ...(doc.props ?? []),
+    ...texts(doc.props),
     ...(Array.isArray(doc.components) ? doc.components : []).flatMap(
-      (/** @type {any} */ entry) => entry?.props ?? [],
+      (/** @type {any} */ entry) => texts(entry?.props),
     ),
-  ]
-    .map(prop => prop?.type)
-    .filter(type => typeof type === 'string');
+  ];
+  // A hook doc read as a component: its parameters and return are its API.
+  const isHook = Array.isArray(doc.params) || Array.isArray(doc.returns);
   try {
     return declaredTypes({
       packageDir,
       packageName: owner.package,
       importSpecifier: ownerImport(docs, owner, componentName, coreDir),
       typeTexts,
+      wholeTexts: [...texts(doc.params), ...texts(doc.returns)],
+      ...(isHook && typeof doc.name === 'string'
+        ? {declaredFunction: doc.name}
+        : {}),
     });
   } catch {
     // A declaration this read cannot follow leaves the answer as it was.

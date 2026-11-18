@@ -51,12 +51,12 @@ export const doc = {
     {
       value: 'component.detail',
       description:
-        "One component's authored ComponentDoc plus ownership fields (package, the owner; import, the specifier; sourceAvailable, whether source exists) and parentDoc (present when the component is documented inside another component's doc, naming that doc). A piece imported from another specifier than the component carries its own import. types (present when the props name any) lists each type the props name that the owner package declares, from the declaration files it publishes: {name, typeParameters?, import?, extends?, members? ({name, type, optional, description?}), more?, text?}. The envelope's package names the same owner.",
+        "One component's authored ComponentDoc plus ownership fields (package, the owner; import, the specifier; sourceAvailable, whether source exists) and parentDoc (present when the component is documented inside another component's doc, naming that doc). Optional: a piece's own import, and types (the props' types its package declares). The envelope's package names the same owner.",
     },
     {
       value: 'component.detail.props',
       description:
-        "Just one component's props table (ComponentPropDoc[]). The envelope's package names the npm package that owns the component; its types (present when the props name any) are the types those props name that the package declares, as on component.detail.",
+        "Just one component's props table (ComponentPropDoc[]). The envelope's package names the npm package that owns the component; optional types as on component.detail.",
     },
     {
       value: 'component.detail.source',
@@ -369,12 +369,12 @@ export const doc = {
     {
       value: 'hook.detail',
       description:
-        "One hook's full authored HookDoc. The envelope's package is @astryxdesign/core.",
+        "One hook's full authored HookDoc. The envelope's package is @astryxdesign/core. Optional types as on component.detail.",
     },
     {
       value: 'hook.detail.params',
       description:
-        "Just one hook's parameters table (HookParamDoc[]). The envelope's package is @astryxdesign/core.",
+        "Just one hook's parameters table (HookParamDoc[]). The envelope's package is @astryxdesign/core; optional types as on hook.detail.",
     },
 
     // theme

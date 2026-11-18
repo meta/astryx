@@ -138,7 +138,7 @@
  * @property {string} package - Owner package, e.g. '@astryxdesign/core' or an integration package name.
  * @property {string} import - Import specifier for the component (e.g. '@astryxdesign/core/Button').
  * @property {boolean} sourceAvailable - Whether a component source file exists for `--source` / swizzle.
- * @property {ComponentDeclaredType[]} [types] - The types the component's props, and its pieces' props, name that its own package declares, read from the declaration files the package publishes; absent when they name none.
+ * @property {ComponentDeclaredType[]} [types] - The types the component's props, and its pieces' props, name that its own package declares, read from the declaration files the package publishes; a type named only as a callback's parameter and a brand whose members are all `never` are left out; for a hook doc, the types its parameters, return and declared signature name. Absent when they name none.
  */
 
 /**
@@ -159,7 +159,7 @@
  * @property {string[]} [extends] - The types an interface extends, as written.
  * @property {ComponentDeclaredTypeMember[]} [members] - An interface's or object type's members, in declaration order, at most 24.
  * @property {number} [more] - How many members follow the listed ones.
- * @property {string} [text] - An alias's or enum's type text, on one line; a text cut for length ends with ' ...'.
+ * @property {string} [text] - An alias's or enum's type text, on one line; a text cut for length ends with ' ...'; a union of string literals is never cut.
  */
 
 /**

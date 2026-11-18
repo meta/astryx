@@ -186,7 +186,9 @@ export function registerHook(program) {
         case 'hook.detail.params': {
           emit(
             record({package: result.package}),
-            code(formatHookParams({params: result.data, name})),
+            code(
+              formatHookParams({params: result.data, name, types: result.types}),
+            ),
           );
           break;
         }

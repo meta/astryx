@@ -12,7 +12,12 @@
  * @position api/hook/detail/params/params.mjs — dispatched from ../../hook.mjs
  */
 
-import {CORE_PACKAGE, resolveCoreDir, resolveHookDoc} from '../../_adapter.mjs';
+import {
+  CORE_PACKAGE,
+  hookTypes,
+  resolveCoreDir,
+  resolveHookDoc,
+} from '../../_adapter.mjs';
 
 /**
  * @param {string} name
@@ -25,9 +30,11 @@ export async function params(
 ) {
   const coreDir = resolveCoreDir(cwd);
   const docs = await resolveHookDoc(coreDir, name, {zh, lang, cwd});
+  const types = hookTypes(coreDir, docs);
   return {
     type: 'hook.detail.params',
     package: CORE_PACKAGE,
     data: docs.params || [],
+    ...(types.length ? {types} : {}),
   };
 }

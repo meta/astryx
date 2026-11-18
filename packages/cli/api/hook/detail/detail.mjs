@@ -8,11 +8,17 @@
  * single-hook branch.
  *
  * @input  hook name + { cwd, zh, lang }
- * @output HookDetailResponse ({ type: 'hook.detail', data: HookDoc })
+ * @output HookDetailResponse ({ type: 'hook.detail', data: HookDoc }), with
+ *   `types` when the hook's API names types Core declares
  * @position api/hook/detail/detail.mjs — dispatched from ../hook.mjs
  */
 
-import {CORE_PACKAGE, resolveCoreDir, resolveHookDoc} from '../_adapter.mjs';
+import {
+  CORE_PACKAGE,
+  hookTypes,
+  resolveCoreDir,
+  resolveHookDoc,
+} from '../_adapter.mjs';
 
 /**
  * @param {string} name
@@ -25,5 +31,10 @@ export async function detail(
 ) {
   const coreDir = resolveCoreDir(cwd);
   const docs = await resolveHookDoc(coreDir, name, {zh, lang, cwd});
-  return {type: 'hook.detail', package: CORE_PACKAGE, data: docs};
+  const types = hookTypes(coreDir, docs);
+  return {
+    type: 'hook.detail',
+    package: CORE_PACKAGE,
+    data: types.length ? {...docs, types} : docs,
+  };
 }

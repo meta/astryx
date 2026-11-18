@@ -63,6 +63,20 @@ const read = (importSpecifier, typeTexts) =>
   });
 
 describe('typeNamesIn', () => {
+  it('leaves out names in a callback parameter list when asked', () => {
+    const text = '(item: Row, ctx: RowContext) => Cell | Fallback';
+    expect(typeNamesIn(text)).toEqual([
+      'Row',
+      'RowContext',
+      'Cell',
+      'Fallback',
+    ]);
+    expect(typeNamesIn(text, {skipCallbackArgs: true})).toEqual([
+      'Cell',
+      'Fallback',
+    ]);
+  });
+
   it('names the identifiers a type text uses, outside strings, keys and dotted names', () => {
     expect(
       typeNamesIn(
@@ -233,7 +247,7 @@ describe('declaredTypes', () => {
       {length: MAX_MEMBERS + 3},
       (_, i) => `  m${i}: number;`,
     );
-    const long = Array.from({length: 80}, (_, i) => `'value${i}'`).join(' | ');
+    const long = Array.from({length: 80}, (_, i) => `Value${i}`).join(' | ');
     write(
       'dist/Big/index.d.ts',
       `export interface Big {\n${members.join('\n')}\n}\nexport type Long = ${long};\n`,
@@ -254,5 +268,70 @@ describe('declaredTypes', () => {
     expect(read('@acme/ui/Note', ['Note'])[0].members?.[0].description).toBe(
       'The body - shown "as is".',
     );
+  });
+
+  it('prints a string-literal union whole however long', () => {
+    pkg({'./Icon': {types: './dist/Icon/index.d.ts'}});
+    const names = Array.from({length: 80}, (_, i) => `'icon${i}'`).join(' | ');
+    write('dist/Icon/index.d.ts', `export type IconName = ${names};\n`);
+    const [icon] = read('@acme/ui/Icon', ['IconName']);
+    expect(icon.text).toBe(names);
+    expect(icon.text?.length).toBeGreaterThan(MAX_TYPE_TEXT);
+  });
+
+  it('skips a brand whose members are all never', () => {
+    pkg({'./Grid': {types: './dist/Grid/index.d.ts'}});
+    write(
+      'dist/Grid/index.d.ts',
+      "export interface Capability { readonly '@acme/ui/capability/v1': never; }\nexport interface Options { size: number; }\n",
+    );
+    expect(
+      read('@acme/ui/Grid', ['Capability | Capability[]', 'Options']).map(
+        t => t.name,
+      ),
+    ).toEqual(['Options']);
+  });
+
+  it('skips a type a prop names only as a callback parameter', () => {
+    pkg({'./Row': {types: './dist/Row/index.d.ts'}});
+    write(
+      'dist/Row/index.d.ts',
+      'export interface RowContext { index: number; }\nexport interface RowStyle { dense: boolean; }\n',
+    );
+    expect(
+      read('@acme/ui/Row', [
+        '(ctx: RowContext) => void',
+        '(ctx: RowStyle) => void',
+        'RowStyle',
+      ]).map(t => t.name),
+    ).toEqual(['RowStyle']);
+  });
+
+  it("reads a hook's declared signature and its texts whole", () => {
+    pkg({'./Toast': {types: './dist/Toast/index.d.ts'}});
+    write(
+      'dist/Toast/index.d.ts',
+      "export { useToast } from './useToast.js';\nexport type { ToastOptions, ShowToastFn } from './types.js';\n",
+    );
+    write(
+      'dist/Toast/useToast.d.ts',
+      "import type { ShowToastFn } from './types.js';\nexport declare function useToast(): ShowToastFn;\n",
+    );
+    write(
+      'dist/Toast/types.d.ts',
+      'export interface ToastOptions { body: string; }\nexport type ShowToastFn = (options: ToastOptions) => () => void;\n',
+    );
+    expect(
+      declaredTypes({
+        packageDir: dir,
+        packageName: '@acme/ui',
+        importSpecifier: '@acme/ui/Toast',
+        wholeTexts: ['(options: ToastOptions) => () => void'],
+        declaredFunction: 'useToast',
+      }).map(t => [t.name, t.import]),
+    ).toEqual([
+      ['ToastOptions', "import type { ToastOptions } from '@acme/ui/Toast';"],
+      ['ShowToastFn', "import type { ShowToastFn } from '@acme/ui/Toast';"],
+    ]);
   });
 });

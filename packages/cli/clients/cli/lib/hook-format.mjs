@@ -17,6 +17,7 @@ import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {
   formatAccessibility,
   formatBestPractices,
+  formatTypes,
   mdCell,
 } from './component-format.mjs';
 
@@ -134,6 +135,8 @@ export function formatHookFull(docs) {
 
   sections.push(...formatHookReturns(docs));
 
+  sections.push(...formatTypes(docs.types));
+
   return sections.join('\n');
 }
 
@@ -176,6 +179,8 @@ export function formatHookCompact(docs, importPath) {
   }
 
   sections.push(...formatHookReturns(docs));
+
+  sections.push(...formatTypes(docs.types));
 
   // Related components (compact footer)
   /** @type {string[]} */
@@ -270,13 +275,21 @@ export async function formatHookBriefAll(coreDir) {
 }
 
 /**
- * Format only the parameters table (matches component formatProps).
+ * Format only the parameters table, then the types the hook's API names
+ * (`docs.types`), as component formatProps does.
  * @param {any} docs
  * @returns {string}
  */
 export function formatHookParams(docs) {
+  const types = formatTypes(docs.types);
   if (docs.params?.length) {
-    return `## Parameters\n\n${formatParamsTable(docs.params)}\n`;
+    return [
+      `## Parameters\n\n${formatParamsTable(docs.params)}\n`,
+      ...types,
+    ].join('\n');
   }
-  return `No parameters documentation found for ${docs.name}.\n`;
+  return [
+    `No parameters documentation found for ${docs.name}.\n`,
+    ...types,
+  ].join('\n');
 }

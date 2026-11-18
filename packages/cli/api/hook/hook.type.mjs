@@ -61,7 +61,14 @@
  * @typedef {object} HookDetailResponse
  * @property {'hook.detail'} type
  * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
- * @property {HookDoc} data
+ * @property {HookDoc & HookDeclaredTypes} data
+ */
+
+/**
+ * The types a hook's parameters, return and declared signature name that
+ * Core declares, read from Core's published declaration files.
+ * @typedef {object} HookDeclaredTypes
+ * @property {import('../component/component.type.mjs').ComponentDeclaredType[]} [types] - As on `component.detail`; absent when they name none.
  */
 
 /**
@@ -70,6 +77,7 @@
  * @property {'hook.detail.params'} type
  * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookParamDoc[]} data
+ * @property {import('../component/component.type.mjs').ComponentDeclaredType[]} [types] - The types the hook's API names that Core declares, as on `hook.detail`; absent when it names none.
  */
 
 /**

@@ -78,11 +78,13 @@ export const doc = {
     },
     {
       type: 'hook.detail',
-      description: "One hook's full authored HookDoc.",
+      description:
+        "One hook's full authored HookDoc, with types (present when its API names any): the types its parameters, its return and its declared signature name that Core declares, read from Core's published declaration files, shaped as on component.detail.",
     },
     {
       type: 'hook.detail.params',
-      description: "Just the hook's parameters table (HookParamDoc[]).",
+      description:
+        "Just the hook's parameters table (HookParamDoc[]), with the same types beside data as on hook.detail; absent when its API names none.",
     },
   ],
   throws: [

@@ -23,6 +23,8 @@ import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {AstryxError, coreDirOrThrow} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {declaredTypes} from '../../foundation/discovery/declared-types.mjs';
+import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
@@ -84,6 +86,40 @@ export async function resolveHookDoc(
   }
 
   return loadDocs(docPath, {zh, lang, root: 'hooks'});
+}
+
+/**
+ * The types a hook's parameters, its return and its declared signature name
+ * that Core declares, read from Core's published declaration files. Empty
+ * when Core ships none for the hook's entry or they name none of its types.
+ * @param {string | null} coreDir
+ * @param {import('./hook.type.mjs').HookDoc} docs
+ * @returns {import('../component/component.type.mjs').ComponentDeclaredType[]}
+ */
+export function hookTypes(coreDir, docs) {
+  if (!coreDir) return [];
+  /** @type {any} */
+  const doc = docs;
+  /** @param {unknown} list @returns {string[]} */
+  const texts = list =>
+    (Array.isArray(list) ? list : [])
+      .map(item => item?.type)
+      .filter(type => typeof type === 'string');
+  try {
+    return declaredTypes({
+      packageDir: coreDir,
+      packageName: CORE_PROVIDER_ID,
+      importSpecifier:
+        typeof doc.importPath === 'string'
+          ? doc.importPath
+          : `${CORE_PROVIDER_ID}/hooks`,
+      wholeTexts: [...texts(doc.params), ...texts(doc.returns)],
+      ...(typeof doc.name === 'string' ? {declaredFunction: doc.name} : {}),
+    });
+  } catch {
+    // A declaration this read cannot follow leaves the answer as it was.
+    return [];
+  }
 }
 
 /**
