@@ -507,7 +507,7 @@ export const butterTheme = defineTheme({
 
   components: withOwnFillText({
     // The send button keeps the 16px corner it took from the 28px composer:
-    // a rounded square on Butter's 40px controls, as before.
+    // a rounded square on Butter's 40px controls.
     'chat-send-button': {
       base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
     },
@@ -579,7 +579,8 @@ export const butterTheme = defineTheme({
     button: {
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
-      // while the chat composer (which sets --_button-radius) rounds them fully.
+      // while the chat composer (which sets --_button-radius) gives them its
+      // 16px concentric corner.
       // Inline padding only. Button sets its own block padding and height.
       base: {
         paddingInline: 'var(--spacing-4)',
