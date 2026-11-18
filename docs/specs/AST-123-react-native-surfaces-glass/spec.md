@@ -103,10 +103,12 @@ and a token fill.
 
 - **FR1 — Glass and material are a look, not a component.** An app chooses the
   look; it never renders a glass or material component:
-  - Component props: a component that offers `surface` (`IconButton`,
-    `Button`) draws glass with `surface="glass"`. The library's bars, bar
-    buttons, tab accessory, and search field draw chrome glass by default;
-    floating surfaces and overlays follow FR7.
+  - Component props: every library surface in this record takes `surface`.
+    The bars, bar buttons, tab accessory, and search field default to `glass`
+    (chrome glass); the overlays the library builds and floating surfaces
+    default to `material` and follow FR7; `IconButton` and `Button` default to
+    `plain` and draw glass with `surface="glass"`. `surface="plain"` drops the
+    look and the scroll edge (FR7, FR8).
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
     or in a `platforms.ios` or `platforms.android` entry (`spec:AST-082/FR10`),
     sets the look for every surface (FR7).
@@ -114,8 +116,9 @@ and a token fill.
     draws the element's pixels. `system`: the platform draws it (a
     host-presented bar, a platform control, system menu or sheet chrome).
     `drawn`: Astryx draws it in React. `auto`: the component's own default, per
-    platform where it differs. One theme member, `render.default`
-    (`spec:AST-112`, under `spec:AST-082/FR10`), overrides every `auto`.
+    platform where it differs (`spec:AST-112/FR21`). One theme member,
+    `render.default`, overrides every `auto`; `spec:AST-112` adds it to the
+    `defineNativeTheme` configuration of `spec:AST-082/FR10`.
   - Glass and material are not `render` values. The look is the component's
     `surface` (`glass`, `material`, or `plain`), which applies only when the
     element is drawn. A `plain` surface uses the token paints of FR7 and none
@@ -355,6 +358,9 @@ and a token fill.
   `material` member on React Native (`spec:AST-082/FR10`).
 - Relies on `spec:AST-112` FR3 (amended): Astryx's own native pieces, these
   four contracts included, link by default.
+- Relies on `spec:AST-082` FR10 gaining `render.default` and `spec:AST-082`
+  DEC-2 taking `surface` and `render` as presentation choices, as
+  `spec:AST-112` amends them (`spec:AST-112/FR21`).
 - Relies on `spec:AST-140` FR5: each contract's baseline is its first
   release's shape, and later behaviour is a named feature the binary reports.
 
