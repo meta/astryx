@@ -2,6 +2,7 @@
 
 'use client';
 
+import * as stylex from '@stylexjs/stylex';
 import {useState, type CSSProperties} from 'react';
 import {
   VStack,
@@ -198,6 +199,22 @@ const cardLogo: CSSProperties = {
   borderColor: 'var(--color-border)',
   backgroundColor: 'var(--color-background-surface)',
 };
+
+const styles = stylex.create({
+  // An order line's name and badge start from no width and grow into the
+  // row, so the price stays beside them while they fit, even wrapped onto
+  // two lines, and moves under them only when the badge itself does not fit.
+  // They never need more than the row: a badge wider than it ellipsizes.
+  itemName: {
+    flexBasis: 0,
+    flexGrow: 1,
+    maxWidth: '100%',
+  },
+  // A price moved under its line keeps to the end, under the other prices.
+  itemPrice: {
+    marginInlineStart: 'auto',
+  },
+});
 
 export default function PaymentFormPage() {
   const showToast = useToast();
@@ -897,11 +914,13 @@ export default function PaymentFormPage() {
                                       <HStack
                                         gap={2}
                                         hAlign="between"
-                                        vAlign="start">
+                                        vAlign="start"
+                                        wrap="wrap">
                                         <HStack
                                           gap={2}
                                           vAlign="center"
-                                          wrap="wrap">
+                                          wrap="wrap"
+                                          xstyle={styles.itemName}>
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
@@ -912,7 +931,10 @@ export default function PaymentFormPage() {
                                             />
                                           )}
                                         </HStack>
-                                        <Text type="body" weight="bold">
+                                        <Text
+                                          type="body"
+                                          weight="bold"
+                                          xstyle={styles.itemPrice}>
                                           {fmt(item.price)}
                                         </Text>
                                       </HStack>

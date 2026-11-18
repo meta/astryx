@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] The payment-form template's order summary wraps an item's name and its badge onto two lines when the row is narrow, so the price stays inside the card on a phone.
+[fix] On a phone, the payment-form template's order summary keeps each price inside its card. An item's name and badge wrap onto two lines, and when even that does not fit beside the price, the price moves under them at the end of the line. Desktop is unchanged.
 
 @josephfarina
