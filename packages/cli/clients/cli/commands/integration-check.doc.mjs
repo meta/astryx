@@ -43,7 +43,7 @@ export const doc = {
       flag: '--strict',
       param: 'options.strict',
       description:
-        'Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` is reported as a note (`invalid_cli_command`) that fails nothing.',
+        'Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` or `installGuidance` is reported as a note (`invalid_cli_command`, `invalid_install_guidance`) that fails nothing.',
     },
     {
       flag: '--next',

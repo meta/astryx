@@ -346,6 +346,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    // A flex item's default `min-width: auto` keeps the body at least as wide
+    // as its content. A wide field then pushes the body past the step. Zero
+    // releases that floor.
+    minWidth: 0,
   },
 
   // ===================== HORIZONTAL LAYOUT =====================

@@ -15,7 +15,7 @@ export const doc = {
     'ticket',
     'triage console',
   ],
-  isReady: false,
+  isReady: true,
   category: 'Tools - Incident Console',
   icons: {BellAlertIcon: 'notificationActive', PlusIcon: 'add'},
 };

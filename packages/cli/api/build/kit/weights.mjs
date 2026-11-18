@@ -792,19 +792,3 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
     secondScore: rest[1]?.score ?? 0,
   };
 }
-
-/**
- * Whether the idea names at least one content word of a template's own
- * descriptor (display name, category, keywords, description, components).
- * @param {string} name
- * @param {string} idea
- * @param {DescribedTemplate[]} catalog
- * @returns {boolean}
- */
-export function sharesOwnWord(name, idea, catalog) {
-  const t = catalog.find(c => c.name === name);
-  if (!t) return false;
-  const order = contentWords(idea);
-  const own = descriptorWords(t, order);
-  return order.some(x => own.has(x));
-}

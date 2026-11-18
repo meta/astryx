@@ -7,7 +7,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {moduleImports} from './embedded-imports.mjs';
+import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 
 const specifiers = (/** @type {string} */ source, /** @type {string} */ file) =>
   (moduleImports(source, file) ?? []).map(each => each.specifier);
@@ -33,5 +33,16 @@ describe('moduleImports', () => {
       ['./types', true],
       ['./a', false],
     ]);
+  });
+});
+
+describe('importSpecifiers', () => {
+  it('reads a template literal with nothing put in it as the string it holds', () => {
+    expect(
+      importSpecifiers(
+        'await import(`../shared.ts`);\nrequire(`./a.css`);\nawait import(`./${x}.ts`);',
+        'theme.ts',
+      ),
+    ).toEqual(['../shared.ts', './a.css']);
   });
 });

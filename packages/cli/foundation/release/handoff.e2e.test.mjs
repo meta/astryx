@@ -259,7 +259,7 @@ describe('update notices through the real bin (FR10)', () => {
     });
     const notice = [
       `A new release of Astryx is available: ${CLI_VERSION} → ${newest}`,
-      `To upgrade, run: npm install @astryxdesign/core@${newest} @astryxdesign/cli@${newest}, then npx astryx upgrade --from ${CLI_VERSION} --apply`,
+      `To upgrade, run: npm install -E @astryxdesign/core@${newest} @astryxdesign/cli@${newest}, then npx astryx upgrade --from ${CLI_VERSION} --apply`,
     ];
     for (const env of [{CI: 'true'}, {NO_UPDATE_NOTIFIER: '1'}]) {
       const off = run(root, ['--version'], {cache, home, env});

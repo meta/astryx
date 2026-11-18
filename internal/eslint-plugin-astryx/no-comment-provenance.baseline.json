@@ -855,9 +855,7 @@
   "packages/core/src/Selector/useSelectorPresentation.ts": [
     "AR3",
     "AR4",
-    "AR4",
     "spec:AST-055",
-    "spec:Popover",
     "spec:Popover"
   ],
   "packages/core/src/SideNav/SideNav.tsx": [

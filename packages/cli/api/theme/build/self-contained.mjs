@@ -7,7 +7,9 @@
  * JavaScript beside the build, and every local import names its file with
  * its extension. Package imports stay as they are.
  *
- * It reads files only through the `files` reader the theme adapter gives it.
+ * It reads the theme's files only through the `files` reader the theme
+ * adapter gives it. The JavaScript it compiles is kept between runs, under
+ * the stamps of every file of Babel's code that compiled it.
  *
  * @input the built module's carried imports, the theme source, the output
  *   folder, and the adapter's file reader
@@ -16,8 +18,13 @@
  *   file reader is `localModuleFiles` in ../_adapter.mjs
  */
 
+import {createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
+import {persistedSummary} from '../../../foundation/fs/gather-cache.mjs';
+import {loadedCodeStamps} from '../../../foundation/fs/loaded-files.mjs';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
@@ -261,20 +268,20 @@ export function selfContainedImports(entries, options) {
 }
 
 /**
- * One TypeScript or JSX module as JavaScript, its local imports naming
- * the files `rewrite` gives.
+ * The options Babel compiles one module with, but for the plugin that
+ * rewrites its imports. No Babel config file or `.babelrc` of the project is
+ * read, so the JavaScript depends only on these, the source, the rewrites and
+ * Babel's own code.
  * @param {LocalModuleFiles} files
  * @param {string} file
- * @param {string} source
- * @param {Map<string, string>} rewrite import as written, to the import it becomes
  */
-function compileModule(files, file, source, rewrite) {
+function compileOptions(files, file) {
   const jsx = /\.(?:tsx|jsx)$/i.test(file);
-  const result = babelCore().transformSync(source, {
+  return {
     filename: file,
     babelrc: false,
     configFile: false,
-    sourceType: 'module',
+    sourceType: /** @type {const} */ ('module'),
     compact: false,
     plugins: [
       ...(/\.[cm]?tsx?$/i.test(file)
@@ -286,27 +293,88 @@ function compileModule(files, file, source, rewrite) {
           ]
         : []),
       ...(jsx ? [[files.plugins.jsx, {runtime: 'automatic'}]] : []),
-      // The local imports name their compiled or plain file.
-      () => ({
-        visitor: {
-          /** @param {any} p */
-          StringLiteral(p) {
-            const to = rewrite.get(p.node.value);
-            if (!to) return;
-            const parent = p.parent;
-            const isSource =
-              ((parent.type === 'ImportDeclaration' ||
-                parent.type === 'ExportNamedDeclaration' ||
-                parent.type === 'ExportAllDeclaration') &&
-                parent.source === p.node) ||
-              parent.type === 'ImportExpression' ||
-              (parent.type === 'CallExpression' &&
-                parent.callee?.type === 'Import');
-            if (isSource) p.node.value = to;
-          },
-        },
-      }),
     ],
+  };
+}
+
+/**
+ * The Babel plugin that makes a module's local imports name their compiled
+ * or plain file.
+ * @param {Map<string, string>} rewrite import as written, to the import it becomes
+ */
+function rewriteImports(rewrite) {
+  return () => ({
+    visitor: {
+      /** @param {any} p */
+      StringLiteral(p) {
+        const to = rewrite.get(p.node.value);
+        if (!to) return;
+        const parent = p.parent;
+        const isSource =
+          ((parent.type === 'ImportDeclaration' ||
+            parent.type === 'ExportNamedDeclaration' ||
+            parent.type === 'ExportAllDeclaration') &&
+            parent.source === p.node) ||
+          parent.type === 'ImportExpression' ||
+          (parent.type === 'CallExpression' &&
+            parent.callee?.type === 'Import');
+        if (isSource) p.node.value = to;
+      },
+    },
   });
-  return result?.code ?? '';
+}
+
+/**
+ * One TypeScript or JSX module as JavaScript, its local imports naming the
+ * files `rewrite` gives. The JavaScript is kept between runs beside the kept
+ * gathers (fs/gather-cache.mjs persistedSummary): it is read back while the
+ * source, the options, the rewrites and every file of Babel's code that made
+ * it are as they were, so a build of an unchanged theme loads neither
+ * `@babel/core` nor its plugins.
+ * @param {LocalModuleFiles} files
+ * @param {string} file
+ * @param {string} source
+ * @param {Map<string, string>} rewrite import as written, to the import it becomes
+ */
+function compileModule(files, file, source, rewrite) {
+  const options = compileOptions(files, file);
+  const key = createHash('sha256')
+    .update(
+      JSON.stringify({
+        source,
+        options,
+        rewrite: [...rewrite].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        rewriteImports: String(rewriteImports),
+        // What Babel reads for a config's `env` blocks; none is read here,
+        // so it stays only as an input Babel could consult.
+        envName: process.env.BABEL_ENV || process.env.NODE_ENV || 'development',
+      }),
+    )
+    .digest('hex');
+  let current = false;
+  return persistedSummary(
+    ['theme-module-javascript', key],
+    () => {
+      const result = babelCore().transformSync(source, {
+        ...options,
+        plugins: [...options.plugins, rewriteImports(rewrite)],
+      });
+      const code = result?.code ?? '';
+      const require = createRequire(import.meta.url);
+      const roots = [
+        require.resolve('@babel/core'),
+        ...options.plugins.map(([plugin]) => String(plugin)),
+      ];
+      // Kept only while Babel's files, and the package folders its
+      // modules were found in, are those this process loaded: after a
+      // reinstall, the JavaScript is the old Babel's.
+      const {stamps, unchangedSinceStart} = loadedCodeStamps(
+        fileURLToPath(import.meta.url),
+        roots,
+      );
+      current = unchangedSinceStart;
+      return {value: code, stamps};
+    },
+    {keep: code => current && code !== ''},
+  );
 }

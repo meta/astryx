@@ -83,7 +83,7 @@ import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   useFieldInputStyling,
@@ -116,6 +116,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Selector/Selector.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -1227,6 +1231,13 @@ export function Selector<T extends SelectorOptionType>(
     id,
     ...restProps
   } = props as SelectorPropsClearable<T>;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'Selector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. Selector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;

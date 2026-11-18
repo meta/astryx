@@ -6,8 +6,10 @@
  * schema and module-loader packages, and none of the CLI's own doc, discovery,
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
- * only patching an integration manifest uses. A module hook in the child
- * records every module that the run loads (resolving a package loads none).
+ * only patching an integration manifest uses, and a search with icon
+ * features off loads none of the icon section's code. A module hook in the
+ * child records every module that the run loads (resolving a package loads
+ * none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -45,6 +47,25 @@ const LARGE_CLI_MODULES = [
   'foundation/fs/module-loader.mjs',
   'foundation/integrations/integrations.mjs',
 ];
+
+/**
+ * The CLI's own modules that only a run that resolves its base uses: the base
+ * resolver, and the identity code that brands provider names. A run whose
+ * base is plainly Core, as every run that prints the version is, answers
+ * without them.
+ */
+const BASE_RESOLUTION_MODULES = [
+  'foundation/bases/resolve.mjs',
+  'foundation/identity/provider-identity.mjs',
+  'foundation/identity/providers.mjs',
+];
+
+/**
+ * The most CLI modules a run that prints the version loads. Each one costs
+ * every run its load time, so a module new to this path takes the place of
+ * one, or raises this number on purpose.
+ */
+const VERSION_RUN_MODULE_LIMIT = 73;
 
 /** The runs that print the version, as text or as JSON. */
 const VERSION_RUNS = ['--version', '-V', '--version --json'];
@@ -158,6 +179,28 @@ describe('a run of the bin that prints the version', () => {
   );
 });
 
+describe('a run of the bin that prints the version, and its base', () => {
+  it.each(VERSION_RUNS)(
+    'loads no base resolver or identity module (astryx %s)',
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(
+        BASE_RESOLUTION_MODULES.filter(file => cliModules.has(file)),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(VERSION_RUNS)(
+    `loads at most ${VERSION_RUN_MODULE_LIMIT} of the CLI's own modules (astryx %s)`,
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(cliModules.size).toBeLessThanOrEqual(VERSION_RUN_MODULE_LIMIT);
+    },
+  );
+});
+
 describe('a component lookup in a folder with no project', () => {
   it('loads no code-rewrite package (astryx component Buttn)', () => {
     const {status, packages, cliModules} = modulesLoadedBy([
@@ -169,6 +212,22 @@ describe('a component lookup in a folder with no project', () => {
     expect(cliModules.has('clients/cli/commands/component.mjs')).toBe(true);
     expect(
       ['jscodeshift', 'recast'].filter(name => packages.has(name)),
+    ).toEqual([]);
+  });
+});
+
+describe('a search in a folder with no project', () => {
+  it("loads none of the icon section's code while icon features are off (astryx search tooltip)", () => {
+    const {status, cliModules} = modulesLoadedBy(['search', 'tooltip']);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // The icon commands' docs are search results; their code is not.
+    expect(
+      [...cliModules].filter(
+        file =>
+          file === 'api/search/_icons.mjs' ||
+          (file.startsWith('api/icon/') && !file.endsWith('.doc.mjs')),
+      ),
     ).toEqual([]);
   });
 });

@@ -10,8 +10,10 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -39,7 +41,7 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
-import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {reachableFiles, receivingAliases, resolutionCandidates} from '../../foundation/render/embedded-imports.mjs';
 import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
@@ -49,7 +51,8 @@ import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
-import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
+import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
+import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -136,15 +139,16 @@ function resolvesCore(dir) {
  * @param {string} file absolute
  * @param {string} cwd
  * @param {string} what
+ * @param {string} [fix] what to do instead
  * @returns {string}
  */
-function confined(file, cwd, what) {
+function confined(file, cwd, what, fix = 'Write inside the folder you run the command from.') {
   try {
     return assertWithin(file, cwd, {allowAbsolute: true, label: what});
   } catch (e) {
     if (e instanceof PathSafetyError) {
       throw new AstryxError(
-        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. Write inside the folder you run the command from.`,
+        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. ${fix}`,
         [],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
@@ -404,16 +408,56 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/** @param {unknown} e */
-function asAstryxError(e) {
+/**
+ * @param {unknown} e
+ * @param {string} pageDir the folder of the page the render read
+ * @param {string} [cwd] the folder the render runs from
+ */
+function asAstryxError(e, pageDir, cwd = process.cwd()) {
   if (e instanceof RenderError) {
     const code = /** @type {import('../../foundation/response/error-codes.mjs').ErrorCode} */ (e.code);
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
+    let message = e.message;
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      suggestions.push({name: `npm install ${e.detail.package}`, reason: 'install the package the page imports'});
+      // The run folder's integration line first, when the page is in the run
+      // folder's package; then the install command the render named; then
+      // one line for every package from the page's own package.
+      const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
+      const needs = `install ${packages.join(', ')}, which this render needs`;
+      const what = packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports';
+      const pageRoot = findPackageRoot(pageDir);
+      const runRoot = findPackageRoot(cwd);
+      const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
+      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
+      if (guidance) {
+        suggestions.push({name: guidance, reason: needs});
+      } else if (typeof e.detail.install === 'string') {
+        suggestions.push({name: e.detail.install, reason: needs});
+      } else if (pageRoot == null) {
+        // In a folder no package.json holds, an install would make the folder
+        // a project, so the message names the packages for the project that
+        // uses the page instead, as template and build do.
+        message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
+      } else {
+        // With the CLI's version ranges, as template and build give it; none
+        // when the project's lockfiles disagree.
+        const step = installCommandFor(packages, pageDir, cwd);
+        const line = step.installGuidance ?? step.installCommand;
+        if (line && samePackage) {
+          suggestions.push({name: line, reason: what});
+        } else if (line) {
+          // Run from here, the line would add the packages to this folder's
+          // package.json, not to the page's, so the message names the page's
+          // package and the line to run there.
+          const where = path.relative(cwd, pageRoot) || '.';
+          message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in ${where}, the package that holds this page: from there, run ${line}`;
+        } else if (step.noCommandReason) {
+          message = `${message}. ${step.noCommandReason}`;
+        }
+      }
     }
-    return new AstryxError(e.message, suggestions, code);
+    return new AstryxError(message, suggestions, code);
   }
   const err = /** @type {any} */ (e);
   if (typeof err?.code === 'string' && err.code.startsWith('ERR_RENDER_')) {
@@ -438,7 +482,7 @@ function servedSet(input) {
   const dir = path.dirname(input);
   if (runChoice(dir).inProject) return null;
   try {
-    return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
+    return {dir: requireCoreDir(dir), integrations: hostedPagePackages()};
   } catch (e) {
     const err = /** @type {any} */ (e);
     return err?.code === ERROR_CODES.ERR_VERSIONS_UNAVAILABLE ? {unavailable: err} : null;
@@ -447,12 +491,17 @@ function servedSet(input) {
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
+ * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title}) {
+export async function renderToFile({cwd, input, output, title, absolute = false}) {
   readInput(input, cwd);
-  confined(output, cwd, 'The output');
+  // An absolute --out is the caller's choice of place, also outside the
+  // current folder (cli-surface DEC-16). The file there is still never one a
+  // render did not write.
+  const elsewhere = absolute && !isInside(output, cwd);
+  if (!elsewhere) confined(output, cwd, 'The output', 'Write inside the folder you run the command from, or name an absolute path.');
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
@@ -461,14 +510,17 @@ export async function renderToFile({cwd, input, output, title}) {
       page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
-      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
-      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+      const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
+      /** @type {unknown[]} */
+      const missing = Array.isArray(detail?.packages) ? detail.packages : [detail?.package];
+      const served = hostedPagePackages();
+      if (set && 'unavailable' in set && missing.some(name => typeof name === 'string' && isServedPackage(name, served))) {
         throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
       }
       throw e;
     }
   } catch (e) {
-    throw asAstryxError(e);
+    throw asAstryxError(e, path.dirname(input), cwd);
   }
   for (const {name, dir} of page.fromSet) {
     let version = null;
@@ -479,7 +531,16 @@ export async function renderToFile({cwd, input, output, title}) {
     }
     recordResolved(name, version, dir, 'package-set');
   }
-  refuseProtected([output], cwd);
+  if (!elsewhere) refuseProtected([output], cwd);
+  // Elsewhere, the file named is the file written: a link there would put the
+  // render wherever the link points.
+  if (elsewhere && fs.lstatSync(output, {throwIfNoEntry: false})?.isSymbolicLink()) {
+    throw new AstryxError(
+      `${shown(cwd, output)} is a symbolic link, so it is not replaced; nothing was written. Name the file itself.`,
+      [],
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
+  }
   // An existing file is replaced only when a render wrote it.
   if (
     fs.existsSync(output) &&
@@ -517,6 +578,9 @@ export async function renderToFile({cwd, input, output, title}) {
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
+    ...(page.notCarried ? {notCarried: page.notCarried} : {}),
+    scriptBytes: page.scriptBytes ?? 0,
+    scriptModules: page.scriptModules ?? 0,
   };
 }
 
@@ -629,13 +693,7 @@ function aliasedResult(unaliased, page, cwd) {
  * @param {string} input absolute
  */
 function restoreFolder(input) {
-  const stem = path.basename(input).replace(/\.[^.]+$/, '');
-  let folder = path.join(path.dirname(input), `${stem}-restored`);
-  for (let n = 2; fs.existsSync(folder); n++) {
-    removeStaleTemporaries(folder);
-    folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
-  }
-  return folder;
+  return freeRestoreFolder(path.dirname(input), path.basename(input), removeStaleTemporaries);
 }
 
 /**
@@ -756,7 +814,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   };
   if (block.found && 'newer' in block) {
     const {format, cli} = block.newer;
-    const command = `${cliCommand(cli ?? 'latest')} experimental render --reverse ${shellArg(shown(cwd, input))}`;
+    const command = `${cliCommand(cli ?? 'latest')} experimental import ${shellArg(shown(cwd, input))}`;
     throw new AstryxError(
       `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
       [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
@@ -813,7 +871,27 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      // A file the render could not carry is missing too, also when no
+      // import here names it (an alias this reverse cannot resolve). An
+      // import already in missing names one recorded file, the one it
+      // resolves to as the walk resolves it (the path as written, then each
+      // extension in order, then its folder's index), so only that file is
+      // not listed again.
+      const recordedOut = (Array.isArray(source.notCarried) ? source.notCarried : []).filter(
+        (/** @type {unknown} */ file) => typeof file === 'string' && file !== '',
+      );
+      const recordedSet = new Set(recordedOut);
+      const covered = new Set(
+        unreached.map(spec => resolutionCandidates(spec).find(candidate => recordedSet.has(candidate))).filter(Boolean),
+      );
+      const missing = [...unreached];
+      const listed = new Set(missing);
+      for (const file of recordedOut) {
+        if (covered.has(file) || listed.has(file)) continue;
+        listed.add(file);
+        missing.push(file);
+      }
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its

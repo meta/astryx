@@ -124,6 +124,9 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: 'none',
     backgroundColor: 'transparent',
+    // The popover default is CanvasText, which follows the color scheme and
+    // not the theme. A card that keeps the page's text must get the page's.
+    color: 'inherit',
     overflow: 'visible',
   },
   // iOS Safari colors its toolbar from a fixed element at the bottom edge. A

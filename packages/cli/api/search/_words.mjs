@@ -185,9 +185,37 @@ export function startsAWordOf(term, text) {
  */
 export function startsATermWordOf(t, text) {
   if (!coversHalf(t.term, text)) return false;
-  return wordsOf(text).some(
-    w => t.starts.some(f => w.startsWith(f)) || sameTermWord(t, w),
-  );
+  // This runs for each word of each entry a query is scored against. Index
+  // loops cost less here than `some` with a callback or `for...of`, in a
+  // short run that does not optimize them.
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    for (let j = 0; j < t.starts.length; j++) {
+      if (w.startsWith(t.starts[j])) return true;
+    }
+    if (sameTermWord(t, w)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a term is one of a text's words, or the start of one, however
+ * short against the whole text: `avata` in AvatarGroupInteractive.
+ * @param {TermWords} t
+ * @param {string} text - The name or keyword as authored.
+ * @returns {boolean}
+ */
+export function isOrStartsAWordOf(t, text) {
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    for (let j = 0; j < t.starts.length; j++) {
+      if (w.startsWith(t.starts[j])) return true;
+    }
+    if (sameTermWord(t, w)) return true;
+  }
+  return false;
 }
 
 /**

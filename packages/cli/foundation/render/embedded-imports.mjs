@@ -2,7 +2,7 @@
 
 /**
  * @file Which embedded files the page itself reaches, for `astryx
- * experimental render --reverse`. A received file is untrusted, so its list
+ * experimental export --reverse`. A received file is untrusted, so its list
  * of files is not: a file is written only when the embedded page reaches it
  * through its own imports (static, re-exports, `import()` and `require()` of
  * a string), followed module by module through the embedded tree. Relative
@@ -20,6 +20,7 @@ import {builtinModules} from 'node:module';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
+import {writtenString} from '../text/written-string.mjs';
 
 /** A name npm gives a package, scoped or not (older names may have capitals). */
 const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
@@ -114,11 +115,11 @@ export function importSpecifiers(source, file) {
 /**
  * Each string specifier one module imports, with its line and whether it
  * brings in types only (`import type`, `export type`, or named bindings that
- * are each an inline `type`), which a bundler drops. Null when the module
- * does not parse.
+ * are each an inline `type`), which a bundler drops, and whether it is a
+ * static import declaration. Null when the module does not parse.
  * @param {string} source
  * @param {string} file for the parser's TypeScript/JSX choice
- * @returns {Array<{specifier: string, line?: number, typeOnly: boolean}> | null}
+ * @returns {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}
  */
 export function moduleImports(source, file) {
   return scanModule(source, file).records;
@@ -174,11 +175,11 @@ function typesOnly(node) {
 /**
  * One module's imports, and the relative asset paths its strings name
  * (`<img src="./logo.png">`, `url(./bg.png)` in a style). `records` holds
- * each import with its line and whether it is types only; null when the
- * module does not parse.
+ * each import with its line, whether it is types only and whether it is a
+ * static import declaration; null when the module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean}> | null}}
+ * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}}
  */
 function scanModule(source, file) {
   /** @type {string[]} */
@@ -202,11 +203,17 @@ function scanModule(source, file) {
   } catch {
     return {imports: [], assets: [], records: null};
   }
-  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean}>} */
+  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}>} */
   const records = [];
   /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
   const add = (specifier, node, typeOnly = false) =>
-    records.push({specifier, line: node.loc?.start?.line, typeOnly});
+    records.push({
+      specifier,
+      line: node.loc?.start?.line,
+      typeOnly,
+      declaration: node.type === 'ImportDeclaration',
+    });
+  const written = writtenString;
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
@@ -222,16 +229,16 @@ function scanModule(source, file) {
       add(node.source.value, node, typesOnly(node));
     } else if (
       node.type === 'ImportExpression' &&
-      node.source?.type === 'StringLiteral'
+      written(node.source) != null
     ) {
-      add(node.source.value, node);
+      add(/** @type {string} */ (written(node.source)), node);
     } else if (
       node.type === 'CallExpression' &&
-      node.arguments?.[0]?.type === 'StringLiteral' &&
+      written(node.arguments?.[0]) != null &&
       (node.callee?.type === 'Import' ||
         (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
     ) {
-      add(node.arguments[0].value, node);
+      add(/** @type {string} */ (written(node.arguments[0])), node);
     }
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra')
@@ -273,6 +280,21 @@ export function receivingAliases(file) {
  */
 
 /**
+ * The tree paths a relative import may name, in the order a reverse resolves
+ * it: the path as written, then with each extension an extensionless import
+ * stands for, then as its folder's index file with each.
+ * @param {string} spec a tree path, `/`-separated
+ * @returns {string[]}
+ */
+export function resolutionCandidates(spec) {
+  return [
+    spec,
+    ...RESOLVE_EXTENSIONS.map(ext => spec + ext),
+    ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`),
+  ];
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
@@ -290,15 +312,8 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
   /** @type {Set<string>} */
   const missing = new Set();
   /** @param {string} candidate tree path, `/`-separated */
-  const resolveIn = candidate => {
-    if (byPath.has(candidate)) return candidate;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(candidate + ext)) return candidate + ext;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(`${candidate}/index${ext}`))
-        return `${candidate}/index${ext}`;
-    return null;
-  };
+  const resolveIn = candidate =>
+    resolutionCandidates(candidate).find(p => byPath.has(p)) ?? null;
   /**
    * The one tree file an alias import names: the file whose path ends with
    * the import's rest (`@/components/Header` -> `.../components/Header.tsx`).
@@ -308,11 +323,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     /** @type {{path: string, tail: string}[]} */
     const hits = [];
     for (const p of byPath.keys()) {
-      for (const tail of [
-        rest,
-        ...RESOLVE_EXTENSIONS.map(e => rest + e),
-        ...RESOLVE_EXTENSIONS.map(e => `${rest}/index${e}`),
-      ]) {
+      for (const tail of resolutionCandidates(rest)) {
         if (p === tail || p.endsWith(`/${tail}`)) {
           hits.push({path: p, tail});
           break;

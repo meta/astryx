@@ -53,6 +53,7 @@ import {
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
 import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export {
   coreTemplateIds,
@@ -1147,6 +1148,8 @@ export function findPageDocFile(dirPath) {
 }
 
 async function discoverPages() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   if (!fs.existsSync(PAGES_DIR)) return [];
   const dirs = listDirEntries(PAGES_DIR).filter(e => e.isDirectory());
 
@@ -1176,6 +1179,8 @@ async function discoverPages() {
 }
 
 async function discoverBlocks() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   const docFiles = findDocFiles(BLOCKS_DIR, TEMPLATE_SUFFIX_RE);
   /** @type {DiscoveredTemplate[]} */
   const blocks = [];

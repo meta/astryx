@@ -534,7 +534,10 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radiusVars['--radius-full'],
+    // A circle marks the thumb; it is no corner. 50% draws it on the square
+    // box the size styles set, so a theme that squares its pills through
+    // --radius-full keeps a round thumb.
+    borderRadius: '50%',
     // Under a finger it sits in the track, centered in its height, above the
     // colour fade (::after) and the press layer (::before). useSwitchTouch
     // moves and lifts it on the compositor: nothing of its own transitions.

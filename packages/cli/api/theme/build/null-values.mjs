@@ -151,6 +151,21 @@ export function nullThemeValues(theme) {
  * @returns {number | null}
  */
 export function keyPathLine(source, keyPath, file) {
+  return keyPathIndex(source, file)(keyPath);
+}
+
+/**
+ * `keyPathLine` for many key paths of one source, read once: the source is
+ * parsed when this is called, and each call of the answer is a lookup.
+ * A value given through a call's argument (`withFill({...})`), a const of
+ * the module or a spread keeps the key it sits under. With `fromRoot`, the
+ * key path is matched from the outermost object (the theme), never as the
+ * end of a longer path (`onDark.components…` for `components…`).
+ * @param {string} source
+ * @param {string} [file]
+ * @returns {(keyPath: string[], options?: {fromRoot?: boolean}) => number | null}
+ */
+export function keyPathIndex(source, file) {
   /** @type {any} */
   let ast;
   try {
@@ -159,7 +174,7 @@ export function keyPathLine(source, keyPath, file) {
       plugins: sourcePlugins(file),
     });
   } catch {
-    return null;
+    return () => null;
   }
   /** @param {any} node @returns {string | null} */
   const keyOf = node =>
@@ -170,26 +185,63 @@ export function keyPathLine(source, keyPath, file) {
         : node?.type === 'NumericLiteral'
           ? String(node.value)
           : null;
-  /** @param {string[]} stack */
-  const ends = stack =>
-    stack.length >= keyPath.length &&
-    keyPath.every((k, i) => stack[stack.length - keyPath.length + i] === k);
-  /** @type {number | null} */
-  let found = null;
+  // Every literal property, in source order, by its own key: its keys from
+  // the outermost object, and its line.
+  /** @type {Map<string, Array<{stack: string[], line: number | null}>>} */
+  const byKey = new Map();
+  // The module's own consts, whose value a key can name.
+  /** @type {Map<string, any>} */
+  const consts = new Map();
+  for (const statement of ast.program.body) {
+    const declaration =
+      statement.type === 'ExportNamedDeclaration'
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== 'VariableDeclaration') continue;
+    for (const d of declaration.declarations)
+      if (d.id?.type === 'Identifier' && d.init) consts.set(d.id.name, d.init);
+  }
+  /** @type {Set<string>} */
+  const following = new Set();
+  // A value under a key: an object or array keeps the key, and so does one
+  // given through a call's argument, a const of the module or a spread.
+  /** @param {any} node @param {string[]} stack */
+  const value = (node, stack) => {
+    if (!node || typeof node !== 'object') return;
+    if (WRAPPERS.has(node.type)) return value(node.expression, stack);
+    if (node.type === 'Identifier') {
+      const init = consts.get(node.name);
+      if (init && !following.has(node.name)) {
+        following.add(node.name);
+        value(init, stack);
+        following.delete(node.name);
+      }
+      return;
+    }
+    if (node.type === 'CallExpression') {
+      visit(node.callee, []);
+      for (const a of node.arguments) value(a, stack);
+      return;
+    }
+    visit(node, stack);
+  };
   /** @param {any} node @param {string[]} stack */
   const visit = (node, stack) => {
-    if (found != null || !node || typeof node !== 'object') return;
+    if (!node || typeof node !== 'object') return;
     if (node.type === 'ObjectExpression') {
       for (const p of node.properties) {
+        if (p.type === 'SpreadElement') {
+          value(p.argument, stack);
+          continue;
+        }
         if (p.type !== 'ObjectProperty') continue;
         const k = p.computed ? null : keyOf(p.key);
         if (k == null) continue;
         const next = [...stack, k];
-        if (ends(next)) {
-          found = p.loc?.start?.line ?? null;
-          return;
-        }
-        visit(p.value, next);
+        const list = byKey.get(k) ?? [];
+        list.push({stack: next, line: p.loc?.start?.line ?? null});
+        byKey.set(k, list);
+        value(p.value, next);
       }
       return;
     }
@@ -208,5 +260,87 @@ export function keyPathLine(source, keyPath, file) {
     }
   };
   visit(ast.program, []);
+  return (keyPath, {fromRoot = false} = {}) => {
+    if (!keyPath.length) return null;
+    for (const {stack, line} of byKey.get(keyPath[keyPath.length - 1]) ?? [])
+      if (
+        (fromRoot
+          ? stack.length === keyPath.length
+          : stack.length >= keyPath.length) &&
+        keyPath.every((k, i) => stack[stack.length - keyPath.length + i] === k)
+      )
+        return line;
+    return null;
+  };
+}
+
+/**
+ * The line of the first property named `key` whose value is the literal
+ * `value` as written (text, or a number written as itself), anywhere in a
+ * source: the place a value given through a const, a shorthand or a spread
+ * is written, where no whole key path reaches it. Null when none is.
+ * @param {string} source
+ * @param {string} key
+ * @param {unknown} value
+ * @param {string} [file]
+ * @returns {number | null}
+ */
+export function keyValueLine(source, key, value, file) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(source, {
+      sourceType: 'unambiguous',
+      plugins: sourcePlugins(file),
+    });
+  } catch {
+    return null;
+  }
+  /** @param {any} node @returns {any} */
+  const unwrapped = node => {
+    let n = node;
+    while (n && WRAPPERS.has(n.type)) n = n.expression;
+    return n;
+  };
+  /** @type {number | null} */
+  let found = null;
+  /** @param {any} node */
+  const visit = node => {
+    if (found != null || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (node.type === 'ObjectProperty' && !node.computed) {
+      const k =
+        node.key?.type === 'Identifier'
+          ? node.key.name
+          : node.key?.type === 'StringLiteral'
+            ? node.key.value
+            : node.key?.type === 'NumericLiteral'
+              ? String(node.key.value)
+              : null;
+      const v = unwrapped(node.value);
+      if (
+        k === key &&
+        (v?.type === 'StringLiteral' || v?.type === 'NumericLiteral') &&
+        v.value === value
+      ) {
+        found = node.loc?.start?.line ?? null;
+        return;
+      }
+    }
+    for (const [k, v] of Object.entries(node))
+      if (
+        k !== 'loc' &&
+        k !== 'start' &&
+        k !== 'end' &&
+        v &&
+        typeof v === 'object'
+      )
+        visit(v);
+  };
+  visit(ast.program);
   return found;
 }

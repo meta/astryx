@@ -27,6 +27,10 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {
+  publishedOptionDescription,
+  publishedSummary,
+} from './command-pointers.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 
 /** The doc kinds that declare a namespace. */
@@ -97,7 +101,14 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
-      loaded.push({source, doc});
+      // The docs and search read a command's summary with its pointers.
+      loaded.push({
+        source,
+        doc:
+          doc.type === 'command' && doc.pointers?.length
+            ? {...doc, summary: publishedSummary(doc)}
+            : doc,
+      });
     } catch (error) {
       failed.push({
         source,
@@ -169,6 +180,17 @@ function entryText(entry, fn) {
 }
 
 /**
+ * The text for a command option: its own or its API parameter's, then the
+ * text of every part it declares.
+ * @param {{description?: string, param?: string, pointers?: Array<string | {text: string}>}} option
+ * @param {any} fn the FunctionDoc the command calls, if any
+ * @returns {string}
+ */
+function optionText(option, fn) {
+  return publishedOptionDescription(option, entryText({param: option.param}, fn));
+}
+
+/**
  * `text`, ending in a full stop when more text follows it in the same cell.
  * @param {string} text
  * @param {boolean} more
@@ -233,7 +255,7 @@ function commandSection(cmd, index) {
         ].filter(Boolean);
         return [
           `\`${option.flag}\``,
-          [sentence(entryText(option, fn), extra.length > 0), ...extra]
+          [sentence(optionText(option, fn), extra.length > 0), ...extra]
             .filter(Boolean)
             .join(' '),
         ];
