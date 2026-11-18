@@ -130,6 +130,18 @@ const ROWS = [
     },
   ],
   [
+    "a border's state said with no part offers each family that draws one",
+    {
+      q: 'Feel: border darkens on hover.',
+      says: /the families that draw a border at rest and take hover, each from its own rest border: inputs, containers/,
+      saysNot: /not used/,
+      saysOrHas: [
+        /^--color-border-emphasized '#[0-9a-f]{6}' --on inputs --state hover --mode light$/,
+      ],
+      never: /--state hover(?! --mode)|--on (?!inputs|containers|checks)/,
+    },
+  ],
+  [
     'a one-word mood after a semicolon is named',
     {q: 'bigger buttons; dreamy', says: /not used: "dreamy"/},
   ],
