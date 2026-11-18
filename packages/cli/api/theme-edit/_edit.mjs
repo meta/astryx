@@ -67,6 +67,7 @@ import {
   radiusTokenOf,
   acceptedContrast,
   contrastPlace,
+  drawnPair,
   contrastProblems,
   describe,
   entryDamage,
@@ -2259,6 +2260,25 @@ async function acceptContrast(slug, reason, options) {
       {run: [`${P} show ${slug}`, line]},
     );
   const ctx = await context(cwd);
+  // An official theme (a package Astryx ships, @astryxdesign/theme-*) is
+  // the reference others copy: it keeps no contrast miss, by any reason.
+  const ownName = (() => {
+    try {
+      return String(
+        JSON.parse(
+          fs.readFileSync(path.join(ctx.project.cwd, 'package.json'), 'utf8'),
+        ).name ?? '',
+      );
+    } catch {
+      return '';
+    }
+  })();
+  if (/^@astryxdesign\/theme-/.test(ownName) && reason.trim() !== 'none')
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${ownName} is an official Astryx theme, and an official theme keeps no contrast problem as designed: follow the problem's fix line instead. Nothing was changed.`,
+      {run: [`${P} show ${slug}`]},
+    );
   const data = loadTheme(cwd, slug);
   /** The settings' record of acceptances, written with the settings. */
   const record =
@@ -2311,17 +2331,28 @@ async function acceptContrast(slug, reason, options) {
         `${part} on ${ground} in ${mode} fails in a color the editor made, not one the theme typed: a made color must pass, so it cannot be kept as designed; follow its fix line instead. Nothing was changed.`,
         {run: here?.fix ? [here.fix] : [`${P} show ${slug}`]},
       );
-    // The color kept: the text's as drawn (a token read in that mode), or
-    // a track's fill.
-    const drawnAs = /\(([^\s()]+) on /.exec(String(here?.text))?.[1] ?? '';
-    const read = drawnAs.startsWith('--')
-      ? String(res[mode][drawnAs] ?? '')
-      : drawnAs || (String(here?.text).match(/#[0-9a-f]{6}\b/i)?.[0] ?? '');
-    const rgb = parseColor(read);
-    const color = rgb ? hex(rgb) : read.toLowerCase();
+    // The exact pair kept: the text (or a track's fill) and what it is
+    // drawn on, each as drawn in that mode.
+    const pair = drawnPair(/** @type {any} */ (here), res, mode);
+    if (!pair)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${part} on ${ground} in ${mode} is not drawn in two fixed colors the editor can name, so it cannot be kept as one exact pair. Nothing was changed.`,
+        {run: [`${P} show ${slug}`]},
+      );
+    const {color, groundColor} =
+      /** @type {{color: string, groundColor: string}} */ (pair);
     record.accepted = [
       ...kept.filter(a => !same(a)),
-      {part, ground, mode, ratio: at.ratio, color, reason: reason.trim()},
+      {
+        part,
+        ground,
+        mode,
+        ratio: at.ratio,
+        color,
+        groundColor,
+        reason: reason.trim(),
+      },
     ];
   }
   await commitTheme(ctx, slug, data, {history: true});
@@ -2352,7 +2383,7 @@ async function acceptContrast(slug, reason, options) {
       notes: [
         reason.trim().toLowerCase() === 'none'
           ? `${part} on ${ground} in ${mode} is a problem again: show lists it with its fix line`
-          : `${part} on ${ground} in ${mode} is kept as designed at ${contrastPlace(/** @type {any} */ (here))?.ratio}:1 (${reason.trim()}); a change that draws it lower makes it a problem again; to take this back: ${P} set ${slug} contrast-accepted none --on ${part} --ground ${ground} --mode ${mode}`,
+          : `${part} on ${ground} in ${mode} is kept as designed at ${contrastPlace(/** @type {any} */ (here))?.ratio}:1 (${reason.trim()}); a change to either of its colors makes it a problem again; to take this back: ${P} set ${slug} contrast-accepted none --on ${part} --ground ${ground} --mode ${mode}`,
       ],
     },
   });
