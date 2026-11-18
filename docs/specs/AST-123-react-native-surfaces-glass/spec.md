@@ -106,15 +106,17 @@ and a token fill.
   - Component props: every library surface in this record takes `surface`.
     The bars, bar buttons, tab accessory, and search field default to `glass`
     (chrome glass); the overlays the library builds and floating surfaces
-    default to `material` and follow FR7; `IconButton` and `Button` default to
-    `plain` and draw glass with `surface="glass"`. `surface="plain"` drops the
-    look and the scroll edge (FR7, FR8).
+    default to `material` and follow FR7. `IconButton` and `Button` default to
+    `plain`, where they keep the paint their own record gives them and use
+    none of the native components, and draw glass with `surface="glass"`. On
+    a bar, an overlay, or a floating surface, `surface="plain"` drops the look
+    and the scroll edge (FR7, FR8).
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
     or in a `platforms.ios` or `platforms.android` entry (`spec:AST-082/FR10`),
     sets the look for every surface (FR7).
   - Rendering: `render` and `surface` are as `spec:AST-112/FR21` states. A
-    `plain` surface uses the token paints of FR7 and none of the native
-    components.
+    `plain` surface uses none of the native components; FR7 gives a `plain`
+    bar, overlay, or floating surface its token paint.
   - The library's own surfaces here (bars, bar buttons, glass buttons, the
     overlays it builds, and floating surfaces) are `drawn`, with
     `surface="glass"` or `surface="material"` for the look. The native
@@ -208,7 +210,7 @@ and a token fill.
     of the running platform's entries (`ios` or `android`) whose OS version
     range includes the running version and that set `material`, the last one
     applies; with none, the durable member applies. `opaque` paints every surface
-    `opaque`. `translucent` or an iOS glass value asks for the system
+    in the table below `opaque`. `translucent` or an iOS glass value asks for the system
     material: floating surfaces and overlays then take `native` wherever
     `AstryxMaterialView` is present (system glass on iOS 26 and later, the system
     blur before it), unless the app explicitly sets `surfaceMaterial="opaque"`
@@ -235,12 +237,15 @@ and a token fill.
     a one-pixel outline. Overlays have no `translucent` paint.
   - Grouped chrome uses `AstryxGlassContainerView` for the `glass` and
     `native` paints and a plain View for the others.
-  - `surface="plain"` sends a surface to the token paints and uses none of the
-    native components. Overlays paint `opaque`. Chrome and floating surfaces
+  - `surface="plain"` on a bar, an overlay, or a floating surface sends it to
+    the token paints and uses none of the native components. Overlays paint
+    `opaque`. Chrome and floating surfaces
     paint `opaque` when Reduce Transparency, Increase Contrast, a theme
     `material: 'opaque'`, their props, or (floating surfaces) `surfaceMaterial`
     resolving to `opaque` ask for it, and `translucent` otherwise. A `glass` or
-    `material` surface follows the table above. Every paint here is `drawn`.
+    `material` surface follows the table above. Every paint here is `drawn`. A
+    `plain` `IconButton` or `Button` keeps the paint its own record gives it
+    (FR1).
 
 - **FR8 — System scroll-edge effects under a bar built in React.**
   `AstryxScrollEdgeView` wraps a bar that the library builds in React over the
