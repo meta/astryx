@@ -12,11 +12,17 @@
  *   literal radius scale, also where its container radius has that value, so a
  *   theme that extends it and sets its own container keeps it.
  * - A theme that extends another one and has no radius scale of its own
- *   inherits that theme's chat radius, so its tokens are left alone: every
- *   Astryx theme, and every theme this codemod migrates, sets the token.
+ *   inherits that theme's chat radius, so its tokens are left alone when the
+ *   base sets the token: an Astryx theme, or a theme this project defines,
+ *   which this upgrade migrates (a relative or aliased import, a
+ *   `defineTheme()` binding in the file, or an inline `defineTheme()`). Any
+ *   other base, such as a theme from another package, gets a TODO: an upgrade
+ *   never edits installed dependencies.
  * - Each adaptation rule with a radius scale gets its page step in its own
  *   tokens, with `base` and `multiplier` completed from the theme's scale.
- *   Adaptation rules in a base theme, which another file defines, are not read.
+ *   A theme's own radius scale also completes its base theme's adaptation
+ *   rules, which another file defines, so such a theme gets a TODO too unless
+ *   the base is an Astryx theme (they have no radius rules).
  *
  * It leaves a TODO comment where it cannot read the theme: a non-literal
  * config, a spread at the top of the config, tokens that are not an object
@@ -40,8 +46,9 @@ export const meta = {
     "adaptation rule's radius scale to that rule's tokens. This keeps the " +
     'corners of ChatComposer, its drawer and status bar, the buttons inside ' +
     'the composer other than the send button, and ChatMessageBubble. A ' +
-    'theme that extends another theme ' +
-    "and has no radius scale of its own inherits that theme's value. Remove " +
+    'theme that extends an Astryx theme or one this project defines, and ' +
+    "has no radius scale of its own, inherits that theme's value; one that " +
+    'extends another theme gets a TODO. Remove ' +
     'an added token to adopt the container radius.',
 };
 
@@ -55,6 +62,21 @@ const TODO_COMMENT =
   'add "--radius-chat" to this theme\'s tokens: 28px, or the page step of ' +
   'its radius scale (base × 7 × multiplier, in px). Add the page step of ' +
   "each adaptation rule's radius scale to that rule's tokens too. ";
+
+const TODO_EXTENDS_COMMENT =
+  ' TODO(astryx upgrade): --radius-chat now follows the container radius, ' +
+  'and this theme extends a theme this upgrade does not migrate. To keep ' +
+  'its previous chat corners, add "--radius-chat" to its tokens: the base ' +
+  "theme's own --radius-chat, else 28px, or the page step of the base's " +
+  'radius scale (base × 7 × multiplier, in px). ';
+
+const TODO_BASE_RULES_COMMENT =
+  ' TODO(astryx upgrade): --radius-chat now follows the container radius, ' +
+  "and this theme's radius scale also completes its base theme's adaptation " +
+  'rules. If the base has a rule with a radius scale, add a rule with the ' +
+  'same condition here whose tokens set "--radius-chat" to that rule\'s ' +
+  "page step, completed from this theme's scale (base × 7 × multiplier, in " +
+  'px). ';
 
 /** @param {any} node */
 function keyName(node) {
@@ -225,6 +247,7 @@ function addTodo(j, fromPath, text) {
  * @typedef {object} Edits
  * @property {(object: any, value: string) => void} token Add the token to an object's tokens.
  * @property {(text: string) => void} todo Leave a TODO comment.
+ * @property {(node: any) => 'astryx' | 'project' | 'other'} base Classify the theme `extends` names.
  */
 
 /**
@@ -246,20 +269,27 @@ function migrateConfig(config, edits) {
   }
   const tokens = tokensProperty ? unwrap(tokensProperty.value) : null;
   const radius = findProperty(config, 'radius');
-  const extendsTheme = Boolean(findProperty(config, 'extends'));
+  const extendsProperty = findProperty(config, 'extends');
+  const extendsTheme = Boolean(extendsProperty);
+  const base = extendsProperty
+    ? edits.base(unwrap(extendsProperty.value))
+    : null;
   const scale = radius ? readScale(radius.value) : null;
   const rules = readRules(config);
+  const setsToken = Boolean(tokens && findProperty(tokens, TOKEN));
   let changed = false;
 
   // The theme's own tokens.
   if (radius && scale === undefined) {
     changed = todo(TODO_COMMENT);
-  } else if (
-    !(tokens && findProperty(tokens, TOKEN)) &&
-    (radius || !extendsTheme)
-  ) {
+  } else if (!setsToken && (radius || !extendsTheme)) {
     edits.token(config, `${scale ? pageStep(scale) : PREVIOUS_CHAT_RADIUS}px`);
     changed = true;
+  } else if (!setsToken && base === 'other') {
+    changed = todo(TODO_EXTENDS_COMMENT);
+  }
+  if (radius && extendsTheme && base !== 'astryx') {
+    changed = todo(TODO_BASE_RULES_COMMENT) || changed;
   }
 
   // Each adaptation rule's radius scale.
@@ -307,6 +337,64 @@ function isThemeObject(node) {
   );
 }
 
+/** An Astryx theme package, which sets the chat radius. */
+const ASTRYX_THEME_MODULE = /^@(astryxdesign|xds)\/theme-/u;
+/** A file in this project: relative, absolute, or a common path alias. */
+const PROJECT_MODULE = /^(\.{1,2}\/|\/|@\/|~\/|#)/u;
+
+/**
+ * Classify the theme an `extends` value names: an Astryx theme, a theme this
+ * project defines (which this upgrade migrates), or another one.
+ * @param {any} j @param {any} node @param {any} scopePath
+ * @param {(callee: any, path: any) => boolean} isDefineTheme
+ * @returns {'astryx' | 'project' | 'other'}
+ */
+function classifyBase(j, node, scopePath, isDefineTheme, depth = 0) {
+  const value = unwrap(node);
+  if (depth > 4 || !value) return 'other';
+  if (value.type === 'CallExpression') {
+    return isDefineTheme(value.callee, scopePath) ? 'project' : 'other';
+  }
+  const name =
+    value.type === 'Identifier'
+      ? value.name
+      : value.type === 'MemberExpression' &&
+          !value.computed &&
+          value.object?.type === 'Identifier'
+        ? value.object.name
+        : null;
+  if (name == null) return 'other';
+  const scope = scopePath.scope?.lookup(name);
+  const bindingPath = scope?.getBindings()[name]?.[0];
+  const declaration = bindingPath?.parent;
+  if (!declaration) return 'other';
+  const declarationType = declaration.node.type;
+  if (
+    declarationType === 'ImportSpecifier' ||
+    declarationType === 'ImportDefaultSpecifier' ||
+    declarationType === 'ImportNamespaceSpecifier'
+  ) {
+    const source = declaration.parent?.node?.source?.value;
+    if (typeof source !== 'string') return 'other';
+    if (ASTRYX_THEME_MODULE.test(source)) return 'astryx';
+    return PROJECT_MODULE.test(source) ? 'project' : 'other';
+  }
+  if (
+    declarationType === 'VariableDeclarator' &&
+    value.type === 'Identifier' &&
+    declaration.node.id === bindingPath.node
+  ) {
+    return classifyBase(
+      j,
+      declaration.node.init,
+      declaration,
+      isDefineTheme,
+      depth + 1,
+    );
+  }
+  return 'other';
+}
+
 /**
  * @param {{source: string, path: string}} file
  * @param {{jscodeshift: any}} api
@@ -320,6 +408,8 @@ export default function transform(file, api) {
     components: new Map([['defineTheme', new Set()]]),
   });
   let changed = false;
+  const isDefineTheme = (/** @type {any} */ callee, /** @type {any} */ path) =>
+    Boolean(resolveImportedComponent(callee, path, defineTheme));
   /** What the file's defineTheme() themes need, for a manual report. */
   /** @type {string[]} */
   const defineSteps = [];
@@ -349,6 +439,8 @@ export default function transform(file, api) {
             : `add '--radius-chat': '${value}' to the tokens of the adaptation rule with that radius scale in ${at}`,
         );
       },
+      base: (/** @type {any} */ node) =>
+        classifyBase(j, node, callPath, isDefineTheme),
       todo: (/** @type {string} */ text) => {
         addTodo(j, callPath, text);
         defineSteps.push(
@@ -377,6 +469,8 @@ export default function transform(file, api) {
               ? `add '--radius-chat': '${value}' to its tokens`
               : `add '--radius-chat': '${value}' to the tokens of the adaptation rule with that radius scale`,
           ),
+        base: (/** @type {any} */ node) =>
+          classifyBase(j, node, exportPath, isDefineTheme),
         todo: () =>
           steps.push(
             "add '--radius-chat' to its tokens (28px, or the page step of its radius scale) and the page step of each adaptation rule's radius scale to that rule's tokens",

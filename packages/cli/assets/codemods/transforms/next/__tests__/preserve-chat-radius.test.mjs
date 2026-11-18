@@ -97,6 +97,52 @@ export const theme = defineTheme({name: 'app', extends: neutralTheme});`;
 export const theme = defineTheme({name: 'app', extends: neutralTheme, radius: {base: 4, multiplier: 1.5}});`),
     );
     expect(scaled).toMatch(/tokens: \{ ?'--radius-chat': '42px' ?\}/);
+    expect(scaled).not.toMatch(TODO);
+  });
+
+  it('classifies the theme `extends` names: an Astryx theme or a theme this project defines keeps the chat radius, any other gets a TODO', async () => {
+    const kept = [
+      `import {base} from './base';\nexport const theme = defineTheme({name: 'app', extends: base});`,
+      `import {base} from '@/themes/base';\nexport const theme = defineTheme({name: 'app', extends: base});`,
+      `import * as themes from '@astryxdesign/theme-neutral';\nexport const theme = defineTheme({name: 'app', extends: themes.neutralTheme});`,
+    ];
+    for (const body of kept) {
+      const source = `${IMPORT}${body}`;
+      expect(await applyTransform(source)).toBe(source);
+    }
+
+    // A base defined in this file is migrated with it.
+    const local = flat(
+      await applyTransform(`${IMPORT}const base = defineTheme({name: 'base'});
+export const theme = defineTheme({name: 'app', extends: base, tokens: {'--radius-container': '8px'}});`),
+    );
+    expect(local).toMatch(
+      /name: 'base', tokens: \{ ?'--radius-chat': '28px' ?\}/,
+    );
+    expect(local).toMatch(/tokens: \{ ?'--radius-container': '8px' ?\}/);
+    expect(local).not.toMatch(TODO);
+
+    // A theme from another package is not migrated, nor is an unknown value.
+    for (const body of [
+      `import {brandTheme} from '@acme/brand-theme';\nexport const theme = defineTheme({name: 'app', extends: brandTheme});`,
+      `const base = makeBrandTheme();\nexport const theme = defineTheme({name: 'app', extends: base});`,
+    ]) {
+      const once = await applyTransform(`${IMPORT}${body}`);
+      expect(once.match(TODO)).toHaveLength(1);
+      expect(once).toContain('extends a theme this upgrade does not migrate');
+      expect(once).not.toContain("'--radius-chat'");
+      expect(await applyTransform(once)).toBe(once);
+    }
+  });
+
+  it("leaves a TODO on an extending theme with its own radius scale, which also completes its base's adaptation rules", async () => {
+    const once =
+      await applyTransform(`${IMPORT}import {brandTheme} from '@acme/brand-theme';
+export const theme = defineTheme({name: 'app', extends: brandTheme, radius: {base: 5, multiplier: 1}});`);
+    expect(flat(once)).toMatch(/tokens: \{ ?'--radius-chat': '35px' ?\}/);
+    expect(once.match(TODO)).toHaveLength(1);
+    expect(once).toContain("completes its base theme's adaptation rules");
+    expect(await applyTransform(once)).toBe(once);
   });
 
   it("gives each adaptation rule's radius scale its page step, completed from the theme's scale", async () => {
@@ -342,6 +388,12 @@ const DOWNSTREAM = [
     changes: false,
   },
   {
+    prelude: `const base = defineTheme({name: 'base', tokens: {'--radius-container': '16px'}});\n`,
+    config: `{name: 'a', extends: base, tokens: {'--radius-container': '8px'}}`,
+    root: '28px',
+    changes: true,
+  },
+  {
     config: `{name: 'a', extends: ${BASE}, adaptations: {rules: [{${COARSE}, value: {radius: {base: 4, multiplier: 2}}}]}}`,
     root: '28px',
     rules: ['56px'],
@@ -352,8 +404,8 @@ const DOWNSTREAM = [
 describe('preserve-chat-radius, built with Core', () => {
   it.each(DOWNSTREAM)(
     'keeps the chat radius of $config',
-    async ({config, root, rules = [], changes}) => {
-      const source = `${IMPORT}export const theme = defineTheme(${config});`;
+    async ({prelude = '', config, root, rules = [], changes}) => {
+      const source = `${IMPORT}${prelude}export const theme = defineTheme(${config});`;
       const before = {root, rules};
       expect(effectiveChatRadius(await applyTransform(source))).toEqual(before);
       // Without the codemod, the new default changes the fixture, or not.
