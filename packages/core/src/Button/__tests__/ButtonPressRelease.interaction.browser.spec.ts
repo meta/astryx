@@ -735,12 +735,25 @@ test('after a busy first frame, the release starts at that frame and keeps a but
   // When the press controller writes the release, 150 ms of script hold the
   // main thread before the first frame, so the release animation starts
   // late. Each frame after that records whether the release is still
-  // written and the layer's strength, until the release is gone.
+  // written, the layer's strength and the frame's time, until the release
+  // is gone. The page also records when the release animation starts and
+  // ends, and when the press attribute leaves `fading`, all on its clock.
   await opened.surface.evaluate(el => {
-    type Frame = [press: string | null, strength: number];
-    (window as unknown as {__release: Promise<Frame[]>}).__release =
+    type Frame = [press: string | null, strength: number, t: number];
+    interface Release {
+      frames: Frame[];
+      startAt: number;
+      endsAt: number;
+      leftAt: number;
+    }
+    (window as unknown as {__release: Promise<Release>}).__release =
       new Promise(resolve => {
-        const frames: Frame[] = [];
+        const release: Release = {
+          frames: [],
+          startAt: Number.NaN,
+          endsAt: Number.NaN,
+          leftAt: Number.NaN,
+        };
         const observer = new MutationObserver(() => {
           if (el.getAttribute('data-astryx-press') !== 'fading') {
             return;
@@ -750,14 +763,37 @@ test('after a busy first frame, the release starts at that frame and keeps a but
           while (performance.now() < until) {
             // Busy: the main thread is held.
           }
-          const sample = () => {
+          const leave = new MutationObserver(() => {
+            if (el.getAttribute('data-astryx-press') !== 'fading') {
+              release.leftAt = performance.now();
+              leave.disconnect();
+            }
+          });
+          leave.observe(el, {attributeFilter: ['data-astryx-press']});
+          const sample = (t: number) => {
             const press = el.getAttribute('data-astryx-press');
-            frames.push([
+            if (press === 'fading' && Number.isNaN(release.startAt)) {
+              const animation = el
+                .getAnimations({subtree: true})
+                .find(
+                  running =>
+                    (running.effect as KeyframeEffect | null)?.pseudoElement ===
+                    '::before',
+                );
+              if (animation?.startTime != null) {
+                release.startAt = Number(animation.startTime);
+                release.endsAt =
+                  release.startAt +
+                  Number(animation.effect?.getComputedTiming().endTime);
+              }
+            }
+            release.frames.push([
               press,
               Number(getComputedStyle(el, '::before').opacity),
+              t,
             ]);
             if (press !== 'fading') {
-              resolve(frames);
+              resolve(release);
               return;
             }
             requestAnimationFrame(sample);
@@ -768,31 +804,55 @@ test('after a busy first frame, the release starts at that frame and keeps a but
       });
   });
   await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
-  const frames = await page.evaluate(
+  const release = await page.evaluate(
     async () =>
       (
         window as unknown as {
-          __release: Promise<[string | null, number][]>;
+          __release: Promise<{
+            frames: [string | null, number, number][];
+            startAt: number;
+            endsAt: number;
+            leftAt: number;
+          }>;
         }
       ).__release,
   );
-  const fading = frames.filter(([press]) => press === 'fading');
+  const {frames} = release;
+  const samples = frames.map(([press, strength, t]) => ({press, strength, t}));
+  // It ran on frames after the block. A page starved of frames fails here by
+  // name, not on a bare count.
+  const fading = requireFrames(samples, {
+    min: 3,
+    during: 'the release ran after the busy first frame',
+    where: frame => frame.press === 'fading',
+  });
   // Chromium starts the release when it first styles it, after the block:
   // the first frame shows it at most two frames in. WebKit starts it at the
   // time the busy script began, so its first frame shows it 150 ms in; the
   // checks below still hold there.
   if (browserName !== 'webkit') {
-    expect(fading[0]?.[1], JSON.stringify(frames)).toBeGreaterThan(
+    expect(fading[0]?.strength, JSON.stringify(frames)).toBeGreaterThan(
       strengthAt((2 * 1000) / 60),
     );
   }
-  // It ran on frames after the block, and its last frame still written
-  // shows the layer at rest: the release went when its animation ended, not
-  // partway through it.
-  expect(fading.length, JSON.stringify(frames)).toBeGreaterThan(2);
-  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(
-    strengthAt(releaseMs - 1000 / 60) + 0.01,
+  expect(
+    Number.isFinite(release.startAt) && Number.isFinite(release.endsAt),
+    'the release animation was not read',
+  ).toBe(true);
+  // The release went when its animation ended, not partway through it: the
+  // press attribute left at or after the animation's end. Both times are on
+  // the page's clock, so a frame gap moves neither.
+  expect(release.leftAt, JSON.stringify(release)).toBeGreaterThanOrEqual(
+    release.endsAt - 1,
   );
+  // Each frame still written shows the layer no stronger than the exit curve
+  // at that frame's own time into the release. A late frame shows a later
+  // point of the curve, so a frame gap still reads true. A frozen fade fails.
+  for (const frame of fading) {
+    expect(frame.strength, JSON.stringify(frames)).toBeLessThanOrEqual(
+      strengthAt(frame.t - release.startAt) + 0.01,
+    );
+  }
 });
 
 test('a second tap 70 ms after the first leaves nothing pressed', async ({

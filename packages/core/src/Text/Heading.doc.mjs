@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'Heading',
+  playground: {
+    defaults: {level: 1, children: 'Heading'},
+  },
   subComponentOf: 'Text',
   displayName: 'Heading',
   description:

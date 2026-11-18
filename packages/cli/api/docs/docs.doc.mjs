@@ -79,6 +79,12 @@ export const doc = {
         'Return the token-efficient dense doc variant. It is written to be read whole, so it returns the whole doc.',
     },
     {
+      name: 'options.list',
+      type: 'boolean',
+      description:
+        'Return the topic list, the same as giving no topic. It takes no topic or section.',
+    },
+    {
       name: 'options.index',
       type: 'boolean',
       description:
@@ -133,7 +139,7 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: "depth is not a whole number of levels or 'all'",
+      when: "depth is not a whole number of levels or 'all', or list is set with a topic or section",
     },
     {
       code: 'ERR_INVALID_DETAIL',

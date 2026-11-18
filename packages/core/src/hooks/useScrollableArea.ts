@@ -201,6 +201,21 @@ function overflowEqual(
   return a.inline === b.inline && a.block === b.block;
 }
 
+/**
+ * React renders a component again for a same-value update that follows the
+ * component's own update, and only then bails out.
+ */
+function setIfChanged(
+  last: {current: boolean},
+  set: (value: boolean) => void,
+  value: boolean,
+): void {
+  if (last.current !== value) {
+    last.current = value;
+    set(value);
+  }
+}
+
 function mappingsEqual(a: LogicalAxisMapping, b: LogicalAxisMapping): boolean {
   return (
     a.inline === b.inline &&
@@ -278,6 +293,7 @@ export function useScrollableArea({
     useState<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const [mapping, setMapping] = useState<LogicalAxisMapping>(INITIAL_MAPPING);
   const [isViewportFocused, setViewportFocused] = useState(false);
+  const viewportFocusedRef = useRef(false);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
   const measureRef = useRef<(() => void) | null>(null);
 
@@ -294,7 +310,11 @@ export function useScrollableArea({
       if (inline.isScrollable || block.isScrollable) {
         return;
       }
-      setViewportFocused(node.ownerDocument.activeElement === node);
+      setIfChanged(
+        viewportFocusedRef,
+        setViewportFocused,
+        node.ownerDocument.activeElement === node,
+      );
     };
     syncFocus();
     node.addEventListener('focusin', syncFocus);
@@ -304,7 +324,7 @@ export function useScrollableArea({
     return () => {
       node.removeEventListener('focusin', syncFocus);
       node.removeEventListener('focusout', syncFocus);
-      setViewportFocused(false);
+      setIfChanged(viewportFocusedRef, setViewportFocused, false);
       setViewport(null);
     };
   }, []);
@@ -375,7 +395,11 @@ export function useScrollableArea({
       // while the page lacks system focus), and this commit may drop the tab
       // stop that keeps focus here. A scrollable viewport never reads it.
       if (!inline.isScrollable && !block.isScrollable) {
-        setViewportFocused(viewport.ownerDocument.activeElement === viewport);
+        setIfChanged(
+          viewportFocusedRef,
+          setViewportFocused,
+          viewport.ownerDocument.activeElement === viewport,
+        );
       }
 
       const nextOverflow = {

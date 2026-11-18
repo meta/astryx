@@ -17,7 +17,7 @@ import {loadModuleDoc} from './_module-doc.mjs';
 /**
  * Build hook candidates: name + keywords + usage/description from the hook's
  * .doc.mjs.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Promise<Candidate[]>}
  */
 export async function gatherHooks(coreDir) {

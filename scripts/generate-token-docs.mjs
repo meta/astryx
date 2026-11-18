@@ -12,8 +12,10 @@
  *
  * The namespace carries the topic's search keywords; a guide adds none of
  * its own, so search indexes each guide by its title, description, and text,
- * as it indexed the topic's sections. Each token is written once, in its
- * category's guide. A token reference
+ * as it indexed the topic's sections. Each token's value is written once, in
+ * its category's guide; the namespace page names the tokens most code needs,
+ * and the generator fails when it names one the sources do not define. A
+ * token reference
  * (`{type: 'token-ref', topic: 'tokens', section: 'Color Tokens'}`) resolves
  * through the tokens namespace to the guide that holds the table.
  *
@@ -111,6 +113,15 @@ function keyToSlug(key) {
   return key.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+// Every table lists Core's defaults. A theme replaces them, so the headers
+// say whose values they are.
+const VALUE_HEADERS = ['Token', 'Core default'];
+const LIGHT_DARK_HEADERS = [
+  'Token',
+  'Core default (light)',
+  'Core default (dark)',
+];
+
 /** Map of group name → { exportName, file?, title, description, headers } */
 const groups = [
   {
@@ -120,7 +131,7 @@ const groups = [
     title: 'Color Tokens',
     description:
       'Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.',
-    headers: ['Token', 'Light', 'Dark'],
+    headers: LIGHT_DARK_HEADERS,
     formatRow: lightDarkRow,
     // One line per status role (architecture:theme-tokens INV11), so a reader
     // picks the token by the surface it sits on.
@@ -180,7 +191,7 @@ const groups = [
     title: 'Data Visualization Tokens',
     description:
       'Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Source compilation emits the complete 56-variable group when any member is retained and none for an unused graph. Prebuilt CSS consumers load @astryxdesign/core/astryx.css, which defines the complete group for the already-compiled dataVars entry.',
-    headers: ['Token', 'Light', 'Dark'],
+    headers: LIGHT_DARK_HEADERS,
     formatRow: lightDarkRow,
   },
   {
@@ -191,7 +202,7 @@ const groups = [
     title: 'Syntax Tokens',
     description:
       'Code highlighting colors used by CodeBlock. Each defaults to a palette token, so syntax colors follow the theme; defineTheme({syntax}) sets a syntax theme instead.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -201,7 +212,7 @@ const groups = [
     title: 'Spacing Tokens',
     description:
       'Spacing scale used for padding, gap, and margin. Component gap props map spacing steps to these tokens.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -211,7 +222,7 @@ const groups = [
     title: 'Size Tokens',
     description:
       'Control heights for consistent sizing across buttons, inputs, and selectors.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -220,7 +231,7 @@ const groups = [
     exportName: 'borderDefaults',
     title: 'Border Tokens',
     description: 'Border width for card and input borders.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -229,7 +240,7 @@ const groups = [
     title: 'Focus Tokens',
     description:
       'The keyboard focus ring, shared by every component that draws one. Override these to restyle focus across the system.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -239,7 +250,7 @@ const groups = [
     title: 'Radius Tokens',
     description:
       "Numeric scale based on a 4dp base unit. Tokens scale with the theme's radius multiplier; --radius-none and --radius-full are fixed.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -249,7 +260,7 @@ const groups = [
     title: 'Shadow Tokens',
     description:
       'Elevation shadows (low to med to high) and inset shadows for input state rings.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -259,7 +270,7 @@ const groups = [
     title: 'Duration Tokens',
     description:
       "Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio. Of a theme's two `motion` knobs, `tempo` (0.75–1.5) scales every duration here; `character` leaves durations alone. A duration scale beats `tempo` for the bands it sets, and explicit `tokens` beat both. `tempo` leaves these unscaled: finger tracking, momentum, the rubber band, the on-screen keyboard, the press's onset delay, cancel distance and tap flash, hover-intent delays, gesture thresholds, Spinner's and Skeleton's loops, and the 200 ms Reduce Motion cap.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -269,7 +280,7 @@ const groups = [
     title: 'Easing Tokens',
     description:
       "Easing curves for animations and transitions. Of a theme's two `motion` knobs, `character` sets `--ease-entrance` and `--ease-move`: `crisp` decelerates without overshoot, `expressive` overshoots slightly, and at `standard` both equal `--ease-standard`; `--ease-exit` keeps its own curve at every character. `tempo` leaves curves alone. A duration scale's own fields win over the knobs, and explicit `tokens` win over everything. No curve here shapes motion that follows a finger or the system (dragging, momentum, the rubber band, the on-screen keyboard), and the press's clocks, hover-intent delays and gesture thresholds keep their timing whatever the character.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -278,7 +289,7 @@ const groups = [
     exportName: 'typographyDefaults',
     title: 'Font Family Tokens',
     description: 'Font family stacks for body, code, and heading text.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -288,7 +299,7 @@ const groups = [
     title: 'Font Size Tokens',
     description:
       'Geometric type scale: round(14 × 1.2^step). Base is 14px (--font-size-base).',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -297,7 +308,7 @@ const groups = [
     exportName: 'fontWeightDefaults',
     title: 'Font Weight Tokens',
     description: 'Font weight values for body, emphasis, and headings.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -307,7 +318,7 @@ const groups = [
     title: 'Type Scale Tokens',
     description:
       'Semantic tokens for headings, body, labels, code, supporting text, and display text. References font size and weight tokens. Override via typography.scale in defineTheme.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
 ];
@@ -379,6 +390,113 @@ export const docs = ${JSON.stringify(childDoc, null, 2)};
 // 3. Build the namespace doc
 // ---------------------------------------------------------------------------
 
+// The tokens most code reaches for, named on the namespace page itself, so a
+// read of `astryx docs tokens` alone is enough to write styles. A family
+// placeholder (`<status>`, `<color>`) stands for each name of its family, read
+// from the sources, and the page lists those names; every named token, with
+// each placeholder expanded, must exist in the sources, so the page changes
+// with a token family or the generator fails.
+const tokenNames = new Set(
+  groups.flatMap(g =>
+    extractDefaults(g.exportName, g.file).map(([name]) => name),
+  ),
+);
+/** @param {RegExp} pattern a token name pattern with one capture group */
+function familyOf(pattern) {
+  return [...tokenNames].flatMap(name => {
+    const found = name.match(pattern);
+    return found ? [found[1]] : [];
+  });
+}
+/** @param {string[]} names */
+function listed(names) {
+  return names.length < 2
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')}, or ${names[names.length - 1]}`;
+}
+const FAMILIES = {
+  status: familyOf(/^--color-on-([a-z]+)-muted$/),
+  color: familyOf(/^--color-data-categorical-([a-z]+)$/),
+};
+
+const CORE_TOKEN_LINES = [
+  [
+    'Spacing',
+    '--spacing-0 to --spacing-12, plus --spacing-0-5 and --spacing-1-5',
+  ],
+  [
+    'Text color',
+    '--color-text-primary, --color-text-secondary, --color-text-accent; status text --color-text-<status>',
+  ],
+  [
+    'Surfaces',
+    '--color-background-body, --color-background-surface, --color-background-card, --color-background-muted',
+  ],
+  ['Borders', '--color-border, --color-border-emphasized, --border-width'],
+  [
+    'Accent and status fills',
+    `--color-accent with --color-on-accent; --color-<status> with --color-on-<status>, where <status> is ${listed(FAMILIES.status)}`,
+  ],
+  [
+    'Radius',
+    '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-full',
+  ],
+  [
+    'Control heights',
+    '--size-element-sm, --size-element-md, --size-element-lg',
+  ],
+  ['Shadow', '--shadow-low, --shadow-med, --shadow-high'],
+  [
+    'Type',
+    '--text-heading-1-size to --text-heading-6-size, --text-body-size, --font-weight-semibold',
+  ],
+  [
+    'Charts',
+    `--color-data-categorical-<color> for each series, where <color> is ${listed(FAMILIES.color)}, from dataVars in @astryxdesign/core/theme/dataTokens.stylex`,
+  ],
+];
+
+for (const [label, line] of CORE_TOKEN_LINES) {
+  for (const named of line.match(/--[a-z0-9<>-]+/g) ?? []) {
+    const placeholder = named.match(/<([a-z]+)>/)?.[1];
+    const family = placeholder ? FAMILIES[placeholder] : [''];
+    if (!family || family.length === 0) {
+      throw new Error(
+        `generate-token-docs: "${label}" names ${named}, and no token family <${placeholder}> exists.`,
+      );
+    }
+    for (const member of family) {
+      const name = placeholder
+        ? named.replace(`<${placeholder}>`, member)
+        : named;
+      if (!tokenNames.has(name)) {
+        throw new Error(
+          `generate-token-docs: "${label}" names ${name}, which no token source defines.`,
+        );
+      }
+    }
+  }
+}
+
+// The StyleX example, shown on the namespace page and in the usage guide.
+const USAGE_EXAMPLE = `import * as stylex from '@stylexjs/stylex';
+import {colorVars, spacingVars, sizeVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
+
+const styles = stylex.create({
+  card: {
+    padding: spacingVars['--spacing-4'],
+    backgroundColor: colorVars['--color-background-surface'],
+    borderRadius: radiusVars['--radius-container'],
+  },
+  series: {
+    color: dataVars['--color-data-categorical-blue'],
+  },
+  button: {
+    height: sizeVars['--size-element-md'],
+  },
+});`;
+
 const namespaceDoc = {
   type: 'namespace',
   name: 'tokens',
@@ -386,6 +504,27 @@ const namespaceDoc = {
   summary:
     'Complete reference for color, data visualization, syntax, spacing, size, border, focus, radius, shadow, motion, and typography tokens.',
   keywords: ['design tokens', 'css variables', 'custom properties'],
+  blocks: [
+    {
+      type: 'prose',
+      text: 'Use tokens in StyleX code by importing their vars; component props take spacing steps instead (`gap={4}` is `--spacing-4`). Never hard-code a color, size, radius, or shadow that a token names.',
+    },
+    {
+      type: 'code',
+      lang: 'tsx',
+      label: 'Token vars in StyleX',
+      code: USAGE_EXAMPLE,
+    },
+    {
+      type: 'list',
+      style: 'unordered',
+      items: CORE_TOKEN_LINES.map(([label, line]) => `${label}: ${line}`),
+    },
+    {
+      type: 'prose',
+      text: 'Each category below has every token with its default value.',
+    },
+  ],
   slots: {
     guides: {title: 'Token Categories', accepts: {kinds: ['generic']}},
   },
@@ -424,23 +563,7 @@ const usageDoc = {
           type: 'code',
           lang: 'tsx',
           label: 'Using token imports',
-          code: `import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars, sizeVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
-
-const styles = stylex.create({
-  card: {
-    padding: spacingVars['--spacing-4'],
-    backgroundColor: colorVars['--color-background-surface'],
-    borderRadius: radiusVars['--radius-container'],
-  },
-  series: {
-    color: dataVars['--color-data-categorical-blue'],
-  },
-  button: {
-    height: sizeVars['--size-element-md'],
-  },
-});`,
+          code: USAGE_EXAMPLE,
         },
         {
           type: 'prose',

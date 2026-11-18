@@ -25,6 +25,7 @@ import {
   touchDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {paging} from '../../motion/uikit/paging';
 
 const storybook = withStorybook(test);
 
@@ -180,7 +181,13 @@ async function flick(
   const from = {x: box.x + box.width / 2 + (back ? -40 : 40), y};
   const to = {x: from.x + (back ? 80 : -80), y};
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: 80}));
+  // The paging reads a scrolling surface's release and pages from
+  // `advanceSpeed`. A release the page reads on the other side of it from
+  // the script fails by name, never as a button that stays disabled.
+  await driver.play(drag(from, to, {durationMs: 80}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
 }
 
 async function settled(scroller: Locator): Promise<void> {

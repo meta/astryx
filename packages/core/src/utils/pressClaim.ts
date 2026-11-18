@@ -10,19 +10,23 @@
  *   no listener to the page.
  */
 
-const watchers = new Set<() => void>();
+import {sharedState} from './sharedRealm';
+
+const claims = sharedState('utils/press-claim/state', 1, () => ({
+  watchers: new Set<() => void>(),
+}));
 
 /** Tells each watcher that a long press acted on the press that is down. */
 export function claimPress(): void {
-  for (const watcher of [...watchers]) {
+  for (const watcher of [...claims.watchers]) {
     watcher();
   }
 }
 
 /** Calls `watcher` at each claim until the returned function runs. */
 export function watchPressClaims(watcher: () => void): () => void {
-  watchers.add(watcher);
+  claims.watchers.add(watcher);
   return () => {
-    watchers.delete(watcher);
+    claims.watchers.delete(watcher);
   };
 }

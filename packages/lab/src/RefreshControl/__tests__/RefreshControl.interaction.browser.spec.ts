@@ -67,6 +67,7 @@ import {
   type TouchDriver,
   PEN_SKIP,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
 } from '@astryxdesign/interaction-harness';
 
 import {refreshControl} from '../refreshValues';
@@ -1189,12 +1190,6 @@ async function listScrollRest(page: Page, timeout = 3000): Promise<number> {
   );
 }
 
-/**
- * The pause that ends a vertical trackpad scroll's gesture, ms. The page's
- * clock counts whole ms, so a gap of 1 ms less is the longest within one.
- */
-const TRACKPAD_SCROLL_END_MS = 180;
-
 /** Why the trackpad proofs run in WebKit only. */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel step as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas";
@@ -1228,7 +1223,7 @@ test('with a trackpad, a two-finger scroll at the top pulls and refreshes as a f
       x: 200,
       y: 300,
       steps: Array.from({length: 30}, () => ({dy: -10})),
-      maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+      maxGapMs: WHEEL_SCROLL_END_MS.vertical,
     });
     // The scroll's gesture ends after its last step. The pull's release
     // starts the settle, and the content comes to rest on the inset.
@@ -1539,4 +1534,55 @@ test('the end slides from its start, even when the page is busy as the refresh e
   expect(typeof end?.start).toBe('number');
   expect(typeof blockEnd).toBe('number');
   expect(end?.start ?? 0).toBeGreaterThanOrEqual(blockEnd - START_SLACK_MS);
+});
+
+test.describe('a tap that wobbles keeps its click', () => {
+  test('a tap at the top that drifts 3 px down keeps every move: the pull never cancels a tap\u2019s wobble (spec:AST-094 FR19, DEC-30)', async ({
+    page,
+  }) => {
+    const {driver, start} = await openRefresh(page);
+    await page.evaluate(() => {
+      const moves: {travel: number; cancelled: boolean}[] = [];
+      (window as unknown as {__wobble: typeof moves}).__wobble = moves;
+      let startY = 0;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          startY = event.touches[0]?.clientY ?? 0;
+        },
+        {passive: true},
+      );
+      window.addEventListener(
+        'touchmove',
+        event => {
+          moves.push({
+            travel: Math.round((event.touches[0]?.clientY ?? 0) - startY),
+            cancelled: event.defaultPrevented,
+          });
+        },
+        {passive: true},
+      );
+    });
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: start.x, y: start.y}]},
+      {t: 30, fingers: [{id: 0, x: start.x, y: start.y + 2}]},
+      {t: 60, fingers: [{id: 0, x: start.x, y: start.y + 3}]},
+      {t: 90, fingers: []},
+    ]);
+    // WebKit ends a touch's click when one of its moves is cancelled;
+    // Chromium sends no move inside its 15 px slop.
+    const moves = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __wobble: {travel: number; cancelled: boolean}[];
+          }
+        ).__wobble,
+    );
+    if (driver.engine === 'webkit') {
+      // WebKit sends the wobble's moves; each reaches the page uncancelled.
+      expect(moves.length, JSON.stringify(moves)).toBeGreaterThan(0);
+    }
+    expect(moves.filter(({cancelled}) => cancelled)).toEqual([]);
+  });
 });

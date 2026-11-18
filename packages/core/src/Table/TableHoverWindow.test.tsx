@@ -12,7 +12,7 @@ const columns = [{key: 'name', header: 'Name'}];
 function Fixture() {
   const virtualization = useTableRowsVirtualization({
     rowHeight: 56,
-    viewportHeight: 240,
+    initialViewportHeight: 240,
   });
   return (
     <>

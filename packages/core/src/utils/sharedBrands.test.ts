@@ -86,11 +86,14 @@ describe('brands a swizzled copy shares with the package', () => {
     // A swizzled Table carries its own copy of this module and reads the
     // capability the package's useTableRowsVirtualization made.
     const {result} = renderHook(() =>
-      pkg.useTableRowsVirtualization({rowHeight: 40, viewportHeight: 400}),
+      pkg.useTableRowsVirtualization({
+        rowHeight: 40,
+        initialViewportHeight: 400,
+      }),
     );
     expect(copy.getTableVirtualizationConfig(result.current)).toEqual({
       rowHeight: 40,
-      viewportHeight: 400,
+      initialViewportHeight: 400,
     });
     // The brand member is required, so a plain object is not a capability:
     // only the hook makes one.

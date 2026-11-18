@@ -14,28 +14,84 @@
  * 4. Report mismatches
  *
  * Exit 0 if codemods reproduce changes (or no consumer files changed).
- * Exit 1 if there are mismatches — callsites were hand-edited.
+ * Exit 1 if there are mismatches — callsites were hand-edited — unless the
+ * pull request carries the `allow-manual-edit` label: an owner exception that
+ * a maintainer applies (ALLOW_MANUAL_EDIT=true). It still lists every mismatch.
  */
 
-import {execSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {getTransformsBetween} from '../../packages/cli/assets/codemods/registry.mjs';
 import {runCodemods} from '../../packages/cli/assets/codemods/runner.mjs';
 
 // Consumer directories whose changes should be reproducible by codemods
 const CONSUMER_DIRS = ['apps/storybook', 'apps/sandbox', 'e2e'];
 
-function run(cmd) {
-  return execSync(cmd, {encoding: 'utf-8'}).trim();
+/**
+ * Runs a command with its arguments as given. No shell reads them, so a path
+ * with any characters (a space, parentheses, `$`, a backtick) passes through.
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{cwd?: string}} [options]
+ */
+function run(command, args, {cwd} = {}) {
+  return execFileSync(command, args, {encoding: 'utf-8', cwd}).trim();
+}
+
+/**
+ * The files the branch changed since `base`, read NUL-separated so git
+ * neither quotes nor escapes a path.
+ * @param {string} base
+ * @param {{cwd?: string}} [options]
+ */
+export function changedFiles(base, options = {}) {
+  return run('git', ['diff', '--name-only', '-z', base, 'HEAD'], options)
+    .split('\0')
+    .filter(Boolean);
+}
+
+/**
+ * A file's content at `base`, or null when the file is new since then.
+ * @param {string} base
+ * @param {string} file
+ * @param {{cwd?: string}} [options]
+ */
+export function baseVersion(base, file, options = {}) {
+  try {
+    return execFileSync('git', ['show', `${base}:${file}`], {
+      encoding: 'utf-8',
+      cwd: options.cwd,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Formats files in place with the workspace's Prettier. Node starts
+ * Prettier's own bin, because `npx` starts it again through a shell, which
+ * expands braces and brackets in a path.
+ * @param {string[]} files
+ * @param {{cwd?: string}} [options]
+ */
+export function formatFiles(files, options = {}) {
+  const manifest = createRequire(import.meta.url).resolve(
+    'prettier/package.json',
+  );
+  const {bin} = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  const script = path.join(
+    path.dirname(manifest),
+    typeof bin === 'string' ? bin : bin.prettier,
+  );
+  run(process.execPath, [script, '--write', ...files], options);
 }
 
 function getChangedFiles() {
-  const base = run('git merge-base HEAD origin/main');
-  return {
-    base,
-    files: run(`git diff --name-only ${base} HEAD`).split('\n').filter(Boolean),
-  };
+  const base = run('git', ['merge-base', 'HEAD', 'origin/main']);
+  return {base, files: changedFiles(base)};
 }
 
 function getCodemodTargets(changedFiles) {
@@ -120,13 +176,13 @@ async function main() {
   // Revert consumer files to base branch state
   let revertedFiles = [];
   for (const file of consumerFiles) {
-    try {
-      const baseContent = run(`git show ${base}:${file}`);
-      fs.writeFileSync(file, baseContent);
-      revertedFiles.push(file);
-    } catch {
+    const baseContent = baseVersion(base, file);
+    if (baseContent == null) {
       console.log(`  ⏭  ${file} — new in this PR, skipping`);
+      continue;
     }
+    fs.writeFileSync(file, baseContent);
+    revertedFiles.push(file);
   }
   console.log(
     `Reverted ${revertedFiles.length} files to base (${base.slice(0, 8)})\n`,
@@ -233,9 +289,7 @@ async function main() {
   // (jscodeshift's toSource() may change quotes, spacing, etc.)
   console.log('\nFormatting codemod output with prettier...');
   try {
-    run(
-      `npx prettier --write ${codemodModifiedFiles.map(f => `"${f}"`).join(' ')}`,
-    );
+    formatFiles(codemodModifiedFiles);
   } catch (e) {
     console.log('  ⚠️  Prettier formatting failed, comparing raw output');
   }
@@ -248,7 +302,7 @@ async function main() {
     const tmpFile = file.replace(ext, `.expected${ext}`);
     fs.writeFileSync(tmpFile, prVersions[file]);
     try {
-      run(`npx prettier --write "${tmpFile}"`);
+      formatFiles([tmpFile]);
       formattedExpected[file] = fs.readFileSync(tmpFile, 'utf-8');
     } catch {
       formattedExpected[file] = prVersions[file];
@@ -261,7 +315,6 @@ async function main() {
   // codemod REMOVED from base is also absent in the PR, and every line it
   // ADDED is present in the PR. This allows the PR to contain additional
   // changes from stacked commits that are beyond the codemod's scope.
-  let mismatches = 0;
   let matches = 0;
   const mismatchDetails = [];
 
@@ -310,7 +363,6 @@ async function main() {
           `  ✅ ${file} (superset — PR includes codemod changes + additional edits)`,
         );
       } else {
-        mismatches++;
         const issues = [];
         if (missingRemovals.length > 0) {
           issues.push(
@@ -339,38 +391,63 @@ async function main() {
     }
   }
 
-  // Report
-  console.log(`\n${'='.repeat(60)}`);
-  console.log('Codemod Verification Results');
-  console.log('='.repeat(60));
-  console.log(`  Files verified: ${matches + mismatches}`);
-  console.log(`  ✅ Reproducible: ${matches}`);
-  console.log(`  ❌ Mismatches:   ${mismatches}`);
-
-  if (mismatches > 0) {
-    console.log(
-      '\nMismatched files (codemod changes not fully reflected in PR):',
-    );
-    for (const {file, diffLines, issues} of mismatchDetails) {
-      console.log(`  ❌ ${file} (${issues || diffLines + ' lines differ'})`);
-    }
-    console.log(
-      '\n⚠️  The codemod did not reproduce the committed consumer changes.',
-    );
-    console.log('This means either:');
-    console.log('  1. Callsites were hand-edited instead of using the codemod');
-    console.log('  2. The codemod is incomplete (add missing transforms)');
-    console.log(
-      '  3. Changes are intentionally beyond codemod scope (add allow-manual-edit label)',
-    );
-    process.exit(1);
-  }
-
-  console.log('\n✅ All consumer changes are reproducible by codemods.');
-  process.exit(0);
+  return report({
+    matches,
+    mismatchDetails,
+    allowed: process.env.ALLOW_MANUAL_EDIT === 'true',
+  });
 }
 
-main().catch(err => {
-  console.error('Codemod verification failed:', err);
-  process.exit(1);
-});
+/** The label a maintainer applies for an owner exception. */
+export const ALLOW_LABEL = 'allow-manual-edit';
+
+/**
+ * Prints the results and returns the exit code: 1 when the codemods did not
+ * reproduce every consumer change, 0 when they did or when `allowed`.
+ * @param {{matches: number, mismatchDetails: {file: string, diffLines: number, issues?: string}[], allowed: boolean, log?: (line: string) => void}} options
+ * @returns {0 | 1}
+ */
+export function report({matches, mismatchDetails, allowed, log = console.log}) {
+  const mismatches = mismatchDetails.length;
+  log(`\n${'='.repeat(60)}`);
+  log('Codemod Verification Results');
+  log('='.repeat(60));
+  log(`  Files verified: ${matches + mismatches}`);
+  log(`  ✅ Reproducible: ${matches}`);
+  log(`  ❌ Mismatches:   ${mismatches}`);
+
+  if (mismatches > 0) {
+    log('\nMismatched files (codemod changes not fully reflected in PR):');
+    for (const {file, diffLines, issues} of mismatchDetails) {
+      log(`  ❌ ${file} (${issues || diffLines + ' lines differ'})`);
+    }
+    log('\n⚠️  The codemod did not reproduce the committed consumer changes.');
+    log('This means either:');
+    log('  1. Callsites were hand-edited instead of using the codemod');
+    log('  2. The codemod is incomplete (add missing transforms)');
+    log(
+      `  3. Changes are intentionally beyond codemod scope (a maintainer adds the ${ALLOW_LABEL} label; it takes effect on the next push or a draft-and-ready toggle)`,
+    );
+    if (allowed) {
+      log(`\n✅ Mismatches allowed by ${ALLOW_LABEL} (owner exception).`);
+      return 0;
+    }
+    return 1;
+  }
+
+  log('\n✅ All consumer changes are reproducible by codemods.');
+  return 0;
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().then(
+    code => process.exit(code),
+    err => {
+      console.error('Codemod verification failed:', err);
+      process.exit(1);
+    },
+  );
+}

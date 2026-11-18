@@ -23,7 +23,10 @@ export type DocsNavPackage = Pick<
   'name' | 'displayName' | 'canaryOnly'
 >;
 
-export type DocsNavTopic = Pick<DocTopic, 'topic' | 'title' | 'category'>;
+export type DocsNavTopic = Pick<
+  DocTopic,
+  'topic' | 'title' | 'category' | 'parent'
+>;
 
 export type DocsNavEntry = Pick<
   ComponentSidebarEntry,
@@ -92,10 +95,11 @@ export function getDocsNav(): DocsNav {
       displayName,
       canaryOnly,
     })),
-    docTopics: docTopics.map(({topic, title, category}) => ({
+    docTopics: docTopics.map(({topic, title, category, parent}) => ({
       topic,
       title,
       category,
+      parent,
     })),
     componentItems: componentItems.map(toNavItem),
     utilities: utilities.map(toNavEntry),

@@ -1,15 +1,24 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/* global process */
+
 /**
  * @file Reusable generator for runtime-sized palette reference modules.
  * @input A theme source, its committed full palette, and theme-specific paths.
- * @output Selected palette-reference content plus synchronized package outputs.
+ * @output Selected palette-reference content plus synchronized package outputs,
+ *   and the `--check` / write command line each theme's script runs.
  * @position Shared implementation behind theme-specific palette-ref CLIs.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import * as ts from 'typescript';
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 
 const COPYRIGHT = '// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n';
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
@@ -401,5 +410,94 @@ export function createSelectedPaletteRefGenerator({
     discoverSelectedRefs,
     renderSelectedRefs,
     generateSelectedPaletteRefs,
+  };
+}
+
+/**
+ * Everything one theme's palette-ref script needs, derived from the theme's
+ * folder name. Every theme names its files the same way, so the paths, the
+ * exported identifier, and the regeneration command follow from `slug`:
+ *
+ *     packages/themes/<slug>/src/<slug>Theme.ts
+ *     packages/themes/<slug>/src/<slug>Palettes.generated.ts
+ *     packages/themes/<slug>/src/<slug>PaletteRefs.generated.ts
+ *     packages/cli/assets/templates/themes/<slug>/<slug>PaletteRefs.generated.ts
+ *
+ * @param {object} theme
+ * @param {string} theme.slug The theme's folder name under `packages/themes`.
+ * @param {string} theme.displayName The theme's name in messages and headers.
+ * @param {string} [theme.root] The repository root; defaults to this checkout.
+ */
+export function defineThemePaletteRefs({slug, displayName, root = REPO_ROOT}) {
+  const paletteRefsIdentifier = `${slug}PaletteRefs`;
+  const themeSourceRel = `packages/themes/${slug}/src/${slug}Theme.ts`;
+  const fullPaletteRel = `packages/themes/${slug}/src/${slug}Palettes.generated.ts`;
+  const selectedRefsRel = `packages/themes/${slug}/src/${paletteRefsIdentifier}.generated.ts`;
+  const templateRefsRel = `packages/cli/assets/templates/themes/${slug}/${paletteRefsIdentifier}.generated.ts`;
+  const regenerateCommand = `pnpm generate:${slug}-palette-refs`;
+
+  const generator = createSelectedPaletteRefGenerator({
+    themeDisplayName: displayName,
+    paletteRefsIdentifier,
+    themeSourceRel,
+    fullPaletteRel,
+    selectedRefsRel,
+    templateRefsRel,
+    regenerateCommand,
+  });
+
+  /** Generate (or, with `check`, compare) this theme's palette refs. */
+  function generate({root: generateRoot = root, check = false} = {}) {
+    return generator.generateSelectedPaletteRefs({root: generateRoot, check});
+  }
+
+  /**
+   * Run the command: write both outputs, or with `--check` compare them and
+   * fail when either has drifted. Returns the exit code.
+   */
+  function main({
+    argv = process.argv,
+    stdout = process.stdout,
+    stderr = process.stderr,
+  } = {}) {
+    const check = argv.includes('--check');
+    const result = generate({check});
+    const count = countSelectedRefs(result.selected);
+
+    if (check && result.problems.length > 0) {
+      stderr.write(
+        `\n${displayName} selected palette refs are out of sync:\n` +
+          result.problems
+            .map(
+              problem =>
+                `  - ${path.relative(root, problem.output)} ${problem.reason}`,
+            )
+            .join('\n') +
+          `\nRun: ${regenerateCommand}\n\n`,
+      );
+      return 1;
+    }
+
+    if (check) {
+      stdout.write(
+        `${displayName} selected palette refs are in sync (${count} stops).\n`,
+      );
+    } else {
+      for (const output of result.outputs) {
+        stdout.write(`Wrote ${path.relative(root, output)}\n`);
+      }
+      stdout.write(`Selected ${count} referenced palette stops.\n`);
+    }
+    return 0;
+  }
+
+  return {
+    themeSourceRel,
+    fullPaletteRel,
+    selectedRefsRel,
+    templateRefsRel,
+    generator,
+    generate,
+    main,
   };
 }

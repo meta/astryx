@@ -1,7 +1,0 @@
----
-'@astryxdesign/cli': patch
----
-
-[experimental] `astryx experimental render` matches `compilerOptions.paths` keys and targets by TypeScript's rules, from the project's own tsconfig.json or jsconfig.json (a config it `extends` is not read). Newly, a `*` may sit anywhere in a key or a target (`"theme-*-x"`, `"./icons/icon-*"`), and a key's targets are tried in order, so a module, stylesheet, image or JSON file under a later target is found; `--reverse` puts a file back under the target its sent path names (the one whose folders match the most of the path above the file, a target with text before its `*` included), else under the first target. Only bare specifiers are matched, an import whose targets do not exist resolves as a package, and a catch-all `"*"` key never turns a missing package into a path error. A module the page loads from outside its own files and outside `node_modules` (a sibling package's source, say) resolves a bare import through the same aliases first, as the page's own files and TypeScript do, so the page and that module load one copy of a package; an import no alias places resolves as a package, so an installed package that a prefix key also names (`"@scope/*"` and `@scope/realpkg`) still loads. `--reverse` of a rendered file that lost its embedded source on the way (and has no Astryx components to rebuild from) now fails with `ERR_RENDER_SOURCE_DAMAGED`, saying so, instead of `ERR_RENDER_NOT_ASTRYX`.
-
-@josephfarina

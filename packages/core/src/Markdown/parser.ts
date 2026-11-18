@@ -48,7 +48,7 @@ import {
 // The decoder Markdown renders with, public from the parser subpath
 // (spec:AST-061 DEC-5).
 export {decodeMarkdownCharacterReferences} from './characterReferences';
-import {isSafeMarkdownParserUrl} from './url';
+import {isSafeMarkdownParserUrl, normalizedMarkdownDestination} from './url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -871,7 +871,9 @@ function matchLinkDefinition(
   }
   return {
     label,
-    destination: decodeLinkDestination(destination),
+    destination: normalizedMarkdownDestination(
+      decodeLinkDestination(destination),
+    ),
     hasTitle: match[4] != null,
   };
 }
@@ -2519,11 +2521,13 @@ function parseInlineImpl(
             ? -1
             : (angleClose ?? inlineIndex.closingParen(altClose + 1));
         if (srcClose !== -1) {
-          const src = decodeLinkDestination(
-            inlineDestination(text.slice(altClose + 2, srcClose)),
+          const src = normalizedMarkdownDestination(
+            decodeLinkDestination(
+              inlineDestination(text.slice(altClose + 2, srcClose)),
+            ),
           );
           if (!isSafeMarkdownParserUrl(src)) {
-            // Dangerous scheme — emit as plain text.
+            // Unsafe scheme — emit as plain text.
             nodes.push({type: 'text', value: text.slice(i, srcClose + 1)});
           } else {
             nodes.push({
@@ -2575,11 +2579,13 @@ function parseInlineImpl(
             ? -1
             : (angleClose ?? inlineIndex.closingParen(textClose + 1));
         if (urlClose !== -1) {
-          const href = decodeLinkDestination(
-            inlineDestination(text.slice(textClose + 2, urlClose)),
+          const href = normalizedMarkdownDestination(
+            decodeLinkDestination(
+              inlineDestination(text.slice(textClose + 2, urlClose)),
+            ),
           );
           if (!isSafeMarkdownParserUrl(href)) {
-            // Dangerous scheme — emit as plain text instead of a link.
+            // Unsafe scheme — emit as plain text instead of a link.
             nodes.push({type: 'text', value: text.slice(i, urlClose + 1)});
           } else {
             nodes.push({
@@ -2844,7 +2850,7 @@ function scanAutolinksInText(text: string): AutolinkMatch[] {
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const url = m[1];
-      // Skip dangerous URL schemes (javascript:, vbscript:, data:text/html)
+      // Skip unsafe URL schemes (javascript:, vbscript:, data:).
       if (!isSafeMarkdownParserUrl(url)) {
         continue;
       }
@@ -3002,7 +3008,7 @@ function splitTextOnAutolinks(
     }
     out.push({
       type: 'link',
-      url: m.href,
+      url: normalizedMarkdownDestination(m.href),
       children: [{type: 'text', value: m.display}],
     });
     cursor = m.end;
@@ -3855,7 +3861,9 @@ function parseMarkdownImpl(
     // literal text, the same rule the inline image path applies.
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
     const imageSrc = imageMatch
-      ? decodeLinkDestination(inlineDestination(imageMatch[2]))
+      ? normalizedMarkdownDestination(
+          decodeLinkDestination(inlineDestination(imageMatch[2])),
+        )
       : '';
     if (
       imageMatch &&

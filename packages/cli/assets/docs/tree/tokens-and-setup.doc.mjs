@@ -2,7 +2,8 @@
 
 /**
  * @file `astryx docs styling/tokens-and-setup`: using design tokens in custom
- * styles and configuring a StyleX compiler for swizzled components.
+ * styles, configuring a StyleX compiler for swizzled components, and keeping
+ * Next.js webpack builds small.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -14,8 +15,16 @@ export const docs = {
   placement: {parent: 'namespace:styling', slot: 'guides', order: 30},
   category: 'guide',
   description:
-    'Using design tokens in custom styles and configuring a StyleX compiler for swizzled components.',
-  keywords: ['StyleX setup', 'swizzle', 'webpack', 'Vite', 'Next.js'],
+    'Using design tokens in custom styles, configuring a StyleX compiler for swizzled components, and keeping Next.js webpack builds small.',
+  keywords: [
+    'StyleX setup',
+    'swizzle',
+    'webpack',
+    'Vite',
+    'Next.js',
+    'optimizePackageImports',
+    'Server Components',
+  ],
 
   sections: [
     {
@@ -126,6 +135,33 @@ export default stylexPlugin({
             'Pure theming (defineTheme + astryx theme build) needs NO StyleX compiler; only swizzled/authored StyleX source does.',
             'Keep loading `astryx.css` with a StyleX compiler in place. The compiler builds your own and swizzled source only; never add `node_modules/@astryxdesign` to its inputs.',
           ],
+        },
+      ],
+    },
+    {
+      id: 'nextjs-webpack',
+      title: 'Next.js with webpack',
+      content: [
+        {
+          type: 'prose',
+          text: 'If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`. With webpack, a Server Component that imports from the package root would otherwise ship every client component; this keeps first load to what the page uses. Turbopack, the default bundler in Next.js 16, needs no change, and the setting is safe to keep there.',
+        },
+        {
+          type: 'code',
+          lang: 'js',
+          label: 'next.config.mjs',
+          code: `/** @type {import('next').NextConfig} */
+const nextConfig = {
+  experimental: {
+    optimizePackageImports: ['@astryxdesign/core'],
+  },
+};
+
+export default nextConfig;`,
+        },
+        {
+          type: 'prose',
+          text: "In Server Components, also import each component from its own entry, for example `import {Button} from '@astryxdesign/core/Button'`. `{@command component <Name>}` prints that entry. Files that start with `'use client'` are not affected.",
         },
       ],
     },

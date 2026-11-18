@@ -5,8 +5,8 @@
  * @file CarouselFocusRing.a11y.chromium.spec.ts
  * @input Built Carousel and CodeBlock stories and real Chromium keyboard input
  * @output Evidence that the Carousel scroller's and the CodeBlock viewport's
- *   keyboard rings paint whole: no mask erases the Carousel ring, at rest or
- *   mid-scroll, and no clipping ancestor cuts either ring
+ *   keyboard rings paint whole: no mask or scroll button covers the Carousel
+ *   ring, at rest or mid-scroll, and no clipping ancestor cuts either ring
  * @position Real-engine proof for the focus rings; jsdom cannot match
  *   :focus-visible or paint
  */
@@ -168,7 +168,13 @@ async function pixel(page: Page, x: number, y: number) {
  * The ring the Carousel root's overlay paints, checked in pixels: the
  * midpoint of each edge, one pixel inside the root, shows the ring's color.
  */
-async function expectRingPaintsEveryEdge(page: Page, label: string) {
+async function expectRingPaintsEveryEdge(
+  page: Page,
+  label: string,
+  // Where on the start and end edges to sample, as a fraction of the height:
+  // 1/2 is level with the vertically centred scroll buttons.
+  sideHeight = 1 / 4,
+) {
   const root = page.locator('#storybook-root .astryx-carousel').first();
   const ring = await root.evaluate(el => {
     const after = getComputedStyle(el, '::after');
@@ -187,9 +193,8 @@ async function expectRingPaintsEveryEdge(page: Page, label: string) {
   const edges = {
     top: [box.x + box.width / 2, box.y + 1],
     bottom: [box.x + box.width / 2, box.y + box.height - 2],
-    // Above the vertically centred scroll buttons, which sit over the edges.
-    start: [box.x + 1, box.y + box.height / 4],
-    end: [box.x + box.width - 2, box.y + box.height / 4],
+    start: [box.x + 1, box.y + box.height * sideHeight],
+    end: [box.x + box.width - 2, box.y + box.height * sideHeight],
   } as const;
   for (const [edge, [x, y]] of Object.entries(edges)) {
     const painted = await pixel(page, Math.floor(x), Math.floor(y));
@@ -224,6 +229,8 @@ test.describe('Carousel and CodeBlock focus rings (Chromium)', () => {
       });
       await page.waitForTimeout(100);
       await expectRingPaintsEveryEdge(page, 'mid-scroll');
+      // Mid-scroll both scroll buttons show; the ring passes under neither.
+      await expectRingPaintsEveryEdge(page, 'at the scroll buttons', 1 / 2);
     });
   }
 

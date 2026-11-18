@@ -24,6 +24,7 @@ import {
   type WheelOption,
 } from './Wheel';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
+import {loopedStep, restingLoopStep} from './wheelOptions';
 
 const ROW = 28;
 
@@ -64,6 +65,47 @@ describe('nearestEnabledIndex', () => {
   it('stays on the committed row when no row is enabled', () => {
     const none = HOURS.map(option => ({...option, isDisabled: true}));
     expect(nearestEnabledIndex(none, 3, 10)).toBe(10);
+  });
+});
+
+describe('the looping wheel’s rules', () => {
+  /** Enabled where `isEnabled` holds for the row a position shows. */
+  const rowsWhere =
+    (isEnabled: (row: number) => boolean, count = 60) =>
+    (position: number) =>
+      isEnabled(((position % count) + count) % count);
+
+  it('rests beside the seam by turning the shorter way round', () => {
+    // Months with only January and February enabled: from December, January
+    // is one row on, February two.
+    const early = rowsWhere(row => row < 2, 12);
+    expect(restingLoopStep(early, 11, 1, 12)).toBe(1);
+    expect(restingLoopStep(early, 0, 1, 12)).toBe(0);
+  });
+
+  it('steps a key in its own direction across the seam, never a whole turn', () => {
+    const every = () => true;
+    expect(loopedStep(every, 59, 1, 60)).toBe(1);
+    expect(loopedStep(every, 0, -1, 60)).toBe(-1);
+    expect(loopedStep(every, 3, 60, 60)).toBeNull();
+    const onlyOne = rowsWhere(row => row === 30);
+    expect(loopedStep(onlyOne, 30, 1, 60)).toBeNull();
+  });
+
+  it('skips disabled rows across the seam', () => {
+    // 00-05 and 55-58 enabled, 59 disabled.
+    const bounded = rowsWhere(row => row <= 5 || (row >= 55 && row <= 58));
+    expect(loopedStep(bounded, 58, 1, 60)).toBe(2);
+    expect(loopedStep(bounded, 0, -1, 60)).toBe(-2);
+  });
+
+  it('never turns a key the long way round, nor against its direction', () => {
+    // Only 00-05 enabled: past :05 the next enabled row in either key's
+    // direction lies more than half a turn away, so the key stays put.
+    const early = rowsWhere(row => row <= 5);
+    expect(loopedStep(early, 5, 1, 60)).toBeNull();
+    expect(loopedStep(early, 0, -1, 60)).toBeNull();
+    expect(loopedStep(early, 4, 1, 60)).toBe(1);
   });
 });
 
@@ -761,6 +803,47 @@ describe('Wheel — a key step on a page starved of frames', () => {
     expect(onChange.mock.calls).toEqual([[11]]);
     expectRestOn(11);
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Tab', 'moves focus out of the column'],
+    ['ArrowLeft', 'scrolls nothing in a column'],
+  ])('keeps the row a key steps to through %s, which %s', key => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    scrollTo.mockClear();
+    // The key scrolls nothing. Then the step's first frame, and no frame for
+    // longer than the quiet period.
+    fireEvent.keyDown(listbox, {key});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    // The step still owns the column: it re-aims at 11 and never commits 10.
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    frame(11 * ROW);
+    act(() => {
+      listbox.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+  });
+
+  it('ends a key step on a key that scrolls the column, as Space, and commits the row shown', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait} = renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    // Space scrolls a focused column by itself: the person's scroll replaces
+    // the step, and the rest commits the row it shows.
+    fireEvent.keyDown(listbox, {key: ' '});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    expect(onChange.mock.calls).toEqual([[11], [10]]);
   });
 
   it('keeps the row a key steps to when the quiet period of a scroll before the key ends first', () => {

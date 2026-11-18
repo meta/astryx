@@ -25,7 +25,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component\'s real public contract.',
+          text: "`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component's real public contract.",
         },
         {
           type: 'code',
@@ -86,14 +86,52 @@ export default {
   ],
 },`,
         },
+      ],
+    },
+    {
+      id: 'choose-keywords',
+      title: 'Choose keywords',
+      content: [
         {
           type: 'prose',
-          text: "Set `keywords` to the words people search for: synonyms and the task the component does, such as `keywords: ['slider', 'slideshow', 'rotating cards']`. `{@command search}` ranks a match on a component's name or keywords above one in its description, so without keywords a search for the component's task can list Core components first. Check with the words a person would type:",
+          text: "Each keyword is what a person types to reach this component, and no other one, before they learn its name. Use two kinds: another name for the whole component, as another library names it, and the job in the person's own words. `{@command search}` ranks a match on a component's name or keywords above any other match. `{@command component}` never opens a component by a keyword: typing one as a name gives that component first in its answer.",
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'For a made-up Zorblet, keep `glimmer flange`: another name for the same component.',
+            'Keep `flarp a quandle`: the job, in the words a person types.',
+            'Leave out `blip`: generic, many components fit it.',
+            'Leave out `wobbly`: a feature, not the component itself.',
+            "Leave out `frobnitz`: another component's name or job.",
+            'Leave out `zorblet`: its own name already matches.',
+            'Leave out `snorkel`: a place the component is used, not what it is.',
+          ],
+        },
+        {
+          type: 'list',
+          style: 'ordered',
+          items: [
+            'Begin with the current keywords. Keep every one that passes, and change only what fails.',
+            'If someone typed only this word, this component should be the first answer. If another component is the right answer, the word belongs to that component, or to none.',
+            'A single word is fine when only this component answers it. For the job, prefer two words: generic single words collide.',
+            'When two components want the same word, it goes to the one that says it is that thing. When neither owns the word, leave it out of both.',
+            'Aim for three to eight keywords, best first. An earlier keyword wins a tie, and each keyword you add or take out can change who wins a tie for other words.',
+            'Add the words people actually type. When no component fits a need, leave it unfilled.',
+            'Each word of a two-word keyword also matches alone. Neither word should belong to another component on its own.',
+            'A word you take out hands its answers to the components that still declare it. Check who comes first for it.',
+            'Each keyword must be true of what the component does. Similar is not the same.',
+          ],
+        },
+        {
+          type: 'prose',
+          text: 'Check each added and removed word:',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '{@command search "rotating cards" --type component}',
+          code: '{@command search "glimmer flange" --type component}\n{@command component "glimmer flange"}',
         },
       ],
     },
@@ -149,9 +187,22 @@ export default {
           code: `examples: [
   {
     label: 'Automatic rotation',
-    code: '<AcmeCarousel slides={slides} interval={5000} />',
+    code: '<AcmeCarousel slides={["/one.jpg", "/two.jpg"]} interval={5000} />',
+  },
+  {
+    label: 'Wrap the app',
+    kind: 'setup',
+    code: '<AcmeCarouselProvider locale={locale}>{children}</AcmeCarouselProvider>',
   },
 ],`,
+        },
+        {
+          type: 'prose',
+          text: "An example's `kind` is `'demo'` by default: it runs on its own, so a docs site may show it as a live preview. Set `kind: 'setup'` for code that cannot run on its own, such as an app setup file, a server route, or a snippet that uses variables defined elsewhere; it is always shown as code only.",
+        },
+        {
+          type: 'prose',
+          text: "A demo runs on its own when its code compiles as a TSX module, ends with the JSX it renders (or declares a component, or default-exports one), and imports only the package, the packages it declares, React and Core: no relative path, and no code that runs only on a server. Every name it uses must be defined in it or imported, except the components the package documents, the components and hooks Core documents, React's exports, and browser globals such as `window`. A sample value is enough: `const viewer = {name: 'Ada'};`. `{@command doctor integration validate}` lists each demo that does not run on its own, with the fix.",
         },
       ],
     },

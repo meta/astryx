@@ -1,4 +1,4 @@
-Results for "icon" (20 of 233)
+Results for "icon" (20 of 234)
 name:        Icon
 domain:      component
 package:     @astryxdesign/core
@@ -56,6 +56,10 @@ name:        BaseTypeaheadCustomSearch
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template BaseTypeaheadCustomSearch --type block
+name:        BaseTypeaheadMenu
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template BaseTypeaheadMenu --type block
 name:        BottomSheetSnapPoints
 domain:      template
 package:     @astryxdesign/core
@@ -88,7 +92,3 @@ name:        CenterInsideACard
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template CenterInsideACard --type block
-name:        ChatComposerDrawerShowcase
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerDrawerShowcase --type block

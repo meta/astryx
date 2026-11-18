@@ -10,7 +10,8 @@ export const doc = {
   keywords: [
     'shell',
     'chrome',
-    'layout frame',
+    'layout',
+    'frame',
     'header',
     'menu',
     'topbar',
@@ -20,7 +21,10 @@ export const doc = {
   category: 'Shell - Top Nav',
   icons: {
     BoltIcon: 'bolt',
+    CloudIcon: 'cloud',
     FaceSmileIcon: 'emoji',
+    FireIcon: 'fire',
+    GiftIcon: 'gift',
     GlobeAltIcon: 'globe',
     HomeModernIcon: 'home',
     MagnifyingGlassIcon: 'search',

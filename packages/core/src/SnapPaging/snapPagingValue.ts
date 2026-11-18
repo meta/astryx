@@ -177,10 +177,11 @@ export function snapPages(
   element: HTMLElement,
   shown: number,
   end: number,
+  isHeld = false,
 ): SnapPages {
   const stops: number[] = [];
   const owners: Element[][] = [];
-  for (const {item, stop} of itemStops(element, shown, end)) {
+  for (const {item, stop} of itemStops(element, shown, end, isHeld)) {
     if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
       stops.push(stop);
       owners.push([item]);
@@ -200,10 +201,65 @@ export function snapPages(
   return {stops: n > 0 ? stops : [0], skipped: []};
 }
 
+/** The translate an item's styles show now, in the row's pixels. */
+const translateOf = (item: Element) =>
+  Number.parseFloat(getComputedStyle(item).translate) || 0;
+
+/**
+ * An item's rect, and the paging translate it carried in that rect. A
+ * browser can resolve each read of a running animation at its own time. A
+ * translate read after the rect can then show the item one move later.
+ * Equal translates on both sides of the rect show the translate the rect
+ * carried.
+ */
+function heldRead(
+  item: Element,
+  isHeld: boolean,
+): {rect: DOMRect; held: number} {
+  if (!isHeld) {
+    return {rect: item.getBoundingClientRect(), held: 0};
+  }
+  let before = translateOf(item);
+  let rect = item.getBoundingClientRect();
+  let after = translateOf(item);
+  for (let read = 1; read < 4 && Math.abs(after - before) > 0.01; read++) {
+    before = translateOf(item);
+    rect = item.getBoundingClientRect();
+    after = translateOf(item);
+  }
+  return {rect, held: after};
+}
+
+/**
+ * How far the row's items reach, start to end. A held row's items carry the
+ * paging's translate, so each rect takes its own item's translate off. The
+ * span is then the layout's, whenever each rect was read.
+ */
+export function itemsSpan(element: HTMLElement, isHeld = false): number {
+  const items = Array.from(element.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement,
+  );
+  if (items.length === 0) {
+    return 0;
+  }
+  // A rect is on screen, scaled with the row; a translate is in the row's own
+  // pixels. So each rect takes the scale off before its translate.
+  const scale = rowScale(element, element.getBoundingClientRect());
+  let start = Infinity;
+  let end = -Infinity;
+  for (const item of items) {
+    const {rect, held} = heldRead(item, isHeld);
+    start = Math.min(start, rect.left / scale - held);
+    end = Math.max(end, rect.right / scale - held);
+  }
+  return end - start;
+}
+
 function itemStops(
   element: HTMLElement,
   shown: number,
   end: number,
+  isHeld: boolean,
 ): {item: Element; stop: number}[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
@@ -217,9 +273,12 @@ function itemStops(
       rtl ? style.scrollPaddingRight : style.scrollPaddingLeft,
     ) || 0;
   return Array.from(element.children, item => {
-    const rect = item.getBoundingClientRect();
+    // A held row's children carry the paging's translate. Each rect takes
+    // its own item's translate off.
+    const {rect, held} = heldRead(item, isHeld);
     const fromEdge =
-      (rtl ? box.right - rect.right : rect.left - box.left) / scale;
+      (rtl ? box.right - rect.right : rect.left - box.left) / scale +
+      (rtl ? held : -held);
     return {
       item,
       stop: Math.min(Math.max(fromEdge - border + shown - padding, 0), end),

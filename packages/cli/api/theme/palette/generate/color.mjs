@@ -63,7 +63,7 @@ function linearRgbToOklab(red, green, blue) {
 }
 
 /** @param {number} lightness @param {number} a @param {number} b @returns {ColorTriple} */
-function oklabToLinearRgb(lightness, a, b) {
+export function oklabToLinearRgb(lightness, a, b) {
   const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b;
   const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b;
   const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b;

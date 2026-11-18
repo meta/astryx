@@ -256,8 +256,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Each leg runs its share of the plan at the head, as a pull request's
-  # dependent-audit legs do. A leg without a share only says so.
+  # Each leg runs its share of the plan at the head, with the steps of a
+  # pull request's planned dependent-audit legs. A leg without a share only
+  # says so.
   audits:
     name: Audits at head (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [plan, build-storybook]

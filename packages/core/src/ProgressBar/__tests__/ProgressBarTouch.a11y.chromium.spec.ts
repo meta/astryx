@@ -61,7 +61,10 @@ async function open(
   await page.goto(
     `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story${globals ? `&globals=${globals}` : ''}`,
   );
-  await expect(page.getByRole('progressbar')).toBeVisible();
+  // Storybook renders the story once it has loaded the story's module. A
+  // loaded runner can take longer than an assertion's 5 s for that, so the
+  // wait ends on the bar itself, within the test's timeout.
+  await page.getByRole('progressbar').waitFor();
   expect(
     await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
   ).toBe(coarse);

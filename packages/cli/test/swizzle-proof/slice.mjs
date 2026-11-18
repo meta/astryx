@@ -7,7 +7,7 @@
  *   (spec:AST-110 FR7). It prints each step's time, and fails with
  *   each target's failure.
  * @position Shared by the swizzle-proof.<n>.test.mjs files, one per slice,
- *   so the test-node shards split the proof between them
+ *   so CI runs one per leg of its swizzle-proof job
  */
 
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 import {runSlice} from './proof.mjs';
-import {notRendered, samples} from './samples.mjs';
+import {notRendered} from './samples.mjs';
 
 /** @param {number} index @param {number} count */
 export function proveSlice(index, count) {
@@ -29,10 +29,10 @@ export function proveSlice(index, count) {
         const run = await runSlice({
           index,
           count,
-          samples,
           notRendered,
           project,
           all: process.env.SWIZZLE_PROOF_ALL === '1',
+          browser: process.env.SWIZZLE_PROOF_BROWSER === '1',
         });
         const failures = run.results.filter(r => r.failure);
         console.log(

@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "11dd50b9d1b4ab0d08622c70d90634a9848d91fea3ed0eb3aad5845d120a1042",
+      "skeleton": "886d96a28f744f16807376b1b70638d515e9a851e9507809a9d819b938ea3cd3",
       "mentions": []
     },
     "browser-support": {
@@ -154,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "3241e02aec55b756c2dd55f6311b8e60f3b1f70b6cf76b3bc4661e7fb9410a4b",
+      "skeleton": "e0a2a3ca8c5e424d77bba6b0e13e87340bf2b6b4e45dbb08ed3fcd766460a93e",
       "mentions": []
     },
     "icons": {
@@ -254,13 +254,19 @@
     },
     "theme": {
       "sections": [
+        "make-or-change",
+        "look-after-each-change",
+        "denser-or-roomier",
+        "one-kind-of-part",
+        "no-app-yet",
+        "share-with-other-teams",
         "quick-start",
         "creating-a-custom-theme",
         "icon-sizes",
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "eacd1432d49237ed62f82ea054c0e5930503e9f072ab40b4965461f29cf31080",
+      "skeleton": "0265677164b16d22adfd3e60e3a7238e4c89b1f27f1a2aab9fcd0ad9bc4042ef",
       "mentions": []
     },
     "use-a-theme": {
@@ -299,7 +305,7 @@
         "mcp-server",
         "global-mode"
       ],
-      "skeleton": "032b8da5c5f97f350157c8f4b270f1c954ba32da04cbb5e846f42ed7fc9e31bb",
+      "skeleton": "712ebe16f9b4feced0722c6ee99d718798ced1e237d94dfeddc2ab0334250394",
       "mentions": []
     }
   }

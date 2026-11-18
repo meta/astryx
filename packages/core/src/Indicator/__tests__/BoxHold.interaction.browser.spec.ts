@@ -92,11 +92,11 @@ async function countChanges(page: Page, control: Control): Promise<void> {
  */
 type TouchPath = 'touch events' | 'gesture';
 
+const TOUCH_PATHS: ReadonlyArray<TouchPath> = ['touch events', 'gesture'];
+
 /** The paths each engine offers: the gesture path is Chromium's. */
 function touchPaths(browserName: string): ReadonlyArray<TouchPath> {
-  return browserName === 'chromium'
-    ? ['touch events', 'gesture']
-    : ['touch events'];
+  return browserName === 'chromium' ? TOUCH_PATHS : ['touch events'];
 }
 
 /**
@@ -395,18 +395,23 @@ test.describe('a finger held on a control’s box', () => {
     expect(tapped).toBeLessThanOrEqual(1);
   });
 
-  test('a long press that opens a ContextMenu over a box leaves the box unchanged', async ({
-    page,
-    browserName,
-  }) => {
-    const cases = [
-      {story: 'a11y-boxhold--in-context-menu', index: 0},
-      {story: 'a11y-boxhold--in-context-menu', index: 2},
-      {story: 'a11y-boxhold--in-popover-context-menu', index: 0},
-    ];
-    for (const path of touchPaths(browserName)) {
-      for (const ms of [HOLD_MS, 1200]) {
-        for (const {story, index} of cases) {
+  // One test per path, hold and box: each opens its story, and on a loaded
+  // runner one story load can take 10 s or more.
+  for (const path of TOUCH_PATHS) {
+    for (const ms of [HOLD_MS, 1200]) {
+      for (const {story, index} of [
+        {story: 'a11y-boxhold--in-context-menu', index: 0},
+        {story: 'a11y-boxhold--in-context-menu', index: 2},
+        {story: 'a11y-boxhold--in-popover-context-menu', index: 0},
+      ]) {
+        test(`a long press that opens a ContextMenu over a box leaves the box unchanged (${path}, ${ms} ms, ${story} box ${index})`, async ({
+          page,
+          browserName,
+        }) => {
+          test.skip(
+            !touchPaths(browserName).includes(path),
+            'the gesture path is Chromium’s',
+          );
           await openStory(page, storybook(), story);
           const control = {story, role: 'checkbox', index} as const;
           const points = await pointsOf(page, control);
@@ -414,24 +419,23 @@ test.describe('a finger held on a control’s box', () => {
           await longTouch(page, path, points.box, ms);
           await expect(page.getByText('Rename').first()).toBeVisible();
           await afterPageTimer(page, BROWSER_CLICK_WAIT_MS);
-          expect
-            .soft(
-              await changes(page),
-              `${path}: ${story} box ${index}, ${ms} ms`,
-            )
-            .toBe(0);
-        }
+          expect(await changes(page)).toBe(0);
+        });
       }
     }
-  });
+  }
 
-  test('a hold in a long-press row runs the row’s long press and leaves the box unchanged', async ({
-    page,
-    browserName,
-  }) => {
-    const story = 'a11y-boxhold--in-long-press-row';
-    for (const path of touchPaths(browserName)) {
-      for (const ms of [HOLD_MS, 1200]) {
+  for (const path of TOUCH_PATHS) {
+    for (const ms of [HOLD_MS, 1200]) {
+      test(`a hold in a long-press row runs the row’s long press and leaves the box unchanged (${path}, ${ms} ms)`, async ({
+        page,
+        browserName,
+      }) => {
+        test.skip(
+          !touchPaths(browserName).includes(path),
+          'the gesture path is Chromium’s',
+        );
+        const story = 'a11y-boxhold--in-long-press-row';
         await openStory(page, storybook(), story);
         const control = {story, role: 'checkbox', index: 0} as const;
         const points = await pointsOf(page, control);
@@ -439,10 +443,10 @@ test.describe('a finger held on a control’s box', () => {
         await longTouch(page, path, points.box, ms);
         await expect(page.getByText('Long presses: 1')).toBeVisible();
         await afterPageTimer(page, BROWSER_CLICK_WAIT_MS);
-        expect.soft(await changes(page), `${path}, ${ms} ms`).toBe(0);
-      }
+        expect(await changes(page)).toBe(0);
+      });
     }
-  });
+  }
 
   test('a hold in an onContextMenu row opens the row’s menu and leaves the box unchanged', async ({
     page,

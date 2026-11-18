@@ -25,6 +25,7 @@ import {observeMutations} from '../utils/sharedMutationObserver';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {
   type HeldRowListener,
+  itemsSpan,
   makeSnapPaging,
   rowScale,
   type SnapPages,
@@ -198,21 +199,8 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     followFrame = requestAnimationFrame(follow);
   }
 
-  // Every child carries the same translate, so a held row's span is its
-  // layout's.
   function span(): number {
-    const items = children();
-    if (items.length === 0) {
-      return 0;
-    }
-    let start = Infinity;
-    let end = -Infinity;
-    for (const child of items) {
-      const rect = child.getBoundingClientRect();
-      start = Math.min(start, rect.left);
-      end = Math.max(end, rect.right);
-    }
-    return (end - start) / rowScale(element, element.getBoundingClientRect());
+    return itemsSpan(element, isMoving);
   }
 
   // Each child's start and end along the row, in the position's terms, with
@@ -288,7 +276,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   }
 
   function pages(): SnapPages {
-    return snapPages(element, position(), travel());
+    return snapPages(element, nativePosition(), travel(), isMoving);
   }
 
   function stops(): number[] {

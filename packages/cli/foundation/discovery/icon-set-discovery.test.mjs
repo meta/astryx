@@ -191,13 +191,31 @@ describe('resolveIconModule', () => {
 });
 
 describe('Project.iconSets', () => {
-  it('reads no set, and records no issue, without experimental.iconSet unless asked', async () => {
+  it('reads no set, and records no issue, with no icon-set package and no experimental.iconSet', async () => {
+    const project = await Project.load(
+      writeIconSetProject(tmp, {packages: []}),
+      {fresh: true},
+    );
+    const state = await project.iconSets();
+    expect(state.sets).toEqual([]);
+    expect(state.choice.status).toBe('none');
+    expect(await project.issues()).toEqual([]);
+  });
+
+  it('reads an installed icon-set package without experimental.iconSet, and reports an invalid set', async () => {
     const project = await Project.load(
       writeIconSetProject(tmp, {packages: [{data: '{nope'}]}),
       {fresh: true},
     );
-    expect((await project.iconSets()).sets).toEqual([]);
-    expect(await project.issues()).toEqual([]);
+    expect((await project.iconSets()).withdrawn).toEqual([
+      expect.objectContaining({name: 'glyphs', kind: 'invalid'}),
+    ]);
+    expect(await project.issues()).toEqual([
+      expect.objectContaining({
+        code: 'invalid_icon_set',
+        package: '@acme/glyphs',
+      }),
+    ]);
   });
 
   it('answers one installed set as the project set', async () => {

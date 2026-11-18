@@ -322,7 +322,7 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('first')).toHaveFocus();
   });
 
-  it('leaves controls inside a closed dialog out of the Tab cycle', () => {
+  it('leaves controls inside a closed dialog that the page does not display out of the Tab cycle', () => {
     render(
       <Trap>
         <button type="button" data-testid="first">
@@ -375,6 +375,42 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
     expect(first).toHaveFocus();
     matches.mockRestore();
+  });
+
+  it('keeps controls inside a closed dialog that the page displays in the Tab cycle', () => {
+    // A Popover opened inside a closed <dialog> that the page shows in flow, as
+    // a card. The dialog has a box, and it never sets `open`.
+    render(
+      <dialog data-testid="card">
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="second">
+            Second
+          </button>
+        </Trap>
+      </dialog>,
+    );
+    const card = screen.getByTestId('card');
+    const box = new DOMRect(0, 0, 320, 120);
+    const rects = vi.spyOn(card, 'getClientRects').mockReturnValue({
+      length: 1,
+      item: (index: number) => (index === 0 ? box : null),
+      0: box,
+      [Symbol.iterator]: function* () {
+        yield box;
+      },
+    } as unknown as DOMRectList);
+    const first = screen.getByTestId('first');
+    first.focus();
+
+    expect(fireEvent.keyDown(first, {key: 'Tab'})).toBe(true);
+    const second = screen.getByTestId('second');
+    second.focus();
+    expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    rects.mockRestore();
   });
 
   it('lets the innermost region answer Tab when regions nest at the end', () => {
@@ -544,6 +580,65 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
 
       expect(outside).toHaveFocus();
     });
+  });
+});
+
+describe('useFocusTrap chorded Tab', () => {
+  function renderEnds() {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="last">
+          Last
+        </button>
+      </Trap>,
+    );
+    return {
+      first: screen.getByTestId('first'),
+      last: screen.getByTestId('last'),
+    };
+  }
+
+  it('leaves Ctrl+Tab and Meta+Tab at either end to the browser', () => {
+    const {first, last} = renderEnds();
+
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab', ctrlKey: true})).toBe(true);
+    expect(fireEvent.keyDown(last, {key: 'Tab', metaKey: true})).toBe(true);
+    expect(last).toHaveFocus();
+
+    first.focus();
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', ctrlKey: true, shiftKey: true}),
+    ).toBe(true);
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', metaKey: true, shiftKey: true}),
+    ).toBe(true);
+    expect(first).toHaveFocus();
+  });
+
+  it('still wraps Alt+Tab and Alt+Shift+Tab, which move focus in Safari', () => {
+    const {first, last} = renderEnds();
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab', altKey: true})).toBe(false);
+    expect(first).toHaveFocus();
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', altKey: true, shiftKey: true}),
+    ).toBe(false);
+    expect(last).toHaveFocus();
+  });
+
+  it('still wraps a plain Tab and Shift+Tab at either end', () => {
+    const {first, last} = renderEnds();
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(last).toHaveFocus();
   });
 });
 

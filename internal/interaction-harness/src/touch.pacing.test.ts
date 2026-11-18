@@ -42,6 +42,7 @@ import {
   TouchPacingError,
   TouchPageStallError,
   TouchStarvationError,
+  frameGaps,
   liftStallError,
   longestFrameGap,
   readHold,
@@ -817,5 +818,23 @@ describe('boundaries, the scroll release and frame evidence', () => {
       /back; the page drew no frame for 176 ms during the gesture\. /,
     );
     expect(new TouchLiftStallError(lift).message).not.toMatch(/drew no frame/);
+  });
+});
+
+describe('frameGaps', () => {
+  it('gives each gap across a span, from the frame before it to the frame after it', () => {
+    expect(frameGaps([150, 0, 16, 32, 166], 20, 160)).toEqual([
+      {from: 16, to: 32},
+      {from: 32, to: 150},
+      {from: 150, to: 166},
+    ]);
+  });
+
+  it('bounds a span with no frame before or after it by its own ends, and gives none with no frame read', () => {
+    expect(frameGaps([50], 20, 160)).toEqual([
+      {from: 20, to: 50},
+      {from: 50, to: 160},
+    ]);
+    expect(frameGaps([], 20, 160)).toEqual([]);
   });
 });

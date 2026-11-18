@@ -202,7 +202,11 @@ guidance owns the process used to propose and test APIs.
   component derive the default; INV16 keeps the caller able to override it.
   When a touch default changes a released component's behavior, that
   `presentation` value is the restoring prop `spec:AST-017` FR3 names
-  (`spec:AST-017/DEC-23`).
+  (`spec:AST-017/DEC-23`). One exception overrides an explicit choice: under a
+  calendar other than `gregory` or `iso8601`, `presentation="native"` on
+  `DateInput` or `DateTimeInput` resolves to the Astryx surface for the
+  pointer, because no native date picker shows the application's calendar
+  (`spec:AST-111` FR15, DEC-7).
 - **INV17 — Compact has one shared definition.** A component that chooses a
   presentation by screen size uses the theme's compact definition: width below
   the effective `md` point or height below 500, with the same numbers on every
@@ -283,7 +287,9 @@ guidance owns the process used to propose and test APIs.
   sit in its baseline, which only shrinks. Tests may name a private attribute,
   because they assert the DOM a component renders. A private attribute appears
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
-  promise, and may change in any release. The public data attributes are
+  promise, and may change in any release. A data attribute outside the
+  `data-astryx-*` namespace is public too, and is added only when a current
+  record names it (DEC-2). The public `data-astryx-*` attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -296,22 +302,29 @@ guidance owns the process used to propose and test APIs.
   among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
   theme build, AspectRatio, the Chat composer, the press and menu-press hooks,
   and the edge-compensation styles, and the lint rule allows their names.
-- **INV24 — Each published package's public surface has a generated API
-  report.** `pnpm api:report` generates one committed report per published
-  package from its built declarations and stylesheet, with a section for each
-  entry point. A report lists exports, component props with their types, hook
+- **INV24 — Each pull request carries a generated public API delta.** No package
+  commits a generated API report. For a pull request that changes a published
+  package's source or build, CI runs one surface generator on the merge base and
+  on the exact head, from each published package's built declarations and
+  stylesheet by entry point, and writes the API changes between them,
+  uncommitted, as CI's API-changes artifact. The delta lists new, changed, and
+  removed exports, component props with their types, hooks with their
   signatures, supporting types, public CSS custom properties and theme targets,
-  and the public `data-astryx-*` attributes INV23 names. A reachable member tagged internal
-  appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
-  including Lab, do not. A member inside a canonical experimental boundary
-  appears marked experimental (`spec:AST-017` FR21). The pull-request report
-  lists the API changes between the reports built from the merge base and from
-  the head: added, changed, and removed rows, each with its signature and a
-  usage example, and flags a committed report that differs from the head's
-  build as stale, in one line. The report and its changes are evidence: they
-  fail no check and decide no acceptance (INV13).
-- **INV25 — Undeclared public API goes to a human.** Review compares each added
-  or changed row of a pull request's API changes with current records. A row
+  the public `data-astryx-*` attributes INV23 names, and public events, each row
+  with its signature. A reachable member tagged internal appears (INV12); Core's
+  `./internal/*` subpaths and unpublished packages, including Lab, do not. A
+  member inside a canonical experimental boundary appears marked experimental
+  (`spec:AST-017` FR21). The merge gate reads that artifact only for a pull
+  request that changes a published package's source or build, and fails closed
+  when it is missing or the generator errors. For any other pull request the
+  gate reads no artifact, and its review notes say "New public API: none". The
+  review bot's review of each pull request starts its summary notes with the
+  delta, each row with a usage example, or says "New public API: none";
+  public-API review reads that delta. The delta's rows are evidence and decide
+  no acceptance (INV13).
+- **INV25 — Undeclared public API goes to a human.** Public-API review
+  compares each added or changed row of the pull request's API delta (INV24)
+  with current records. A row
   that a record current at the merge base, or a record change in the same pull
   request, decides needs no further step. A row that no current record decides,
   including a reachable member tagged internal, goes to human review with that
@@ -328,12 +341,12 @@ source. Lab components are not stable public promises until promotion.
   intentional observable contract triggers public-API review. A top-level export
   need not change for a reachable supporting contract to change.
 - Each review compares declarations and reachable exports from merge-base to head
-  and from current main to the synthetic merge. The API changes from the
-  generated reports (INV24) inventory that evidence and map each row to its
-  canonical component, family, architecture, or system owner; they do not decide
+  and from current main to the synthetic merge. The pull request's API delta
+  (INV24) inventories that evidence and maps each row to its canonical
+  component, family, architecture, or system owner; it does not decide
   acceptance.
-- A pull request that changes a published package's public surface regenerates
-  its API reports with `pnpm api:report`; a stale report is flagged, not failed.
+- A pull request that changes a published package's public surface shows the
+  change in its API delta (INV24) and commits no generated report.
 - After the generated surface inventory identifies the exact API and behavior
   delta and its canonical owner, route it under
   `architecture:knowledge-contracts`. This record does not redefine review results
@@ -408,6 +421,41 @@ the system already names.
 
 Rejected: component-local names for shared concepts.
 
+### DEC-2 — A data attribute outside the private `data-astryx-*` namespace is public surface
+
+**Reference:** `architecture:public-component-api/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "New data attributes are public facing and shoudln't be used
+for internal only concerns without a clear spec that by passes this rule", and
+"main reason to be careful of data attributes is we generate them for themes".
+Theme compilation writes selectors on data attributes (the `data-astryx-*`
+scopes and attributes that mirror props, such as `data-size` and
+`data-variant`), so a data attribute a component renders can be read or
+targeted by a theme and becomes public surface. A component therefore adds a
+new data attribute only when a current record names it and states why; an
+internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
+attribute at all.
+
+For a per-instance dynamic style, the first choice is a StyleX dynamic style
+(`stylex.create` with a function): it sets a generated custom property inline
+on that instance (`--x-<property>`, or a hashed name under a pseudo-element or
+condition). That property is private by this rule: no theme value, record, or
+document names it, and it may change in any release. The owner said, on
+Avatar's initials: "We should make this the agent's first choice for these
+types of dynamic styles."
+
+Rejected: adding a data attribute for an internal concern without a record
+that names it.
+
+### DEC-6 — Pull requests carry an API delta, not a committed report
+
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
+
+Rejected: keeping a committed generated API report per package.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -422,7 +470,7 @@ Rejected: component-local names for shared concepts.
 | INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping                                             | A reachable supporting type or behavior outside `./internal/*` is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                                                                                                                                                                                                                         |
 | INV14                   | `AppShell.test.tsx`                                                                                                      | A component hardcodes a divergent point or treats equality as below                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV15                   | Public-API review of the generated declaration inventory                                                                 | A part or StyleX-typed styling prop ships without class-name and inline-style counterparts on the same element                                                                                                                                                                                                                                                                                                                                                                          |
-| INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests                                     | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice                                                                                                                                                                                           |
+| INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests                                     | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice, other than the `spec:AST-111` FR15 calendar exception                                                                                                                                    |
 | INV17                   | Resolver tests at the compact edges plus public-API review                                                               | A component that chooses a presentation by screen size with its own numbers, or disagrees with the theme compact definition at width 768 or height 500                                                                                                                                                                                                                                                                                                                                  |
 | INV18                   | Public-API review against the component's anatomy table                                                                  | A prop that selects or configures a subcomponent's prop or label, a composition that renders a slot the anatomy does not describe, or a rendered content slot that is not a part named in the anatomy                                                                                                                                                                                                                                                                                   |
 | INV19                   | Public-API review with a bundle and runtime cost note for a costly feature                                               | A feature with a large resource cost that every caller pays with no plug-in path or named feature prop                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -431,12 +479,16 @@ Rejected: component-local names for shared concepts.
 | INV21a                  | Public-API review of each breaking or deprecating change to a shipped API                                                | A breaking or deprecating change to a shipped public API justified only by conformance to a system rule                                                                                                                                                                                                                                                                                                                                                                                 |
 | INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside hooks whose result only an Astryx component or StyleX can use and `useMenuPress` (by owner decision), or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                               |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
-| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
-| INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
+| INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
+| INV25                   | Public-API review routing against the pull request's API delta                                                           | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
 
+- INV23 gap: nothing checks data attributes outside `data-astryx-*` yet; the
+  lint and its verification row see only `data-astryx-*` names, and existing
+  attributes outside that namespace, such as ToastViewport's `data-toast-id`,
+  have no inventory.
 - INV2, INV3: shipped props that predate the behavior-prop rule keep their
   names until a minor renames them under INV9. This list is a partial
   inventory; known deviations include Tooltip and HoverCard `focusTrigger`,
@@ -477,12 +529,13 @@ Known verification gaps:
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
-- INV24: the reports cover declarations, CSS custom properties, theme targets,
+- INV24: the delta covers declarations, CSS custom properties, theme targets,
   and public attributes; context-member behavior, undeclared defaults, CLI
   schemas, and observable behavior for both the branch and synthetic merge
-  still need explicit review. When no build of the merge base is kept, the
-  API changes compare with the merge base's committed reports, marked as
-  such, and list the rows a stale committed report carries.
+  still need explicit review.
+- INV24 gap: the review recipe's API delta has no fixture test yet, and no
+  repository test covers the merge gate's fail-closed read of the compare
+  artifact.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's
