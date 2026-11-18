@@ -14,7 +14,13 @@ export const docs = {
       required: true,
     },
     {
-      name: 'heightProperty',
+      name: 'options',
+      type: 'UseCollapsibleContentMotionOptions',
+      description: 'Optional settings for the content motion.',
+      required: false,
+    },
+    {
+      name: 'options.heightProperty',
       type: '`--${string}`',
       description: "A CSS custom property that gets the content's natural height, as a px value that height can take. The hook measures it once at each open and at each close that keeps the children, with the content's animation suppressed for the read, so keyframes can grow from 0 to var(<property>) and shrink back. Rows that change in the same commit are measured in one pass.",
     },
@@ -63,7 +69,8 @@ export const docsDense = {
   description: "Content motion for a useCollapsible disclosure: phases last while the content element's own CSS animation plays, children stay through the close, natural height -> custom property. Own import; unused pages carry none. No animation: ends at once. Reduce Motion: fine pointer at once; coarse pointer waits for an opacity-only fade <= 200ms.",
   paramDescriptions: {
     collapsible: 'the useCollapsible result (whole).',
-    heightProperty: 'custom property that gets the content natural height (px) at each open + each close that keeps the children, read w/ animation suppressed; changed rows measured in one pass.',
+    options: 'optional settings.',
+    'options.heightProperty': 'custom property that gets the content natural height (px) at each open + each close that keeps the children, read w/ animation suppressed; changed rows measured in one pass.',
   },
   returnDescriptions: {
     isPresent: 'render children only while true: open, or close animation playing.',

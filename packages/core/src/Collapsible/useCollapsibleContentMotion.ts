@@ -120,17 +120,15 @@ const pendingHeights = sharedMap<HTMLElement, string>(
   1,
 );
 
-/**
- * Measures every element a commit changes in one pass, after the commit and
- * before paint: all writes, all reads, then all writes, so one layout runs.
- */
-function measureNaturalHeight(node: HTMLElement, property: string): void {
+/** Queues the element for the pass that runs after the commit, before paint. */
+function queueNaturalHeight(node: HTMLElement, property: string): void {
   if (pendingHeights.size === 0) {
     queueMicrotask(flushNaturalHeights);
   }
   pendingHeights.set(node, property);
 }
 
+/** Measures every queued element in one layout: all writes, reads, then writes. */
 function flushNaturalHeights(): void {
   const entries = [...pendingHeights].filter(([node]) => node.isConnected);
   pendingHeights.clear();
@@ -222,7 +220,7 @@ export function useCollapsibleContentMotion(
       heightProperty != null &&
       (isOpen || isHeld)
     ) {
-      measureNaturalHeight(node, heightProperty);
+      queueNaturalHeight(node, heightProperty);
     }
     if (motion != null && !isHeld) {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- the phase ends from the animation state this commit reads, before paint
