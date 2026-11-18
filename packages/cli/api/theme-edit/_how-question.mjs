@@ -7787,7 +7787,10 @@ export function draftAnswer(ctx, env, question) {
       ([at, , typed]) =>
         at < (role.index ?? 0) &&
         !typed &&
-        c.text.slice(at, role.index).trim().split(/\s+/).length <= 2,
+        c.text.slice(at, role.index).trim().split(/\s+/).length <= 2 &&
+        // (Never a color said ON the part, "white on accent buttons": that
+        // is the part's text.)
+        !/\b(?:on|against|over)\b/.test(c.text.slice(at, role.index)),
     );
     const said = before.length ? before[before.length - 1][1] : null;
     if (!said) continue;
