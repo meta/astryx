@@ -227,6 +227,8 @@ const TEXT_WORDS =
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  // A range (a calendar's range band, a date range) is no color.
+  'range',
   // A reader (a book reader, a feed reader) is no header.
   'reader',
   'readers',
@@ -7548,6 +7550,34 @@ export function draftAnswer(ctx, env, question) {
             );
       // (Names test the element's own words; states, the whole.)
       const nameText = said;
+      // Spacing asked between the parts a holder lays out ("more space
+      // between the keys in the shortcut", "between the buttons in the
+      // button group") is the holder's gap, when the census shows the
+      // holder draws a gap and holds those parts side by side.
+      if (
+        c.aspects.includes('spacing') &&
+        said &&
+        ((by === 'possessive' &&
+          /\bbetween\s+(?:the\s+)?[a-z]/i.test(holderText)) ||
+          new RegExp(
+            `\\bbetween\\s+(?:the\\s+)?${said.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`,
+            'i',
+          ).test(elementText))
+      ) {
+        const rec = ctx.C.MAP[holder];
+        const laidOut = (rec?.repeats ?? []).filter(
+          k =>
+            partIn(said) === k ||
+            words(k).test(said) ||
+            (k.startsWith(`${holder}-`) &&
+              words(k.slice(holder.length + 1)).test(said)),
+        );
+        if (
+          laidOut.length > 0 &&
+          ['gap', 'row-gap', 'column-gap'].some(x => rec?.own?.[x])
+        )
+          return {part: {on: holder}, holder};
+      }
       /** @type {Array<{k: string, score: number}>} */
       const found = [];
       for (const h of members) {
@@ -15493,6 +15523,62 @@ export function draftAnswer(ctx, env, question) {
       : toks;
   }
   /**
+   * The part's own pieces inside it, by the census, that draw an aspect
+   * the part itself draws none of: empty when the part draws it, or holds
+   * no such piece of its own.
+   * @param {string} on
+   * @param {string} a
+   * @returns {string[]}
+   */
+  function innerDrawing(on, a) {
+    const props = GROUPS[a] ?? [];
+    const rec = C.MAP[one(on)];
+    if (!rec || props.length === 0) return [];
+    /** @param {any} r */
+    const draws = r =>
+      props.some(x => r?.own?.[x] || r?.at?.[x]) ||
+      Object.values(r?.inside ?? {}).some(ps =>
+        /** @type {string[]} */ (ps).some(x => props.includes(x)),
+      );
+    if (draws(rec)) return [];
+    // A piece whose own resting paint draws it, never one that paints it
+    // only to mark a state (a nav item's selected fill, an option's
+    // highlight) or through a hover or press layer inside it.
+    /**
+     * Whether a census condition is a resting look: always, or only the
+     * piece's visual props (its size, its orientation), never a runtime
+     * state, a pseudo-class or a layer.
+     * @param {string} cond
+     * @param {string} k
+     */
+    const resting = (cond, k) => {
+      if (cond === 'always') return true;
+      if (/[\s:[]/.test(cond)) return false;
+      const visual = ctx.project.target.get(k)?.props ?? [];
+      return cond
+        .split(',')
+        .every(pair => visual.includes(pair.split('=')[0] ?? ''));
+    };
+    /** @param {string} k */
+    const drawsAtRest = k =>
+      props.some(x =>
+        Object.entries(C.MAP[k]?.at?.[x] ?? {}).some(
+          ([cond, value]) =>
+            resting(cond, k) &&
+            !/^(transparent|none|)$/.test(String(value).trim()),
+        ),
+      );
+    // Only the part's own pieces: a shared component inside it (an empty
+    // state's Button) is never handed a change meant for the part.
+    const owner = ctx.project.target.get(one(on))?.component;
+    return (rec.contains ?? []).filter(
+      k =>
+        drawsAtRest(k) &&
+        owner !== undefined &&
+        ctx.project.target.get(k)?.component === owner,
+    );
+  }
+  /**
    * The commands for one part (or the whole theme) and one aspect.
    * @param {Clause} c
    * @param {{on: string, when?: string, role?: string, level?: string} | null} p
@@ -16591,12 +16677,33 @@ export function draftAnswer(ctx, env, question) {
           ),
       ) &&
       !/\b(background|bg|fill(ed)?|gradient)\b/.test(c.text)
-    )
+    ) {
+      // A part that draws none of what is asked hands it to the one part
+      // inside it that draws it (a keyboard shortcut's fill, drawn by its
+      // key badges); with several such parts, nothing is written and the
+      // answer names them.
+      const inner = innerDrawing(on, a);
+      if (inner.length === 1) {
+        /** @type {Draft | null} */
+        const d = answerFor(c, {on: inner[0]}, a);
+        if (d)
+          return {
+            ...d,
+            text: `${on} draws no fill of its own: the ${inner[0]} inside it draws it, so on ${inner[0]}. ${d.text}`,
+          };
+      }
+      if (inner.length > 1)
+        return {
+          text: `${on} draws no fill of its own; the parts inside it that draw it: ${inner.join(', ')}. Name one with --on; nothing is written`,
+          options: [],
+          lookup: `${HOW} ${on}`,
+        };
       return {
         text: `${on} reads no fill or text color token that set can change; its color comes from its own props`,
         options: [],
         lookup: `${HOW} ${on}`,
       };
+    }
     if (p?.role === 'body' && a === 'weight') {
       const v =
         weightIn(c) ??

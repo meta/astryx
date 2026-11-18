@@ -313,7 +313,10 @@ one removal merged ahead of the decision to allow it.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
   options MUST appear in generated help and the machine-readable manifest; help
-  leaves out the ones the run's base does not serve and counts them, and the
+  leaves out the ones the run's base does not serve and counts them. An
+  option's text in help also leaves out a part that names a command or option
+  the run's base does not serve: on a base without layout skeletons, the
+  `template --list` text does not name `--skeleton`. The
   manifest lists every command and every command's option with `available`;
   the global options, which every base serves, carry none (`spec:AST-114`
   FR7).
