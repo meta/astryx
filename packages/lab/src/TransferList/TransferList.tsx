@@ -60,6 +60,7 @@ import {
   mergeRefs,
   themeProps,
 } from '@astryxdesign/core/utils';
+import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
 import {transferListVars} from './tokens.stylex';
 
 // A Lucide glyph the shared icon registry does not carry (there is no `add`
@@ -155,17 +156,16 @@ export interface TransferListProps<T extends string = string> extends Omit<
   noResultsText?: string;
 }
 
-// Core List's handle is its grip alone, a 1rem box. It stays clear of its
-// row's edge by its target's reach, less the row's inset: the compact rows
-// keep Item's inset, `--spacing-2`. Under a coarse pointer a finger's target
-// reaches further. SYNC: core List/ListReorderHandle.tsx GRIP, TARGET_REACH,
-// TOUCH_REACH and HANG.
-const GRIP = '1rem';
-const TARGET_REACH = `max(4px, (24px - ${GRIP}) / 2)`;
+// Core List's handle is its grip alone. It stays clear of its row's edge by
+// its target's reach, less the row's inset: the compact rows keep Item's
+// inset, `--spacing-2`. Under a coarse pointer a finger's target reaches
+// further.
+const GRIP = reorderHandle.grip;
+const TARGET_REACH = reorderHandle.targetReach;
 // The panel's heading is not a row, so it reads the compact rows' inset.
 const INSET = `var(--_item-inset-inline, ${spacingVars['--spacing-2']})`;
 const GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
-const TOUCH_GUARD = `max(0px, calc((44px - ${GRIP}) / 2 - ${INSET}))`;
+const TOUCH_GUARD = `max(0px, calc(${reorderHandle.touchReach} - ${INSET}))`;
 // A hanging handle sits its grip and its target's reach outside its row's
 // content, and its target reaches past that. The row's own inset holds part
 // of that room.
