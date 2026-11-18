@@ -492,6 +492,17 @@ describe("a leg's log that misses test files", () => {
     ]);
   });
 
+  it('counts skipped and todo files as the summary does', () => {
+    const name = 'test-node (5)';
+    const log = [
+      `${name}\tlog\t${rawLine(files[0], 2)}`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  \x1b[33m↓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${files[1]} \x1b[2m(\x1b[22m\x1b[2m3 tests\x1b[22m\x1b[2m | \x1b[22m\x1b[33m3 skipped\x1b[39m\x1b[2m)\x1b[22m`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  \x1b[33m↓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${files[2]} \x1b[2m(\x1b[22m\x1b[2m1 test\x1b[22m\x1b[2m | \x1b[22m\x1b[35m1 todo\x1b[39m\x1b[2m)\x1b[22m`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  Test Files  1 passed | 2 skipped (3)`,
+    ].join('\n');
+    expect(incompleteLegs(log)).toEqual([]);
+  });
+
   it('fails the check and writes no reasons, so no record is written', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-'));
     try {
@@ -519,6 +530,30 @@ describe("a leg's log that misses test files", () => {
       }
       expect(status).toBe(1);
       expect(stderr).toContain('test-node (4): 3 files read, 5 counted');
+      // A leg that crashed before its summary fails too, by name.
+      fs.writeFileSync(logFile, leg('test-node (6)', 4, null));
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'check',
+            '--log',
+            logFile,
+            '--reasons',
+            reasonsFile,
+          ],
+          {cwd: ROOT, stdio: 'pipe', encoding: 'utf8'},
+        );
+        status = 0;
+      } catch (error) {
+        status = error.status;
+        stderr = String(error.stderr);
+      }
+      expect(status).toBe(1);
+      expect(stderr).toContain(
+        'test-node (6): 4 files read, no Test Files summary',
+      );
       expect(fs.existsSync(reasonsFile)).toBe(false);
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});

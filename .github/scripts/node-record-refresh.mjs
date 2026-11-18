@@ -43,6 +43,9 @@ export const DRIFT_MARGIN_S = MARGIN_S;
 export const BRANCH = 'ci/node-durations-refresh';
 export const TITLE = 'ci: refresh the recorded Node test times';
 
+/** A test file's line in Vitest's default reporter, with its result mark. */
+const REPORTED_FILE =
+  /[✓❯×↓]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(/g;
 /** A Main run's Node leg, as its log names each line's job. */
 const NODE_LEG_JOB = /^test-node \(\d+\)$/;
 
@@ -97,10 +100,10 @@ export function driftedEntries(log, recorded) {
 }
 
 /**
- * The Node legs whose log does not give a time for every test file Vitest
- * counted: fewer files read than its `Test Files` summary, or no summary. A
- * log that stops early (a reader that drops a long line and all that follows)
- * would keep older times for the rest of the leg.
+ * The Node legs whose log does not name every test file Vitest counted:
+ * fewer files than its `Test Files` summary, or no summary (a leg that
+ * crashed). A log that stops early (a reader that drops a long line and all
+ * that follows) would keep older times for the rest of the leg.
  * @param {string} log a Main run's log
  * @returns {{job: string, read: number, counted: number | null}[]}
  */
@@ -113,12 +116,12 @@ export function incompleteLegs(log) {
   }
   return [...legs]
     .map(([job, lines]) => {
-      const text = lines.join('\n');
-      const read = Object.keys(recordDurations(text)).length;
-      const summary = text
-        .replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '')
-        .match(/Test Files\s+[^\n]*\((\d+)\)/g)
-        ?.pop();
+      const text = lines.join('\n').replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
+      // Every file the reporter names counts, skipped and todo files too.
+      const read = new Set(
+        [...text.matchAll(REPORTED_FILE)].map(match => match[1]),
+      ).size;
+      const summary = text.match(/Test Files\s+[^\n]*\((\d+)\)/g)?.pop();
       const counted = summary
         ? Number(/\((\d+)\)\s*$/.exec(summary)?.[1])
         : null;
@@ -255,7 +258,7 @@ function main(args) {
     const short = incompleteLegs(log);
     if (short.length > 0) {
       console.error(
-        `::error title=Incomplete Node leg logs::These legs' logs do not time every test file they ran, so no record is written:\n${short.map(({job, read, counted}) => `  ${job}: ${read} files read, ${counted == null ? 'no Test Files summary' : `${counted} counted`}`).join('\n')}`,
+        `::error title=Incomplete Node leg logs::These legs' logs miss test files their Vitest summary counts, so no record is written:\n${short.map(({job, read, counted}) => `  ${job}: ${read} files read, ${counted == null ? 'no Test Files summary' : `${counted} counted`}`).join('\n')}`,
       );
       return 1;
     }
