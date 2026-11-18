@@ -150,6 +150,19 @@ describe('doctor core-props', () => {
       });
       expect(config?.status).toBe('info');
       expect(config?.message).toMatch(/^Not checked: the project compiles JSX with `@emotion\/react`/);
+      // A classic JSX factory other than React's.
+      const factory = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react', jsxFactory: 'h'}}),
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(factory?.status).toBe('info');
+      expect(factory?.message).toMatch(/^Not checked: the project compiles JSX with `h`/);
+      // A page that gives Core no prop still has its config read.
+      const noProps = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', jsxImportSource: '@emotion/react'}}),
+        'src/App.tsx': ["import {Divider} from '@astryxdesign/core';", 'export default function App() {', '  return <Divider />;', '}', ''].join('\n'),
+      });
+      expect(noProps?.status).toBe('info');
     },
     SLOW,
   );

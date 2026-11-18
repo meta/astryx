@@ -338,7 +338,21 @@ const JSX_DECLARATION = /\bdeclare\s+(?:module\s+['"]react(?:\/jsx-runtime)?['"]
  * `@jsxImportSource` or `@jsx` pragma), which can give every component props
  * of its own.
  */
-const OTHER_JSX_RUNTIME = /@jsxImportSource\s+(?!react(?:\s|\*|$))\S|@jsx\s+[A-Za-z_$]/m;
+const OTHER_JSX_RUNTIME = /@jsxImportSource\s+(?!react(?:\s|\*|$))\S|@jsx\s+(?!React\.createElement\b)[A-Za-z_$]/m;
+
+/**
+ * The JSX runtime other than React's that compiler options name: a
+ * `jsxImportSource` other than `react`, or a `jsxFactory` other than
+ * `React.createElement`. Null for React's.
+ * @param {Record<string, unknown>} options
+ * @returns {string | null}
+ */
+function otherJsxRuntime(options) {
+  const {jsxImportSource: source, jsxFactory: factory} = options;
+  if (typeof source === 'string' && source !== 'react') return source;
+  if (typeof factory === 'string' && factory !== 'React.createElement') return factory;
+  return null;
+}
 
 /**
  * Test, story and fixture files, and the folders that usually hold them:
@@ -396,6 +410,8 @@ export async function findUnknownCoreProps(projectDir) {
   const uses = [];
   /** @type {string[]} */
   const jsxDeclarations = [];
+  /** @type {string[]} */
+  const corePages = [];
   for (const file of files) {
     let text;
     try {
@@ -404,22 +420,26 @@ export async function findUnknownCoreProps(projectDir) {
       continue;
     }
     if (/\.[cm]?tsx?$/.test(file) && JSX_DECLARATION.test(text)) jsxDeclarations.push(file);
-    if (NOT_PAGE_CODE.test(relative(file)) || !text.includes('@astryxdesign/core') || OTHER_JSX_RUNTIME.test(text)) continue;
+    if (NOT_PAGE_CODE.test(relative(file)) || !text.includes('@astryxdesign/core')) continue;
+    corePages.push(file);
+    if (OTHER_JSX_RUNTIME.test(text)) continue;
     for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file), path: file});
   }
-  // Each page is read with the config TypeScript reads for it; pages that
-  // share a config share one read.
+  // Each page that imports Core is read with the config TypeScript reads for
+  // it; pages that share a config share one read.
   /** @type {Map<string, {file: string, options: Record<string, unknown>}>} */
   const configs = new Map();
   /** @type {Map<string, string>} */
   const configOf = new Map();
-  for (const file of new Set(uses.map(use => use.path))) {
+  for (const file of corePages) {
     const config = compilerOptionsFor(file) ?? {file: '', options: {}};
     configs.set(config.file, config);
     configOf.set(file, config.file);
   }
-  const runtime = [...configs.values()].map(config => config.options.jsxImportSource).find(source => typeof source === 'string' && source !== 'react');
-  if (typeof runtime === 'string') return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
+  for (const {options} of configs.values()) {
+    const runtime = otherJsxRuntime(options);
+    if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
+  }
   // One batch read of the props Core's docs list, as `astryx component
   // <Name> --props` prints them; a component they do not describe is not
   // judged.
