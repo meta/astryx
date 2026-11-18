@@ -361,6 +361,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     clearTapOpen,
     isTouchHover,
     handleMouseArrival,
+    handleMouseDeparture,
   } = useTouchTriggerInternal({
     touchTrigger,
     isEnabled,
@@ -411,11 +412,12 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const handleMouseLeave = useCallback(() => {
     // On touch the synthesized mouseleave arrives with the next tap elsewhere,
     // which the outside-tap dismissal already handles.
+    handleMouseDeparture();
     if (isTouchPointerRef.current) {
       return;
     }
     scheduleHide();
-  }, [isTouchPointerRef, scheduleHide]);
+  }, [handleMouseDeparture, isTouchPointerRef, scheduleHide]);
 
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(

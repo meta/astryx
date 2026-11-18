@@ -397,6 +397,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     armOutsideDismiss,
     answerTap,
     handleMouseArrival,
+    handleMouseDeparture,
   } = useTouchTriggerInternal(
     {
       touchTrigger,
@@ -528,6 +529,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
+      handleMouseDeparture();
       if (isTouchPointerRef.current) {
         return;
       }
@@ -543,7 +545,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       scheduleHide();
     },
-    [isTouchPointerRef, layerId, scheduleHide],
+    [handleMouseDeparture, isTouchPointerRef, layerId, scheduleHide],
   );
 
   // Under `auto`, whether focus counts is decided when it arrives, and a

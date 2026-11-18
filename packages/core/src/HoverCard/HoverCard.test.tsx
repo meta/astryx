@@ -1737,6 +1737,46 @@ describe('HoverCard', () => {
       });
     });
 
+    it('opens on focus that a later tap moves by script after a tap left the trigger under the finger', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      const trigger = screen.getByText('Ruby Cheung');
+      const tapElsewhere = () => {
+        fireEvent.pointerOver(pill, {pointerType: 'touch'});
+        fireEvent.pointerDown(pill, {pointerType: 'touch'});
+        fireEvent.pointerUp(pill, {pointerType: 'touch'});
+      };
+      // The first tap leaves the trigger under the finger.
+      tapElsewhere();
+      fireEvent.mouseOver(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.focusIn(trigger);
+      fireEvent.focusOut(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // The next tap lands elsewhere: the trigger hears its compatibility
+      // mouseleave, and the tap's handler moves focus to the trigger.
+      tapElsewhere();
+      fireEvent.mouseLeave(trigger);
+      fireEvent.focusIn(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
     it('opens on keyboard focus after an earlier tap elsewhere', async () => {
       const onOpenChange = vi.fn();
       render(

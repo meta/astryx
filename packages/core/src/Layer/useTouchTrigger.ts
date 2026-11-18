@@ -310,12 +310,13 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    */
   isTouchHover: () => boolean;
   /**
-   * The trigger's own mouse arrival: answers `isTouchHover()`, and when the
-   * arrival is a finger's compatibility event on a trigger that saw no
-   * pointer of its own (a tap moved it under the finger), the focus that tap
-   * then gives the trigger counts as touch in `isTouchInteraction()`.
+   * Call on the trigger's mouse arrival; returns `isTouchHover()`. A finger's
+   * arrival on a trigger with no pointer of its own makes the focus that tap
+   * gives it touch in `isTouchInteraction()`.
    */
   handleMouseArrival: () => boolean;
+  /** Call on the trigger's mouse departure: the tap that arrived has ended. */
+  handleMouseDeparture: () => void;
 }
 
 /**
@@ -520,6 +521,10 @@ export function useTouchTriggerInternal(
     return isFinger;
   }, [isTouchHover]);
 
+  const handleMouseDeparture = useCallback(() => {
+    isFingerArrivalRef.current = false;
+  }, []);
+
   const handlePointerEnter = useCallback((event: PointerEvent) => {
     // Only a finger is hoverless on arrival. A pen in detection range hovers
     // like a mouse, and treating its arrival as touch would bail out of the
@@ -626,5 +631,6 @@ export function useTouchTriggerInternal(
     answerTap,
     isTouchHover,
     handleMouseArrival,
+    handleMouseDeparture,
   };
 }
