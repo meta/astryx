@@ -52,6 +52,7 @@ import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
 
@@ -569,6 +570,9 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     }
   }
   writeOutput(output, page.html, cwd, {replace: true, ...(existingMode === undefined ? {} : {mode: existingMode & 0o7777})});
+  // The checks read the bytes on disk, not the string in memory: they vouch
+  // for the file that will be shared.
+  const written = fs.readFileSync(output, 'utf8');
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -582,6 +586,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
+    checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
   };
 }
 

@@ -1350,6 +1350,54 @@ describe('render(): every write stays inside the current folder', () => {
     expect(byId(doc, 'q').children[0].text).toBe('Q');
     expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('remote-asset');
     expect(r.data.files).toEqual(expect.arrayContaining(['a.png', 'b.png']));
+    // The check names what the written file loads; it never stops the write.
+    expect(r.data.checks.outside).toEqual(['https://example.com/x.png']);
+    expect(r.data.checks.roundTrip).toEqual({exact: true, files: 3, differs: []});
+    const cli = await runCli(['experimental', 'export', 'styleattr/page.tsx', '--out', 'styleattr/again.html'], {cwd: dir});
+    expect(cli.status).toBe(0);
+    expect(fs.existsSync(path.join(dir, 'styleattr/again.html'))).toBe(true);
+    expect(cli.stdout).toMatch(/outside:\s+https:\/\/example\.com\/x\.png/);
+    expect(cli.stdout).toContain('loads 1 reference from outside the file when it opens (outside, above), so it does not stand alone.');
+    expect(cli.stdout).not.toContain('Share this one file');
+    // A file beside the page the render leaves for the browser is from outside
+    // the file too, not from the network; a reference that loads nothing is
+    // not counted.
+    put('relref/page.tsx', 'export default function Page() { return (<main><link rel="icon" href="./bg.png" /><iframe src="about:blank" title="x" /><h1>R</h1></main>); }\n');
+    const rel = await runCli(['experimental', 'export', 'relref/page.tsx'], {cwd: dir});
+    expect(rel.status).toBe(0);
+    expect(rel.stdout).toMatch(/^outside:\s+\.\/bg\.png$/m);
+    expect(rel.stdout).toContain('loads 1 reference from outside the file when it opens (outside, above), so it does not stand alone.');
+    expect(rel.stdout).not.toContain('about:blank');
+  }, 60_000);
+
+  it('carries a srcset of local images as data: URIs, and the file still stands alone', async () => {
+    put('srcset/dot.png', PNG);
+    put('srcset/dot2.png', PNG);
+    put('srcset/page.tsx', 'export default function Page() { return (<main><h1>S</h1><img src="./dot.png" srcSet="./dot.png 1x, ./dot2.png 2x" alt="" /></main>); }\n');
+    const r = /** @type {any} */ (await render('srcset/page.tsx', {cwd: dir}));
+    expect(fs.readFileSync(path.join(dir, 'srcset/page.html'), 'utf8')).toMatch(/srcset="data:image\/png;base64,[^"]+ 1x, data:image\/png;base64,[^"]+ 2x"/i);
+    expect(r.data.checks.outside).toEqual([]);
+  }, 60_000);
+
+  it('names the element a style attribute sits on, caps the outside list in text, and prints an absolute output once', async () => {
+    const imgs = Array.from({length: 12}, (_, i) => `<img src="https://img.example/${i}.png" alt="" />`).join('');
+    put(
+      'many/page.tsx',
+      `export default function Page() { return (<main><div style={{backgroundImage: 'image-set("https://img.example/set.png" 1x)'}}>S</div>${imgs}</main>); }\n`,
+    );
+    const r = /** @type {any} */ (await render('many/page.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.message)).toContain(
+      'The page renders a <div> that loads https://img.example/set.png, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.',
+    );
+    expect(r.data.checks.outside).toHaveLength(13);
+    // An --out outside the current folder is shown as its absolute path, once.
+    const abs = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-abs-')), 'abs.html');
+    const cli = await runCli(['experimental', 'export', 'many/page.tsx', '--out', abs], {cwd: dir});
+    expect(cli.status).toBe(0);
+    expect(cli.stdout).toMatch(/^outside:\s+.+, \.\.\. and 3 more( in \S+)?$/m);
+    const line = cli.stdout.split('\n').find(l => l.startsWith(`${abs} (`));
+    expect(line).toBeDefined();
+    expect(line?.split(abs).length).toBe(2);
   }, 60_000);
 
   it('carries a stylesheet pulled in by @import and gives it back, and says when one is missing', async () => {
