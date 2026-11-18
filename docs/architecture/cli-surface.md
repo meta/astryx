@@ -166,7 +166,10 @@ and remains available through explicit Core package selection.
   from it.** Help text, the README command and error-code tables, and the
   manifest are generated. None of them is written by hand. Every command and
   subcommand's `CommandDoc` declares `outsideProject`, which the manifest
-  publishes (`spec:AST-081` FR4).
+  publishes (`spec:AST-081` FR4). A component doc's optional
+  `playground.mobile` holds the props of its render at a phone viewport,
+  merged over `defaults`; the theme editor's part census renders it as the
+  component's mobile layout.
 - **INV8 — Exit codes do not depend on the output mode.** The same condition
   exits the same way with and without `--json`, so a command works as a gate
   without parsing stdout.
@@ -295,7 +298,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
+  integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
   not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
