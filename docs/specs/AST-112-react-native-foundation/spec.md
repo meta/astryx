@@ -77,8 +77,8 @@ shared icon names under FR17.
       secure storage, files, network, cookies, permissions, haptics,
       clipboard, client identity), system symbols, safe-area insets, and the
       native half of the library's own components: the native controls, the
-      navigation hosts, gestures and drag (the gesture owner, gesture root,
-      and touch shield included), system materials and glass surfaces, the
+      navigation hosts, gestures and drag (the gesture owner and gesture
+      root included), system materials and glass surfaces, the
       presentation, menu, and action-sheet hosts, icons and drawing, and
       layout, text, and keyboard. Its opt-in capabilities are the device
       features an app chooses (FR3): `camera` (camera view, live code
