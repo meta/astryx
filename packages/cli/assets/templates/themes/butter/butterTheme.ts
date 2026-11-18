@@ -506,6 +506,11 @@ export const butterTheme = defineTheme({
   },
 
   components: withOwnFillText({
+    // The send button keeps the 16px corner it took from the 28px composer:
+    // a rounded square on Butter's 40px controls, as before.
+    'chat-send-button': {
+      base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
+    },
     // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
     // accent tint) and under its hover. Selected rows, a dropzone's hint and
     // a numbered citation, all on that fill, use the nearest stop that clears
