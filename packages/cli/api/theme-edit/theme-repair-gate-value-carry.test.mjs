@@ -294,6 +294,12 @@ describe('the repair gate offers only lines that carry the whole typed value', (
     expect(readsTyped({offered: 'all', typed: 'all 200'})).toEqual([0]);
     expect(coversTyped([[0]], 'all 200')).toBe(false);
     expect(coversTyped([[0], [1]], 'Inter 600')).toBe(true);
+    // (A line read whole that offers one of several typed values carries
+    // the tokens it offers: `2px` of `2px 15px`.)
+    expect(coversTyped([true, [1]], '2px 15px')).toBe(false);
+    expect(coversTyped([true, [1]], '2px 15px', '', ['2px', '15px'])).toBe(
+      true,
+    );
     expect(
       readsTyped({
         offered: '#1f2937',

@@ -5798,7 +5798,15 @@ async function changeOnce(
     s =
       sub === 'undo' && rawIdx >= 0
         ? data.settings[rawIdx]
-        : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+        : checkSetting(
+            ctx,
+            slug,
+            data,
+            thing,
+            value,
+            sub === 'set' ? {...flags, sides: true} : flags,
+            sub === 'undo',
+          );
   } catch (e) {
     // A stored setting this Core no longer knows (a renamed part or
     // property, or a hand edit) can still be removed.
@@ -6116,6 +6124,17 @@ async function changeOnce(
     data.settings.some(x => keyOf(x) === keyOf({...s, mode: ownMode}))
   )
     s = {...s, mode: ownMode};
+  // A box shorthand written as its sides (a menu's padding of two to four
+  // lengths): the first side is this change's setting, and the others are
+  // written beside it in the same change, so one undo takes back all.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const sidesBeside = [];
+  const shorthand = sub === 'set' && s.sides?.length ? s : null;
+  if (shorthand?.sides) {
+    const [first, ...rest] = shorthand.sides;
+    s = first;
+    sidesBeside.push(...rest);
+  }
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
@@ -6557,6 +6576,10 @@ async function changeOnce(
       if (borderAdded) data.settings.push(borderAdded);
     }
     data.settings.push(s);
+  }
+  for (const side of sidesBeside) {
+    data.settings = data.settings.filter(x => keyOf(x) !== keyOf(side));
+    data.settings.push(side);
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
@@ -7071,6 +7094,11 @@ async function changeOnce(
   );
   /** @type {string[]} */
   const notes = [
+    ...(shorthand
+      ? [
+          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${[s, ...sidesBeside].map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} takes back all ${sidesBeside.length + 1}`,
+        ]
+      : []),
     ...fieldNotes,
     ...(borderAdded
       ? [

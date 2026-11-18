@@ -283,43 +283,37 @@ export const setLine = (slug, thing, value, s, unset = false) =>
   `${P} ${unset ? 'undo' : 'set'} ${slug} ${quoteCommandArgument(thing)}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
 
 /**
- * The longhand lines that give a box shorthand of two to four lengths side
- * by side (`padding '5px 0'`: padding-block 5px, padding-inline 0), each
- * with the length typed for it, as CSS gives the sides out; null for any
+ * The sides a box shorthand of two to four lengths gives out, as CSS does
+ * (`5px 0`: block 5px, inline 0), each with the length typed for it; one
+ * length said for every side is that length alone (side ''); null for any
  * other property or value.
- * @param {string} slug
  * @param {string} prop
  * @param {string} v
- * @param {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} s
- * @returns {string[] | null}
+ * @returns {Array<[string, string]> | null}
  */
-function boxSideLines(slug, prop, v, s) {
+function boxSides(prop, v) {
   if (prop !== 'padding' && prop !== 'margin') return null;
   const w = splitTop(v.trim(), ' ').filter(Boolean);
   if (w.length < 2 || w.length > 4) return null;
   if (!w.every(x => oneLength(x) || /^[+-]?0*\.?0+$/.test(x))) return null;
-  // (One length said again for each side is that one length.)
-  if (new Set(w).size === 1) return null;
-  /** @type {Array<[string, string]>} */
-  const sides =
-    w.length === 2
+  if (new Set(w).size === 1) return [['', w[0]]];
+  return w.length === 2
+    ? [
+        ['block', w[0]],
+        ['inline', w[1]],
+      ]
+    : w.length === 3
       ? [
-          ['block', w[0]],
+          ['top', w[0]],
           ['inline', w[1]],
+          ['bottom', w[2]],
         ]
-      : w.length === 3
-        ? [
-            ['top', w[0]],
-            ['inline', w[1]],
-            ['bottom', w[2]],
-          ]
-        : [
-            ['top', w[0]],
-            ['right', w[1]],
-            ['bottom', w[2]],
-            ['left', w[3]],
-          ];
-  return sides.map(([side, x]) => setLine(slug, `${prop}-${side}`, x, s));
+      : [
+          ['top', w[0]],
+          ['right', w[1]],
+          ['bottom', w[2]],
+          ['left', w[3]],
+        ];
 }
 
 /** @param {string} v */
@@ -852,6 +846,7 @@ const COLOR_DIAL_WORDS = (() => {
  * @property {string} [state]
  * @property {string} [mode]
  * @property {boolean} [only]
+ * @property {boolean} [sides] - set's own value: a box shorthand where one length works is written as its sides (never a saved entry, which is checked as written)
  */
 
 /**
@@ -7964,13 +7959,34 @@ function checkOne(
           );
         }) &&
         (splitTop(v.trim(), ' ').filter(Boolean).length > 1 || v.includes('/'));
+      // A padding of two to four lengths there is its sides, each with the
+      // length typed for it: set writes them in this one change (a side
+      // the part cannot take refuses as that side).
+      const sides = !unset && hit && flags?.sides ? boxSides(prop, v) : null;
+      if (sides?.length === 1) {
+        s.value = sides[0][1];
+        const said = `"${v.trim()}" is ${s.value} on every side, the one length ${hit} takes there`;
+        s.note = s.note ? `${s.note}; ${said}` : said;
+      } else if (sides)
+        return {
+          ...s,
+          sides: sides.map(([side, x]) =>
+            checkSetting(ctx, slug, data, `${prop}-${side}`, x, {
+              on: s.on,
+              when: s.when,
+              state: s.state,
+              mode: s.mode,
+              only: s.only,
+            }),
+          ),
+        };
       // A bare 0 is a length everywhere in CSS but inside calc(), where it
       // is a number: it is saved as 0px, the length it means.
       if (hit && /^[+-]?0*\.?0+$/.test(v.trim())) {
         s.value = '0px';
         const said = `${v.trim()} is saved as 0px: ${hit} reads ${prop} inside calc(), where a bare 0 is not a length`;
         s.note = s.note ? `${s.note}; ${said}` : said;
-      } else if (hit && !oneLength(v) && !corners) {
+      } else if (hit && !oneLength(String(s.value)) && !corners) {
         const first = splitTop(v.trim(), ' ')[0] ?? '';
         const n = cssNumber(first);
         const fix = oneLength(first)
@@ -7981,11 +7997,7 @@ function checkOne(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${hit} reads ${prop} inside calc() (its corners and inner rows follow it), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
-          {
-            run: boxSideLines(slug, prop, v, s) ?? [
-              setLine(slug, prop, fix, s),
-            ],
-          },
+          {run: [setLine(slug, prop, fix, s)]},
         );
       }
     }
