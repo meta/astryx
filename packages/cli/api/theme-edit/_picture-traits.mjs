@@ -766,21 +766,14 @@ export function readTraits(pic, scale = 1) {
       });
   };
   const controls = [...groups['button-like'], ...groups.inputs];
-  // Height of controls. The shared control size feeds buttons and inputs
-  // alike, so it is written only when each kind agrees on its own height:
-  // one value when they match, else the buttons' as the shared size and the
-  // inputs' on the inputs. When the inputs' height is not clear, the shared
-  // size is not written either (it would resize them).
-  const heightStep = (/** @type {number} */ v) => ({verb: /** @type {const} */ ('set'), thing: '--size-element-md', value: `${px(v)}px`});
+  // Height of controls: the control size token set on the control families
+  // only, buttons (button-like) and inputs, each from its own boxes. It is
+  // never set for the whole theme: parts that are not controls read it too
+  // (a dialog header centers its close button on it), and set on a family
+  // it reaches only the parts that size themselves by it.
   const showPx = (/** @type {number} */ v) => `${px(v)}px`;
-  const ofKind = (/** @type {Box[]} */ boxes, /** @type {number} */ near) => {
-    const a = agreed(boxes.map(b => b.h), near * scale);
-    return boxes.length && a.n >= 2 && a.n >= boxes.length * 0.6 ? a.value : null;
-  };
-  // An input's focus ring reads as a wider edge around the same field, so
-  // inputs agree on their height inside the edge, and the height written is
-  // the one drawn with the inputs' usual edge.
-  // A ring drawn outside adds to the height, one drawn inside does not, so
+  // An input's focus ring reads as a wider edge around the same field: a
+  // ring drawn outside adds to the height, one drawn inside does not, so
   // inputs agree when their heights agree either with or inside the edge.
   // Focus only adds, so the inputs' own edge is the thinnest one drawn.
   const usualEdge = groups.inputs.length ? Math.min(...groups.inputs.map(b => b.edge)) : 0;
@@ -789,29 +782,19 @@ export function readTraits(pic, scale = 1) {
   const inner = outerAgree.n >= innerAgree.n ? outerAgree : innerAgree;
   const plainInputs = groups.inputs.filter(b => b.edge === usualEdge);
   const inputsAgree = groups.inputs.length >= 2 && inner.n >= 2 && inner.n >= groups.inputs.length * 0.6;
-  const inputsH = inputsAgree ? mode(plainInputs.map(b => b.h)) : null;
-  const buttonsH = ofKind(groups['button-like'], 1);
-  if (buttonsH != null && inputsH != null && Math.abs(buttonsH - inputsH) <= 1 * scale)
-    fromBoxes('height', 'button-like', controls, b => b.h, 1, heightStep, showPx);
-  else if (buttonsH != null && inputsH != null) {
-    fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, heightStep, showPx);
+  fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, v => ({verb: 'set', thing: '--size-element-md', value: showPx(v), on: 'button-like'}), showPx);
+  if (inputsAgree) {
+    const inputsH = mode(plainInputs.map(b => b.h));
     traits.push({
       trait: 'height',
       on: 'inputs',
-      value: showPx(/** @type {number} */ (inputsH)),
+      value: showPx(inputsH),
       read: `${inner.n} of ${groups.inputs.length} inputs boxes (${whereIn(groups.inputs, W, H)})`,
       sure: inner.n >= 3 ? 'sure' : 'about',
-      step: {verb: 'set', thing: 'height', value: showPx(/** @type {number} */ (inputsH)), on: 'inputs'},
+      step: {verb: 'set', thing: '--size-element-md', value: showPx(inputsH), on: 'inputs'},
     });
-  } else if (buttonsH != null && groups.inputs.length)
-    unsure.push({
-      trait: 'height',
-      on: 'button-like',
-      why: `buttons read ${showPx(buttonsH)}, but the inputs read ${[...new Set(groups.inputs.map(b => showPx(b.h)))].join(', ')} with no clear height, and the shared control size would resize them too`,
-      options: [stepText(heightStep(buttonsH))],
-    });
-  else if (buttonsH != null) fromBoxes('height', 'button-like', groups['button-like'], b => b.h, 1, heightStep, showPx);
-  else if (controls.length) fromBoxes('height', 'button-like', controls, b => b.h, 1, heightStep, showPx);
+  } else if (groups.inputs.length)
+    unsure.push({trait: 'height', on: 'inputs', why: `${groups.inputs.length} inputs box${groups.inputs.length > 1 ? 'es' : ''} (${whereIn(groups.inputs, W, H)}) read ${[...new Set(groups.inputs.map(b => showPx(b.h)))].join(', ')}: too few agree to write it`});
   // Corners: controls and inputs together when they agree, else apart.
   const cornerOf = (/** @type {Box} */ b) => (b.round ? Infinity : b.radius);
   const cornerStep = (/** @type {string} */ on, /** @type {string | null} */ token) => (/** @type {number} */ v) =>
