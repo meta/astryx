@@ -97,6 +97,48 @@ describe('family role groups', () => {
     expect(rule('button')).toMatch(/linear-gradient\(#ffffff, #e6e6e6\)/);
     expect(rule('toggle-button')).toMatch(/linear-gradient\(red, blue\)/);
   }, 240_000);
+
+  it("keeps a member's own setting in every mode it sets, against a one-mode group look", async ctx => {
+    if (needBases(ctx)) return;
+    // Both modes: a dark-only group look leaves the member's own in dark.
+    await themeEditNew('km', {cwd, like: 'neutral'});
+    await themeEditSet('km', 'background-image', 'linear-gradient(red, blue)', {
+      cwd,
+      on: 'toggle-button',
+    });
+    await themeEditSet(
+      'km',
+      'background-image',
+      'linear-gradient(#111111, #222222)',
+      {cwd, on: 'button-like', mode: 'dark'},
+    );
+    const both = fs.readFileSync(
+      path.join(cwd, 'themes', 'km', 'km.css'),
+      'utf8',
+    );
+    const toggle = (/** @type {string} */ css) =>
+      (css.match(/\.astryx-toggle-button\b[^{]*\{[^}]*\}/g) ?? []).join('\n');
+    expect(toggle(both)).toMatch(/linear-gradient\(red, blue\)/);
+    expect(toggle(both)).not.toMatch(/linear-gradient\(#111111, #222222\)/);
+    // One mode: the member keeps its own there; the group look takes the other.
+    await themeEditNew('kl', {cwd, like: 'neutral'});
+    await themeEditSet('kl', 'background-image', 'linear-gradient(red, blue)', {
+      cwd,
+      on: 'toggle-button',
+      mode: 'light',
+    });
+    await themeEditSet(
+      'kl',
+      'background-image',
+      'linear-gradient(#111111, #222222)',
+      {cwd, on: 'button-like'},
+    );
+    const one = fs.readFileSync(
+      path.join(cwd, 'themes', 'kl', 'kl.css'),
+      'utf8',
+    );
+    expect(toggle(one)).toMatch(/linear-gradient\(red, blue\)/);
+  }, 240_000);
 });
 
 /** @param {string} q @param {string} theme */

@@ -6891,7 +6891,9 @@ export function compileTheme(ctx, data, base) {
                 kebab(x.thing) === kebab(s.thing) &&
                 (x.when ?? '') === (s.when ?? '') &&
                 (x.state ?? '') === (s.state ?? '') &&
-                (x.mode ?? '') === (s.mode ?? ''),
+                // (A member's setting with no mode is its setting in both
+                // modes: a one-mode look leaves it in that mode too.)
+                (!x.mode || x.mode === s.mode),
             ),
         )
       : partsOf(ctx, s);
