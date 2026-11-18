@@ -61,6 +61,10 @@ import {
 import {flushSync} from 'react-dom';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
+import {
+  inputRowSizeStyles,
+  inputRowPadStyles,
+} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -174,15 +178,12 @@ const SWAP_DURATION = durationVars['--duration-fast'];
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -1344,6 +1345,8 @@ export function TouchDateField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
+          inputRowPadStyles.pad,
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085

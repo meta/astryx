@@ -34,6 +34,10 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {
+  inputRowSizeStyles,
+  inputRowPadStyles,
+} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -172,17 +176,7 @@ function getDefaultTime(hasSeconds: boolean): ISOTimeString {
   );
 }
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
@@ -1323,6 +1317,7 @@ export function TouchDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
+              inputRowPadStyles.pad,
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
@@ -1415,6 +1410,7 @@ export function TouchDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
+              inputRowPadStyles.pad,
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,

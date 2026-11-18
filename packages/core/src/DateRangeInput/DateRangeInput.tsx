@@ -26,6 +26,10 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {
+  inputRowSizeStyles,
+  inputRowPadStyles,
+} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
@@ -43,7 +47,6 @@ import {
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
-  sizeVars,
   radiusVars,
   spacingVars,
   typographyVars,
@@ -257,15 +260,12 @@ const styles = stylex.create({
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -792,6 +792,8 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             inputWrapperStyles.textField,
             sizeStyles[size],
+            inputRowSizeStyles[size],
+            inputRowPadStyles.pad,
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],
