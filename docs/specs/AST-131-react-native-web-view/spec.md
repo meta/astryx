@@ -38,8 +38,7 @@ of `spec:AST-140`: the result vocabulary (`spec:AST-140/FR3`) and additive
 evolution (`spec:AST-140/FR5`). It specifies the native web view
 (`AstryxWebView`) and its device report (`AstryxWebViewInfo`), which the
 library's `WebView` and `WebContent` use. The capability's other modules are
-part of the same platform package; "Who uses it" lists them, and each has its
-own record.
+outside the core package, because no Astryx component uses them; "Who uses it" lists them.
 
 ## Why this exists
 
@@ -62,21 +61,21 @@ own record.
   whether sign-in is its own opt-in.
 - `AstryxWebSessions`, `AstryxWebData`, `AstryxWebBundles`, and
   `AstryxPageSnapshots` serve the web view's sessions, page data, bundled
-  folders, and thumbnails; each has its own record.
+  folders, and thumbnails; they are outside the core package, because no Astryx component uses them.
 
 ## Who uses it
 
-| Native piece          | Kind                                       | Astryx components that use it                                                                                                                                                                      | What a person sees                                                                                      |
-| --------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `AstryxWebView`       | native component (Fabric Native Component) | `WebView`; `WebContent` (through `WebView`); apps through the `./web` entry's `NativeWebView`                                                                                                      | A web page or an HTML document inside the screen, in the app's colour scheme and text size              |
-| `AstryxWebViewInfo`   | native module (Turbo Native Module)        | `WebView` and `WebContent` (through `NativeWebView`'s checks before a load); the `useWebViewSupports` hook and the capability status of `useCapabilities`                                          | Nothing directly; a page that needs a guarantee the device lacks does not load, and the screen says why |
-| `AstryxWebSessions`   | native module (Turbo Native Module)        | `WebView` (its `session={{sessionId}}` prop: the native view resolves the handle, FR8); no component calls the module itself; part of the platform package's `web` capability, with its own record | A signed-in embedded page                                                                               |
-| `AstryxWebData`       | native module (Turbo Native Module)        | No Astryx component uses it; part of the platform package's `web` capability, with its own record                                                                                                  | Web pages that keep nothing after sign-out                                                              |
-| `AstryxWebBundles`    | native module (Turbo Native Module)        | No Astryx component uses it; part of the platform package's `web` capability, with its own record (a `NativeWebView` with a `{bundle}` source shows its folders)                                   | A bundled web app that works offline and opens at once when warmed up                                   |
-| `AstryxAuthSession`   | native module (Turbo Native Module)        | No Astryx component uses it; the library's `useAuthSession` hook reaches it; part of the platform package's `web` capability, with its own record                                                  | The system's sign-in sheet                                                                              |
-| `AstryxPageSnapshots` | native module (Turbo Native Module)        | No Astryx component uses it; part of the platform package's `web` capability, with its own record                                                                                                  | A thumbnail of an HTML document                                                                         |
+| Native piece          | Kind                                       | Astryx components that use it                                                                                                                                                 | What a person sees                                                                                      |
+| --------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `AstryxWebView`       | native component (Fabric Native Component) | `WebView`; `WebContent` (through `WebView`); apps through the `./web` entry's `NativeWebView`                                                                                 | A web page or an HTML document inside the screen, in the app's colour scheme and text size              |
+| `AstryxWebViewInfo`   | native module (Turbo Native Module)        | `WebView` and `WebContent` (through `NativeWebView`'s checks before a load); the `useWebViewSupports` hook and the capability status of `useCapabilities`                     | Nothing directly; a page that needs a guarantee the device lacks does not load, and the screen says why |
+| `AstryxWebSessions`   | native module (Turbo Native Module)        | `WebView` carries its handle (`session={{sessionId}}`, FR8), and the native view resolves it; no component calls the module itself, so the module is outside the core package | A signed-in embedded page                                                                               |
+| `AstryxWebData`       | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package                                                                                                                | Web pages that keep nothing after sign-out                                                              |
+| `AstryxWebBundles`    | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package (a `NativeWebView` with a `{bundle}` source shows its folders)                                                 | A bundled web app that works offline and opens at once when warmed up                                   |
+| `AstryxAuthSession`   | native module (Turbo Native Module)        | No Astryx component uses it (the library's `useAuthSession` hook reaches it), so it is outside the core package                                                               | The system's sign-in sheet                                                                              |
+| `AstryxPageSnapshots` | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package                                                                                                                | A thumbnail of an HTML document                                                                         |
 
-Notes on the `web` capability's other modules, each part of the platform package with its own record:
+Notes on the `web` capability's other modules, which are outside the core package, because no Astryx component uses them:
 
 - `AstryxWebSessions` holds an embedded page's cookies, store, and pin natively
   under an opaque handle that the view's `sessionId` prop names (FR8).
@@ -94,8 +93,8 @@ Notes on the `web` capability's other modules, each part of the platform package
   props, layout, loading and failure states, and fallback content. Each
   component's own record and `spec:AST-082/FR3` own it.
 - The full contracts of `AstryxWebSessions`, `AstryxWebData`,
-  `AstryxWebBundles`, `AstryxAuthSession`, and `AstryxPageSnapshots`. Each is
-  part of the platform package's `web` capability and has its own record.
+  `AstryxWebBundles`, `AstryxAuthSession`, and `AstryxPageSnapshots`. They
+  are outside the core package, because no Astryx component uses them.
 - Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`) are separate products; they conform to this record's contracts.
 - Browser features the view does not offer: downloads, file upload pickers,
   geolocation, WebRTC, pop-up windows, and pull-to-refresh.
