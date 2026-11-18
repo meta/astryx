@@ -93,9 +93,9 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   are separate products; they conform to this record's contracts.
 - `Stepper`. It takes `render`, but it has no native piece and no
   platform contract here.
-- The contracts of the native-driver gesture views that ship in the same
-  `./controls` entry (swipe row, drag snap, zoom pager, pan and zoom). The
-  Gestures and drag record (AST-124) owns them; FR1's default link covers them.
+- The contracts of the native-driver gesture views (swipe row, drag snap, zoom
+  pager, pan and zoom), which stay internal like the controls. The Gestures and
+  drag record (AST-124) owns them; FR1's default link covers them.
 - The date family's own surfaces (popover, bottom sheet, typed field) and their
   eligibility rules. `spec:AST-043` and the date components' records own them.
 - Equivalent internal implementations remain valid when they satisfy this
@@ -113,18 +113,10 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   controls and the gesture views are part of the default set of
   `spec:AST-112/FR3`. They are internal implementation behind the library's
   components: no entry exports one as a separate public view
-  (`spec:AST-112/FR5`); `./controls` holds the components themselves. Where an
-  app uses the opt-out that `spec:AST-112/FR3` allows, every probe below
-  answers false and every component draws its Astryx control. The library
-  reaches the controls through this internal surface:
-  - `NativeButton`, `NativeSlider`, `NativeTextField`,
-    `NativeSegmentedControl`, `NativePasteControl`, each with its
-    `is<View>Available()` probe;
-  - `datePickerView()` and `isDatePickerViewAvailable()` (the iOS picker view),
-    and `AstryxDatePicker` with `isAvailable()`, `openDate`,
-    `openDateRange` and `openTime` (the Android dialogs);
-  - `AndroidDatePicker` and `AndroidDateRangePicker`, which open the dialogs
-    from a field the library draws (`renderField({open, isOpen})`).
+  (`spec:AST-112/FR5`); `./controls` holds the components themselves. Each
+  native piece has an availability probe. Where it answers false (the app opted
+  out, an older binary, or the OS has no equivalent), the component draws its
+  Astryx control (FR14).
 - **FR2 — `render` chooses the system control or the drawn one.** Every
   component in the Who uses it table takes one axis, `render: 'auto' |
 'system' | 'drawn'`. The kind of surface (a popover or a bottom sheet in the
@@ -159,74 +151,79 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   - FR2 gap: `Switch` has no native contract. Its system presentation is React
     Native's own `Switch`, outside this group's appearance mapping (FR11)
     and contract baseline (FR15); see OQ6.
-- **FR3 — Native button.** `NativeButton` takes `label`, `variant`
-  (`primary`, `secondary`, `ghost`, `destructive`), `size` (`sm`, `md`, `lg`),
-  `buttonStyle` (`standard`, `glass`), `symbolName`, `isLoading`, `isDisabled`,
-  `width` (`content`, `fill`), `cornerStyle` (`theme`, `system`), the appearance
-  props of FR11, `onPress`, and the accessibility props of FR12.
+- **FR3 — Native button.** `AstryxNativeButton` takes the title, Astryx's
+  `variant` (`primary`, `secondary`, `ghost`, `destructive`) and `size` (`sm`,
+  `md`, `lg`), `buttonStyle` (`standard`, `glass`), an iOS-only SF Symbol
+  (`systemImage`), loading and enabled states, the appearance of FR11, the press
+  slop and the accessibility props of FR12. It reports each completed press and
+  its fitting size.
   - iOS draws UIButton with UIButton.Configuration: filled, tinted or plain by
     variant, the destructive role in the system red. `glass` draws
     `prominentGlass` (primary, destructive) or `glass` (secondary, ghost) on
-    iOS 26 and later, and the standard mapping below. `symbolName` is an SF
-    Symbol drawn before the label; the library resolves its icon names to it.
+    iOS 26 and later, and the standard mapping below. `systemImage` is drawn
+    before the title; the library resolves its icon names to SF Symbols.
   - Android draws a Material 3 button: filled, tonal or text by variant, the
     theme's error colour for `destructive`. It draws no icon.
-  - `symbolName` (`systemImage` in the contract) is an iOS-only member and
-    says so in its tag (`spec:AST-140/FR1`). On Android, a set `symbolName`
-    gives one development warning.
+  - `systemImage` is an iOS-only member and says so in its tag
+    (`spec:AST-140/FR1`). On Android, a set `systemImage` gives one
+    development warning.
   - The system control decides when a touch is a press. On iOS a touch that
-    moves further than the drawn Button's press distance is not a press. Every completed activation calls
-    `onPress` once.
-- **FR4 — Native slider.** `NativeSlider` takes `value`, `min`, `max`, `step`
-  (0: continuous), `onChange`, `onChangeEnd`, `onSlidingChange`,
-  `changeInterval` (default 100 ms), `isDisabled`, `isRTL`, the appearance
-  props of FR11 and the accessibility props of FR12.
-  - The thumb belongs to the UI thread (FR13). `onChange` hears the value at
-    most once per `changeInterval` while the thumb moves, and the last value of
-    a move before the commit. `onChangeEnd` hears the value when the finger
+    moves further than the drawn Button's press distance is not a press. Every
+    completed activation reaches `Button`'s `onClick` once.
+- **FR4 — Native slider.** `AstryxNativeSlider` takes the value, its minimum
+  and maximum, `step` (0: continuous), `changeInterval` (default 100 ms), the
+  enabled state, `layoutDirection`, the appearance of FR11 and the
+  accessibility props of FR12. It reports `onValueChange`, `onValueCommit`,
+  `onSlidingChange` and its fitting size, and takes a `restoreValue` command
+  (FR9). `Slider` hears the first two as its `onChange` and `onChangeEnd`.
+  - The thumb belongs to the UI thread (FR13). `onValueChange` reports the
+    value at most once per `changeInterval` while the thumb moves, and the last
+    value of a move before the commit. `onValueCommit` reports the value when
+    the finger
     lifts, when the touch is cancelled, and after each accessibility increment
-    or decrement. `onSlidingChange` hears `true` when a drag starts and `false`
+    or decrement. `onSlidingChange` reports `true` when a drag starts and `false`
     when it ends.
   - `step` snaps the thumb as it moves. During a drag the finger controls the
     thumb; a new `value` from the caller takes effect when the drag ends.
-  - `isRTL` mirrors the slider: the minimum is at the right edge and the track
+  - `layoutDirection: 'rtl'` mirrors the slider: the minimum is at the right edge and the track
     fills from the right.
-- **FR5 — Native text field.** `NativeTextField` takes `value`,
-  `onChangeText`, `placeholder`, `size`, `secureTextEntry`, `keyboardType`,
-  `textContentType`, `returnKey`, `autoCapitalize`, `autoCorrect`,
-  `spellCheck`, `hasClear`, `startSymbolName`, `isLoading`, `editable`,
-  `isDisabled`, `status` (`error`, `warning`, `success`), `autoFocus`,
-  `fieldStyle` (`bordered`, `filled`), the appearance props of FR11, `onFocus`,
-  `onBlur`, `onSubmit` (the return key), the accessibility props of FR12, and a
-  `ref` handle with `focus()`, `blur()` and `isFocused()`.
+- **FR5 — Native text field.** `AstryxNativeTextField` takes the text with
+  its event count (FR9), the placeholder, `size`, secure entry, the keyboard,
+  content type and return key, capitalization, autocorrection, spell checking,
+  a clear button, an iOS-only start SF Symbol (`startSystemImage`), loading,
+  editable and enabled states, `status` (`error`, `warning`, `success`),
+  autofocus, an iOS-only filled box (`fieldStyle`, `fill`, `cornerRadius`,
+  `insetX`), the appearance of FR11 and the accessibility props of FR12. It
+  reports text changes, focus changes, the return key and its fitting size,
+  and takes `focus` and `blur` commands.
   - iOS draws a UITextField in the system's rounded style; `filled` draws no
     border, the theme's fill and element radius, its horizontal inset, the
     status colour as the border while a status is set, and the accent as the
-    border while focused. `startSymbolName` is an SF Symbol at the start of the
+    border while focused. `startSystemImage` is drawn at the start of the
     box.
   - Android draws a Material 3 outlined TextInputLayout with a
     TextInputEditText. It takes neither `filled` nor a start symbol; spelling
     suggestions follow `autoCorrect`.
-  - `startSymbolName`, `fieldStyle`, `fill`, `cornerRadius` and `insetX`
-    (`startSystemImage`, `fieldStyle`, `fill`, `cornerRadius`, `insetX` in the
-    contract) are iOS-only members and say so in their tags
+  - `startSystemImage`, `fieldStyle`, `fill`, `cornerRadius` and `insetX` are
+    iOS-only members and say so in their tags
     (`spec:AST-140/FR1`). On Android, each one set gives one
     development warning.
   - `status` colours the box's border, and for `error` the caret. The message
     stays the library's, below the box.
-  - `focus()` and `blur()` are the view's `focus` and `blur` commands;
-    `isFocused()` follows the field's focus events.
-- **FR6 — Native segmented control.** `NativeSegmentedControl` takes
-  `segments` (each a `title`, `isTitleHidden`, `symbolName`, `isDisabled`,
-  `accessibilityLabel`), `selectedIndex` (-1: none), `onChange(index)`,
-  `layout` (`hug`, `fill`), `size`, `isDisabled`, the appearance props of FR11,
-  `accessibilityLabel`, and `onFittingSize`.
+  - `TextInput`'s handle answers `focus()` and `blur()` through the view's
+    commands, and `isFocused()` follows the field's focus events.
+- **FR6 — Native segmented control.** `AstryxSegmentedControl` takes
+  `segments` (each a title, whether the title is hidden, an SF Symbol, an
+  enabled state and an accessibility label), `selectedIndex` (-1: none),
+  `layout` (`hug`, `fill`), `size`, the enabled state, the appearance of FR11
+  and the group's accessibility label. It reports each tapped index and its
+  fitting size, and takes a `restoreSelectedIndex` command (FR9).
   - iOS draws UISegmentedControl. A segment draws its title, or with
-    `isTitleHidden` its SF Symbol. A segment never shows both.
+    its title hidden its SF Symbol. A segment never shows both.
   - `hug` sizes each segment to its content; `fill` gives every segment the
     same width.
   - Titles scale with Dynamic Type, and the control grows with them.
-    `onFittingSize` reports the control's fitting size, so the library draws its
+    The control's fitting size (FR10) tells the library when to draw its
     own segments when the titles do not fit (FR2). Every title shows in full.
   - The selected segment keeps UIKit's fill and title colours unless the theme
     paints them (FR11).
@@ -256,22 +253,22 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     already showing), `invalid-value` when the dialog returns none, `not-linked` or
     `no-module` when the module is absent, or `error`. It never rejects. A field
     shows one dialog at a time.
-  - A failure other than `cancelled` reaches the field's `onError`; without
-    one, a development build warns. A failed open is always visible to the
+  - A failure other than `cancelled` is never silent: the date component
+    reports it, and a development build warns. A failed open is always visible to the
     caller.
   - The library plays its `select` haptic when a pick commits from a surface
     that played no system feedback (the compact pill's calendar, the inline
     calendar, the dialogs). The wheels give their own system feedback, so no
     library haptic follows them.
-- **FR8 — System paste control.** `NativePasteControl` takes `onPaste`,
-  `acceptedTypes` (a subset of `text`, `url`, `image`; default `text`),
-  `isDisabled`, `foregroundTint`, `backgroundTint`, `cornerRadius` (negative:
-  the system capsule), `displayMode` (`iconAndLabel`, `label`), the appearance
-  props of FR11 and `accessibilityHint`.
+- **FR8 — System paste control.** `AstryxPasteControl` takes the accepted
+  types (a subset of `text`, `url`, `image`; default `text`), the enabled
+  state, foreground and background tints, `cornerRadius` (negative: the system
+  capsule), `displayMode` (`iconAndLabel`, `label`), the appearance of FR11 and
+  an accessibility hint. It reports each paste and its fitting size.
   - iOS 16 and later draw UIPasteControl. A tap on it grants access to the
     pasteboard for that one paste, so iOS asks no paste question.
-  - Each paste calls `onPaste` once with one value, in this order of
-    preference among the accepted kinds: `{type: 'url', url}`,
+  - Each paste reports one value, and PasteButton's `onPaste` receives it, in
+    this order of preference among the accepted kinds: `{type: 'url', url}`,
     `{type: 'image', uri, width, height}`, `{type: 'text', text}`. An image
     arrives as a PNG file in the app's temporary folder. The file can disappear
     at the app's next launch, so an app that keeps the image copies it. Nothing reads the pasteboard (DEC-5).
@@ -298,8 +295,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     final size, so a parent that measures twice sees no jump.
   - A button drawn again with the same content has its final size from its
     first frame.
-  - `width: 'fill'` (Button) and `layout: 'fill'` (SegmentedControl) keep the
-    caller's width and take only the height.
+  - A full-width Button and a SegmentedControl with `layout: 'fill'` keep the
+    width their layout gives them and take only the height.
   - The paste control's fitting size is also its minimum, whatever the caller
     styles: UIKit refuses a paste control laid out smaller than it. A report
     counts only for the `displayMode` it was measured for.
@@ -359,13 +356,12 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   commit, a tap's index, a text change with its count, a focus change, a return,
   a paste, a fitting size. No control runs JavaScript per frame while the person
   drags, types or scrolls a picker.
-- **FR14 — An absent control reports itself and the library draws.** Each
-  native control renders its `fallback` (nothing by default) where its native view is absent
-  (opted out, an older binary, the OS has no equivalent, Jest, the web) and
-  calls `onError({reason: 'no-native-view'})` once. Its probe says which, so the
-  library draws its own control instead (`spec:AST-112/FR7`). A dialog call on
-  a binary without the module resolves `not-linked` or `no-module`
-  (`spec:AST-112/FR3`, `spec:AST-140/FR2`).
+- **FR14 — An absent control is never a blank space.** Where a native control
+  is absent (the app opted out, an older binary, the OS has no equivalent,
+  Jest, the web), its probe answers false and the component draws its Astryx
+  control in its place (`spec:AST-112/FR7`, `spec:AST-140/FR2`). A dialog call
+  on a binary without the module resolves `not-linked` or `no-module`
+  (`spec:AST-112/FR3`, `spec:AST-140/FR3`).
 - **FR15 — The contracts follow the platform's evolution rules.** Every
   contract in the group follows `spec:AST-140/FR5`: it is at revision 1, and a
   later behaviour is a named feature that the JavaScript checks before it uses
@@ -429,8 +425,9 @@ FR7's results.
   and FR6, for the controls listed here.
 - Relies on `spec:AST-112` FR3 (amended): the native half of Astryx's
   components, the controls among them, links by default.
-- Relies on `spec:AST-112` FR5 (amended): `./controls` holds the native
-  controls and the gesture views of the library's components.
+- Relies on `spec:AST-112` FR5 (amended): the native controls and the gesture
+  views stay internal; `./controls` holds the library's components whose
+  native half they are.
 - Relies on `spec:AST-140/FR5`: every contract is at revision 1, and later
   behaviour is a named feature.
 - Departs from `spec:AST-082/FR11` on Android: Slider and SegmentedControl,
@@ -449,7 +446,7 @@ FR7's results.
 | -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | FR1      | Built app without any opt-in: binary symbols and the probes; unit tests of the entry through the `./testing` doubles       | default link, gesture views included; opted out where an opt-out exists; each probe                                                                                                   | A default build lacks a control, or an opted-out build answers a probe true                                                                      |
 | FR2      | Unit tests of the `render` resolution and of each component's shape rules                                                  | `render` `auto`, `system` and `drawn`; a theme's default; no host; each ineligible shape, icons on Android and an icon-and-label segment included; a focused field switching `render` | A wrong control, a missing or repeated development warning, a system control for an ineligible shape, or a lost value                            |
-| FR3      | Simulator and emulator checks of each variant, size and style                                                              | each variant; glass on iOS 26 and earlier; loading; disabled; a drag past the press slop                                                                                              | A wrong system style, a press after the slop, a press without `onPress`, or no development warning for `symbolName` on Android                   |
+| FR3      | Simulator and emulator checks of each variant, size and style                                                              | each variant; glass on iOS 26 and earlier; loading; disabled; a drag past the press slop                                                                                              | A wrong system style, a press after the slop, a press that does not reach `onClick`, or no development warning for `systemImage` on Android      |
 | FR4      | Simulator drag and VoiceOver checks; UI-thread frame check                                                                 | a drag; step snapping; a value during a drag; an accessibility step; right to left                                                                                                    | More than one value per interval, a missing commit, a held value applied before release, or JavaScript run per frame                             |
 | FR5      | Simulator and emulator checks of each style and status; unit tests of the handle                                           | bordered and filled; each status; secure entry; focus and blur                                                                                                                        | A wrong border or caret colour, a filled box on Android, a handle that misses focus, or no development warning for an iOS-only member on Android |
 | FR6      | Simulator checks at the default text size and at AX1                                                                       | `hug` and `fill`; an image segment; disabled segments; a title that does not fit                                                                                                      | A cut title, a native control at AX1, or a wrong fitting size                                                                                    |
@@ -460,7 +457,7 @@ FR7's results.
 | FR11     | Unit tests that each control forwards exactly the listed tokens; Simulator and emulator checks in light and dark           | each theme value per platform; a system button shape; an override a control cannot take                                                                                               | A token sent where the table says it does not reach, a missing one, or no development notice for an override                                     |
 | FR12     | VoiceOver and TalkBack checks of each control; unit tests of the forwarded props; Dynamic Type and font scale checks       | each element prop; busy; an image segment; large text sizes                                                                                                                           | A host view read instead of the control, a lost label or state, or text that does not scale                                                      |
 | FR13     | UI-thread frame checks during drags, typing and picker scrolls                                                             | a slider drag; a segmented tap; typing; the wheels                                                                                                                                    | JavaScript runs per frame                                                                                                                        |
-| FR14     | Unit tests through the `./testing` doubles in their absent, older and current shapes                                       | each view absent; the module absent; an older binary                                                                                                                                  | A throw, a rejection, a repeated `onError`, or a component that draws nothing                                                                    |
+| FR14     | Unit tests through the `./testing` doubles in their absent, older and current shapes                                       | each view absent; the module absent; an older binary                                                                                                                                  | A throw, a rejection, or a component that draws nothing                                                                                          |
 | FR15     | The platform's spec rules check                                                                                            | every contract at revision 1; a missing named feature                                                                                                                                 | A feature used without its check, or a silently weaker path without it                                                                           |
 | FR16     | Source review and symbol check of the controls' native code against the public SDKs                                        | each control's iOS and Android code                                                                                                                                                   | A private selector, a private field read, or a restricted API                                                                                    |
 
