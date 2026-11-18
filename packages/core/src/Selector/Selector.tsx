@@ -465,6 +465,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 
   // Section heading. Plain secondary text, no rules — the same treatment
@@ -499,6 +500,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
