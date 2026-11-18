@@ -24,6 +24,10 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// Its assertions read the drawn open states page.
+realRenders(true);
 
 const T = 300_000;
 
