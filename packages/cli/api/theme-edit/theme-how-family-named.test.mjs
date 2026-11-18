@@ -2,9 +2,11 @@
 
 /**
  * @file A font family said by its name, in capitals, beside the text it is
- * for ("Fraunces headings", "use Playfair Display for headings", "headings
+ * for ("Inter headings", "use Playfair Display for headings", "headings
  * in Lora") is that family on that text, as "font Lora" is; a capitalized
- * word the readers know ("Bold headings") keeps its own reading.
+ * word the readers know ("Bold headings") keeps its own reading, and a
+ * one-word name only Fontsource publishes, said with no cue ("Stylish
+ * headings"), is offered, never written.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -80,7 +82,7 @@ describe('a family said by name', () => {
     ],
     ['headings in Lora', 'set q0 font Lora --on heading'],
     ['body text in Merriweather', 'set q0 font Merriweather --on body'],
-    ['Fraunces headings', 'set q0 font Fraunces --on heading'],
+    ['headings in Fraunces', 'set q0 font Fraunces --on heading'],
     [
       'use Playfair Display for headings',
       "set q0 font 'Playfair Display' --on heading",
@@ -89,8 +91,8 @@ describe('a family said by name', () => {
       'use Acme Grotesk for headings',
       "set q0 font 'Acme Grotesk' --on heading",
     ],
-    // (A catalog family that is no word the editor reads.)
-    ['Basic headings', 'set q0 font Basic --on heading'],
+    // (A catalog family that is no word the editor reads, with a cue.)
+    ['headings in Basic', 'set q0 font Basic --on heading'],
     ['headings in Lobster', 'set q0 font Lobster --on heading'],
   ])
     it(
@@ -139,6 +141,27 @@ describe('a family said by name', () => {
     expect(offer?.commands?.[0]).toMatch(
       / set q0 font Assistant --on heading$/,
     );
+    // (A one-word name only Fontsource publishes, said with no cue, may be
+    // a plain word: it is offered, never written.)
+    for (const [ask, name, on] of [
+      ['Stylish headings', 'Stylish', 'heading'],
+      ['Fraunces headings', 'Fraunces', 'heading'],
+    ]) {
+      const {data} = /** @type {any} */ (
+        await themeEditHow(ask, {cwd, theme: 'q0'})
+      );
+      const results = /** @type {any[]} */ (data.results ?? []);
+      expect(
+        results
+          .filter(r => !r.offer)
+          .flatMap(r => r.commands)
+          .some(c => / set q0 (?:font|font-family) /.test(c)),
+        ask,
+      ).toBe(false);
+      expect(results.find(r => r.offer)?.commands?.[0], ask).toMatch(
+        new RegExp(` set q0 font ${name} --on ${on}$`),
+      );
+    }
     // (A casing said in words is the text's case, never a family.)
     for (const ask of [
       'titles in All Caps, rounder cards',
