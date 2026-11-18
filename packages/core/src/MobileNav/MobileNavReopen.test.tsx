@@ -22,6 +22,7 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {AppShell} from '../AppShell/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
+import {loadMobileNavDrawer} from './MobileNavToggle';
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal =
@@ -82,6 +83,12 @@ function TestShell() {
     </AppShell>
   );
 }
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
+});
 
 describe('Mobile nav re-open after close (uncontrolled OOTB)', () => {
   it('can be opened, closed, then opened again', () => {

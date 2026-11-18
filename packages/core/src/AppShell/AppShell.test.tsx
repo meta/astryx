@@ -40,6 +40,7 @@ import {TopNav, TopNavHeading, TopNavItem} from '../TopNav';
 import {TextInput} from '../TextInput';
 import {useAppShellMobile} from './AppShellMobileContext';
 import {Theme, defineTheme} from '../theme';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -126,6 +127,12 @@ afterEach(() => {
   act(() => {
     document.documentElement.removeAttribute('data-astryx-theme');
   });
+});
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
 });
 
 describe('AppShell', () => {

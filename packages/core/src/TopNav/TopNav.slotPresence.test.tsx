@@ -24,6 +24,7 @@ import {TopNavMobileContentContext} from './TopNavMobileContentContext';
 import {NavHeadingMenu} from '../NavMenu/NavHeadingMenu';
 import {NavHeadingMenuItem} from '../NavMenu/NavHeadingMenuItem';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom does not implement showModal/close on <dialog>; the drawer uses them.
 beforeAll(() => {
@@ -88,6 +89,12 @@ function InMode({
 function InDrawer(props: {children: ReactNode; mobileContent?: ReactNode}) {
   return <InMode mode="drawer" {...props} />;
 }
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
+});
 
 describe('TopNav slots follow isRenderable', () => {
   describe.each([
