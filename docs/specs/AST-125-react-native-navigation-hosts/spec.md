@@ -65,17 +65,16 @@ outside Astryx stay React and React Native (`spec:AST-112/FR2`).
 
 | Native piece       | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                   | What a person sees                                                                                 |
 | ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), in both system and drawn chrome; the drawn chrome draws `Header` (`Header.ForNavigation`) inside its screens                                                                                          | Native push and pop transitions, the back swipe, Android predictive back                           |
-| AstryxStackScreen  | native component (Fabric Native Component) | The router's stack navigator; `ScreenView` and `StackHeader` (they set a screen's options); `ScreenScroll` (the screen's scroll target); the header search row, drawn with `SearchField`                                                                                        | The navigation bar: titles, large title, back button, bar buttons and menus, toolbar, search field |
+| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), in both system and drawn chrome; the drawn chrome draws `Header` inside its screens                                                                                                                   | Native push and pop transitions, the back swipe, Android predictive back                           |
+| AstryxStackScreen  | native component (Fabric Native Component) | The router's stack navigator; `Header` (its composed parts declare the screen's stack options) and `ScreenView`; `ScreenScroll` (the screen's scroll target); the header search row, drawn with `SearchField`                                                                   | The navigation bar: titles, large title, back button, bar buttons and menus, toolbar, search field |
 | AstryxHeaderSlot   | native component (Fabric Native Component) | The router's stack navigator, for a screen's `headerTitle`, `headerLeft` and `headerRight` given as React                                                                                                                                                                       | A custom title view or bar button in the system bar                                                |
 | AstryxTabsHost     | native component (Fabric Native Component) | The router's tab navigator (`createTabs`) with system chrome                                                                                                                                                                                                                    | The system tab bar (iOS) or a Material navigation bar or rail (Android)                            |
 | AstryxTabScreen    | native component (Fabric Native Component) | The router's tab navigator with system chrome                                                                                                                                                                                                                                   | Each tab's icon, label and badge, and the tab's content                                            |
-| AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its `bottomAccessory` option                                                                                                                                                                                                                    | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
+| AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its bottom accessory (`BottomAccessory`, one component for both placements)                                                                                                                                                                     | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
 | AstryxRouter       | protocol (JavaScript)                      | The router provides it: `NavigationRoot` (its handle) and `createNavigationRef()` carry the four methods, and `useNavigationInspector` reads it. No other Astryx component reads it; apps (`useRouterState`), Astryx Stage's address bar and the Astryx app's preview chrome do | An address bar or route list that shows and opens the app's routes                                 |
 
-The drawn tab bar (`TabBar.ForNavigation`), the drawn accessory
-(`BottomAccessory`) and the drawn modal route (`BottomSheet`) render no
-navigation host.
+The drawn tab bar (`TabBar`) and the drawn modal route (`BottomSheet`) render
+no navigation host.
 
 ## Non-goals
 
@@ -87,9 +86,9 @@ navigation host.
 - Safe-area measurement outside navigation: the core's safe-area provider owns
   window insets; the hosts report screen insets only.
 - How an app chooses system or drawn chrome (OQ1).
-- The API of the router's stack and tab options, the `Header` component and
-  the library's tab accessory: they map onto the native props here, and this
-  record does not settle them.
+- The API of the stack and tab options, the `Header` component's parts and
+  the `BottomAccessory` component: they map onto the native props here, and
+  their own records own them.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -189,8 +188,8 @@ navigation host.
   - A prevent-remove guard turns `canPop` off before any gesture, so the
     system never starts a swipe the router would refuse.
 - **FR5 — The stack screen carries each screen's chrome.** These are native
-  props. The router's stack options and the `Header` component map onto them;
-  their API is outside this record. Where a concept is the same, a prop keeps
+  props. The stack options, which a screen declares through the composed
+  `Header` parts, map onto them; their API is outside this record. Where a concept is the same, a prop keeps
   the name and meaning react-native-screens and React Navigation give it:
   compatibility with the ecosystem's option vocabulary is a goal, so an app
   that moves from those libraries reads the same words. Booleans are positive.
@@ -526,8 +525,3 @@ off the predictive back scrub.
   bottom toolbar. Options: map `headerSearchBarOptions` onto Material's search
   bar and `toolbarItems` onto a Material bottom app bar; or keep the drawn row
   and document the toolbar options as iOS-only.
-- **OQ5 — Does the library keep a second placement vocabulary?**
-  (`human-api`) The tab accessory contract reports `expanded` or `inline`; the
-  library's docked bar (`useDockedBar`, `DockedBarBand`) names its placements
-  `floating`, `regular` and `inline`. Options: use the contract's names in the
-  library; or keep the library's names and document the mapping.
