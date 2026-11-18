@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A small, forgiving HTML reader for `astryx experimental render
+ * @file A small, forgiving HTML reader for `astryx experimental export
  * --reverse`: enough for rendered markup, plus the helpers that ask it which
  * Astryx component an element came from. Its scanner also finds the parts of
  * a rendered file that a reverse compares.

@@ -55,9 +55,8 @@ import {
   addBaseHelpText,
   baseHelpSettings,
   checkRun,
-  commandAvailable,
-  helpBase,
   runResolution,
+  servedSubcommands,
 } from './lib/base-gate.mjs';
 import {commandPath} from './lib/command-path.mjs';
 import {scanRootArgs} from './lib/root-args.mjs';
@@ -122,7 +121,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon use',
   'experimental icon new-set',
   'experimental icon new-definition',
-  'experimental render',
+  'experimental export',
   // The groups answer --json with their own help, as the root does.
   'experimental theme',
   'experimental theme editor',
@@ -817,6 +816,9 @@ export async function createProgram({argv} = {}) {
     if (actionCommand === program) return;
     const fullName = commandPath(actionCommand);
     if (JSON_SUPPORTED.has(fullName)) return;
+    // A renamed command's old name answers with the moved error's envelope.
+    const {RENAMED_PATHS} = await import('./lib/renamed-commands.mjs');
+    if (RENAMED_PATHS.has(fullName)) return;
     process.__xdsJsonHandled = true;
     // A group given a word it does not have reports an unknown subcommand and
     // lists the ones it has, in JSON as in text, even when a flag follows it.
@@ -826,9 +828,7 @@ export async function createProgram({argv} = {}) {
       // The suggestions name only what the run's base serves, so its
       // integrations load first.
       await loadProjectOnce();
-      const names = actionCommand.commands
-        .filter(child => commandAvailable(child, helpBase()))
-        .map(child => child.name());
+      const names = servedSubcommands(actionCommand).map(child => child.name());
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.
