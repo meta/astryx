@@ -31,8 +31,11 @@ Android with status bar glyphs that match it; and can select and copy prose
 across paragraphs, headings and list items as one piece of text. The developer gets these from six native pieces: the safe-area provider, view and module, the keyboard dock, the window status bar, and the selectable text view, each with a JavaScript wrapper in the platform layer. Dates, numbers, counts and relative times in every component format through the JavaScript engine's `Intl`, which the package states as a requirement on the JavaScript engine, with a library fallback for each feature the engine lacks.
 
 This record details the platform layer of `spec:AST-112` for this group. It
-uses the result and probe vocabulary of `spec:AST-112/FR6` and
-`spec:AST-112/FR7`, and the additive evolution of `spec:AST-112/FR8`. Every piece in the group belongs to the
+follows the shared platform rules of `spec:AST-140`: a missing piece is a
+result (`spec:AST-140/FR2`), one result vocabulary (`spec:AST-140/FR3`),
+additive evolution (`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and
+coexistence with an app's own native code (`spec:AST-140/FR9`); probes take
+the shape of `spec:AST-112/FR7`. Every piece in the group belongs to the
 platform's core (`spec:AST-112/FR1`): it links in every app and is not an opt-in
 capability. The on-screen keyboard in browsers is `spec:AST-099`; this record
 owns the keyboard on native React Native.
@@ -42,8 +45,8 @@ owns the keyboard on native React Native.
 - Safe-area provider, view and module: no behaviour gap with the ecosystem's
   safe-area library. Astryx owns them so the package takes no third-party
   native dependency for layout (`spec:AST-112/FR2`); an app may still use
-  react-native-safe-area-context beside these components without conflict.
-  OQ1 asks about scope.
+  react-native-safe-area-context beside these components without conflict
+  (`spec:AST-140/FR9`). OQ1 asks about scope.
 - Keyboard dock: Astryx's own composer and its linked list must stay on the
   keyboard through every frame of a show, a hide and an interactive dismissal,
   on both platforms, with no JavaScript per frame.
@@ -143,7 +146,7 @@ owns the keyboard on native React Native.
   installed; the package's only declaration of it is the optional peer of
   `./navigation-legacy` (`spec:AST-112/FR2`, `spec:AST-112/FR5`). An app may
   also install react-native-safe-area-context itself and use it beside these
-  components without conflict.
+  components without conflict (`spec:AST-140/FR9`).
 - **FR6 — `KeyboardDockView` holds content that stays on the keyboard.** The
   caller sizes the dock and gives it bottom padding equal to the part of the
   dock the keyboard covers; the dock itself never resizes.
@@ -171,7 +174,7 @@ owns the keyboard on native React Native.
   register the dock.
 - **FR7 — The dock rides the keyboard with no JavaScript per frame.** The
   dock moves its children natively on every frame of a keyboard change, and
-  JavaScript hears only the change's start and end.
+  JavaScript hears only the change's start and end (`spec:AST-140/FR6`).
   - iOS: a show, a
     hide or a height change moves them with the keyboard's own duration and
     curve, and the caller's padding update causes no jump. During an
@@ -253,7 +256,8 @@ owns the keyboard on native React Native.
 - **FR13 — A missing piece degrades to a correct layout.** Each view has a
   probe (`isSafeAreaProviderAvailable()`, `isSafeAreaViewAvailable()`,
   `isKeyboardDockAvailable()`, `isNativeSelectableTextViewAvailable()`), and
-  the window status bar's probe is internal (`spec:AST-112/FR7`).
+  the window status bar's probe is internal (`spec:AST-112/FR7`,
+  `spec:AST-140/FR2`).
   - Without the native provider, `SafeAreaProvider` is a plain view whose
     subtree gets the starting numbers, or zeros; it always renders its
     children. Without the native view, `SafeAreaView` applies the same edge rule
@@ -271,7 +275,7 @@ owns the keyboard on native React Native.
     comes.
 - **FR14 — The group follows the package's contract baseline.** Every
   contract in this group is at revision 1 and grows only by named features
-  (`spec:AST-112/FR8`). The
+  (`spec:AST-140/FR5`). The
   keyboard dock's `transcriptNativeID`, `bottomInset`, `restingInset` and
   `animatesSideInsets` belong to revision 1; the group lists no named features.
 
@@ -338,7 +342,7 @@ owns the keyboard on native React Native.
 `Intl` is a requirement on the JavaScript engine (FR15), not a native
 contract. `AstryxSelectableText`'s `content` is the blocks as JSON, with sizes in dp
 before font scaling and colours as processed colour numbers; the wrapper builds
-it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
+it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
 
 ### Platform support
 
@@ -351,8 +355,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 | `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                                                      |
 | `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                                            |
 
-- Engine: Hermes on iOS meets FR15 without `NumberFormat#formatToParts`;
-  Hermes on Android meets it with it.
+- Engine: the JavaScript engine on iOS meets FR15 without
+  `NumberFormat#formatToParts`; on Android it meets FR15 with it.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, which has UIKit's keyboard layout guide; Android API level
   24; the New Architecture only).
@@ -371,9 +375,10 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
   default.
 - Relies on `spec:AST-112` FR4 (amended): native code calls public platform
   API only.
-- Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and
-  grow by named features.
-- Details `spec:AST-112/FR6`, `spec:AST-112/FR7` and `spec:AST-112/FR9` for
+- Relies on `spec:AST-140` FR5: contracts start at revision 1 and grow by
+  named features.
+- Details `spec:AST-140/FR2`, `spec:AST-140/FR3`, `spec:AST-112/FR7` and
+  `spec:AST-112/FR9` for
   this group's probes, fallbacks and app root.
 - `spec:AST-099` is unchanged; it keeps the keyboard in browsers.
 - The package's `Intl` engine requirement is owned here; FR16's plural rules
