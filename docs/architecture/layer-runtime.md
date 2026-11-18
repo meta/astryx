@@ -606,8 +606,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   in place; when the keyboard rises it moves up above it and then holds.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
   viewport geometry is measured after paint and then applied, with two
-  exceptions. The runtime observes anchor visibility for every layer (which
-  drives `spec:AST-116` FR7's hide once FR7 ships; FR7 gap there), and,
+  exceptions. The runtime observes anchor visibility for every layer (which also drives `spec:AST-116` FR7's hide), and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
   leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the

@@ -94,6 +94,16 @@ export function releaseTemporaryFocus(element: HTMLElement): void {
   temporaryFocus.get(element)?.();
 }
 
+/** Whether the element takes focus as it is, with no temporary tab stop. Internal. */
+export function takesFocusAsIs(element: HTMLElement): boolean {
+  return (
+    element.hasAttribute('tabindex') ||
+    element.tabIndex >= 0 ||
+    element.isContentEditable ||
+    element.matches(FOCUSABLE_SELECTOR)
+  );
+}
+
 /** Focuses the element. A nonfocusable element gets a tab stop until blur or disposal. Internal. */
 export function focusForLastInputTemporarily(
   element: HTMLElement,
@@ -101,12 +111,7 @@ export function focusForLastInputTemporarily(
   modality: InteractionModality = getInteractionModality(element),
 ): () => void {
   releaseTemporaryFocus(element);
-  const needsTabIndex =
-    !element.hasAttribute('tabindex') &&
-    element.tabIndex < 0 &&
-    !element.isContentEditable &&
-    !element.matches(FOCUSABLE_SELECTOR);
-  if (!needsTabIndex) {
+  if (takesFocusAsIs(element)) {
     focusForLastInput(element, options, modality);
     return () => {};
   }

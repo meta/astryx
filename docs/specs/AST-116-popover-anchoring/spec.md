@@ -312,8 +312,7 @@ Dialog and DropdownMenu.
   only its trigger role (FR1). INV7's move to another trigger applies only when
   no separate anchor is named, and INV20's centered case and the touch growth
   use the anchor's center. Its Purpose and positioning-mode prose and its
-  browser-close note say "anchor" the same way. INV12's anchor-visibility
-  observation drives FR7's hide once FR7 ships (FR7 gap).
+  browser-close note say "anchor" the same way.
 - `architecture:component-import-boundaries`: INV10 names `usePopover`'s
   `anchor`, `onOutsidePress` and `anchorOutOfViewBehavior` as an exception to
   its 0.3 KB allowance and states their costs, its INV10 verification row
@@ -338,8 +337,6 @@ Dialog and DropdownMenu.
   - The rich text editor's link form, a dialog popover in a published package.
   - The `LayerSamePress` story and Popover's own tests.
 
-FR7 gap: an anchor scrolled out of a scrolling panel leaves the surface held
-over unrelated content.
 FR9 gap: outside presses close the popover through native light dismiss, which
 no caller can cancel.
 FR12 gap: focus containment is active whenever the popover is open, whatever
@@ -354,6 +351,10 @@ FR19 gap: a Dialog opened from a menu row returns focus to the row, which the
 closed menu removed, so focus falls to the body.
 FR20 gap: a Popover whose opener was removed while it was open leaves focus on
 the body.
+AR1 gap: a surface that hides with neither an anchor nor a trigger that can
+take focus leaves focus to fall to the page body.
+AR1 gap: an `<svg>` anchor that can take focus is not a focus target; focus
+moves to the trigger.
 
 ## Verification
 
@@ -370,7 +371,7 @@ the body.
 | FR20, FR21 | `focusReturn.test.ts` and a real-browser spec                         | Each candidate missing in turn: a tour opened by code, a remounted filter button, a removed opener, no candidate left  | A candidate skipped out of order, a hidden or closing candidate chosen, focus on the body, or no warning fails                                               |
 | FR22       | Existing Popover, Dialog, DropdownMenu and Popover-family suites      | Every released state except FR22's three named changes                                                                 | Any other changed expectation in an existing suite fails                                                                                                     |
 | FR24       | `pnpm size:pages` with a page of Popover, Button and Text             | The menu reference page and that page, with none of the three inputs set                                               | A first-load gzip delta over an input's INV10 cost fails review                                                                                              |
-| AR1        | Real-browser interaction spec                                         | Focus inside a surface whose anchor scrolls out, with a focusable anchor, a trigger only, neither                      | Focus left in a hidden surface, or moved back when it shows, fails                                                                                           |
+| AR1        | `PopoverAnchorOutOfView.test.tsx` and a real-browser interaction spec | Focus inside a surface whose anchor scrolls out, with a focusable anchor, a trigger only                               | Focus left in a hidden surface, or moved back when it shows, fails                                                                                           |
 | AR2–AR4    | `Popover.test.tsx` accessibility suite                                | A trigger-less popover with a separate anchor; a fallback without a tab stop; a popover opened by code                 | An ARIA attribute on the anchor, a tab stop left behind, or an unannounced code-opened popover fails                                                         |
 
 ## Decision log
