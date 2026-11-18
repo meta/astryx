@@ -85,14 +85,16 @@ shared icon names under FR17.
       capability shape (FR7), the types of every capability, the registry
       seams the capabilities plug into, the generic capabilities that Astryx's
       components use (storage, cookies, permissions, haptics, and clipboard),
-      system symbols, safe-area insets, the photo library and its thumbnails
-      (the photo picker input uses them), and the native half of the library's own components: the native controls, the
+      system symbols, safe-area insets, and the native half of the library's own components: the native controls, the
       navigation hosts, gestures and drag (the gesture owner and gesture
       root included), system materials and glass surfaces, the
       presentation, menu, and action-sheet hosts, icons and drawing, and
       layout, text, and keyboard. Its opt-in capabilities today are the
       device features an app chooses (FR3): `camera` (camera view), `media` (audio and
-      video playback), and `web` (web view).
+      video playback), `photos` (the photo library and its thumbnails), and
+      `web` (web view). An app that does not opt `photos` in declares no
+      photo-library permission, and the photo source of the file input falls
+      back to the system photo picker, which needs none.
   - `@astryxdesign/react-native-expo`: an optional wrapper for Expo apps. It
     holds the Expo configuration plugin and the Expo host hooks, the native
     pieces that join the platform to an Expo app's lifecycle (FR11). Its peer dependencies are
@@ -257,7 +259,8 @@ shared icon names under FR17.
     reached through the Astryx router (`./navigation`).
   - `./theme`, `./styles`, and `./i18n` hold the theme objects, the style
     helpers, and the strings.
-  - `./camera`, `./media`, and `./web` are the opt-in capabilities' entries. `./controls`, part of the core,
+  - `./camera`, `./media`, `./photos`, and `./web` are the opt-in capabilities'
+    entries. `./controls`, part of the core,
     holds the library's components whose native half is a native control or a
     gesture view (`spec:AST-126`, `spec:AST-124`); the controls and views
     themselves stay internal. `./navigation` is reserved for the Astryx
@@ -327,19 +330,19 @@ shared icon names under FR17.
   - Each group of the platform has its own record, which details these rules
     and FR3's linking for the group's pieces:
 
-    | Group                      | Record         | Links             |
-    | -------------------------- | -------------- | ----------------- |
-    | Surfaces and glass         | `spec:AST-123` | core              |
-    | Gestures and drag          | `spec:AST-124` | core              |
-    | Navigation hosts           | `spec:AST-125` | core              |
-    | Native controls            | `spec:AST-126` | core              |
-    | Icons and drawing          | `spec:AST-127` | core              |
-    | Menus and presentation     | `spec:AST-128` | core              |
-    | Layout, text, and keyboard | `spec:AST-129` | core              |
-    | System modules             | `spec:AST-130` | core              |
-    | Web                        | `spec:AST-131` | `web`             |
-    | Media and camera           | `spec:AST-132` | `media`, `camera` |
-    | Photos                     | `spec:AST-135` | core              |
+    | Group                      | Record         | Links                   |
+    | -------------------------- | -------------- | ----------------------- |
+    | Surfaces and glass         | `spec:AST-123` | core                    |
+    | Gestures and drag          | `spec:AST-124` | core                    |
+    | Navigation hosts           | `spec:AST-125` | core                    |
+    | Native controls            | `spec:AST-126` | core                    |
+    | Icons and drawing          | `spec:AST-127` | core                    |
+    | Menus and presentation     | `spec:AST-128` | core                    |
+    | Layout, text, and keyboard | `spec:AST-129` | core                    |
+    | System modules             | `spec:AST-130` | core                    |
+    | Web                        | `spec:AST-131` | `web`                   |
+    | Media and camera           | `spec:AST-132` | `media`, `camera`       |
+    | Photos                     | `spec:AST-135` | core, opt-in (`photos`) |
 - **FR8 — Native interfaces evolve additively.** A shipped native interface
   never changes; new behavior is additive and named, so an older binary is
   never silently wrong. `spec:AST-140/FR5` owns the rules and the check that
@@ -402,7 +405,7 @@ shared icon names under FR17.
     | Command                                      | Its one job                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
     | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
     | `astryx rn create <path>`                    | Writes a new React Native app into an empty folder from an app template (`--template <name>`, default `starter`; `--list` lists the templates). With `--install-deps` it also installs the dependencies; otherwise it prints the install command for the app's package manager. `astryx rn run` generates the native projects when they are missing.                                                                                                                                                                                                                                                         |
-    | `astryx rn shell`                            | Writes the app's generated `ios/` and `android/` projects from `astryx.shell` in its `package.json`. `--check` compares instead of writing, `--ensure` writes a platform that has no generated files and checks the others, `--entry-only` writes only the generated entry files and touches no native folder, and `--profile <name>` applies a profile of the configuration. `astryx rn shell save-lock` keeps the iOS pod lock for the next generation.                                                                                                                                                    |
+    | `astryx rn shell`                            | Writes the app's generated `ios/` and `android/` projects from `astryx.shell` in its `package.json`. `--check` compares instead of writing, `--ensure` writes a platform that has no generated files and checks the others (`--check` and `--ensure` together fail with `ERR_INVALID_OPTION`), `--entry-only` writes only the generated entry files and touches no native folder, and `--profile <name>` applies a profile of the configuration. `astryx rn shell save-lock` keeps the iOS pod lock for the next generation.                                                                                 |
     | `astryx rn apply`                            | Writes the capability opt-in (FR3) and the host declarations (FR4) into the native projects of an app that keeps its own, with no `astryx.shell`. `--check` compares instead of writing.                                                                                                                                                                                                                                                                                                                                                                                                                     |
     | `astryx rn run ios`, `astryx rn run android` | Puts the app on a simulator, an emulator, or a device. The steps of its plan are: generate or check the native project, check the machine, build, start the dev server for a debug build, install, and launch. `--target <name\|id>` names the simulator, emulator, or connected device, by name or identifier (default: the booted one, else the newest). `--release` builds the release configuration, `--with-dev-server` and `--skip-dev-server` change the dev-server default (together they fail with `ERR_INVALID_OPTION`), `--skip-launch` stops after the install, and `--dry-run` prints the plan. |
     | `astryx rn doctor`                           | An alias that runs the shared `astryx doctor` with the package as its base.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -593,8 +596,10 @@ shared icon names under FR17.
 - **FR20 — The package covers what Astryx uses.** `@astryxdesign/react-native`
   ships all native code that any Astryx component or any of Astryx's own
   `create` templates uses, so no Astryx component needs a third-party library.
-  Native capabilities that no Astryx component or template uses are outside
-  the core package; an app uses its host platform's implementation or an
+  A capability that a component uses but that carries a permission, a usage
+  string, or a library's size ships in the package as an opt-in capability
+  (FR3, DEC-13), as `camera` and `photos` do. Native capabilities that no
+  Astryx component or template uses are outside the core package; an app uses its host platform's implementation or an
   open-source library for them, and Astryx components work beside it (FR2).
 - **FR21 — Glass and materials are a look, not a component.** The public API
   expresses glass and materials through component props (surface and
@@ -884,8 +889,10 @@ A library component with a native half is complete only when that half links,
 so the native half of every library component links in every app: controls,
 navigation hosts, gestures and drag, surfaces, menus, icons, and layout and
 keyboard. A device feature brings a permission, a usage string, or a
-library's size that an app must choose to carry, so camera, media, and web
-stay opt-in.
+library's size that an app must choose to carry, so camera, media, photos,
+and web stay opt-in. A component that uses an opt-in capability works without
+it through the system's own picker or its fallback, as the file input's photo
+source falls back to the system photo picker, which needs no permission.
 
 Rejected: opt-in capabilities for the library's own native pieces, because an
 app would have to know which component needs which capability.
