@@ -118,9 +118,8 @@ for it, and the drawn header shows its theme's look in its place.
   screen's scroll target — owned by `component:react-native/NavigationStack`.
 - The native stack, its bars and the native props the header record maps onto —
   owned by `spec:AST-125`.
-- Icon resolution and drawn glyphs — owned by `spec:AST-127`; glass and
-  material views and paint selection — owned by `spec:AST-123`.
-- The bottom tab bar and its accessory — the tab bar component's.
+- Icon resolution and drawn glyphs — owned by `spec:AST-127`.
+- Glass and material views and paint selection — owned by `spec:AST-123`.
 
 ## Public concepts
 
