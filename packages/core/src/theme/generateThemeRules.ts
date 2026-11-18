@@ -1033,12 +1033,23 @@ function generatedMediaStatusRoleDefaults(
   return aliases;
 }
 
+/**
+ * The scope root in an adaptation's media blocks. The scope root always
+ * carries the theme attribute, and the scope's lower limit stops at the next
+ * themed element, so this matches the root alone, with `:scope`'s 0,1,0
+ * specificity. Unlike a bare `:scope`, browsers file it under the attribute,
+ * so other elements skip it on every style recalc, including when a theme
+ * family shares one block under a list of theme names.
+ */
+const ADAPTATION_SCOPE_ROOT = `:where(:scope)[data-${dataAttrNamespace}-theme]`;
+
 /** The `:scope` token block for portable and theme-local token values. */
 function tokenBlock(
   source: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
   tokenEntries: [string, string][] = Object.entries(source.tokens),
+  rootSelector: string = ':scope',
 ): string | null {
   const declarations = [
     // Font sizes follow the reader's text size where the root Theme sets the
@@ -1058,7 +1069,7 @@ function tokenBlock(
     .join('\n');
   const hasEntries =
     tokenEntries.length > 0 || Object.keys(source.localTokens ?? {}).length > 0;
-  return hasEntries ? `  :scope {\n${declarations}\n  }` : null;
+  return hasEntries ? `  ${rootSelector} {\n${declarations}\n  }` : null;
 }
 
 /** `components.button["variant:secondary"]`-style location for a rule. */
@@ -1996,10 +2007,13 @@ function generateAdaptationRuleRules(
   statusRoleDefaults: [string, string][],
 ): string[] {
   const parts: string[] = [];
-  const tokens = tokenBlock(rule, location, sink, [
-    ...Object.entries(rule.tokens),
-    ...statusRoleDefaults,
-  ]);
+  const tokens = tokenBlock(
+    rule,
+    location,
+    sink,
+    [...Object.entries(rule.tokens), ...statusRoleDefaults],
+    ADAPTATION_SCOPE_ROOT,
+  );
   if (tokens !== null) {
     parts.push(tokens);
   }
@@ -2100,6 +2114,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].statusRoles.`,
       sink,
       roleEntries,
+      ADAPTATION_SCOPE_ROOT,
     );
     if (roleRule !== null) {
       blocks.push(
