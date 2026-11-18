@@ -98,10 +98,6 @@ current family and architecture owners.
 | FR10 | The dialog surface sets its text color to `--color-text-primary`, so text in it that sets no color of its own draws in the surface's text color and not the browser's `CanvasText`.                                                                                                                                                                                                                                                                                                                                                                                | Current source                                                                                 | settled            |
 | FR11 | Dialog names itself `dialog` to a Layout inside it, in the same layer, so its LayoutHeader and LayoutFooter reflect `data-container="dialog"` (`component:LayoutHeader`, `component:LayoutFooter`). A layer opened from the dialog starts with no container.                                                                                                                                                                                                                                                                                                       | Current source and `componentPartTargets.test.tsx`                                             | settled            |
 
-FR4 and AR2 gap: closing takes focus back to the invoker even when a caller moved it
-outside the Dialog, and when the invoker is gone focus falls to the body
-(`spec:AST-116` FR17, FR19 and FR20 gaps).
-
 ### Allowed variation
 
 - **AV1 — Initial target.** A form control, action, heading, or other eligible

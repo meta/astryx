@@ -254,6 +254,8 @@ this record's current membership snapshot must be updated with it.
 FR2 and FR3 gap: Escape and platform close requests reach a non-modal Popover through
 the shared stack and native auto light dismiss wherever focus is
 (`spec:AST-116` FR15 gap).
+FR9 gap: a Popover's focus return to a control is a plain focus, which can
+scroll the control into view.
 
 ## Allowed component variation
 
