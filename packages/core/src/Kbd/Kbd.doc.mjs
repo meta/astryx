@@ -94,8 +94,12 @@ export const docs = {
       description: 'Ref forwarded to the shortcut group element.',
     },
   ],
+  // A shortcut of two keys, so a preview shows the keys side by side.
+  playground: {
+    defaults: {keys: 'mod+k'},
+  },
   theming: {
-    targets: [{className: 'astryx-kbd'}],
+    targets: [{className: 'astryx-kbd'}, {className: 'astryx-kbd-key'}],
   },
   usage: {
     anatomy,
@@ -142,7 +146,7 @@ export const docsZh = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-kbd'}],
+    targets: [{className: 'astryx-kbd'}, {className: 'astryx-kbd-key'}],
   },
   usage: {
     anatomy,

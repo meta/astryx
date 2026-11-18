@@ -669,7 +669,7 @@ export default function CheckoutWizardPage() {
       padding={6}
       contentWidth={1000}
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack ref={attachHost} gap={6}>
             <HStack gap={3} vAlign="center">
               <StackItem size="fill">

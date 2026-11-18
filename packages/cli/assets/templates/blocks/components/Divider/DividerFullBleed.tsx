@@ -11,7 +11,7 @@ import {Text} from '@astryxdesign/core/Text';
 export default function DividerFullBleed() {
   return (
     <Section variant="transparent" width="100%">
-      <Card width={400}>
+      <Card width={400} maxWidth="100%">
         <VStack gap={3}>
           <Text type="label">Order Summary</Text>
           <HStack hAlign="between">

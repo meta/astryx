@@ -183,6 +183,7 @@ describe('per-job scope step', () => {
         'lab_specs_path',
         'release_bump',
         'spec_only',
+        'times_only',
         'tooling_only',
         'touches',
         'truncated',

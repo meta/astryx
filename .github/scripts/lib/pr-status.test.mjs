@@ -301,6 +301,45 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
+  it('marks a change that came from main as inherited, keeps an unproven match apart from one not found, and counts the reports read', () => {
+    const verdict = {
+      status: 'changed',
+      changes: [
+        {...change('a', 30), inherited: {from: 'main'}},
+        {...change('b', 20), inherited: {found: false}},
+        {...change('d', 15), inherited: {found: true}},
+        change('c', 10),
+      ],
+      inheritedChecked: 11,
+    };
+    const section = buildVisualDeltas({verdict});
+    expect(section).toContain(
+      '| Card · a (neutral, light) · inherited from main |',
+    );
+    expect(section).toContain(
+      '| Card · b (neutral, light) · inheritance unknown: not found in the 11 newest reports of other pull requests |',
+    );
+    expect(section).toContain(
+      '| Card · d (neutral, light) · same image also changed on another pull request, not proven from main |',
+    );
+    expect(section).toContain('| Card · c (neutral, light) | changed');
+    expect(section).toContain(
+      'Inheritance checked against the 11 newest reports of other pull requests.',
+    );
+    expect(section).not.toMatch(/introduc/);
+  });
+
+  it('says when the inheritance lookup failed, so a broken lookup is never silent', () => {
+    const section = buildVisualDeltas({
+      verdict: {
+        status: 'changed',
+        changes: [change('a', 30)],
+        inheritedLookupFailed: 'HTTP 403',
+      },
+    });
+    expect(section).toContain('Inheritance lookup failed: HTTP 403.');
+  });
+
   it('collapses the changed shots under their count, largest change first', () => {
     const verdict = {
       status: 'changed',

@@ -12,7 +12,9 @@ import * as path from 'node:path';
 import {
   extractImportedPackages,
   analyzeTemplateNeeds,
+  parsedSpecifiers,
 } from './template-needs.mjs';
+import {_resetHostedRun, activateHostedRun} from '../runtime/package-root.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
 
@@ -410,5 +412,119 @@ describe('analyzeTemplateNeeds', () => {
     const result = analyzeTemplateNeeds(source, dir);
     expect(result.notes).toEqual([]);
     expect(result.missingPackages).toEqual([]);
+  });
+});
+
+describe('parsedSpecifiers', () => {
+  it('reads a template literal with nothing put in it as the string it holds', () => {
+    expect(
+      parsedSpecifiers(
+        'await import(`../shared.ts`);\nrequire(`./a.css`);\nawait import(`./${x}.ts`);',
+      ),
+    ).toEqual(['../shared.ts', './a.css']);
+  });
+});
+
+describe('analyzeTemplateNeeds in a hosted run', () => {
+  const dirs = [];
+  const temp = prefix => {
+    const made = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    dirs.push(made);
+    return made;
+  };
+  afterEach(() => {
+    _resetHostedRun();
+    for (const made of dirs.splice(0)) {
+      fs.rmSync(made, {recursive: true, force: true});
+    }
+  });
+  const source = `
+    import {Button} from '@astryxdesign/core';
+    import {ArrowIcon} from '@heroicons/react/24/outline';
+    import {LineChart} from 'recharts';
+  `;
+
+  it("counts a package the host's set declares as installed outside a project", () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const outside = temp('tmpl-needs-outside-');
+
+    // A folder no package.json holds gets no install step, which would make
+    // it a project.
+    expect(analyzeTemplateNeeds(source, outside)).toMatchObject({
+      missingPackages: ['@heroicons/react', 'recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: @heroicons/react, recharts. Install them in the project that uses this page.',
+      ],
+    });
+    activateHostedRun({startingRoot: set});
+    const result = analyzeTemplateNeeds(source, outside);
+    expect(result).toMatchObject({
+      missingPackages: ['recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: recharts. Install them in the project that uses this page.',
+      ],
+    });
+  });
+
+  it('counts an integration the host approves and its set holds as installed outside a project, as render serves it', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const kit = path.join(set, 'node_modules', '@acme', 'astryx-kit');
+    fs.mkdirSync(kit, {recursive: true});
+    fs.writeFileSync(
+      path.join(kit, 'package.json'),
+      JSON.stringify({name: '@acme/astryx-kit', version: '1.0.0'}),
+    );
+    const outside = temp('tmpl-needs-outside-');
+    const page = `
+      import {Button} from '@astryxdesign/core';
+      import {Banner} from '@acme/astryx-kit';
+    `;
+
+    expect(analyzeTemplateNeeds(page, outside).missingPackages).toEqual([
+      '@acme/astryx-kit',
+    ]);
+    activateHostedRun({startingRoot: set, integrations: ['@acme/astryx-kit']});
+    expect(analyzeTemplateNeeds(page, outside)).toMatchObject({
+      missingPackages: [],
+      installCommand: null,
+      notes: [],
+    });
+  });
+
+  it('still names an integration the host approves that its set does not hold, which render cannot serve', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(path.join(set, 'package.json'), JSON.stringify({}));
+    const outside = temp('tmpl-needs-outside-');
+    activateHostedRun({startingRoot: set, integrations: ['@acme/astryx-kit']});
+    expect(
+      analyzeTemplateNeeds("import {Banner} from '@acme/astryx-kit';", outside)
+        .missingPackages,
+    ).toEqual(['@acme/astryx-kit']);
+  });
+
+  it('still names it inside a project, which installs its own packages', () => {
+    const set = temp('tmpl-needs-set-');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const app = temp('tmpl-needs-app-');
+    fs.writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.7.16'}}),
+    );
+    activateHostedRun({startingRoot: set, projectRoot: app});
+
+    expect(analyzeTemplateNeeds(source, app).missingPackages).toEqual([
+      '@heroicons/react',
+      'recharts',
+    ]);
   });
 });

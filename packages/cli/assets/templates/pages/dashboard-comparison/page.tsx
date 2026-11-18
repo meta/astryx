@@ -38,6 +38,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Table, proportional, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   BarChart,
   Bar,
@@ -400,7 +401,10 @@ function MiniSparkline({data, color}: {data: SparkPoint[]; color: string}) {
   return (
     <div aria-hidden="true">
       <ResponsiveContainer width="100%" height={48}>
-        <LineChart data={data} margin={{top: 4, right: 0, left: 0, bottom: 0}}>
+        <LineChart
+          data={data}
+          margin={{top: 4, right: 0, left: 0, bottom: 0}}
+          accessibilityLayer={false}>
           <Line
             type="linear"
             dataKey="v"
@@ -736,7 +740,7 @@ function SectionHeading({
   icon?: typeof UsersIcon;
 }) {
   return (
-    <HStack hAlign="between" vAlign="center" gap={3}>
+    <HStack hAlign="between" vAlign="center" gap={3} wrap="wrap">
       <HStack gap={3} vAlign="center">
         {icon ? (
           <AspectRatio ratio={1} fit="center" xstyle={sectionIconStyles.tile}>
@@ -767,6 +771,7 @@ function labelFor(
 }
 
 export default function DataDashboardPage() {
+  const showToast = useToast();
   // Matches TREND_DAYS — the fixtures render a full quarter.
   const [range, setRange] = useState<DateRange>('90d');
   const [segment, setSegment] = useState<Segment>('all');
@@ -791,7 +796,7 @@ export default function DataDashboardPage() {
                 User analytics overview · {summary}
               </Text>
             </VStack>
-            <HStack gap={1}>
+            <HStack gap={1} wrap="wrap">
               <Selector
                 label="Date range"
                 isLabelHidden
@@ -817,13 +822,20 @@ export default function DataDashboardPage() {
                 label="Export"
                 variant="secondary"
                 icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: this dashboard would export here',
+                    uniqueID: 'export-dashboard',
+                  })
+                }
               />
             </HStack>
           </HStack>
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               <SectionHeading
@@ -832,7 +844,7 @@ export default function DataDashboardPage() {
                 icon={UsersIcon}
               />
               <Grid
-                columns={{minWidth: 240, repeat: 'fit'}}
+                columns={{minWidth: 240, max: 4, repeat: 'fit'}}
                 gap={3}
                 xstyle={metricsGridStyles.grid}>
                 {OVERVIEW_METRICS.map(metric => (
@@ -863,7 +875,7 @@ export default function DataDashboardPage() {
                 hint="Share of active users"
                 icon={UsersIcon}
               />
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+              <Grid columns={{minWidth: 320, max: 3, repeat: 'fit'}} gap={4}>
                 <BreakdownCard title="Age" data={AGE_DATA} />
                 <BreakdownCard title="Gender" data={GENDER_DATA} />
                 <BreakdownCard title="Device" data={DEVICE_DATA} />

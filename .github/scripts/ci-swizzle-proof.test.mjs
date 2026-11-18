@@ -4,8 +4,8 @@
  * @file ci-swizzle-proof.test.mjs
  * @input .github/workflows/ci.yml and the swizzle proof's slice files
  * @output Proof that the swizzle proof runs in its own required legs, one
- *   slice each, exactly when its scope proves a target, and never inside the
- *   Node legs
+ *   slice each under the Node legs' shard watchdog, exactly when its scope
+ *   proves a target, and never inside the Node legs
  * @position Beside the other ci.yml shape tests
  */
 
@@ -33,12 +33,45 @@ describe('the swizzle proof in CI', () => {
     const job = ci.jobs['swizzle-proof'];
     expect(job.strategy.matrix.slice).toEqual(sliceFiles.map((_, i) => i + 1));
     expect(job.strategy['fail-fast']).toBe(false);
-    const run = job.steps.find(
+    const step = job.steps.find(
       step => step.name === 'Run this slice of the swizzle proof',
-    ).run;
-    expect(run).toBe(
-      `pnpm test:node ${SLICES}/swizzle-proof.\${{ matrix.slice }}.test.mjs`,
     );
+    expect(step.run).toContain(
+      `pnpm test:node "\${WATCHDOG[@]}" ${SLICES}/swizzle-proof.\${{ matrix.slice }}.test.mjs`,
+    );
+    // Its own job runs the slice: never the setting that leaves it out.
+    expect(step.env?.VITEST_SWIZZLE_PROOF_OWN_JOB).toBeUndefined();
+  });
+
+  it('runs each slice under the shard watchdog, as the Node legs do, and checks its recorded time', () => {
+    const slice = ci.jobs['swizzle-proof'].steps.find(
+      step => step.name === 'Run this slice of the swizzle proof',
+    );
+    const node = ci.jobs['test-node'].steps.find(
+      step => step.name === 'Run this shard of the Node tests',
+    );
+    // The same limit, counted the same way, and the same reporters.
+    for (const line of node.run
+      .split('\n')
+      .filter(line =>
+        /^(started=|VITEST_SHARD_WATCHDOG_SECONDS=|export |WATCHDOG=)/.test(
+          line.trim(),
+        ),
+      ))
+      expect(slice.run).toContain(line.trim());
+    expect(ci.jobs['swizzle-proof']['timeout-minutes']).toBe(
+      ci.jobs['test-node']['timeout-minutes'],
+    );
+    expect(slice.env.VITEST_SHARD_TIMES_FILE).toBe(
+      node.env.VITEST_SHARD_TIMES_FILE,
+    );
+    const drift = ci.jobs['swizzle-proof'].steps.find(
+      step => step.name === 'Check the recorded time of this slice',
+    );
+    expect(drift.run).toBe(
+      'node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1',
+    );
+    expect(drift.if).toContain("steps.slice.outcome != 'skipped'");
   });
 
   it('starts the legs exactly when the scope proves a target', () => {
@@ -57,6 +90,54 @@ describe('the swizzle proof in CI', () => {
     expect(
       scope.steps.some(step => step.uses === './.github/actions/setup'),
     ).toBe(false);
+  });
+
+  it('proves no target on a pull request without the ci:run-swizzle label: main proves them (spec:AST-110/DEC-3)', () => {
+    const scope = ci.jobs['swizzle-proof-scope'];
+    expect(scope.needs).toContain('run-labels');
+    expect(ci.jobs['run-labels'].outputs.swizzle).toBe(
+      '${{ steps.decide.outputs.swizzle }}',
+    );
+    const decide = scope.steps.find(step => step.id === 'proof');
+    expect(decide.env.OPTED_OUT).toBe(
+      "${{ github.event_name == 'pull_request' && needs.run-labels.outputs.swizzle != 'true' }}",
+    );
+    // Opted out, it writes mode=none before reading the scope.
+    const lines = decide.run.split('\n').map(line => line.trim());
+    const optedOut = lines.indexOf('if [ "$OPTED_OUT" = true ]; then');
+    expect(optedOut).toBe(0);
+    expect(lines[optedOut + 2]).toBe('echo \'mode=none\' >> "$GITHUB_OUTPUT"');
+    expect(
+      lines.indexOf('node packages/cli/test/swizzle-proof/scope.mjs'),
+    ).toBeGreaterThan(optedOut + 2);
+    // Nor does it check out the change to read it.
+    const checkout = scope.steps.find(
+      step =>
+        step.uses?.startsWith('actions/checkout') &&
+        step.with?.['fetch-depth'] === 2,
+    );
+    expect(checkout.if).toContain(
+      "(github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true')",
+    );
+  });
+
+  it('adds every leg to the admission of a run with the label, so the legs start together', () => {
+    const job = ci.jobs['swizzle-proof'];
+    expect(job.strategy['max-parallel']).toBeUndefined();
+    const label = room =>
+      JSON.parse(
+        room.steps.find(
+          step => step.name === 'Wait for room under the CI ceiling',
+        ).with['label-legs'],
+      );
+    for (const id of ['room', 'admission'])
+      expect(label(ci.jobs[id])['ci:run-swizzle'], id).toBe(
+        job.strategy.matrix.slice.length,
+      );
+    // Room plans the Node legs alone: the proof's legs are no longer a
+    // widening matrix beside them.
+    const plan = ci.jobs.room.steps.find(step => step.id === 'node-legs');
+    expect(plan.run).not.toContain('--other-widths');
   });
 
   it('is required by the test join, with the legs checked against the scope', () => {

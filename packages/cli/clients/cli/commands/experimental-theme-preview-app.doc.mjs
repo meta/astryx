@@ -40,10 +40,11 @@ export const doc = {
     },
   ],
   outsideProject: 'own',
+  requires: ['setup.guide', 'themes.appModule'],
   notes: [
     {
       type: 'prose',
-      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme preview app works the same: it makes the new app, with its pages from this CLI's own Core. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
+      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme preview app makes the new app, with its pages from this CLI's own Core; with `--theme` it writes nothing and stops with `ERR_PROJECT_REQUIRED`, because the theme comes from a project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
     },
   ],
   exitCodes: [

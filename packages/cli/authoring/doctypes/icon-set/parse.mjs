@@ -60,240 +60,269 @@ export function isPackagePath(value) {
   );
 }
 
-const packagePathSchema = z
-  .string()
-  .regex(PACKAGE_PATH_RE, 'must be a ./ path inside the package')
-  .refine(isPackagePath, {message: 'must not contain "." or ".." segments'});
-const MODULE_RE =
-  /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*(?:\/[A-Za-z0-9._~-]+)*$/u;
+function buildSchemas() {
+  const packagePathSchema = z
+    .string()
+    .regex(PACKAGE_PATH_RE, 'must be a ./ path inside the package')
+    .refine(isPackagePath, {message: 'must not contain "." or ".." segments'});
+  const MODULE_RE =
+    /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*(?:\/[A-Za-z0-9._~-]+)*$/u;
 
-/** @param {string} field */
-const nonBlank = field =>
-  z.string().refine(value => value.trim() !== '', {
-    message: `${field} must not be blank`,
-    abort: true,
-  });
+  /** @param {string} field */
+  const nonBlank = field =>
+    z.string().refine(value => value.trim() !== '', {
+      message: `${field} must not be blank`,
+      abort: true,
+    });
 
-const iconSetDocSchema = z
-  .object({
-    type: z.literal('icon-set'),
-    name: nonBlank('name').regex(
-      KEBAB_RE,
-      'name must be lowercase kebab-case starting with a letter',
-    ),
-    displayName: nonBlank('displayName'),
-    description: z.string(),
-    maintained: z.boolean(),
-    license: nonBlank('license'),
-  })
-  .strict();
+  const iconSetDocSchema = z
+    .object({
+      type: z.literal('icon-set'),
+      name: nonBlank('name').regex(
+        KEBAB_RE,
+        'name must be lowercase kebab-case starting with a letter',
+      ),
+      displayName: nonBlank('displayName'),
+      description: z.string(),
+      maintained: z.boolean(),
+      license: nonBlank('license'),
+    })
+    .strict();
 
-const moduleSchema = z
-  .string()
-  .regex(
+  const moduleSchema = z
+    .string()
+    .regex(
+      MODULE_RE,
+      'module must be a package import specifier, never a relative or absolute path',
+    )
+    .refine(
+      value => !value.split('/').some(part => part === '..' || part === '.'),
+      {
+        message: 'module must not contain "." or ".." segments',
+      },
+    );
+  const exportSchema = z
+    .string()
+    .regex(EXPORT_RE, 'export must be a JavaScript identifier');
+  const variantNameSchema = z
+    .string()
+    .regex(KEBAB_RE, 'a variant must be lowercase kebab-case');
+
+  const variantSchema = z
+    .object({
+      variant: variantNameSchema,
+      export: exportSchema,
+      module: moduleSchema.optional(),
+    })
+    .strict();
+
+  const matchSchema = z
+    .object({
+      set: z.string().regex(KEBAB_RE, 'set must be a lower-kebab set name'),
+      export: exportSchema,
+      variant: nonBlank('variant').optional(),
+      confidence: z.enum(MATCH_CONFIDENCES),
+    })
+    .strict();
+
+  const iconSchema = z
+    .object({
+      id: z
+        .string()
+        .regex(ID_RE, 'id must be lowercase kebab-case letters and digits'),
+      export: exportSchema,
+      module: moduleSchema.optional(),
+      words: z
+        .array(
+          nonBlank('word').refine(
+            word => word === word.toLowerCase() && word === word.trim(),
+            {message: 'words must be lower-case and trimmed'},
+          ),
+        )
+        .min(1, 'an icon must have at least one word'),
+      variants: z.array(variantSchema).optional(),
+      matches: z.array(matchSchema).optional(),
+    })
+    .strict();
+
+  const dataSchema = z
+    .object({
+      schemaVersion: z.literal(1),
+      module: moduleSchema,
+      source: z
+        .object({
+          package: nonBlank('source.package'),
+          version: nonBlank('source.version'),
+        })
+        .strict()
+        .optional(),
+      exclude: z.array(exportSchema).optional(),
+      variants: z.array(variantNameSchema).min(1).optional(),
+      default: z
+        .object({variant: variantNameSchema.optional()})
+        .strict()
+        .optional(),
+      themeMap: exportSchema.optional(),
+      map: z.record(z.string(), z.string()).optional(),
+      generated: packagePathSchema
+        .refine(value => /\.(?:[cm]?js|jsx|tsx?|mts)$/u.test(value), {
+          message: 'generated must be a JavaScript or TypeScript module file',
+        })
+        .optional(),
+      adapter: z
+        .object({module: packagePathSchema, export: exportSchema})
+        .strict()
+        .optional(),
+      icons: z.array(iconSchema),
+    })
+    .strict()
+    .superRefine((data, ctx) => {
+      const declared = data.variants ?? [];
+      /**
+       * Whether a named variant is one the set declares.
+       * @param {string | undefined} variant
+       * @param {(string|number)[]} at
+       */
+      const checkVariant = (variant, at) => {
+        if (variant != null && !declared.includes(variant)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'variant'],
+            message: `variant "${variant}" is not in variants`,
+          });
+        }
+      };
+
+      declared.forEach((variant, at) => {
+        if (declared.indexOf(variant) !== at) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['variants', at],
+            message: `variant "${variant}" is listed twice`,
+          });
+        }
+      });
+      if (data.default) checkVariant(data.default.variant, ['default']);
+      const defaultVariant = data.default?.variant;
+
+      /** @type {Map<string, number>} */
+      const ids = new Map();
+      data.icons.forEach((icon, index) => {
+        const first = ids.get(icon.id);
+        if (first != null) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['icons', index, 'id'],
+            message: `duplicate id "${icon.id}" (also icons.${first})`,
+          });
+        } else {
+          ids.set(icon.id, index);
+        }
+        /** @type {Set<string>} */
+        const named = new Set();
+        (icon.matches ?? []).forEach((match, at) => {
+          const key = `${match.set}\0${match.variant ?? ''}\0${match.export}`;
+          if (named.has(key)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['icons', index, 'matches', at],
+              message: `the match ${match.set}${match.variant ? ` ${match.variant}` : ''} "${match.export}" is listed twice`,
+            });
+          }
+          named.add(key);
+        });
+        /** @type {Set<string>} */
+        const drawn = new Set();
+        (icon.variants ?? []).forEach((entry, at) => {
+          const where = ['icons', index, 'variants', at];
+          checkVariant(entry.variant, where);
+          if (entry.variant === defaultVariant) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [...where, 'variant'],
+              message: `variant "${entry.variant}" is the default: the icon's own export draws it`,
+            });
+          } else if (drawn.has(entry.variant)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [...where, 'variant'],
+              message: `variant "${entry.variant}" is listed twice`,
+            });
+          }
+          drawn.add(entry.variant);
+        });
+      });
+
+      for (const [name, id] of Object.entries(data.map ?? {})) {
+        if (!ICON_DEFINITION_NAME_RE.test(name)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['map', name],
+            message: `"${name}" is not an icon definition name: definitions are camelCase`,
+          });
+        }
+        if (!ids.has(id)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['map', name],
+            message: `"${id}" is not the id of an icon in this file`,
+          });
+        }
+      }
+    });
+
+  /** Zod skips `__proto__` when it looks for unknown keys. */
+  const PROTO_KEY_ISSUE = {
+    code: /** @type {const} */ ('unrecognized_keys'),
+    keys: ['__proto__'],
+    path: [],
+    message: 'Unrecognized key: "__proto__"',
+  };
+
+  /**
+   * Compile-time drift locks: the sealed schemas must infer the public types.
+   *
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').Equal<
+   *     z.infer<typeof iconSetDocSchema>,
+   *     IconSetDoc
+   *   >
+   * >} _IconSetDocDriftLock
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').MutuallyAssignable<
+   *     z.infer<typeof dataSchema>,
+   *     IconSetData
+   *   >
+   * >} _IconSetDataDriftLock
+   */
+
+  return {
+    packagePathSchema,
     MODULE_RE,
-    'module must be a package import specifier, never a relative or absolute path',
-  )
-  .refine(
-    value => !value.split('/').some(part => part === '..' || part === '.'),
-    {
-      message: 'module must not contain "." or ".." segments',
-    },
-  );
-const exportSchema = z
-  .string()
-  .regex(EXPORT_RE, 'export must be a JavaScript identifier');
-const variantNameSchema = z
-  .string()
-  .regex(KEBAB_RE, 'a variant must be lowercase kebab-case');
+    nonBlank,
+    iconSetDocSchema,
+    moduleSchema,
+    exportSchema,
+    variantNameSchema,
+    variantSchema,
+    matchSchema,
+    iconSchema,
+    dataSchema,
+    PROTO_KEY_ISSUE,
+  };
+}
 
-const variantSchema = z
-  .object({
-    variant: variantNameSchema,
-    export: exportSchema,
-    module: moduleSchema.optional(),
-  })
-  .strict();
-
-const matchSchema = z
-  .object({
-    set: z.string().regex(KEBAB_RE, 'set must be a lower-kebab set name'),
-    export: exportSchema,
-    variant: nonBlank('variant').optional(),
-    confidence: z.enum(MATCH_CONFIDENCES),
-  })
-  .strict();
-
-const iconSchema = z
-  .object({
-    id: z
-      .string()
-      .regex(ID_RE, 'id must be lowercase kebab-case letters and digits'),
-    export: exportSchema,
-    module: moduleSchema.optional(),
-    words: z
-      .array(
-        nonBlank('word').refine(
-          word => word === word.toLowerCase() && word === word.trim(),
-          {message: 'words must be lower-case and trimmed'},
-        ),
-      )
-      .min(1, 'an icon must have at least one word'),
-    variants: z.array(variantSchema).optional(),
-    matches: z.array(matchSchema).optional(),
-  })
-  .strict();
-
-const dataSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    module: moduleSchema,
-    source: z
-      .object({
-        package: nonBlank('source.package'),
-        version: nonBlank('source.version'),
-      })
-      .strict()
-      .optional(),
-    exclude: z.array(exportSchema).optional(),
-    variants: z.array(variantNameSchema).min(1).optional(),
-    default: z
-      .object({variant: variantNameSchema.optional()})
-      .strict()
-      .optional(),
-    themeMap: exportSchema.optional(),
-    map: z.record(z.string(), z.string()).optional(),
-    generated: packagePathSchema
-      .refine(value => /\.(?:[cm]?js|jsx|tsx?|mts)$/u.test(value), {
-        message: 'generated must be a JavaScript or TypeScript module file',
-      })
-      .optional(),
-    adapter: z
-      .object({module: packagePathSchema, export: exportSchema})
-      .strict()
-      .optional(),
-    icons: z.array(iconSchema),
-  })
-  .strict()
-  .superRefine((data, ctx) => {
-    const declared = data.variants ?? [];
-    /**
-     * Whether a named variant is one the set declares.
-     * @param {string | undefined} variant
-     * @param {(string|number)[]} at
-     */
-    const checkVariant = (variant, at) => {
-      if (variant != null && !declared.includes(variant)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [...at, 'variant'],
-          message: `variant "${variant}" is not in variants`,
-        });
-      }
-    };
-
-    declared.forEach((variant, at) => {
-      if (declared.indexOf(variant) !== at) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['variants', at],
-          message: `variant "${variant}" is listed twice`,
-        });
-      }
-    });
-    if (data.default) checkVariant(data.default.variant, ['default']);
-    const defaultVariant = data.default?.variant;
-
-    /** @type {Map<string, number>} */
-    const ids = new Map();
-    data.icons.forEach((icon, index) => {
-      const first = ids.get(icon.id);
-      if (first != null) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['icons', index, 'id'],
-          message: `duplicate id "${icon.id}" (also icons.${first})`,
-        });
-      } else {
-        ids.set(icon.id, index);
-      }
-      /** @type {Set<string>} */
-      const named = new Set();
-      (icon.matches ?? []).forEach((match, at) => {
-        const key = `${match.set}\0${match.variant ?? ''}\0${match.export}`;
-        if (named.has(key)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['icons', index, 'matches', at],
-            message: `the match ${match.set}${match.variant ? ` ${match.variant}` : ''} "${match.export}" is listed twice`,
-          });
-        }
-        named.add(key);
-      });
-      /** @type {Set<string>} */
-      const drawn = new Set();
-      (icon.variants ?? []).forEach((entry, at) => {
-        const where = ['icons', index, 'variants', at];
-        checkVariant(entry.variant, where);
-        if (entry.variant === defaultVariant) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [...where, 'variant'],
-            message: `variant "${entry.variant}" is the default: the icon's own export draws it`,
-          });
-        } else if (drawn.has(entry.variant)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [...where, 'variant'],
-            message: `variant "${entry.variant}" is listed twice`,
-          });
-        }
-        drawn.add(entry.variant);
-      });
-    });
-
-    for (const [name, id] of Object.entries(data.map ?? {})) {
-      if (!ICON_DEFINITION_NAME_RE.test(name)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['map', name],
-          message: `"${name}" is not an icon definition name: definitions are camelCase`,
-        });
-      }
-      if (!ids.has(id)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['map', name],
-          message: `"${id}" is not the id of an icon in this file`,
-        });
-      }
-    }
-  });
-
-/** Zod skips `__proto__` when it looks for unknown keys. */
-const PROTO_KEY_ISSUE = {
-  code: /** @type {const} */ ('unrecognized_keys'),
-  keys: ['__proto__'],
-  path: [],
-  message: 'Unrecognized key: "__proto__"',
-};
+/** @type {ReturnType<typeof buildSchemas> | undefined} */
+let builtSchemas;
 
 /**
- * Compile-time drift locks: the sealed schemas must infer the public types.
- *
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').Equal<
- *     z.infer<typeof iconSetDocSchema>,
- *     IconSetDoc
- *   >
- * >} _IconSetDocDriftLock
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').MutuallyAssignable<
- *     z.infer<typeof dataSchema>,
- *     IconSetData
- *   >
- * >} _IconSetDataDriftLock
+ * This parser's schemas, built when it first parses, not when this module
+ * loads: most runs load the module and never call it.
+ * @returns {ReturnType<typeof buildSchemas>}
  */
+function schemas() {
+  return (builtSchemas ??= buildSchemas());
+}
 
 /**
  * Validate an unknown value as an icon-set descriptor, or throw.
@@ -304,7 +333,7 @@ const PROTO_KEY_ISSUE = {
  * @experimental May change or be removed in a patch release.
  */
 export function parseIconSet(input, label = 'icon set') {
-  const result = iconSetDocSchema.safeParse(input);
+  const result = schemas().iconSetDocSchema.safeParse(input);
   const protoKey =
     input !== null &&
     typeof input === 'object' &&
@@ -312,7 +341,7 @@ export function parseIconSet(input, label = 'icon set') {
   if (result.success && !protoKey) return result.data;
   const issues = [
     ...(result.error?.issues ?? []),
-    ...(protoKey ? [PROTO_KEY_ISSUE] : []),
+    ...(protoKey ? [schemas().PROTO_KEY_ISSUE] : []),
   ];
   throw new Error(formatZodError(label, new z.ZodError(issues)));
 }
@@ -327,7 +356,7 @@ export function parseIconSet(input, label = 'icon set') {
  * @experimental May change or be removed in a patch release.
  */
 export function parseIconSetData(input, label = 'icon set data') {
-  const result = dataSchema.safeParse(input);
+  const result = schemas().dataSchema.safeParse(input);
   if (result.success) return /** @type {IconSetData} */ (result.data);
   throw new Error(formatZodError(label, result.error));
 }

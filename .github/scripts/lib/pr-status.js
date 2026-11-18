@@ -364,7 +364,15 @@ function buildVisualDeltas({verdict, frames = null}) {
       .filter(Boolean)
       .map(inline)
       .join(', ');
-    return variant ? `${story} (${variant})` : story;
+    const shown = variant ? `${story} (${variant})` : story;
+    // inherited-shots.mjs proves a change came from main, or says the
+    // reports it read do not show it: unknown, never "made here".
+    if (row.inherited?.from === 'main') return `${shown} · inherited from main`;
+    if (row.inherited?.found === true)
+      return `${shown} · same image also changed on another pull request, not proven from main`;
+    if (row.inherited?.found === false)
+      return `${shown} · inheritance unknown: not found in the ${num(verdict?.inheritedChecked)} newest reports of other pull requests`;
+    return shown;
   };
   const published = new Set(frames?.published || []);
   const base =
@@ -395,7 +403,7 @@ function buildVisualDeltas({verdict, frames = null}) {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
   const components = new Set(all.map(componentOf));
-  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}</details>\n\n`;
+  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}${verdict?.inheritedLookupFailed ? `Inheritance lookup failed: ${inline(String(verdict.inheritedLookupFailed).slice(0, 200))}.\n\n` : ''}${verdict?.inheritedChecked != null && !verdict?.inheritedLookupFailed ? `Inheritance checked against the ${num(verdict.inheritedChecked)} newest reports of other pull requests.\n\n` : ''}</details>\n\n`;
 }
 
 function previewLine(preview) {

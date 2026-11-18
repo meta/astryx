@@ -6,13 +6,25 @@
  *   one issue that a failure opens and a later pass closes.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
-import {ISSUE_TITLE, minimumVersion, reportIssue} from './cli-minimum-node.mjs';
+import {
+  ISSUE_TITLE,
+  minimumVersion,
+  readLegTimes,
+  readLegVerdicts,
+  refreshRecord,
+  reportIssue,
+  runVerdict,
+  slowFiles,
+} from './cli-minimum-node.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = yaml.parse(
@@ -55,6 +67,12 @@ describe('the minimum Node version', () => {
   });
 });
 
+/** The report's issue step, by its name. */
+const reportStep = () =>
+  workflow.jobs.report.steps.find(
+    step => step.name === 'Open, update or close the minimum-Node issue',
+  );
+
 describe('the workflow', () => {
   const {jobs} = workflow;
   const nodeSteps = job =>
@@ -73,6 +91,56 @@ describe('the workflow', () => {
     expect(workflow.permissions).toEqual({});
   });
 
+  it('checks out every module the version step and the report import, and the version step runs in that tree alone', () => {
+    // Every module the script loads, following relative imports to any depth.
+    const imports = [];
+    const visit = file => {
+      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      for (const [, spec] of text.matchAll(/from '(\.\.?\/[^']+)'/g)) {
+        const next = path.posix.normalize(
+          path.posix.join(path.posix.dirname(file), spec),
+        );
+        if (!imports.includes(next)) {
+          imports.push(next);
+          visit(next);
+        }
+      }
+    };
+    visit('.github/scripts/cli-minimum-node.mjs');
+    expect(imports).toEqual(
+      expect.arrayContaining([
+        '.github/scripts/node-time-drift.mjs',
+        'scripts/lib/duration-split.mjs',
+      ]),
+    );
+    for (const job of ['version', 'report']) {
+      const listed = jobs[job].steps[0].with['sparse-checkout'];
+      for (const file of ['.github/scripts/cli-minimum-node.mjs', ...imports])
+        expect(listed, `${job}: ${file}`).toContain(file);
+    }
+    // The version job's checkout holds only what it lists: run its step there.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'version-tree-'));
+    try {
+      const listed = jobs.version.steps[0].with['sparse-checkout']
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      for (const file of listed) {
+        fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+        fs.copyFileSync(path.join(root, file), path.join(tree, file));
+      }
+      const read = jobs.version.steps.find(step => step.id === 'minimum');
+      const line = /node=\$\((node [^)]+)\)/.exec(read.run)[1].split(' ');
+      const version = execFileSync(line[0], line.slice(1), {
+        cwd: tree,
+        encoding: 'utf8',
+      }).trim();
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+    } finally {
+      fs.rmSync(tree, {recursive: true, force: true});
+    }
+  });
+
   it('reads the version from packages/cli, not .nvmrc', () => {
     const read = jobs.version.steps.find(step => step.id === 'minimum');
     expect(read.run).toContain(
@@ -88,9 +156,8 @@ describe('the workflow', () => {
   });
 
   it("runs the CLI's tests and the global-mode smoke on that version", () => {
-    expect(jobs['cli-tests'].steps.at(-1).run).toContain(
-      'pnpm -F @astryxdesign/cli test',
-    );
+    const tests = jobs['cli-tests'].steps.find(step => step.id === 'tests');
+    expect(tests.run).toContain('pnpm -F @astryxdesign/cli test');
     expect(
       jobs.smoke.steps.find(step =>
         step.run?.includes('cli-global-mode-smoke.mjs'),
@@ -111,9 +178,283 @@ describe('the workflow', () => {
         name === 'report' ? 'write' : undefined,
       );
     }
-    const env = jobs.report.steps.at(-1).env;
-    for (const need of ['version', 'cli-tests', 'pack', 'smoke']) {
-      expect(env.OK).toContain(`needs.${need}.result == 'success'`);
+    const env = reportStep().env;
+    for (const need of ['version', 'pack', 'smoke'])
+      expect(env[`${need.toUpperCase()}_RESULT`]).toBe(
+        `\${{ needs.${need}.result }}`,
+      );
+  });
+
+  it('runs the CLI tests in four legs, split by the recorded times, each stopped by name before its limit', () => {
+    const cli = jobs['cli-tests'];
+    expect(cli.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(cli.strategy['fail-fast']).toBe(false);
+    expect(cli['timeout-minutes']).toBe(30);
+    const tests = cli.steps.find(step => step.id === 'tests');
+    expect(tests.run).toContain('--shard="$SHARD/4"');
+    expect(tests.run).toContain(
+      '--reporter=./scripts/vitest-shard-watchdog.mjs',
+    );
+    expect(tests.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 28 * 60');
+    expect(tests.run).toContain('set -o pipefail');
+  });
+
+  it('keeps each leg’s verdict for the report, which reads all four', () => {
+    const cli = jobs['cli-tests'];
+    const record = cli.steps.find(
+      step => step.name === "Record this leg's verdict",
+    );
+    expect(record.if).toBe("always() && steps.tests.outcome != 'skipped'");
+    expect(record.run).toContain('Node shard stuck');
+    const keep = cli.steps.find(
+      step => step.name === "Keep this leg's verdict",
+    );
+    expect(keep.with.name).toBe('cli-tests-verdict-${{ matrix.shard }}');
+    const read = jobs.report.steps.find(
+      step => step.name === "Read the legs' verdicts",
+    );
+    expect(read.with.pattern).toBe('cli-tests-verdict-*');
+    expect(reportStep().with.script).toContain(
+      'readLegVerdicts(process.env.VERDICTS, 4)',
+    );
+  });
+
+  it('packs the legs by the minimum-Node record, and keeps every run’s times and a refreshed record', () => {
+    const cli = jobs['cli-tests'];
+    const tests = cli.steps.find(step => step.id === 'tests');
+    expect(tests.env.VITEST_DURATIONS_FILE).toBe(
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(tests.env.VITEST_SHARD_TIMES_FILE).toBe(
+      '${{ runner.temp }}/min-node-times.json',
+    );
+    const slow = cli.steps.find(
+      step => step.name === 'Name the files past their minimum-Node time',
+    );
+    expect(slow.run).toContain('cli-minimum-node.mjs slow --times');
+    expect(slow['continue-on-error']).toBeUndefined();
+    const keepTimes = cli.steps.find(
+      step => step.name === "Keep this leg's times",
+    );
+    expect(keepTimes.with.name).toBe('min-node-times-${{ matrix.shard }}');
+    const checkout = jobs.report.steps[0];
+    expect(checkout.with['sparse-checkout']).toContain(
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(checkout.with['sparse-checkout']).toContain(
+      '.github/scripts/node-time-drift.mjs',
+    );
+    // The CLI's test files, so the refreshed record can drop a deleted one.
+    expect(checkout.with['sparse-checkout']).toContain(
+      'packages/cli/**/*.test.*',
+    );
+    expect(checkout.with['sparse-checkout-cone-mode']).toBe(false);
+    expect(reportStep().with.script).toContain(
+      'exists: file => fs.existsSync(',
+    );
+    const keepRecord = jobs.report.steps.at(-1);
+    expect(keepRecord.with.name).toBe('min-node-record');
+    expect(keepRecord.if).toBe('always()');
+    expect(
+      fs.existsSync(path.join(root, tests.env.VITEST_DURATIONS_FILE)),
+    ).toBe(true);
+  });
+});
+
+describe("a leg's verdict, as its step decides it", () => {
+  const record = workflow.jobs['cli-tests'].steps.find(
+    step => step.name === "Record this leg's verdict",
+  );
+
+  /** Runs the step's script with this test log and test-step outcome. */
+  function verdictFor(outcome, log) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'leg-'));
+    try {
+      if (log != null) fs.writeFileSync(path.join(dir, 'cli-tests.log'), log);
+      execFileSync('bash', ['-e', '-c', record.run], {
+        cwd: dir,
+        env: {...process.env, RUNNER_TEMP: dir, OUTCOME: outcome, SHARD: '2'},
+      });
+      return JSON.parse(
+        fs.readFileSync(path.join(dir, 'verdict/leg-2.json'), 'utf8'),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+  const stuck =
+    '::error title=Node shard stuck::shard stuck in a.test.mjs (300 s)\n';
+  // As Vitest writes it on CI: coloured, and with no FAIL summary when the
+  // watchdog stops the leg.
+  const failed =
+    ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/b.test.mjs (2 tests | 1 failed) 20ms\n' +
+    '   \u001b[31m×\u001b[39m reads b\u001b[90m 20ms\u001b[39m\n';
+
+  it('passes when the tests passed', () => {
+    expect(verdictFor('success', '')).toEqual({shard: 2, verdict: 'pass'});
+  });
+
+  it('fails when a test failed, even if the watchdog then stopped the leg', () => {
+    expect(verdictFor('failure', failed + stuck).verdict).toBe('fail');
+    expect(verdictFor('failure', failed).verdict).toBe('fail');
+  });
+
+  it('fails when a test file failed to load, or its hook threw, though no test line shows a ×', () => {
+    const noTests =
+      ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/c.test.mjs (0 test)\n';
+    const hookFailed =
+      ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/d.test.mjs (2 tests | 2 skipped) 30ms\n' +
+      '   \u001b[2m↓\u001b[22m reads d\n   \u001b[2m↓\u001b[22m writes d\n';
+    expect(verdictFor('failure', noTests + stuck).verdict).toBe('fail');
+    expect(verdictFor('failure', hookFailed + stuck).verdict).toBe('fail');
+  });
+
+  it('has no verdict when the watchdog stopped the leg before any test failed', () => {
+    expect(
+      verdictFor('failure', ' ✓ |node| a.test.mjs (2 tests) 10ms\n' + stuck)
+        .verdict,
+    ).toBe('none');
+  });
+
+  it('has no verdict when the test step was cancelled', () => {
+    expect(verdictFor('cancelled', null).verdict).toBe('none');
+  });
+});
+
+describe('the minimum-Node times', () => {
+  it('takes the run’s own slowdown out, so a uniformly slow run names no file', () => {
+    const recorded = Object.fromEntries(
+      ['a', 'b', 'c', 'd', 'e', 'f'].map(name => [`${name}.test.mjs`, 10]),
+    );
+    const times = Object.fromEntries(
+      Object.keys(recorded).map(file => [file, 30]),
+    );
+    expect(slowFiles(times, recorded)).toEqual([]);
+  });
+
+  it('names a file past 1.5 times its record and more than 10 s over it, and judges no file the record lacks', () => {
+    const recorded = {'a.test.mjs': 10, 'b.test.mjs': 30, 'c.test.mjs': 2};
+    const times = {
+      'a.test.mjs': 30,
+      'b.test.mjs': 40,
+      'c.test.mjs': 11,
+      'new.test.mjs': 90,
+    };
+    expect(slowFiles(times, recorded)).toEqual([
+      {file: 'a.test.mjs', recorded: 10, measured: 30},
+    ]);
+  });
+
+  it('refreshes the record with this run’s times, names the run, and drops a file that is gone', () => {
+    const record = {
+      source: 'seed',
+      seconds: {'b.test.mjs': 3, 'a.test.mjs': 1, 'gone.test.mjs': 2},
+    };
+    expect(
+      refreshRecord(
+        record,
+        {'b.test.mjs': 4, 'c.test.mjs': 5},
+        {source: 'run 7', exists: file => file !== 'gone.test.mjs'},
+      ),
+    ).toMatchObject({
+      source: 'run 7',
+      seconds: {'a.test.mjs': 1, 'b.test.mjs': 4, 'c.test.mjs': 5},
+    });
+    // The Node legs' rule: a swizzle-proof slice keeps its largest time.
+    const slice = 'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs';
+    expect(
+      refreshRecord({seconds: {[slice]: 300}}, {[slice]: 120}).seconds,
+    ).toEqual({[slice]: 300});
+    expect(refreshRecord(record, {}, {source: 'run 7'}).$comment).toMatch(
+      /Refreshed from that workflow's run named in `source`/,
+    );
+  });
+
+  it('reads every leg’s times, skipping a file it cannot read', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'times-'));
+    try {
+      // Each artifact downloads into its own folder, under the same file name.
+      for (const [leg, text] of [
+        [1, '{"a.test.mjs": 1}'],
+        [2, '{"b.test.mjs": 2}'],
+        [3, 'not json'],
+      ]) {
+        fs.mkdirSync(path.join(dir, `min-node-times-${leg}`));
+        fs.writeFileSync(
+          path.join(dir, `min-node-times-${leg}`, 'min-node-times.json'),
+          text,
+        );
+      }
+      expect(readLegTimes(dir)).toEqual({'a.test.mjs': 1, 'b.test.mjs': 2});
+      expect(readLegTimes(path.join(dir, 'missing'))).toEqual({});
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('the run verdict', () => {
+  const parts = (
+    legs,
+    pack = 'success',
+    smoke = 'success',
+    version = 'success',
+  ) => ({
+    version,
+    legs,
+    pack,
+    smoke,
+  });
+
+  it('passes only when every leg and both jobs pass', () => {
+    expect(runVerdict(parts(['pass', 'pass', 'pass', 'pass']))).toBe('pass');
+  });
+
+  it('fails when any leg or job fails, even beside a leg with no verdict', () => {
+    expect(runVerdict(parts(['pass', 'fail', 'none', 'pass']))).toBe('fail');
+    expect(runVerdict(parts(['pass', 'pass', 'pass', 'pass'], 'failure'))).toBe(
+      'fail',
+    );
+  });
+
+  it('has no verdict when a leg was stopped or cancelled, or a job was cancelled or skipped', () => {
+    expect(runVerdict(parts(['pass', 'none', 'pass', 'pass']))).toBe('none');
+    expect(
+      runVerdict(
+        parts(['pass', 'pass', 'pass', 'pass'], 'success', 'cancelled'),
+      ),
+    ).toBe('none');
+    expect(
+      runVerdict(
+        parts(
+          ['pass', 'pass', 'pass', 'pass'],
+          'success',
+          'success',
+          'failure',
+        ),
+      ),
+    ).toBe('none');
+  });
+
+  it('reads each leg’s file, and a missing or broken file as no verdict', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdicts-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'leg-1.json'),
+        '{"shard": 1, "verdict": "pass"}',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'leg-3.json'),
+        '{"shard": 3, "verdict": "fail"}',
+      );
+      fs.writeFileSync(path.join(dir, 'leg-4.json'), 'not json');
+      expect(readLegVerdicts(dir, 4)).toEqual(['pass', 'none', 'fail', 'none']);
+      expect(readLegVerdicts(path.join(dir, 'missing'), 2)).toEqual([
+        'none',
+        'none',
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
     }
   });
 });
@@ -151,7 +492,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: fresh,
         context,
-        ok: false,
+        verdict: 'fail',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -163,7 +504,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: open,
         context,
-        ok: false,
+        verdict: 'fail',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -176,7 +517,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: open,
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -190,7 +531,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: persons,
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -199,10 +540,188 @@ describe('the one issue', () => {
       await reportIssue({
         github: fakeGithub(),
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
     ).toBe('none');
+  });
+});
+
+describe('a run with no verdict', () => {
+  it('only notes it on the open issue: no close, no claim of failure', async () => {
+    const github = fakeGithub([ours]);
+    const done = await reportIssue({
+      github,
+      context,
+      verdict: 'none',
+      version: '22.13.0',
+      runUrl: 'https://example.test/run',
+    });
+    expect(done).toBe('no verdict noted');
+    const writes = github.calls.filter(([kind]) => kind !== 'search');
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe('comment');
+    expect(writes[0][1].body).toMatch(/^No verdict on Node 22\.13\.0:/);
+    expect(writes[0][1].body).not.toMatch(/failed|pass/);
+  });
+
+  it('writes nothing when no issue is open', async () => {
+    const github = fakeGithub([]);
+    expect(
+      await reportIssue({
+        github,
+        context,
+        verdict: 'none',
+        version: '22.13.0',
+        runUrl: 'https://example.test/run',
+      }),
+    ).toBe('none');
+    expect(github.calls.filter(([kind]) => kind !== 'search')).toEqual([]);
+  });
+});
+
+describe('the report step, run as the workflow runs it', () => {
+  const ASYNC_FUNCTION = Object.getPrototypeOf(
+    async function () {},
+  ).constructor;
+  const step = reportStep();
+  const dirs = [];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    for (const dir of dirs.splice(0))
+      fs.rmSync(dir, {recursive: true, force: true});
+  });
+
+  /** Runs the step's script with these legs' verdict files (null: no file). */
+  async function report(legs, openIssues) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdicts-'));
+    dirs.push(dir);
+    legs.forEach((verdict, i) => {
+      if (verdict)
+        fs.writeFileSync(
+          path.join(dir, `leg-${i + 1}.json`),
+          JSON.stringify({shard: i + 1, verdict}),
+        );
+    });
+    // A workspace of its own: the step writes the refreshed record into it.
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-'));
+    dirs.push(workspace);
+    fs.mkdirSync(path.join(workspace, 'scripts'));
+    fs.writeFileSync(
+      path.join(workspace, 'scripts/vitest-node-durations.min-node.json'),
+      JSON.stringify({seconds: {'slow.test.mjs': 10, 'same.test.mjs': 5}}),
+    );
+    // The test files the record names exist in the checkout.
+    for (const file of ['slow.test.mjs', 'same.test.mjs'])
+      fs.writeFileSync(path.join(workspace, file), '');
+    const times = path.join(workspace, 'times');
+    fs.mkdirSync(path.join(times, 'min-node-times-1'), {recursive: true});
+    fs.writeFileSync(
+      path.join(times, 'min-node-times-1/min-node-times.json'),
+      JSON.stringify({'slow.test.mjs': 40, 'same.test.mjs': 5}),
+    );
+    vi.stubEnv('GITHUB_WORKSPACE', workspace);
+    vi.stubEnv('TIMES', times);
+    vi.stubEnv('VERDICTS', dir);
+    vi.stubEnv('VERSION_RESULT', 'success');
+    vi.stubEnv('PACK_RESULT', 'success');
+    vi.stubEnv('SMOKE_RESULT', 'success');
+    vi.stubEnv('NODE_VERSION', '22.13.0');
+    const github = fakeGithub(openIssues);
+    const summary = [];
+    const core = {
+      info: vi.fn(),
+      setFailed: vi.fn(),
+      summary: {
+        addHeading: text => (summary.push(text), core.summary),
+        addRaw: text => (summary.push(text), core.summary),
+        write: async () => core.summary,
+      },
+    };
+    // A function built from text has no module loader of its own, so the
+    // script's dynamic import goes through this module's.
+    const script = step.with.script.replaceAll('await import(', 'await load(');
+    await new ASYNC_FUNCTION(
+      'github',
+      'context',
+      'core',
+      'require',
+      'load',
+      script,
+    )(
+      github,
+      {...context, serverUrl: 'https://github.com', runId: 1},
+      core,
+      createRequire(import.meta.url),
+      () => import(path.join(root, '.github/scripts/cli-minimum-node.mjs')),
+    );
+    return {
+      summary: summary.join('\n'),
+      refreshed: JSON.parse(
+        fs.readFileSync(
+          path.join(workspace, 'refreshed/vitest-node-durations.min-node.json'),
+          'utf8',
+        ),
+      ),
+      writes: github.calls.filter(([kind]) => kind !== 'search'),
+      failed: core.setFailed.mock.calls.map(([message]) => message),
+    };
+  }
+
+  it('a leg cancelled at its limit: notes no verdict, leaves the issue open, and the run stays red', async () => {
+    const {writes, failed} = await report(
+      ['pass', 'pass', null, 'pass'],
+      [ours],
+    );
+    expect(writes.map(([kind]) => kind)).toEqual(['comment']);
+    expect(writes[0][1].body).toMatch(/^No verdict on Node 22\.13\.0:/);
+    expect(failed).toEqual([
+      'No verdict on Node 22.13.0: a part of the run stopped or was cancelled before it judged anything.',
+    ]);
+  });
+
+  it('a leg that failed and was then stopped, beside a leg with no verdict: says the CLI failed', async () => {
+    const {writes, failed} = await report(
+      ['fail', 'none', 'pass', 'pass'],
+      [ours],
+    );
+    expect(writes.map(([kind]) => kind)).toEqual(['comment']);
+    expect(writes[0][1].body).toMatch(/failed on Node 22\.13\.0/);
+    expect(failed).toEqual(['The CLI failed on Node 22.13.0.']);
+  });
+
+  it('a failed leg: says the CLI failed', async () => {
+    const {writes, failed} = await report(
+      ['pass', 'fail', 'pass', 'pass'],
+      [ours],
+    );
+    expect(writes.map(([kind]) => kind)).toEqual(['comment']);
+    expect(writes[0][1].body).toMatch(/failed on Node 22\.13\.0/);
+    expect(failed).toEqual(['The CLI failed on Node 22.13.0.']);
+  });
+
+  it('lists the files past their minimum-Node time in the summary, and refreshes the record', async () => {
+    const {summary, refreshed} = await report(
+      ['pass', 'pass', 'pass', 'pass'],
+      [],
+    );
+    expect(summary).toContain('Files past their minimum-Node time');
+    expect(summary).toContain('`slow.test.mjs`: 40 s (recorded 10 s)');
+    expect(summary).not.toContain('same.test.mjs');
+    expect(refreshed.seconds).toEqual({
+      'same.test.mjs': 5,
+      'slow.test.mjs': 40,
+    });
+  });
+
+  it('every leg passes: closes the issue, and the run is green', async () => {
+    const {writes, failed} = await report(
+      ['pass', 'pass', 'pass', 'pass'],
+      [ours],
+    );
+    expect(writes.map(([kind]) => kind)).toEqual(['comment', 'update']);
+    expect(writes[1][1]).toMatchObject({state: 'closed'});
+    expect(failed).toEqual([]);
   });
 });

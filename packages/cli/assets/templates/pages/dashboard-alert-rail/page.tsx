@@ -1314,7 +1314,9 @@ function UptimeRow({entry}: {entry: ServiceUptime}) {
             label={STATUS_LABEL[entry.status]}
             isPulsing={entry.status === 'critical'}
           />
-          <Heading level={4}>{entry.service}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {entry.service}
+          </Heading>
         </HStack>
         <Text type="supporting" color="secondary">
           {entry.uptime.toFixed(2)}% uptime
@@ -1469,7 +1471,7 @@ export default function ServiceHealthMonitorPage() {
                 </Text>
               </HStack>
             </VStack>
-            <HStack gap={2} vAlign="center">
+            <HStack gap={2} vAlign="center" wrap="wrap">
               <SegmentedControl
                 label="Time window"
                 value={timeWindow}
@@ -1500,11 +1502,11 @@ export default function ServiceHealthMonitorPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}
-              <Grid columns={{minWidth: 240, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 240, max: 4, repeat: 'fit'}} gap={3}>
                 {kpis.map(kpi => (
                   <KpiTile
                     key={kpi.key}
@@ -1515,7 +1517,7 @@ export default function ServiceHealthMonitorPage() {
               </Grid>
 
               {/* Time-series charts */}
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={3}>
                 <MetricChart
                   title="Response latency"
                   subtitle="Percentile latency across all services (ms)"

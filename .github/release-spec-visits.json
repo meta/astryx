@@ -11,6 +11,9 @@
     ],
     "a11y-collapsible-disclosure": ["packages/core/src/Collapsible/"],
     "a11y-dialog-modal-pattern": ["packages/core/src/Dialog/"],
+    "a11y-dropdownmenu-in-a-second-document": [
+      "packages/core/src/DropdownMenu/"
+    ],
     "a11y-listbox-pattern": [
       "packages/core/src/MultiSelector/",
       "packages/core/src/Selector/"

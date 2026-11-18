@@ -524,6 +524,17 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
   // render, so we never want array identity in the deps.
   const stateRef = useRef({start, end, hasStart, hasEnd});
   stateRef.current = {start, end, hasStart, hasEnd};
+  // The pinned keys by value. Table reuses rows and cells whose inputs keep
+  // their identity, so the plugin object changes when, and only when, the
+  // pinned keys do: every body cell then reads the new pinning.
+  const pinnedKeys = JSON.stringify([start, end]);
+  const pinned = useMemo(() => {
+    const [pinnedStart, pinnedEnd] = JSON.parse(pinnedKeys) as [
+      string[],
+      string[],
+    ];
+    return {start: pinnedStart, end: pinnedEnd};
+  }, [pinnedKeys]);
 
   // Scroll-aware shadows: toggle CSS variables on the scroll container so each
   // edge's shadow only paints when there is hidden, horizontally-scrolled
@@ -679,7 +690,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
       ): HeaderCellRenderProps {
-        const {start: s, end: e} = stateRef.current;
+        const {start: s, end: e} = pinned;
         const side = resolveStickySide(props.columns, column.key, s, e);
         if (!side) {
           return props;
@@ -720,7 +731,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: BodyCellRenderProps,
         column: TableColumn<T>,
       ): BodyCellRenderProps {
-        const {start: s, end: e} = stateRef.current;
+        const {start: s, end: e} = pinned;
         const side = resolveStickySide(props.columns, column.key, s, e);
         if (!side) {
           return props;
@@ -782,13 +793,13 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         };
       },
     }),
-    // The returned plugin's transforms read live config from `stateRef` and
-    // `attachScrollShadow` is stable (empty deps), so the plugin object can be
-    // computed once and reused across renders.
-    [attachScrollShadow],
+    // `pinned` keeps its identity while the pinned keys keep their values, and
+    // `attachScrollShadow` is stable, so the plugin object is reused until the
+    // pinned keys change.
+    [attachScrollShadow, pinned],
   );
   registerPinnedColumnRuns(plugin, columns =>
-    countPinnedRuns(columns, stateRef.current.start, stateRef.current.end),
+    countPinnedRuns(columns, pinned.start, pinned.end),
   );
   return registerCountIndependentPlugin(plugin);
 }

@@ -75,7 +75,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: "A set's own definitions sit in a `definitions` folder in the set's directory, one file per definition. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every definition: Astryx's, and, in a project that sets `experimental.iconSet`, those of each installed set. A definition file refuses a field it does not know.",
+      text: "A set's own definitions sit in a `definitions` folder in the set's directory, one file per definition. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every definition: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A definition file refuses a field it does not know.",
     },
     {
       type: 'prose',

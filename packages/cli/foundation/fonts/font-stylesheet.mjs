@@ -11,13 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {cssUnescape} from '../text/css-escape.mjs';
-
-/**
- * postcss, loaded the first time a stylesheet is read: most commands read
- * none, and start without it.
- * @returns {typeof import('postcss').default}
- */
-const postcss = () => createRequire(import.meta.url)('postcss');
+import {postcss} from '../runtime/lazy-dependencies.mjs';
 
 /** @param {string} family */
 export const fontKey = family =>
@@ -26,6 +20,31 @@ export const fontKey = family =>
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase();
+
+/**
+ * The families a font service URL requests in its `family` parameters, as
+ * Google Fonts URLs do (`family=Figtree:wght@400;700`, or
+ * `family=Roboto:400|Lato` in the older form), as family keys.
+ * @param {string} url
+ * @returns {Set<string>}
+ */
+export function fontServiceFamilies(url) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const m of url.matchAll(/family=([^&'")]+)/g)) {
+    let value;
+    try {
+      value = decodeURIComponent(m[1].replace(/\+/g, ' '));
+    } catch {
+      continue;
+    }
+    for (const family of value.split('|')) {
+      const name = family.split(':')[0];
+      if (name.trim()) out.add(fontKey(name));
+    }
+  }
+  return out;
+}
 
 /**
  * The families a stylesheet `@import` specifier loads, read from `fromDir`:
@@ -48,8 +67,7 @@ export function importedFontFamilies(spec, fromDir, seen = new Set()) {
       fontKey(`${pkg[2].replace(/-/g, ' ')}${pkg[1] ? ' Variable' : ''}`),
     );
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec)) {
-    for (const m of spec.matchAll(/family=([^:&'")]+)/g))
-      out.add(fontKey(decodeURIComponent(m[1].replace(/\+/g, ' '))));
+    for (const family of fontServiceFamilies(spec)) out.add(family);
     return out;
   }
   /** @type {string | null} */
@@ -125,6 +143,46 @@ export function declarationValues(css, property) {
 }
 
 /**
+ * Each rule of a stylesheet's text that names a font, a weight or a font
+ * style: the values of its `font-family` and `font` declarations, of its
+ * `font-weight` ones and of its `font-style` ones, in source order. What
+ * one rule sets goes together (the weight or the italic a part gives the
+ * family it sets).
+ * @param {string} css
+ * @returns {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>}
+ */
+export function fontRules(css) {
+  /** @type {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>} */
+  const out = [];
+  try {
+    postcss()
+      .parse(css)
+      .walkRules(rule => {
+        /** @type {{families: string[], fonts: string[], weights: string[], styles: string[]}} */
+        const one = {families: [], fonts: [], weights: [], styles: []};
+        rule.each(node => {
+          if (node.type !== 'decl') return;
+          const prop = node.prop.toLowerCase();
+          if (prop === 'font-family') one.families.push(node.value);
+          else if (prop === 'font') one.fonts.push(node.value);
+          else if (prop === 'font-weight') one.weights.push(node.value);
+          else if (prop === 'font-style') one.styles.push(node.value);
+        });
+        if (
+          one.families.length ||
+          one.fonts.length ||
+          one.weights.length ||
+          one.styles.length
+        )
+          out.push(one);
+      });
+  } catch {
+    // A stylesheet that does not parse names nothing known here.
+  }
+  return out;
+}
+
+/**
  * Every custom property a stylesheet's text sets, with each value it is
  * given (one per rule that sets it), in source order.
  * @param {string} css
@@ -138,6 +196,33 @@ export function customPropertyValues(css) {
       .parse(css)
       .walkDecls(/^--/, decl => {
         out.set(decl.prop, [...(out.get(decl.prop) ?? []), decl.value]);
+      });
+  } catch {
+    // A stylesheet that does not parse sets nothing known here.
+  }
+  return out;
+}
+
+/**
+ * The custom properties a stylesheet's text sets on elements: in a rule
+ * whose selector is not the document root (`:root`, `html`, `*`). An
+ * element that sets one shadows the value it would inherit from the page.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function elementCustomProperties(css) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  const root = /(?:^|[\s,(>+~]):root\b|(?:^|[\s,(>+~])html\b|^\s*\*\s*$/;
+  try {
+    postcss()
+      .parse(css)
+      .walkDecls(/^--/, decl => {
+        const rule = /** @type {any} */ (decl.parent);
+        if (rule?.type !== 'rule') return;
+        const selectors = String(rule.selector).split(',');
+        if (selectors.some((/** @type {string} */ x) => !root.test(x)))
+          out.add(decl.prop);
       });
   } catch {
     // A stylesheet that does not parse sets nothing known here.
