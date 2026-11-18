@@ -7,8 +7,9 @@
  * side, brings the border it needs: a transparent one at rest, as wide as
  * the theme's border width, written in the same change and named in the
  * result, so one undo takes back both. A border the theme itself sets to
- * none there is refused instead. The build keeps a state's own colors
- * after the border it repeats there.
+ * none there is refused instead. Whether a part draws a border is read
+ * one way for set and how: drawsLine, by the variant asked, never from a
+ * grouped button's join.
  */
 
 import * as fs from 'node:fs';
@@ -22,6 +23,7 @@ import {
 } from './theme-edit.mjs';
 import {context} from './_context.mjs';
 import {checked, howTheme} from './_how-commands.mjs';
+import {drawsLine} from './_check.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -69,7 +71,12 @@ describe('a border color on a part that draws no border', () => {
         {cwd, on: 'tab', state: 'hover'},
       );
       expect(r.data.notes.join('\n')).toContain(
-        `tab drew no border, so this adds one for the color to show on: border = ${EDGE} on tab`,
+        `added a 1px border to tab so the color shows: tab drew none there; border = ${EDGE} on tab`,
+      );
+      // What the added width moves is measured every time (said, or why
+      // it was not).
+      expect(r.data.notes.join('\n')).toMatch(
+        /tab (?:grows by|keeps its size)|the size change the added border makes on tab was not measured/,
       );
       expect(css()).toMatch(
         new RegExp(`\\.astryx-tab \\{\\s*border: ${EDGE.replace(/[()]/g, '\\$&')};`),
@@ -91,6 +98,7 @@ describe('a border color on a part that draws no border', () => {
       const blocks = [...css().matchAll(rule)].map(m => m[1]);
       // One rule for the selected tab: the border first, its colors after.
       expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toContain(`border: ${EDGE};`);
       expect(blocks[0].indexOf('border:')).toBeLessThan(
         blocks[0].indexOf('border-color: #dddddd #dddddd transparent;'),
       );
@@ -108,7 +116,7 @@ describe('a border color on a part that draws no border', () => {
         {cwd, on: 'button', when: 'variant:primary'},
       );
       expect(r.data.notes.join('\n')).toContain(
-        'button drew no border when variant:primary',
+        'added a 1px border to button when variant:primary so the color shows',
       );
       // A part that draws one is left as it is: inputs.
       const inputs = await themeEditSet(
@@ -117,7 +125,7 @@ describe('a border color on a part that draws no border', () => {
         '#cccccc #cccccc #999999',
         {cwd, on: 'inputs'},
       );
-      expect(inputs.data.notes.join('\n')).not.toContain('drew no border');
+      expect(inputs.data.notes.join('\n')).not.toContain('added a');
       expect(css()).toContain('border-color: #cccccc #cccccc #999999;');
     },
     T,
@@ -201,6 +209,27 @@ describe("how's check", () => {
       );
       expect(lines).toContainEqual(
         expect.stringMatching(/ set h border-left-color '.+' --on banner$/),
+      );
+    },
+    T,
+  );
+});
+
+describe('whether a part draws a border', () => {
+  it(
+    'reads the variant asked and never a grouped button\'s join',
+    async () => {
+      const {C} = /** @type {any} */ (await context(cwd));
+      expect(drawsLine(C, ['text-input'], 'border')).toBe(true);
+      expect(drawsLine(C, ['tab'], 'border')).toBe(false);
+      // A secondary button's top and start edges are joins inside a
+      // button group, cleared on the first child: no border of its own.
+      expect(drawsLine(C, ['button'], 'border')).toBe(false);
+      expect(drawsLine(C, ['selector'], 'border', null, 'variant:input')).toBe(
+        true,
+      );
+      expect(drawsLine(C, ['selector'], 'border', null, 'variant:ghost')).toBe(
+        false,
       );
     },
     T,
