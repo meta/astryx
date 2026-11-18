@@ -108,6 +108,8 @@ describe('experimental export is the name', () => {
         expect(status).toBe(1);
         expect(stdout + stderr).toMatch(/experimental export page\.tsx/u);
         expect(stdout + stderr).toMatch(/\(experimental\)/u);
+        // Scoped as the help line is: for a page built with Astryx.
+        expect(stdout + stderr).toMatch(/built with Astryx components/u);
         expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
