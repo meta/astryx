@@ -32,6 +32,7 @@ import {
 import {recordAgentTextWritten} from '../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
+import {writeFailed} from '../error.mjs';
 export {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
 import {
   computerInstallStep,
@@ -82,19 +83,81 @@ export function applyComputerAgentText({remove}) {
   const recorded = computerAgentTextSettings().links;
   /** @type {import('./init.type.mjs').InitUserFile[]} */
   let files;
-  if (remove) {
-    files = removeComputerAgentText({home, links: recorded});
-    recordComputerAgentTextSettings({install: false, links: []});
-  } else {
-    const written = writeComputerAgentText({home, command});
-    files = written.rows;
-    recordComputerAgentTextSettings({
-      install: true,
-      links: [...new Set([...recorded, ...written.links])],
-    });
-    recordAgentTextWritten(cliVersion());
+  try {
+    if (remove) {
+      files = removeComputerAgentText({home, links: recorded});
+      recordComputerAgentTextSettings({install: false, links: []});
+    } else {
+      const written = writeComputerAgentText({home, command});
+      files = written.rows;
+      recordComputerAgentTextSettings({
+        install: true,
+        links: [...new Set([...recorded, ...written.links])],
+      });
+      recordAgentTextWritten(cliVersion());
+    }
+  } catch (err) {
+    throw computerTextFailed(err, home, remove);
   }
   return {home, command, files, cliOnSearchPath: astryxOnSearchPath()};
+}
+
+/**
+ * The nearest existing folder above `at`: where a refused recursive write
+ * stopped, since the error names the path it was asked for.
+ * @param {string} at
+ * @returns {string}
+ */
+function nearestFolder(at) {
+  let dir = path.dirname(at);
+  while (!fs.existsSync(dir)) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return dir;
+}
+
+/**
+ * The error for a computer-level agent text write or removal the file system
+ * refused, as a read-only `~/.agents/skills`: the path, the errno, what had
+ * already changed, and the step that fixes that errno. Any other error
+ * passes through unchanged.
+ * @param {unknown} err
+ * @param {string} home
+ * @param {boolean} remove
+ * @returns {unknown}
+ */
+function computerTextFailed(err, home, remove) {
+  const {code, path: at, removed, syscall} = /** @type {{code?: unknown, path?: unknown, removed?: string[], syscall?: unknown}} */ (
+    err ?? {}
+  );
+  if (typeof code !== 'string' || typeof at !== 'string') return err;
+  const again = remove ? 'astryx init --user --remove-agents' : 'astryx init --user';
+  // An open that fails on a file that exists is refused by the file itself
+  // (read-only, or owned by root after a sudo run); a mkdir, an unlink, or a
+  // missing target is refused by the folder that holds it.
+  const fix = syscall === 'open' && fs.existsSync(at) ? at : nearestFolder(at);
+  /** @type {Record<string, string>} */
+  const nextFor = {
+    EACCES: `Give yourself write access to ${displayHomePath(fix, home)}, then run \`${again}\` again.`,
+    EPERM: `Give yourself write access to ${displayHomePath(fix, home)}, then run \`${again}\` again.`,
+    EROFS: `That folder is on a read-only file system; run \`${again}\` where your home folder can be written.`,
+    ENOTDIR: `A file stands where a folder belongs on that path (such as ~/.agents being a file); move it aside, then run \`${again}\` again.`,
+  };
+  const next = nextFor[code];
+  if (!next) return err;
+  const done = (removed ?? []).map(file => displayHomePath(file, home));
+  return writeFailed(at, home, err, [], {
+    shown: `the computer-level agent text at ${displayHomePath(at, home)}`,
+    what: remove ? 'remove' : 'write',
+    outcome: remove
+      ? done.length > 0
+        ? `Already removed: ${done.join(', ')}.`
+        : 'The computer-level agent text was not removed.'
+      : 'The computer-level agent text was not written.',
+    next,
+  });
 }
 
 /**

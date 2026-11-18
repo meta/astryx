@@ -563,11 +563,19 @@ export function writeComputerAgentText({home = os.homedir(), command} = {}) {
       rows.push({path: at, action: 'kept', reason: 'not-astryx'});
       continue;
     }
-    if (linkState === 'differs') removeManagedFile(path.join(at, 'SKILL.md'));
-    // The skill folder exists now, so a link still dangling here is one
-    // whose target the system resolves from a linked folder above it: an
-    // Astryx link, remade so that it resolves.
-    if (linkState === 'dangling') fs.unlinkSync(at);
+    // An old copy or a dangling link that cannot be cleared is kept, as a
+    // link or copy that cannot be made is: the skill file is written by now,
+    // so the run goes on rather than stop half done.
+    try {
+      if (linkState === 'differs') removeManagedFile(path.join(at, 'SKILL.md'));
+      // The skill folder exists now, so a link still dangling here is one
+      // whose target the system resolves from a linked folder above it: an
+      // Astryx link, remade so that it resolves.
+      if (linkState === 'dangling') fs.unlinkSync(at);
+    } catch {
+      rows.push({path: at, action: 'kept', reason: 'not-astryx'});
+      continue;
+    }
     try {
       makeLink(at, folder);
       links.push(at);
@@ -596,30 +604,42 @@ export function removeComputerAgentText({
   const folder = path.dirname(file);
   /** @type {import('../../api/init/init.type.mjs').InitUserFile[]} */
   const rows = [];
-  for (const at of links) {
-    const linkState = linkStateOf(at, folder);
-    if (linkState !== 'linked' && linkState !== 'dangling') continue;
-    try {
-      fs.unlinkSync(at);
-      rows.push({path: at, action: 'removed'});
-    } catch {
-      rows.push({path: at, action: 'kept', reason: 'not-astryx'});
-    }
-  }
-  // Managed copies are told apart by their markers and hash, like the file.
-  for (const place of computerSkillLinks(home)) {
-    if (copyStateOf(place.path, '') !== 'differs') continue;
-    removeManagedFile(path.join(place.path, 'SKILL.md'));
-    rows.push({path: place.path, action: 'removed'});
-  }
+  // The skill file goes first: a refusal there stops the run before any link
+  // or copy is touched, so nothing is left half removed.
   const state = managedFileState(file, '');
   if (state === 'absent') {
-    rows.unshift({path: file, action: 'absent'});
+    rows.push({path: file, action: 'absent'});
   } else if (state === 'foreign' || state === 'edited') {
-    rows.unshift({path: file, action: 'kept', reason: keptReason(state)});
+    rows.push({path: file, action: 'kept', reason: keptReason(state)});
   } else {
     removeManagedFile(file);
-    rows.unshift({path: file, action: 'removed'});
+    rows.push({path: file, action: 'removed'});
+  }
+  try {
+    for (const at of links) {
+      const linkState = linkStateOf(at, folder);
+      if (linkState !== 'linked' && linkState !== 'dangling') continue;
+      try {
+        fs.unlinkSync(at);
+        rows.push({path: at, action: 'removed'});
+      } catch {
+        rows.push({path: at, action: 'kept', reason: 'not-astryx'});
+      }
+    }
+    // Managed copies are told apart by their markers and hash, like the file.
+    for (const place of computerSkillLinks(home)) {
+      if (copyStateOf(place.path, '') !== 'differs') continue;
+      removeManagedFile(path.join(place.path, 'SKILL.md'));
+      rows.push({path: place.path, action: 'removed'});
+    }
+  } catch (err) {
+    // Name what was already removed, so the caller can say so.
+    if (err && typeof err === 'object') {
+      /** @type {any} */ (err).removed = rows
+        .filter(row => row.action === 'removed')
+        .map(row => row.path);
+    }
+    throw err;
   }
   return rows;
 }
