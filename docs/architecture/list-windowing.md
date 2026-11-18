@@ -117,6 +117,8 @@ row-position accuracy (DEC-3).
   virtualization (`module:Table/useTableColumnsVirtualization`) use it.
   Selector renders every option when it opens, and Core's Chat renders every
   message.
+- **FR1 gap:** the shared module anchors the window only to the first visible
+  row; the end (follow) and given-item anchors are not available.
 - **FR3 gap:** the shared module positions block-axis rows at one shared
   pitch.
 - **INV4 gap:** Table windows only inside its own bounded viewport; when the
