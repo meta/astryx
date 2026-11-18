@@ -123,4 +123,69 @@ describe('a tint word', () => {
     },
     T,
   );
+
+  it(
+    'deepens a tint until the text asked with it reads in every mode',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow('buttons tinted blue with white text', {
+        cwd,
+        theme: 'n',
+      });
+      // (The answer that runs the whole ask: white on a 15% blue tint over
+      // the light page is 1.4:1.)
+      const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
+      expect(whole).toBeDefined();
+      const all = (whole?.commands ?? [])
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.* editor set \S+ /, ''));
+      expect(all.some(c => /#2563eb 15%/.test(c))).toBe(false);
+      expect(whole?.text).not.toMatch(/at 15% over/);
+      const fills = all.filter(c =>
+        /^background(?:-color)? .*#2563eb.* --on button --when variant:/.test(
+          c,
+        ),
+      );
+      expect(fills.length).toBeGreaterThan(0);
+      for (const fill of fills) {
+        const when = /--when (\S+)/.exec(fill)?.[1];
+        const text = all.filter(
+          x =>
+            x.startsWith("color '#ffffff' --on button") &&
+            x.includes(`--when ${when}`),
+        );
+        expect(text.length).toBeGreaterThan(0);
+        for (const c of text) expect(c).not.toMatch(/--mode/);
+      }
+      expect(whole?.text).toMatch(
+        /the #2563eb tint is deepened to (?:\d+%|solid) so #ffffff text reads at \d+\.\d:1/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'keeps a text color no strength of the tint reads on to the modes it reads in, and names a readable ink',
+    async test => {
+      needsBases(test);
+      // (Yellow at any strength never takes white text to 4.5:1 on the
+      // light page; over the dark page a light tint of it does.)
+      const {data} = await themeEditHow(
+        'buttons tinted #facc15 with white text',
+        {cwd, theme: 'n'},
+      );
+      const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
+      expect(whole).toBeDefined();
+      const all = (whole?.commands ?? [])
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.* editor set \S+ /, ''));
+      const text = all.filter(c => c.startsWith("color '#ffffff' --on button"));
+      expect(text.length).toBeGreaterThan(0);
+      for (const c of text) expect(c).toMatch(/--mode dark/);
+      expect(whole?.text).toMatch(
+        /#ffffff text on the \S+ button would not read on color-mix\(in srgb, #facc15 15%, transparent\) in light mode: \d\.\d\d:1, under the 4\.5:1 text needs, so it is kept to dark mode; #111827 reads there/,
+      );
+    },
+    T,
+  );
 });
