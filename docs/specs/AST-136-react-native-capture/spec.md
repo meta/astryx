@@ -43,11 +43,22 @@ and the platform info module belong to `spec:AST-130`.
 
 ## Why this exists
 
-| Piece                 | What the ecosystem already does well                                                                                                                                                                                          | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAudioRecorder` | expo-audio records with presets, metering, pause and resume, and a permission hook. react-native-audio-recorder-player records and plays with progress callbacks. Both are mature and widely used.                            | Every option ships native code of its own, so an app that adds one stops being a JavaScript-only app and cannot run as a previewed project. The platform's recorder adds what those libraries do not give together: a file in the calling runtime's own folder, native-timed levels with no JavaScript polling, a closed set of reasons for every way a recording ends on its own, results that never throw, no Expo runtime library (`spec:AST-112/FR11`), and Astryx Stage parity.           |
-| `AstryxBarcode`       | react-native-vision-camera's code scanner and expo-camera's barcode scanning read codes from a live camera, and expo-camera also scans an image URL. jsQR and the JavaScript port of ZXing decode codes in pure JavaScript.   | The camera libraries ship native code and open the camera for a job that needs only a file, so the person sees a camera permission they did not expect. The pure-JavaScript decoders need no native code but need the image's pixels, and React Native gives JavaScript no way to read a photo's pixels without a native module; the scope stays open (OQ3). The platform's decoder reads a file or a picker's grant natively, asks for no permission, and reports boxes in the upright image. |
-| `AstryxScreenCapture` | react-native-screenguard and expo-screen-capture block screenshots and recordings on Android with the window's secure flag, and detect screenshots and recordings on iOS. react-native-screenguard also draws a cover on iOS. | Each ships native code of its own. The platform's module is a counted hold that many screens and the web view's `preventsCapture` share, so one screen's release never uncovers another's content. It sets the flag before the first frame of the content that needs it, covers the app's modal windows, and keeps its count across runtimes and activity re-creation. It declares no permission, which keeps it in the core (DEC-3). Detection on iOS is a scope question (OQ2).              |
+Each piece stays in the platform package because an app's alternative is an
+open-source library that ships native code of its own, which ends a
+JavaScript-only app and its use as a previewed project.
+
+- `AstryxAudioRecorder` records into the calling runtime's own folder, with
+  native-timed levels, a closed reason for every way a recording ends by
+  itself, results that never throw, no Expo runtime library
+  (`spec:AST-112/FR11`), and Astryx Stage parity.
+- `AstryxBarcode` reads codes from an image file with no camera and no
+  permission prompt. A pure-JavaScript decoder needs no native code but needs
+  the image's pixels, which JavaScript cannot read in React Native without a
+  native module; the scope stays open (OQ3).
+- `AstryxScreenCapture` is one counted hold that screens and the web view's
+  `preventsCapture` share, so one release never uncovers another screen's
+  content. It declares no permission, which keeps it in the core (DEC-3).
+  Reporting capture on iOS is a scope question (OQ2).
 
 ## Who uses it
 
@@ -312,9 +323,10 @@ contentType, size}`; `durationMs` leaves out paused time. After a
   `camera` stay opt-in), FR6 (the group's closed reasons), FR7 (explicit
   permissions and the probes), FR8 (the group's revision-1 baseline), and
   FR12 (the group in Astryx Stage).
-- `spec:AST-130/FR9` names `camera` as its one permission. This record reads
-  the microphone permission through the recorder with the same states and
-  rules (FR3); OQ1 asks whether `AstryxPermissions` carries it.
+- `spec:AST-130/FR9` names `camera` as its one permission, and
+  `spec:AST-112/FR7` reads permissions through `AstryxPermissions`. This
+  record reads the microphone permission through the recorder with the same
+  states and rules (FR3); OQ1 asks whether `AstryxPermissions` carries it.
 - `spec:AST-112/FR7` asks that an unsupported path never be a silent no-op.
   A hold on iOS blocks nothing and says so only through `supports` (FR9);
   OQ2 asks how iOS answers.
@@ -379,8 +391,9 @@ would then depend on a second capability for one counted flag.
 ## Open questions
 
 - **OQ1 — Does `AstryxPermissions` (`spec:AST-130/FR9`) carry the
-  `microphone` permission, with a `useMicrophonePermission` hook, so the
-  recorder's `getPermission` and `requestPermission` read the same store?**
+  `microphone` permission, with a `useMicrophonePermission` hook, as
+  `spec:AST-112/FR7` asks for every permission, so the recorder's
+  `getPermission` and `requestPermission` read the same store?**
   (`human-api`)
 - **OQ2 — How does iOS answer screen capture?** (`human-design`) A hold on iOS
   blocks nothing and says so only through `supports` (FR9). The options:
