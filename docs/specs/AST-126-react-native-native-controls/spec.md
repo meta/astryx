@@ -39,7 +39,8 @@ The controls are part of the platform layer of `spec:AST-112`. They follow its
 result vocabulary (`spec:AST-112/FR6`), capability shape (`spec:AST-112/FR7`),
 additive evolution (`spec:AST-112/FR8`), its rule that the platform speaks
 Astryx's design language for native controls (`spec:AST-112/FR9`), and Astryx
-Stage as the contract developers build against (`spec:AST-112/FR12`). They
+Stage, which conforms to these contracts and never defines them
+(`spec:AST-112/FR12`). They
 serve the native-first rule of `spec:AST-082/FR11`. In the library
 components, a control's native-only visuals come from the theme (FR11), not
 from component props (`spec:AST-082/DEC-2`).
