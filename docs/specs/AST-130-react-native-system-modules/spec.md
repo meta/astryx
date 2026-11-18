@@ -508,15 +508,14 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   API only.
 - Relies on `spec:AST-112` FR20 (amended): the package covers the native code
   Astryx itself uses; every module of this group is such code.
-- Changes `spec:AST-112/FR1`: the core's list gains appearance, accessibility
-  settings, platform info, the Android back gate and launch hold, and the
-  file picker; the `camera` capability gains camera capture, the camera source
-  of a picker included (FR12).
-- Changes `spec:AST-112` FR1 and FR5 (amended): cookies leave the core's list
-  and the `./network` entry, since no Astryx component uses them; the network
-  state and secure random bytes are already outside the amended core.
-- Changes `spec:AST-112/FR1` and FR3: the core links no web engine, and
-  clearing web view data has no Astryx call (FR18).
+- Is the System modules group record that `spec:AST-112/FR7` names: it lists
+  the group's ten core modules and the core cache location (FR1, FR14).
+- Changes `spec:AST-112/FR5`: the `./network` entry and its cookies leave the
+  package's app API, since no Astryx component uses them.
+- Camera capture, the camera source of a picker included, is the `camera`
+  capability's (`spec:AST-112/FR7`; FR12).
+- The core links no web engine, and clearing web view data has no Astryx call
+  (FR18).
 - Departs from `spec:AST-112/FR7` ("never a silent no-op") for the calls that
   return nothing (FR2); OQ2 asks whether the exception stands.
 - Details `spec:AST-112` FR7 (each module's probes) and FR9 (the haptic moment mapping), and `spec:AST-140/FR3`
