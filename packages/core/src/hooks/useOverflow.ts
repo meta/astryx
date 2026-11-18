@@ -143,7 +143,9 @@ function exactWidth(element: HTMLElement, scale: number): number {
 function layoutScale(measure: HTMLElement): number {
   const screen = measure.getBoundingClientRect().width;
   const layout = measure.offsetWidth;
-  return screen > 0 && layout > 0 ? screen / layout : 1;
+  // offsetWidth is rounded to a whole pixel, so a difference within that
+  // rounding is no scale.
+  return layout > 0 && Math.abs(screen - layout) > 1 ? screen / layout : 1;
 }
 
 /** The bounds of a single-row set, from sub-pixel widths. */
