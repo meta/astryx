@@ -83,6 +83,7 @@ import {
   framesByDefault,
   edgeCopies,
   heldVariantsOf,
+  placementHolds,
   borderFrames,
   undoArgs,
   isCheckNote,
@@ -6814,14 +6815,15 @@ async function changeOnce(
   // result names it with the line that gives it there anyway.
   /** @type {string[]} */
   let heldVariants = [];
-  if (
-    sub === 'set' &&
-    s.on &&
-    !s.when &&
-    !groupsOf(ctx)[s.on] &&
-    r.newProblems.length
-  ) {
-    heldVariants = heldVariantsOf(ctx, String(s.on), r.newProblems);
+  if (sub === 'set' && s.on && !s.when && !groupsOf(ctx)[s.on]) {
+    heldVariants = [
+      ...new Set([
+        ...(r.newProblems.length
+          ? heldVariantsOf(ctx, String(s.on), r.newProblems)
+          : []),
+        ...placementHolds(ctx, data, s),
+      ]),
+    ];
     if (heldVariants.length) {
       const entry =
         data.settings.find(x => x === s) ??

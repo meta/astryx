@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
 /**
  * A setting on one part that would make its text unreadable in one of its
  * variants drawn on another ground keeps that variant at Core's look: a top
@@ -83,6 +85,41 @@ describe('a top nav link colored for a dark bar', () => {
     ).not.toMatch(/mobile-nav's/);
     await themeEditUndo('bar', {cwd});
     expect(cssOf('bar')).not.toMatch(/#bfbfbf/);
+  }, 240_000);
+
+  it('lets the color reach the phone menu when the theme darkens the menu too', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('dk', {cwd, like: 'neutral'});
+    await themeEditSet('dk', 'mode', 'light-only', {cwd});
+    await themeEditSet('dk', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('dk', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+    });
+    // (Held while the menu is white...)
+    await themeEditSet('dk', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    expect(cssOf('dk')).toMatch(
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: var\(--color-text-/,
+    );
+    // (...and reaching it once the theme darkens the menu as well.)
+    const r = await themeEditSet(
+      'dk',
+      '--color-background-surface',
+      '#222222',
+      {cwd, on: 'mobile-nav'},
+    );
+    expect(cssOf('dk')).not.toMatch(
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: var\(--color-text-/,
+    );
+    expect(
+      (r.data.newProblems ?? [])
+        .map((/** @type {any} */ p) => p.problem)
+        .join('\n'),
+    ).not.toMatch(/top-nav-item/);
   }, 240_000);
 
   it('holds nothing where the color reads in the menu too', async ctx => {
