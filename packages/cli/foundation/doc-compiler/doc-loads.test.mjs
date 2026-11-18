@@ -494,6 +494,10 @@ const RUNNERS = {
     runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
     sites: ['createRequire'],
   },
+  'foundation/fs/jiti-cache.mjs': {
+    runs: "jiti's own transform, on a transpile no kept copy holds, and jiti's version, part of each copy's name",
+    sites: ['require(jiti)', 'require(jiti/package.json)'],
+  },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
