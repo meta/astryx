@@ -163,6 +163,7 @@ export function AvatarGroupOverflow({
   xstyle,
   className,
   style,
+  'aria-label': ariaLabel,
   ...rest
 }: AvatarGroupOverflowProps): ReactNode {
   const pressable = usePressFeedback();
@@ -177,7 +178,9 @@ export function AvatarGroupOverflow({
   // `total - visibleCount`, which goes negative whenever the list is shorter
   // than the slice. Clamping keeps that from rendering "+-3".
   const safeCount = Math.max(0, count);
-  const label = t('@astryx.avatarGroup.overflow', {count: safeCount});
+  // A caller's aria-label names the indicator; the count is the fallback.
+  const label =
+    ariaLabel ?? t('@astryx.avatarGroup.overflow', {count: safeCount});
   const content = children ?? `+${safeCount}`;
 
   if (onClick) {
