@@ -26,10 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
@@ -793,7 +790,6 @@ export function DateRangeInput({
             inputWrapperStyles.textField,
             sizeStyles[size],
             inputRowSizeStyles[size],
-            inputRowPadStyles.pad,
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],

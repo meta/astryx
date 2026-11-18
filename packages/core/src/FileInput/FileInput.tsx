@@ -27,11 +27,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
-import {
   colorVars,
+  sizeVars,
   spacingVars,
   radiusVars,
   typographyVars,
@@ -203,7 +200,15 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-1'],
+    // The padding is what the 32 px row leaves after the prompt's line and the
+    // borders, so the row is 32 px at the default text size, and a larger or
+    // wrapped prompt grows it from there.
+    paddingBlock: {
+      default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
+    },
     paddingInline: spacingVars['--spacing-2'],
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
@@ -230,6 +235,7 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
+    minHeight: sizeVars['--size-element-md'],
     outline: 'none',
   },
   compactDisabled: {
@@ -959,8 +965,6 @@ export function FileInput({
           themeProps('file-input', {mode, status: status?.type ?? null}),
           stylex.props(
             isDropzone ? styles.dropzone : styles.compact,
-            !isDropzone && inputRowSizeStyles.md,
-            !isDropzone && inputRowPadStyles.pad,
             isDropzone && !isSelectionDisabled && styles.dropzoneHover,
             isDropzone &&
               !isSelectionDisabled &&

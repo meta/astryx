@@ -21,7 +21,7 @@
 
 import {use, useId, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {borderVars, sizeVars, typeScaleVars} from '../theme/tokens.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {Field, type InputStatus} from '../Field';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
 import {mergeProps} from '../utils';
@@ -44,35 +44,10 @@ const styles = stylex.create({
   },
 });
 
-// The group owns its row height, and its members fill it. The row is the
-// size at the theme's default text size, and grows to a bordered body text
-// line when the text is larger, so no member cuts its line.
-const sizeStyles = stylex.create({
-  sm: {
-    height: {
-      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-  md: {
-    height: {
-      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-  lg: {
-    height: {
-      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-});
+// The group owns its row height, and its members fill it (`height: 100%`),
+// so the row takes the one-line field height: the size, grown to a bordered
+// text line when the text is larger.
+const sizeStyles = inputRowSizeStyles;
 
 export interface InputGroupProps extends Omit<
   BaseProps<HTMLDivElement>,

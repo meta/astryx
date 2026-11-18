@@ -48,7 +48,7 @@ const CASES = [
   },
 ];
 
-/** Each field's outer height, the room its padding leaves, and its line. */
+/** Each field's outer height, the room inside its borders, and its line. */
 async function readFields(
   page: Page,
   story: string,
@@ -76,9 +76,7 @@ async function readFields(
           inner:
             height -
             parseFloat(style.borderTopWidth) -
-            parseFloat(style.borderBottomWidth) -
-            parseFloat(style.paddingTop) -
-            parseFloat(style.paddingBottom),
+            parseFloat(style.borderBottomWidth),
           line: text ? parseFloat(getComputedStyle(text).lineHeight) : 0,
         };
       });
