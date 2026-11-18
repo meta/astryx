@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {encodePng} from './_png.mjs';
-import {measureBoxes, pixelScale, readTraits} from './_picture-traits.mjs';
+import {MEASURE_MOST, measureBoxes, pixelScale, readTraits} from './_picture-traits.mjs';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -110,7 +110,7 @@ function controlsPage() {
 
 describe('measuring boxes', () => {
   it('reads height, corners and edge width as drawn', () => {
-    const {boxes} = measureBoxes(controlsPage());
+    const {boxes} = /** @type {NonNullable<ReturnType<typeof measureBoxes>>} */ (measureBoxes(controlsPage()));
     const buttons = boxes.filter(b => b.h === 28 && b.w === 80);
     expect(buttons).toHaveLength(4);
     for (const b of buttons) {
@@ -132,7 +132,7 @@ describe('measuring boxes', () => {
     const c = canvas(200, 80);
     for (let k = 0; k < 3; k++)
       c.box({x: 10 + k * 60, y: 20, w: 50, h: 24, fill: [30, 30, 30], label: true});
-    const {boxes} = measureBoxes(c.png());
+    const {boxes} = /** @type {NonNullable<ReturnType<typeof measureBoxes>>} */ (measureBoxes(c.png()));
     expect(boxes.length).toBe(3);
     for (const b of boxes) {
       expect(b.radius).toBe(0);
@@ -166,7 +166,7 @@ describe('traits from a picture', () => {
     expect(traits.some(t => /gradient/.test(JSON.stringify(t.step)))).toBe(false);
     const g = unsure.find(u => u.trait === 'gradient');
     expect(g?.why).toMatch(/vertical gradient/);
-    expect(g?.options?.[0]).toMatch(/linear-gradient\(to bottom, #/);
+    expect(g?.options?.[0]).toEqual({verb: 'set', thing: 'background', value: expect.stringMatching(/^linear-gradient\(to bottom, #/), on: 'button'});
   });
 
   it('writes no control trait from a crop of badges alone, and says why', () => {
@@ -181,7 +181,7 @@ describe('traits from a picture', () => {
       expect(traits.some(t => t.step.thing === thing)).toBe(false);
     const height = unsure.find(u => u.trait === 'height');
     expect(height?.why).toMatch(/read 24px, but only one kind of control shows, so this crop cannot tell controls from badges; send a full page/);
-    expect(height?.options).toEqual(['set my --size-element-md 24px --on button-like']);
+    expect(height?.options).toEqual([{verb: 'set', thing: '--size-element-md', value: '24px', on: 'button-like'}]);
   });
 
   it('writes field height on the inputs when it differs from the buttons', () => {
@@ -225,6 +225,25 @@ describe('traits from a picture', () => {
     expect(slots['button-like'].height).toEqual({value: 28, source: 'picture', confidence: 1});
     expect(slots['button-like'].radius.value).toBe(4);
     expect(slots['button-like'].fill.value).toEqual({direction: 'to bottom', stops: expect.arrayContaining([expect.stringMatching(/^#/)])});
+  });
+
+  it('names the look as not measured past the pixel budget, without reading it', () => {
+    const w = 4000, h = Math.ceil(MEASURE_MOST / 4000) + 1;
+    const rgba = new Uint8Array(w * h * 4).fill(255);
+    const {traits, unsure} = readTraits({width: w, height: h, rgba});
+    expect(traits).toEqual([]);
+    expect(unsure[0].why).toMatch(/more than the 8 million its look is measured from/);
+  });
+
+  it('names a grainy picture as not measured instead of running out of room', () => {
+    // Noise: nearly every pixel its own surface.
+    const w = 1500, h = 1000;
+    const rgba = new Uint8Array(w * h * 4);
+    let seed = 7;
+    for (let i = 0; i < rgba.length; i++) rgba[i] = i % 4 === 3 ? 255 : (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 23;
+    const {traits, unsure} = readTraits({width: w, height: h, rgba});
+    expect(traits).toEqual([]);
+    expect(unsure[0].why).toMatch(/too grainy to read boxes from/);
   });
 
   it('never names a typeface', () => {
@@ -286,6 +305,32 @@ describe('how <picture>', () => {
     const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
     expect(commands.some((/** @type {string} */ c) => /--radius-element/.test(c))).toBe(false);
     expect(d.unsure.some((/** @type {any} */ u) => /reads 4px .* sets --radius-element 10px already, which stays/.test(u.text))).toBe(true);
+  });
+
+  it('keeps a control size the theme sets for the whole theme', async () => {
+    await themeEditSet('pt', '--size-element-md', '40px', {cwd});
+    const d = /** @type {any} */ ((await themeEditHow('look.png', {cwd, theme: 'pt'})).data);
+    const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
+    expect(commands.some((/** @type {string} */ c) => /--size-element-md/.test(c))).toBe(false);
+    expect(d.unsure.some((/** @type {any} */ u) => /sets --size-element-md 40px already, which stays/.test(u.text))).toBe(true);
+  });
+
+  it('renders the offered settings as the results do', async () => {
+    const d = /** @type {any} */ ((await themeEditHow('look.png', {cwd, theme: 'pt'})).data);
+    const g = d.unsure.find((/** @type {any} */ u) => /^gradient/.test(u.text));
+    expect(g.options[0]).toMatch(/ set pt background 'linear-gradient\(to bottom, #[0-9a-f]{6}, #[0-9a-f]{6}\)' --on button$/);
+  });
+
+  it('keeps the colors of a picture too grainy to measure', async () => {
+    const w = 1500, h = 1000;
+    const rgba = new Uint8Array(w * h * 4);
+    let seed = 11;
+    for (let i = 0; i < rgba.length; i++) rgba[i] = i % 4 === 3 ? 255 : (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 23;
+    fs.writeFileSync(path.join(cwd, 'grain.png'), encodePng({width: w, height: h, rgba}));
+    const d = /** @type {any} */ ((await themeEditHow('grain.png', {cwd, theme: 'pt'})).data);
+    expect(d.colors.length).toBeGreaterThan(0);
+    expect(d.results).toEqual([]);
+    expect(d.unsure[0].text).toMatch(/^look on theme: the picture is too grainy/);
   });
 
   it('reads points with --at as before, with no traits', async () => {

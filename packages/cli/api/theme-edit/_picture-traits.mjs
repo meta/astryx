@@ -34,6 +34,16 @@
 /** Neighbouring pixels this close (per channel, 0–255) are one surface. */
 const SAME = 6;
 
+/**
+ * The most pixels the look is measured from: about a 2x screenshot of a
+ * large screen. Past it the colors are still read, and the look is named
+ * as not measured.
+ */
+export const MEASURE_MOST = 8_000_000;
+
+/** The most surfaces a picture may have for its boxes to be read. */
+const SURFACES_MOST = 1_000_000;
+
 /** A surface smaller than this many pixels on a side is never a box. */
 const LEAST_SIDE = 8;
 
@@ -92,16 +102,20 @@ function surfaces(rgb, W, H) {
       }
     }
   const label = new Int32Array(W * H);
-  /** @type {Map<number, number>} */
-  const ids = new Map();
+  // A grainy or photographic picture is nearly a surface per pixel: no
+  // boxes to read, and too many to hold, so it is not read.
+  let roots = 0;
+  for (let i = 0; i < W * H; i++) if (find(i) === i && ++roots > SURFACES_MOST) return null;
+  // Each root's surface number, by its pixel index (-1: none yet).
+  const ids = new Int32Array(W * H).fill(-1);
   /** @type {Array<{x0: number, y0: number, x1: number, y1: number, n: number, r: number, g: number, b: number, solid: boolean}>} */
   const stats = [];
   for (let i = 0; i < W * H; i++) {
     const root = find(i);
-    let id = ids.get(root);
-    if (id === undefined) {
+    let id = ids[root];
+    if (id < 0) {
       id = stats.length;
-      ids.set(root, id);
+      ids[root] = id;
       stats.push({x0: W, y0: H, x1: -1, y1: -1, n: 0, r: 0, g: 0, b: 0, solid: false});
     }
     label[i] = id;
@@ -137,30 +151,16 @@ const hexAt = (rgb, i) => `#${hx(rgb[i * 3])}${hx(rgb[i * 3 + 1])}${hx(rgb[i * 3
 const lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
 /**
- * Relative luminance per WCAG, of a #rrggbb color.
- * @param {string} hex
- */
-function luminance(hex) {
-  const v = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const l = v.map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
-}
-
-/** WCAG contrast of two #rrggbb colors. @param {string} a @param {string} b */
-export function contrast(a, b) {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-/**
  * Measure every box in a picture.
  * @param {Picture} pic
- * @returns {{boxes: Box[], pageId: number, page: string, rgb: Uint8Array, label: Int32Array, stats: ReturnType<typeof surfaces>['stats']}}
+ * @returns {null | {boxes: Box[], pageId: number, page: string, rgb: Uint8Array, label: Int32Array, stats: NonNullable<ReturnType<typeof surfaces>>['stats']}}
  */
 export function measureBoxes(pic) {
   const W = pic.width, H = pic.height;
   const rgb = flatten(pic);
-  const {label, stats} = surfaces(rgb, W, H);
+  const read = surfaces(rgb, W, H);
+  if (!read) return null;
+  const {label, stats} = read;
   let pageId = 0;
   for (let i = 1; i < stats.length; i++) if (stats[i].n > stats[pageId].n) pageId = i;
   const ps = stats[pageId];
@@ -197,7 +197,7 @@ export function measureBoxes(pic) {
  * @param {number} id
  * @param {{x0: number, y0: number, x1: number, y1: number}} s
  * @param {Int32Array} label
- * @param {ReturnType<typeof surfaces>['stats']} stats
+ * @param {NonNullable<ReturnType<typeof surfaces>>['stats']} stats
  * @param {number} W @param {number} H
  * @param {(x: number, y: number) => number} at
  * @param {number} sx start x (on the fill) @param {number} sy start y @param {number} dx @param {number} dy
@@ -229,9 +229,9 @@ function walkOut(id, s, label, stats, W, H, at, sx, sy, dx, dy) {
 
 /**
  * @param {number} id
- * @param {ReturnType<typeof surfaces>['stats'][number]} s
+ * @param {NonNullable<ReturnType<typeof surfaces>>['stats'][number]} s
  * @param {Uint8Array} rgb @param {Int32Array} label
- * @param {ReturnType<typeof surfaces>['stats']} stats
+ * @param {NonNullable<ReturnType<typeof surfaces>>['stats']} stats
  * @param {number} W @param {number} H @param {(x: number, y: number) => number} at
  * @returns {Box | null}
  */
@@ -349,7 +349,7 @@ function cornerRadius(rgb, label, W, x, y, w, h, outAt, sideReach) {
  * A fill's gradient: its own pixels down three columns (or across three rows),
  * top fifth against bottom fifth. Text pixels are not the fill, so they never count.
  * @param {number} id
- * @param {ReturnType<typeof surfaces>['stats'][number]} s
+ * @param {NonNullable<ReturnType<typeof surfaces>>['stats'][number]} s
  * @param {Uint8Array} rgb @param {Int32Array} label @param {number} W
  * @returns {Box['gradient']}
  */
@@ -422,7 +422,7 @@ function shadowBelow(rgb, W, H, x, below, w, outI) {
 /**
  * Where a box's text sits: the holes in its fill, left gap against right gap.
  * @param {number} id
- * @param {ReturnType<typeof surfaces>['stats'][number]} s
+ * @param {NonNullable<ReturnType<typeof surfaces>>['stats'][number]} s
  * @param {Int32Array} label @param {number} W
  * @returns {Box['text']}
  */
@@ -461,7 +461,7 @@ const GLYPH_MOST = 600;
  * set on a common baseline. Heights count a row only where the ink covers at
  * least half, so antialiasing does not add a pixel.
  * @param {Picture} pic
- * @param {{rgb: Uint8Array, label: Int32Array, stats: ReturnType<typeof surfaces>['stats']}} read from measureBoxes
+ * @param {{rgb: Uint8Array, label: Int32Array, stats: NonNullable<ReturnType<typeof surfaces>>['stats']}} read from measureBoxes
  * @param {Set<number>} fills the surfaces text sits on (the page and the boxes read as parts)
  * @returns {TextLine[]}
  */
@@ -617,7 +617,7 @@ function mode(values) {
  * @property {string} trait
  * @property {string} on
  * @property {string} why what was seen and why it is not written
- * @property {string[]} [options] commands that would make it on one part, never run for you
+ * @property {Array<Trait['step']>} [options] settings that would make it, offered and never written for you
  */
 
 /**
@@ -667,15 +667,6 @@ function chroma(hex) {
 }
 
 /**
- * A step as the command words after the prefix, for the theme `my`.
- * @param {Trait['step']} st
- */
-function stepText(st) {
-  const v = /^[\w.%-]+$/.test(st.value) ? st.value : `"${st.value}"`;
-  return `set my ${st.thing} ${v}${st.on ? ` --on ${st.on}` : ''}`;
-}
-
-/**
  * The pixel density a PNG says it was saved at: 2 for a 144-dpi (Retina)
  * screenshot, 1 for 72 or 96 dpi or when it names none.
  * @param {Buffer} bytes
@@ -708,7 +699,14 @@ export function pixelScale(bytes) {
  * @returns {{traits: Trait[], unsure: Unsure[], slots: Record<string, Record<string, {value: unknown, source: 'picture', confidence: number}>>, scale: number, boxes: number, lines: number}}
  */
 export function readTraits(pic, scale = 1) {
+  /** @param {string} why */
+  const notRead = why => ({traits: [], unsure: [{trait: 'look', on: 'theme', why}], slots: {}, scale, boxes: 0, lines: 0});
+  const pixels = pic.width * pic.height;
+  if (pixels > MEASURE_MOST)
+    return notRead(`the picture has ${(pixels / 1e6).toFixed(1)} million pixels, more than the ${MEASURE_MOST / 1e6} million its look is measured from; crop it to the part that shows the controls, or save it at screen size`);
   const read = measureBoxes(pic);
+  if (!read)
+    return notRead('the picture is too grainy to read boxes from (nearly every pixel differs from the next); a screenshot of an app reads best');
   const W = pic.width, H = pic.height;
   const px = (/** @type {number} */ v) => Math.round((v / scale) * 2) / 2;
   // Corners as whole pixels.
@@ -849,7 +847,7 @@ export function readTraits(pic, scale = 1) {
       trait: 'gradient',
       on: 'button-like',
       why: `${graded.length} of ${controls.length} control boxes draw a ${g.direction} gradient (one reads ${g.stops.join(' to ')}); no group setting draws gradients yet, so set it on the parts you want`,
-      options: [`set my background "linear-gradient(${g.direction === 'vertical' ? 'to bottom' : 'to right'}, ${g.stops.join(', ')})" --on button`],
+      options: [{verb: 'set', thing: 'background', value: `linear-gradient(${g.direction === 'vertical' ? 'to bottom' : 'to right'}, ${g.stops.join(', ')})`, on: 'button'}],
     });
   }
   const beveled = read.boxes.filter(b => b.bevel);
@@ -874,7 +872,7 @@ export function readTraits(pic, scale = 1) {
         trait: 'type',
         on: 'theme',
         why: `body text reads about ${body}px (±1px, from the capital height of ${bodyLines.length} lines); faces differ by a pixel, so check it against the picture`,
-        options: [`set my text-size ${body}`],
+        options: [{verb: 'set', thing: 'text-size', value: String(body)}],
       });
     else unsure.push({trait: 'type', on: 'theme', why: `text reads at ${[...weight.keys()].sort((a, b) => a - b).map(v => `${v}px`).join(', ')} with no clear body size`});
     // Leading: baselines of stacked lines at the same left edge and size.
@@ -914,7 +912,7 @@ export function readTraits(pic, scale = 1) {
           trait: 'headings',
           on: 'theme',
           why: `${heads.length} heading line${heads.length > 1 ? 's' : ''} at ${sizes} read ${share >= 0.1 ? 'heavy (semibold to heavy, which a picture does not tell apart)' : 'between regular and semibold'}`,
-          options: share >= 0.1 ? ['set my headings semibold', 'set my headings bold', 'set my headings heavy'] : ['set my headings medium'],
+          options: (share >= 0.1 ? ['semibold', 'bold', 'heavy'] : ['medium']).map(value => ({verb: /** @type {const} */ ('set'), thing: 'headings', value})),
         });
     }
   }
@@ -930,10 +928,10 @@ export function readTraits(pic, scale = 1) {
         trait: t.trait,
         on: t.on,
         why: `${t.read} read ${t.value}, but only one kind of control shows, so this crop cannot tell controls from badges; send a full page`,
-        options: [stepText(t.step)],
+        options: [t.step],
       });
     }
-  unsure.push({trait: 'font', on: 'theme', why: 'the typeface is not read from pictures; set the family you want with `set my font`'});
+  unsure.push({trait: 'font', on: 'theme', why: 'the typeface is not read from pictures; set the family you want with the font dial'});
   // The same readings as trait slots per family, for the editor's traits
   // (fill with gradient, edge with bevel, depth): measured looks no setting
   // writes yet ride here, each with how many boxes agree.
