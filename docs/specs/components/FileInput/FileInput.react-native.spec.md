@@ -257,15 +257,16 @@ shape.
 **Reference:** `component:react-native/FileInput/DEC-2`
 **Decider:** imdreamrunner, 2026-11-17
 
-The system photo pickers fall short of this contract in three places, which
-is why the Astryx grid exists, as `spec:AST-082` FR11 allows a custom control
-only where the platform's own control falls short:
+The system photo picker path falls short of this contract in three places,
+which is why the Astryx grid exists, as `spec:AST-082` FR11 allows a custom
+control only where the platform's own control falls short:
 
-- FR4's `maxDuration` filter: neither the iOS nor the Android system photo
-  picker filters videos by duration.
-- FR5's preselection: the Android Photo Picker cannot preselect. The iOS
-  picker can (iOS 15 and later), but the core file picker's `pick()` takes
-  no preselection (`spec:AST-130` FR12).
+- FR4's `maxDuration` filter: the iOS picker has no duration filter. Android's
+  Photo Picker can disable longer videos, but the core file picker's `pick()`
+  passes no duration (`spec:AST-130` FR12).
+- FR5's preselection: Android before API level 36 cannot preselect. The iOS
+  picker (iOS 15 and later) and Android's from API level 36 can, but `pick()`
+  passes no preselection (`spec:AST-130` FR12).
 - FR10's download progress and Cancel: the iOS picker reports an iCloud
   item's progress, but `pick()` reports only that loading started
   (`spec:AST-130` FR12).
@@ -273,12 +274,9 @@ only where the platform's own control falls short:
 An app that opts in to `photos` gets the grid. Where the grid cannot run (an
 app without `photos`, without the photo pieces, and from the limited, denied,
 and restricted states), the system photo picker serves under that reduced
-contract (FR8, FR10).
-
-- FR5 gap: through the iOS system photo picker the field does not preselect
-  its files, although the platform's picker can.
-- FR10 gap: through the iOS system photo picker the field shows no download
-  progress or Cancel, although the platform's picker reports progress.
+contract (FR8, FR10). Where a platform picker offers one of these needs, its
+absence on that path comes from `pick()`, not from the platform: a shortfall
+against `spec:AST-082` FR11, while FR5 and FR10 hold as written.
 
 ## Open questions
 
