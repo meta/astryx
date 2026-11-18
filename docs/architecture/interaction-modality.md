@@ -184,7 +184,8 @@ work.
   separate public-API decision. The shared rings read the state through one
   private custom property, `--_focus-ring` (read as `var(--_focus-ring, 1)`),
   which the modality store sets to 0 on each document's root after a pointer
-  press and clears when a key makes the modality keyboard; unset, it is 1, so
+  press and clears when a key makes the modality keyboard or a Tab moves focus
+  with a modifier held; unset, it is 1, so
   server markup and a page with no input yet show keyboard rings.
 - **INV7 — Essential actions remain reachable.** At the interaction point where a
   component offers an essential action's controlled context, every supported
