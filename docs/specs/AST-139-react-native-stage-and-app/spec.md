@@ -48,7 +48,7 @@ runs inside the app on a real phone, without building or installing anything.
 Preview is the same feature in both places. A project opened in the Astryx app
 and the same project run in Astryx Stage start from the same bundle, check the
 same native requirements, and get the same limits on what they may reach.
-This record owns the `astryx stage …` and `astryx preview …` commands, the
+This record owns the `astryx rn stage …` and `astryx rn preview …` commands, the
 Preview policy per module, and Stage's notes per module.
 
 ## Why this exists
@@ -66,14 +66,14 @@ or without them.
 
 ## Who uses it
 
-| Who                                    | Astryx Stage                                                                                                          | The Astryx app                                                                                   |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| A developer building an Astryx app     | Opens the app in a window beside the editor, switches iOS and Android looks, light and dark, text size, and RTL.      | Scans a QR code from `astryx preview` and uses the project on a real phone while it hot-reloads. |
-| An AI agent working on an Astryx app   | Renders a route headless, taps through a scripted flow, reads the accessibility tree and logs, and checks the result. | None directly; the agent prints the Preview link for the person.                                 |
-| A continuous-integration job           | Runs scripted checks and captures on Linux on every change, with stable reports and exit codes.                       | None.                                                                                            |
-| A reviewer, designer, or product owner | Reads the pictures and reports an agent or a job attached.                                                            | Opens a hosted bundle from a link and tries the change on a phone.                               |
-| A person evaluating Astryx             | None.                                                                                                                 | Browses every component, the example apps, and the themes on a native app.                       |
-| Astryx's own maintainers               | Checks every platform contract against the Simulator and emulator, and every documentation example.                   | Checks components on devices; the app's examples are the documentation's examples.               |
+| Who                                    | Astryx Stage                                                                                                          | The Astryx app                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A developer building an Astryx app     | Opens the app in a window beside the editor, switches iOS and Android looks, light and dark, text size, and RTL.      | Scans a QR code from `astryx rn preview` and uses the project on a real phone while it hot-reloads. |
+| An AI agent working on an Astryx app   | Renders a route headless, taps through a scripted flow, reads the accessibility tree and logs, and checks the result. | None directly; the agent prints the Preview link for the person.                                    |
+| A continuous-integration job           | Runs scripted checks and captures on Linux on every change, with stable reports and exit codes.                       | None.                                                                                               |
+| A reviewer, designer, or product owner | Reads the pictures and reports an agent or a job attached.                                                            | Opens a hosted bundle from a link and tries the change on a phone.                                  |
+| A person evaluating Astryx             | None.                                                                                                                 | Browses every component, the example apps, and the themes on a native app.                          |
+| Astryx's own maintainers               | Checks every platform contract against the Simulator and emulator, and every documentation example.                   | Checks components on devices; the app's examples are the documentation's examples.                  |
 
 ## Non-goals
 
@@ -83,7 +83,7 @@ or without them.
 - Each native contract's behavior on iOS and Android. Its platform group
   record (`spec:AST-123` to `spec:AST-137`) states it; Stage matches it (FR6),
   and Preview limits what a project reaches of it (FR13).
-- The React Native commands outside the `astryx stage` and `astryx preview`
+- The React Native commands outside the `astryx rn stage` and `astryx rn preview`
   groups, and the rules every React Native command follows
   (`spec:AST-112/FR13`).
 - How the Astryx app runs a project internally.
@@ -254,24 +254,24 @@ or without them.
     older device binary does: `supports(feature)` is false and the call takes
     its fallback or its refusal, so the project's JavaScript detects what is
     missing. The report lists it (FR5).
-- **FR8 — `astryx stage` runs Stage from the Astryx CLI.**
+- **FR8 — `astryx rn stage` runs Stage from the Astryx CLI.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
   its other commands, and the group follows their rules
   (`spec:AST-112/FR13`): it asks no question, prints one envelope under
   `--json`, prints plain text otherwise, exits 0 or 1 the same in text and
-  JSON, and its outcomes differ by `code`. `astryx stage` without a
+  JSON, and its outcomes differ by `code`. `astryx rn stage` without a
   subcommand prints the group's help. It answers for one platform: the one
   `--platform` names, `ios` otherwise.
 
-  | Command                      | Its one job                                                                                                                                         |
-  | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `astryx stage open`          | Shows the app in a Stage window, and keeps running until the window closes or the process is stopped.                                               |
-  | `astryx stage shot`          | Takes one capture of the app and writes it with the run's report.                                                                                   |
-  | `astryx stage play <script>` | Runs a scripted check and reports each step.                                                                                                        |
-  | `astryx stage a11y`          | Reads the app's accessibility tree.                                                                                                                 |
-  | `astryx stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
-  | `astryx stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
-  | `astryx stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
+  | Command                         | Its one job                                                                                                                                         |
+  | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `astryx rn stage open`          | Shows the app in a Stage window, and keeps running until the window closes or the process is stopped.                                               |
+  | `astryx rn stage shot`          | Takes one capture of the app and writes it with the run's report.                                                                                   |
+  | `astryx rn stage play <script>` | Runs a scripted check and reports each step.                                                                                                        |
+  | `astryx rn stage a11y`          | Reads the app's accessibility tree.                                                                                                                 |
+  | `astryx rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
+  | `astryx rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
+  | `astryx rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
     - the device: `--platform ios|android`, `--device <name>`,
@@ -310,7 +310,7 @@ or without them.
     Stage cache is a per-user place (`spec:AST-081` FR7), and a file that
     `--out` names by an absolute path is written there, never replacing a
     file the command did not write (`architecture:cli-surface` DEC-16).
-  - The group's question (`spec:AST-042` FR4): what does this app render, and
+  - The group answers: what does this app render, and
     how does it behave, without a simulator? `experimental render` renders a
     web page from a page module, so it does not answer. Its function is
     `stage` in the package's `./commands` entry, and its result is captures,
@@ -319,7 +319,7 @@ or without them.
 
     | Outcome                                                                                                             | Code                         |
     | ------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-    | No Stage binary is installed; the suggestion is `astryx stage install`                                              | `ERR_DEP_MISSING`            |
+    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                           | `ERR_DEP_MISSING`            |
     | The Stage download fails                                                                                            | `ERR_FETCH_FAILED`           |
     | A Stage binary fails its checksum or signature                                                                      | `ERR_STAGE_UNTRUSTED`        |
     | `--window` names no open Stage window                                                                               | `ERR_STAGE_NO_WINDOW`        |
@@ -342,8 +342,8 @@ or without them.
   scanner, from a photo, or with the system camera), by opening a Preview link,
   or by typing an address. The project comes from:
   - a developer's computer: the project's dev server on the local network,
-    which `astryx preview` prints as a link and a QR code; or
-  - a hosted bundle: a bundle that `astryx preview bundle` writes, served
+    which `astryx rn preview` prints as a link and a QR code; or
+  - a hosted bundle: a bundle that `astryx rn preview bundle` writes, served
     over HTTPS from any host (FR20).
 - **FR11 — No project code runs without the person's confirmation.** A
   scanned code and a Preview link opened from outside the app show a
@@ -430,7 +430,7 @@ or without them.
     main module runs, the host compares that with the native components,
     modules, versions, and named features it has; a project that needs one
     the host lacks is refused with a screen that names what is missing.
-    `astryx preview check` answers the same question on the developer's
+    `astryx rn preview check` answers the same question on the developer's
     computer (FR20).
   - The host runs source bundles only. A precompiled bytecode bundle is
     refused before it runs.
@@ -459,17 +459,17 @@ or without them.
   inspector (FR9) is picking an element in a running project, every touch
   goes to the inspector and none reaches the project. When picking ends, the
   project receives touches again.
-- **FR20 — `astryx preview` makes what a Preview host opens.**
+- **FR20 — `astryx rn preview` makes what a Preview host opens.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
   its other commands, under the same rules as FR8.
 
-  | Command                 | Its one job                                                                                                                                                                                                                                                                                                                                                                                       |
-  | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `astryx preview`        | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, `--display-name <words>` is the name the link carries, and `--qr-png <file>` writes the link's QR code. |
-  | `astryx preview check`  | Compares the project's requirements with what a Preview host provides (FR15), and lists each requirement the host lacks.                                                                                                                                                                                                                                                                          |
-  | `astryx preview bundle` | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link (FR16).                                                                                                                                                                          |
-  | `astryx preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                       |
-  | `astryx preview share`  | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                      |
+  | Command                    | Its one job                                                                                                                                                                                                                                                                                                                                                                                       |
+  | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `astryx rn preview`        | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, `--display-name <words>` is the name the link carries, and `--qr-png <file>` writes the link's QR code. |
+  | `astryx rn preview check`  | Compares the project's requirements with what a Preview host provides (FR15), and lists each requirement the host lacks.                                                                                                                                                                                                                                                                          |
+  | `astryx rn preview bundle` | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link (FR16).                                                                                                                                                                          |
+  | `astryx rn preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                       |
+  | `astryx rn preview share`  | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                      |
   - `preview` answers for one platform: the one `--platform` names, `ios`
     otherwise. `preview bundle`, `preview serve`, and `preview share` act on
     every platform the app has unless `--platform ios|android` names one.
@@ -485,7 +485,7 @@ or without them.
     replacing a file the command did not write
     (`architecture:cli-surface` DEC-16).
   - `astryx doctor --scope preview` reports the native-build items as `info`.
-  - The group's question (`spec:AST-042` FR4): how does a Preview host open
+  - The group answers: how does a Preview host open
     this project? `template --cdn` writes a web page, and no command makes
     what a Preview host opens. Its function is `preview` in the package's
     `./commands` entry, and its result is links, URLs, and host-check items.
@@ -523,7 +523,7 @@ or without them.
 ## Current-state impact
 
 - `spec:AST-112` names this record for Astryx Stage and the Astryx app's
-  Preview, and for the `astryx stage …` and `astryx preview …` commands; its
+  Preview, and for the `astryx rn stage …` and `astryx rn preview …` commands; its
   library layer keeps the types and manifest shape a previewed project uses
   (`spec:AST-112/FR1`), and its installers (`spec:AST-112/FR5`) are what the
   prelude installs (FR14).
@@ -547,19 +547,19 @@ or without them.
 | FR5      | A project with an unknown native view and module; a run on a desktop without a system web view                              | each kind of simulated entry                                                                               | A missing native piece that the report does not name                                                                                                                                |
 | FR6      | Stage contract checks of each group's contracts beside the same scripts on the Simulator and emulator                       | each public API; each note in FR6's table; each look                                                       | A Stage answer that differs from iOS and Android and is not a named gap, or a public API with neither a simulation nor a report entry                                               |
 | FR7      | Stage's declared contracts and named features compared with the package's; a Stage below the floor; a Stage at the floor    | an older package; a newer package; one missing contract; one missing named feature                         | A Stage below the floor that runs the project, a refusal without the list, JavaScript that runs before the refusal, or a missing feature that `supports` reports                    |
-| FR8      | CLI contract tests of `astryx stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving    | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode` | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                                             |
+| FR8      | CLI contract tests of `astryx rn stage`: envelopes, exit codes, each code in FR8's table; a tampered binary; window driving | the pinned version; a named binary; `--window` with an open window and with none; `--window` with `--mode` | A tampered binary that runs, a named binary that `stage which` does not report, or `--window` beside a render option that does not fail                                             |
 | FR9      | A walk of every component page and example app on the Simulator and emulator; the inspector over the app and a project      | each component; each example app; each appearance                                                          | A component without live examples, an example that differs from the documentation's, or an inspector that names the wrong component                                                 |
 | FR10     | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android                            | QR code; photo; link; typed address; dev server; hosted bundle                                             | A way in that does not open the project                                                                                                                                             |
 | FR11     | Links and codes from outside the app; a link that claims a confirmation                                                     | local network; internet; typed; opened before                                                              | Any request or code that runs before the person confirms                                                                                                                            |
 | FR12     | The app and two projects that read and write each store; a refused capability; a removed project; the same in Stage         | each store; each refused capability; `clearProjectData` from a project and with the app's bundle URL       | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, or a Stage run with other limits                                     |
 | FR13     | Device and Stage runs of a project that calls each module in the table; a project sign-in with another namespace's redirect | each row of FR13's table; a declined sign-in consent                                                       | A project that changes the app's appearance, reads its launch facts, records, takes the app's players, reads a file outside its own, or receives another runtime's sign-in callback |
 | FR14     | A project that uses the prelude's globals without importing them; Stage's address bar and the Preview chrome over a project | a project; an app with two routers                                                                         | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                            |
-| FR15     | A project that requires a piece the host lacks; a bytecode bundle; `astryx preview check`                                   | a missing native piece; an older host                                                                      | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                 |
+| FR15     | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                | a missing native piece; an older host                                                                      | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                 |
 | FR16     | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                  | a valid link; each failed check; data written while open                                                   | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                               |
 | FR17     | Reload and return while a project runs; a dev server that stops; removing a listed project                                  | a running project; an unreachable address; an encrypted project                                            | A project that cannot be left, an encrypted project in the list, or stored data left after removal                                                                                  |
 | FR18     | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                          | the Astryx app's build; a plain project                                                                    | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                        |
 | FR19     | Inspector picking over a project that counts its touches, on iOS and Android                                                | picking on; picking ended                                                                                  | A touch that reaches the project while picking, or a project that gets no touches after picking ends                                                                                |
-| FR20     | CLI contract tests of `astryx preview`: envelopes, exit codes, each code in FR20's table; a share without terms             | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                              | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                           |
+| FR20     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR20's table; a share without terms          | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                              | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                           |
 | FR21     | Review of each native change's evidence                                                                                     | a native behavior change                                                                                   | A native claim backed only by Stage or Preview                                                                                                                                      |
 
 ## Decision log
@@ -697,7 +697,7 @@ contract would then carry the requirements of two development tools.
   (`human-design`) FR7 pairs by the package's version floor and named
   features. Options for the declaration:
   - **A published manifest per Stage release** that lists each contract and
-    its named features, read by `astryx doctor` and `astryx stage which`. One
+    its named features, read by `astryx doctor` and `astryx rn stage which`. One
     table to compare with the package's contracts.
   - **The manifest plus each contract's spec hash**, so a contract whose spec
     changed without a new floor is caught at start. Catches drift the floor
