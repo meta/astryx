@@ -36,10 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
@@ -639,7 +636,6 @@ export function NativeDateField({
           inputWrapperStyles.textField,
           sizeStyles[size],
           inputRowSizeStyles[size],
-          inputRowPadStyles.pad,
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085

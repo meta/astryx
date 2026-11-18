@@ -34,10 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  inputRowSizeStyles,
-  inputRowPadStyles,
-} from '../Field/inputStyles.stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -1317,7 +1314,6 @@ export function TouchDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
-              inputRowPadStyles.pad,
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
@@ -1410,7 +1406,6 @@ export function TouchDateTimeField({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               sizeStyles[size],
-              inputRowPadStyles.pad,
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
               isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,

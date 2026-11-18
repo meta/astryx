@@ -31,7 +31,7 @@ test.afterAll(async () => {
 });
 
 /**
- * Each field's outer height, the room its padding leaves, its input's line
+ * Each field's outer height, the room inside its borders, its input's line
  * height, and how far its stepper column falls short of its border box.
  */
 async function readFields(page: Page, story: string, rootFontSize: string) {
@@ -52,11 +52,7 @@ async function readFields(page: Page, story: string, rootFontSize: string) {
       const steppers = field.querySelector('button')?.parentElement;
       return {
         height: box.height,
-        inner:
-          box.height -
-          borders -
-          parseFloat(style.paddingTop) -
-          parseFloat(style.paddingBottom),
+        inner: box.height - borders,
         line: parseFloat(getComputedStyle(input).lineHeight),
         stepperGap:
           steppers == null
