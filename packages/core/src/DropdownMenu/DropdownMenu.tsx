@@ -606,6 +606,7 @@ function DropdownMenuBottomSheet({
   const sheetId = useId();
   const actionListRef = useRef<HTMLDivElement>(null);
   const openModalityRef = useRef<'keyboard' | 'pointer'>('pointer');
+  const focusLastOnOpenRef = useRef(false);
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
@@ -697,29 +698,40 @@ function DropdownMenuBottomSheet({
     if (!isOpen || openModalityRef.current !== 'keyboard') {
       return;
     }
-    const findFirstAction = () =>
-      actionListRef.current?.querySelector<HTMLElement>(
+    const findAction = () => {
+      const actions = actionListRef.current?.querySelectorAll<HTMLElement>(
         'button:not(:disabled), a[href]',
-      ) ?? null;
+      );
+      if (actions == null || actions.length === 0) {
+        return null;
+      }
+      return focusLastOnOpenRef.current
+        ? actions[actions.length - 1]
+        : actions[0];
+    };
+    const focusAction = (action: HTMLElement) => {
+      focusLastOnOpenRef.current = false;
+      action.focus({preventScroll: true});
+    };
     let observer: MutationObserver | null = null;
     let frame = requestAnimationFrame(() => {
-      const action = findFirstAction();
+      const action = findAction();
       if (action != null) {
-        action.focus({preventScroll: true});
+        focusAction(action);
         return;
       }
       // The sheet loads on demand, so a keyboard open can arrive before its
       // rows exist. Wait for them, then focus a frame later so the sheet's
       // own open-focus has already run.
       observer = new MutationObserver(() => {
-        const loaded = findFirstAction();
+        const loaded = findAction();
         if (loaded == null) {
           return;
         }
         observer?.disconnect();
         observer = null;
         frame = requestAnimationFrame(() => {
-          loaded.focus({preventScroll: true});
+          focusAction(loaded);
         });
       });
       observer.observe(document.body, {childList: true, subtree: true});
@@ -749,12 +761,24 @@ function DropdownMenuBottomSheet({
     openModalityRef.current = 'pointer';
   };
   const handleSheetTriggerKeyDown = (event: React.KeyboardEvent) => {
-    if (
-      event.key === 'ArrowDown' ||
-      event.key === 'Enter' ||
-      event.key === ' '
-    ) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (event.currentTarget.matches(':disabled, [aria-disabled="true"]')) {
+        return;
+      }
+      event.preventDefault();
+      if (event.repeat) {
+        return;
+      }
       openModalityRef.current = 'keyboard';
+      focusLastOnOpenRef.current = event.key === 'ArrowUp';
+      if (!isOpen) {
+        setOpen(true);
+      }
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      openModalityRef.current = 'keyboard';
+      focusLastOnOpenRef.current = false;
     }
   };
   const handleSheetTriggerClick = (event: React.MouseEvent<HTMLElement>) => {
