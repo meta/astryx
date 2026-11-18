@@ -99,6 +99,7 @@ import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
 import {NUMBER_WORDS, commaNumbers, modeNear, pluralOf} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
@@ -5262,9 +5263,10 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:soft|softer|gentle|gentler|easy|easier)\s+dark\s+mode\b/gi,
       'softer text in dark mode, lighter page in dark mode',
     )
+    // (Said with the text-size dial's own rung, "large", it is that rung.)
     .replace(
-      /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
-      'larger text',
+      /\b(big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
+      (_m, w) => (/^large$/i.test(w) ? 'text-size large' : 'larger text'),
     )
     // (Theme-wide only: "a thin border" on a part is its own line.)
     .replace(
@@ -13820,7 +13822,34 @@ export function draftAnswer(ctx, env, question) {
         /\b(?:light|pale|dark|deep|bright)\s+$/.test(c.text.slice(0, m.index))
       )
         return chosen;
-      const family = /^(gr[ae]y|neutral)$/.test(word) ? 'neutral' : word;
+      // ("navy" in a theme whose accent is a navy: the word names the
+      // theme's own color, so the shade comes from that color's ramp, as
+      // "gray" comes from the theme's grays.)
+      // (Only a color near that one, not merely of its hue: a brown is no
+      // orange accent. Never for one mode asked: the pair would leave it.)
+      const own = c.mode
+        ? undefined
+        : PALETTE_DIALS.find(d => {
+            const seed = [...env.data.settings]
+              .reverse()
+              .find(
+                x => x?.source === 'dial' && x.thing === d && !x.on && !x.mode,
+              )?.value;
+            if (!seed || !parseColor(String(seed)) || !parseColor(chosen))
+              return false;
+            const lab = (/** @type {string} */ v) => {
+              const {L, C, H} = hexToOklch(
+                hex(/** @type {number[]} */ (parseColor(v))),
+              );
+              const r = (H * Math.PI) / 180;
+              return [L, C * Math.cos(r), C * Math.sin(r)];
+            };
+            const [a, b] = [lab(String(seed)), lab(chosen)];
+            return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= 0.09;
+          });
+      const family = /^(gr[ae]y|neutral)$/.test(word)
+        ? 'neutral'
+        : (own ?? word);
       if (!ramps.has(family))
         ramps.set(
           family,
@@ -30994,13 +31023,27 @@ export function draftAnswer(ctx, env, question) {
         ).test(q.toLowerCase())
       )
         continue;
+      // (Said of a part, it is the dial's only when the dial's own help
+      // names that part, "elegant serif headings": the type dial sets how
+      // headings step up and are set.)
+      const helpNames = (
+        /** @type {string} */ dial,
+        /** @type {string} */ on,
+      ) =>
+        new RegExp(`\\b${on.replace(/-/g, ' ')}s?\\b`, 'i').test(
+          DIALS[dial]?.help ?? '',
+        );
       const moves = (FEELS.get(w) ?? []).filter(
         m =>
           !ownDials.has(m.dial) &&
           !clauses.some(
             c =>
               (c.parts.length || c.aspects.length) &&
-              new RegExp(`\\b${w}\\b`).test(c.text),
+              new RegExp(`\\b${w}\\b`).test(c.text) &&
+              !(
+                c.parts.length &&
+                c.parts.every(p => helpNames(m.dial, String(p.on)))
+              ),
           ),
       );
       if (!moves.length) continue;
@@ -31098,7 +31141,7 @@ export function draftAnswer(ctx, env, question) {
     const rest = notTaken.filter(w => !namedFor.includes(w));
     if (rest.length)
       result.push({
-        text: `not taken: ${rest.map(w => `"${w}"`).join(', ')}: no setting reads ${rest.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
+        text: `not taken: ${rest.map(w => `"${w}"`).join(', ')}: no setting reads ${rest.length > 1 ? 'these words' : 'this word'}; the looks how sets are its dials (${Object.keys(DIALS).join(', ')}), the page and text colors, and contrast (how --list dials lists each)`,
         options: [],
       });
   }
