@@ -190,6 +190,32 @@ describe('a stress theme of gradients', () => {
 
 describe('beside a variant gradient', () => {
   it(
+    'splits a layer whose position, size and repeat come before its image, as CSS allows',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('ro', {cwd, like: 'neutral'});
+      const sel = '.astryx-button[data-variant="primary"]';
+      await themeEditSet(
+        'ro',
+        'background',
+        'center / 8px 8px repeat-x linear-gradient(#049cdb, #0064cd), left top no-repeat url("dots.png")',
+        {cwd, on: 'button', when: 'variant:primary'},
+      );
+      const body = /** @type {{body: string}} */ (
+        rulesOn(css('ro'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        'linear-gradient(#049cdb, #0064cd), url("dots.png")',
+      );
+      expect(valueIn(body, 'background-position')).toBe('center, left top');
+      expect(valueIn(body, 'background-size')).toBe('8px 8px, auto');
+      expect(valueIn(body, 'background-repeat')).toBe('repeat-x, no-repeat');
+      expect(body).not.toMatch(/(?:^|[;\s])background:/);
+    },
+    T,
+  );
+
+  it(
     'splits a url() image layered with a gradient into its longhands, and keeps the shorthand for a layer with other words',
     async () => {
       if (unbuilt) return;
