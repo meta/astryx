@@ -4808,6 +4808,23 @@ function valueWords(rest) {
 }
 
 /**
+ * A background pattern said whole: the `background` value the text types,
+ * read by the CSS grammar (each layer, and a color said with it), when it
+ * holds a gradient; null otherwise.
+ * @param {string} text
+ * @returns {string | null}
+ */
+function pictureValue(text) {
+  const said = namedProperty(text);
+  return said &&
+    !said.bad &&
+    /^background(?:-image)?$/.test(said.prop) &&
+    GRADIENT_START.test(said.value)
+    ? said.value
+    : null;
+}
+
+/**
  * Text with every CSS function call taken out, nested calls included.
  * @param {string} text
  */
@@ -21313,6 +21330,17 @@ export function draftAnswer(ctx, env, question) {
     )
       return answerFor(c, null, a);
     if (on === 'page') {
+      // "page background radial-gradient(#0002 1px, transparent 1px) 0 0 /
+      // 16px 16px": a picture value said whole is written as said, on the
+      // part that paints the page.
+      const picture = pictureValue(c.text);
+      if (picture)
+        return {
+          text: `the page background: ${picture} on app-shell (the page behind your parts)`,
+          options: [
+            [set('background', picture, {on: 'app-shell', ...modeOf(c)})],
+          ],
+        };
       const color = colorFor(c, 'fill');
       // "the page background lighter": the whole-theme answer, per mode.
       if (!color && a === 'background' && c.dir) return answerFor(c, null, a);
@@ -31937,6 +31965,31 @@ export function draftAnswer(ctx, env, question) {
         text: `${pageColorNote(env.data?.mode)} (The parts that paint it: ${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}.)`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
+      });
+    // (A picture, a pattern or gradient, on the part that paints the page
+    // shows only inside AppShell: the body rule carries the page color, not
+    // the picture. Said once, with the way to have it.)
+    const paintsPicture = (/** @type {Draft} */ d) =>
+      d.options.some(o =>
+        o.some(
+          st =>
+            st.on === 'app-shell' &&
+            st.verb === 'set' &&
+            /^background(?:-image)?$/.test(String(st.thing)) &&
+            /\b(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/.test(
+              String(st.value),
+            ),
+        ),
+      );
+    if (
+      TARGET.has('app-shell') &&
+      result.some(paintsPicture) &&
+      !result.some(d => /picture shows inside AppShell/.test(d.text))
+    )
+      result.push({
+        text: 'Your page picture shows inside AppShell, on its frame: around and behind your parts, where the main panel and other surfaces keep their own fill. Wrap the page in AppShell: a page without it shows no picture, and the body rule (`body { background: var(--color-background-body) }`) gives it the page color only.',
+        options: [],
+        lookup: `${HOW} app-shell`,
       });
   }
   // "bold white text in the header", "white text on the primary button":
