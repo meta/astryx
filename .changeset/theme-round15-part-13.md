@@ -8,7 +8,7 @@
 - Every item of a with-list belongs to its head: "primary buttons #303030 with white text and 8px corners". A comma ends the list.
 - A size word of the part said before ("small rounded corners" after buttons) reaches it across clauses that name no part.
 - "menus and popovers look like Slack's: white, rounded, …" applies each item to every part in the head.
-- A fill said with its own text ("navy #0f172a with white text") stays a fill.
+- A fill said with its own text ("navy #0f172a with white text") stays a fill. "The top bar" in a sentence after a table stays the app's top bar; only a header said with the table is the table's header row.
 - "soft glows and shadows" is one ask, not two that clash.
 - The answer that runs a whole ask in order carries a tint ("blue-tinted glass") as the tint, never the solid color.
 - "selected tab #171717 with a 2px underline, other tabs #666666": the selected label keeps its color, the underline its state, and the other tabs their text color.
@@ -34,6 +34,6 @@
 - A color on a link or a text goes into the token its color prop reads (`--color-text-accent` on links), on that part alone, as a heading's color already did.
 - A text size, weight, line height or letter spacing on a part whose text is drawn by elements that read one token for it (`font-size` on a banner or a code block, `font-weight` on the top nav heading) goes into that token on the part. Where the text reads several tokens (a title and a subtitle), set still refuses and names each.
 - A bare `0` on a padding read inside `calc()` is saved as `0px`.
-- A token the part does not read, where the parts inside it do (`--text-body-size` on a tab list), is refused with those parts' token on the part. A part name with a piece after it (`top-nav-heading-title`) is refused with the part that holds it.
+- A token the part does not read, where the parts inside it do (`--text-body-size` on a tab list), is refused with those parts' token on the part. A part name with a piece after it (`top-nav-heading-title`) is refused with the part that holds it; a part name with a variant or a state after it (`button-primary`, `link-hover`) is refused with that part and its `--when` or `--state`.
 
 @josephfarina

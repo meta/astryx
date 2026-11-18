@@ -10844,11 +10844,14 @@ export function draftAnswer(ctx, env, question) {
         /\d/.test(withoutFunctions(c.text)))
     )
       c.aspects = ['opacity'];
-  // "the table ... a header" is the table's header row.
-  if (/\b(tables?|rows?|zebra)\b/.test(q))
-    for (const c of clauses)
-      for (const p of c.parts)
-        if (p.on === 'app-shell-header') p.on = 'table-header-cell';
+  // "the table ... a header" is the table's header row: a header said in
+  // the sentence that says the table ("the top bar" a sentence later is
+  // the app's).
+  for (const c of clauses) {
+    const said = q.toLowerCase().split(/[.!?\n]+/).find(x => x.includes(c.text.trim().toLowerCase()));
+    if (/\bheaders?\b/.test(c.text) && /\b(tables?|rows?|zebra)\b/.test(said ?? c.text))
+      for (const p of c.parts) if (p.on === 'app-shell-header') p.on = 'table-header-cell';
+  }
   // A clause that is only a color ("brand blue, #0057ff") belongs to the
   // clause before it; a clause with any other word ("accent #fff") does not.
   for (let i = 1; i < clauses.length; i++) {
