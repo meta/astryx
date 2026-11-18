@@ -428,7 +428,8 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   theme, `themes/<name>/`, so the theme editor opens it. That state is read
   as data and never run: a settings file the editor's own checks refuse, or
   a palette made with a recipe this CLI does not know (named with the CLI
-  update it needs), is not copied, and the theme is still added; nor is it
+  update it needs), or more than one folder of it, is not copied and is
+  named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
   write, which is left in place and named. The receipt lists the files
   copied, and `theme remove` takes back the unchanged ones.

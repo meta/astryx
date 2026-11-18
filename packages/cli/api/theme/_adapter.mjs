@@ -15,6 +15,7 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {copyTree, stageSharedTheme} from './_shared-source.mjs';
+import {APP_COPY_MARK} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
@@ -2077,9 +2078,11 @@ export async function addSharedThemeToApp(source, options) {
     let editorNote = null;
     /** @type {'new' | 'replace' | null} */
     let editorPlan = null;
-    const editorRefusal = staged.editor
-      ? await sharedEditorProblem(staged.editor.dir, name)
-      : null;
+    const editorRefusal = !staged.editor
+      ? null
+      : staged.editor.dir == null
+        ? staged.editor.notCopied
+        : await sharedEditorProblem(staged.editor.dir, name);
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor) {
       if (!fs.existsSync(editorDir)) editorPlan = 'new';
@@ -2097,19 +2100,22 @@ export async function addSharedThemeToApp(source, options) {
       : !fs.existsSync(editorRoot);
     /** @type {string | null} */
     let editorAside = null;
+    let editorWriting = false;
     /** @type {string[]} */
     let editorFiles = [];
     /** @type {string[]} */
     let newlyInstalled = [];
     try {
-      if (staged.editor && editorPlan) {
+      if (staged.editor?.dir && editorPlan) {
         if (editorPlan === 'replace') {
-          editorAside = path.join(
+          const asideAt = path.join(
             editorRoot,
             `.astryx-shared-${name}-${process.pid}`,
           );
-          fs.renameSync(editorDir, editorAside);
+          fs.renameSync(editorDir, asideAt);
+          editorAside = asideAt;
         }
+        editorWriting = true;
         copyTree(staged.editor.dir, editorDir);
         editorFiles = filesUnder(editorDir);
       }
@@ -2118,6 +2124,20 @@ export async function addSharedThemeToApp(source, options) {
         targetPath: relFrom(cwd, target),
         takenSlugs: new Set(),
       });
+      // With the editor's state beside it, the copy stays the editor's:
+      // the shared descriptor keeps the mark the editor writes, so the
+      // editor's later builds update this copy.
+      if (editorFiles.length) {
+        const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
+        const shared = doc ? path.join(staged.root, name, doc) : null;
+        if (
+          doc &&
+          shared &&
+          fs.existsSync(shared) &&
+          fs.readFileSync(shared, 'utf-8').includes(APP_COPY_MARK)
+        )
+          fs.copyFileSync(shared, path.join(target, doc));
+      }
       const install = installSharedThemeNeeds(
         forkNeeds(outputDir, files, cwd),
         projectDir,
@@ -2153,7 +2173,16 @@ export async function addSharedThemeToApp(source, options) {
                     ...(editorMadeRoot ? {madeRoot: true} : {}),
                   },
                 }
-              : {}),
+              : previousEditor && Object.keys(previousEditor).length
+                ? {
+                    // (This add copied no editor state: the earlier add's
+                    // list stays, so remove still takes those files back.)
+                    editor: {
+                      files: previousEditor,
+                      ...(previous?.editor?.madeRoot ? {madeRoot: true} : {}),
+                    },
+                  }
+                : {}),
           },
           null,
           2,
@@ -2236,7 +2265,7 @@ export async function addSharedThemeToApp(source, options) {
       fs.rmSync(target, {recursive: true, force: true});
       if (aside) fs.renameSync(aside, target);
       if (madeRoot) removeEmptyFolder(root, {deep: true});
-      if (editorFiles.length || editorAside) {
+      if (editorWriting || editorAside) {
         fs.rmSync(editorDir, {recursive: true, force: true});
         if (editorAside) fs.renameSync(editorAside, editorDir);
         else if (editorMadeRoot) removeEmptyFolder(editorRoot);

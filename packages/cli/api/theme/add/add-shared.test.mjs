@@ -699,6 +699,56 @@ describe('theme add with a shared theme', () => {
     },
   );
 
+  it.each([
+    ['carries no editor state', false],
+    ['carries editor state left out', true],
+  ])(
+    "a re-add that %s keeps the first add's editor files for remove",
+    async (_, leftOut) => {
+      const before = tree(app);
+      writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+      fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+        SETTINGS('ocean'),
+      );
+      await themeAdd(path.join(shared, 'b'), {cwd: app});
+      if (leftOut)
+        // (A file the add did not write makes the next add leave the folder.)
+        fs.writeFileSync(path.join(app, 'themes/ocean/notes.txt'), 'mine\n');
+      else fs.rmSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+      if (leftOut)
+        expect(again.data.copy?.editor?.notCopied).toMatch(/already holds/);
+      else expect(again.data.copy).not.toHaveProperty('editor');
+      const removed = await themeRemove('ocean', {cwd: app});
+      expect(removed.data.undo?.removed).toEqual(
+        expect.arrayContaining(['themes/ocean/ocean.settings.json']),
+      );
+      if (leftOut) fs.rmSync(path.join(app, 'themes'), {recursive: true});
+      expect(tree(app)).toEqual(before);
+    },
+  );
+
+  it('names two folders of editor state, and copies neither', async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    for (const dir of ['one', 'two']) {
+      fs.mkdirSync(path.join(shared, 'b', dir), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', dir, 'ocean.settings.json'),
+        SETTINGS('ocean'),
+      );
+    }
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(
+        /2 folders with ocean\.settings\.json \(one, two\)/,
+      ),
+    });
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+  });
+
   it('adds no editor state when the shared theme carries none', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean');
     const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
