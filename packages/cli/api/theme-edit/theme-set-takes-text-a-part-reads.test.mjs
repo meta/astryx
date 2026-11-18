@@ -258,6 +258,24 @@ describe('a part name with a piece after it', () => {
     },
     T,
   );
+
+  it(
+    'a variant or a state after a part name is that part so, and any other rest is no piece of it',
+    async () => {
+      const primary = await set(['color', 'red', '--on', 'button-primary']);
+      expect(primary.error).not.toMatch(/drawn inside/);
+      expect(lines(primary)).toEqual([
+        'set t color red --on button --when variant:primary',
+      ]);
+      const hover = await set(['color', 'red', '--on', 'link-hover']);
+      expect(hover.error).not.toMatch(/drawn inside/);
+      expect(lines(hover)).toEqual(['set t color red --on link --state hover']);
+      const panel = await set(['color', 'red', '--on', 'tab-panel']);
+      expect(panel.error).not.toMatch(/drawn inside tab\b/);
+      expect(lines(panel)).not.toContain('set t color red --on tab');
+    },
+    T,
+  );
 });
 
 describe('a color for each side and a radius for each corner', () => {

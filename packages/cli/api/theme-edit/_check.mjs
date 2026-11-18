@@ -5149,14 +5149,47 @@ function checkOne(
             run: [setLine(slug, thing, v, {...s, on: named}, unset)],
           },
         );
-      // A name that is a part's name with a piece of it after (a top nav
-      // heading's title, `top-nav-heading-title`) means that part: the
-      // longest part name it starts with. A text property its inner
-      // elements read from tokens is offered as those tokens there.
+      // A name that is a part's name with more after it: the longest part
+      // name it starts with. The rest is a variant of that part
+      // (`button-primary`), a state of it (`link-hover`), or a piece it
+      // draws (a top nav heading's title, `top-nav-heading-title`): the
+      // piece's own name among the parts it holds, or, holding none, an
+      // inner element the census saw. A text property those inner elements
+      // read from tokens is offered as those tokens there. Any other rest
+      // (`tab-panel`) is no piece of it.
       const holder = [...TARGET.keys()]
         .filter(n => dashed.startsWith(`${n}-`))
         .sort((a, b) => b.length - a.length)[0];
-      if (holder) {
+      const rest = holder ? dashed.slice(holder.length + 1) : '';
+      const record = holder ? ctx.C.MAP[holder] : null;
+      const variant = Object.entries(record?.attrs ?? {}).find(
+        ([, vals]) => Array.isArray(vals) && vals.includes(rest),
+      )?.[0];
+      if (holder && variant)
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part name; it is ${holder} with ${variant} ${rest}, set on ${holder} --when ${variant}:${rest}.`,
+          {
+            didYouMean: [holder],
+            run: [setLine(slug, thing, v, {...s, on: holder, when: `${variant}:${rest}`}, unset)],
+          },
+        );
+      if (holder && (STATE_WORDS.includes(rest) || TARGET.get(holder)?.states?.includes(rest)))
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part name; it is ${holder} when ${rest}, set on ${holder} --state ${rest}.`,
+          {
+            didYouMean: [holder],
+            run: [setLine(slug, thing, v, {...s, on: holder, state: rest}, unset)],
+          },
+        );
+      const held = record?.contains ?? [];
+      if (
+        holder &&
+        (held.length
+          ? held.some(k => k.split('-').at(-1) === rest.split('-').at(-1))
+          : Object.keys(record?.innerSets ?? {}).length > 0)
+      ) {
         const toks = innerPropTokens(ctx.C, holder, kebab(thing));
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
