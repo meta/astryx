@@ -131,6 +131,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   only by its own wrapper (`spec:AST-140/FR1`, FR2), and its wrapper answers
   `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` have
   no public object: the library is their one caller.
+  - The native appearance step (FR4), the back gate (FR10) and the launch hold
+    (FR11) act in the package's generated native shell. In an app whose shell
+    lacks them, the saved appearance applies only once JavaScript sets it,
+    after the first frame; every back press goes to React Native; and there is
+    no launch hold.
 
   | Contract                      | Kind                                | Methods                                                                                                       | Platforms    |
   | ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -148,11 +153,12 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 - **FR2 — Constants are synchronous; everything else is a result.**
   - What the system knows at launch is a launch value, read once and then
     answered synchronously: the saved appearance and the run's override, the
-    accessibility snapshot, the app's version, build, identifier and install
-    time, the linked capabilities, the named contract features, and the
+    accessibility snapshot, the app's version, build, identifier and install or
+    last update time, the linked capabilities, the named contract features, and the
     process start. Synchronous members (`isAvailable()`,
     `getOverride()`, `getRunOverride()`, `current()`, `app`,
-    `capabilities`, `launch`, and `AstryxLaunch`'s `initialURL()`) never
+    `capabilities`, `contractFeatures`, `launch`, and `AstryxLaunch`'s
+    `initialURL()`) never
     throw; they
     answer `null`, `'system'`, or all-false where the module or the constant is
     absent.
@@ -235,7 +241,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     (default: off), a link on one of the app's own schemes whose named query
     parameter is `light`, `dark` or `system` applies that appearance natively
     as a run-only override at cold launch only: when the first activity is
-    created on Android, and when the scene connects on iOS, before the first
+    created on Android, and when the app's first window scene connects on iOS,
+    before the first
     frame (feature `launch-link`). Nothing is saved. A link that arrives later
     (a new intent, or a scene URL) never changes the appearance; navigation
     from it uses the screen's own `appearance` option (`spec:AST-125/FR7`).
