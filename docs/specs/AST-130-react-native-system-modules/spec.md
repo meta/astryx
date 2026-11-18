@@ -117,8 +117,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   (`spec:AST-112/FR9`).
 - Each component's use of these modules beyond what "Who uses it" names; the
   component's own record owns it.
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
