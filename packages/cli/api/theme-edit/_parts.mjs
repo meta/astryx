@@ -24,7 +24,7 @@ import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
-import {removeEmptyFolder} from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,

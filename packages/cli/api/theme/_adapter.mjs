@@ -71,6 +71,7 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
 import {forkFileNames, renamedEntry} from './_fork.mjs';
 import {
@@ -2058,7 +2059,7 @@ export async function addSharedThemeToApp(source, options) {
       // uninstalled.
       fs.rmSync(target, {recursive: true, force: true});
       if (aside) fs.renameSync(aside, target);
-      if (madeRoot) removeEmptyFolders(root);
+      if (madeRoot) removeEmptyFolder(root, {deep: true});
       // (An uninstall that fails is said with the error, never hidden.)
       if (newlyInstalled.length > 0) {
         const undone = runPackageManager(projectDir, 'remove', newlyInstalled);
@@ -2182,17 +2183,6 @@ function scriptsOff(pm, action, projectDir) {
   return ['--ignore-scripts'];
 }
 
-/** @param {string} dir */
-function removeEmptyFolders(dir) {
-  try {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true}))
-      if (entry.isDirectory()) removeEmptyFolders(path.join(dir, entry.name));
-    if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
-  } catch {
-    // Left as it is.
-  }
-}
-
 /**
  * Undo what `theme add` did for a shared theme whose record was just
  * removed: delete each file its copy wrote that still holds what it wrote,
@@ -2218,7 +2208,7 @@ function undoSharedTheme(projectDir, slug, remaining) {
     removed.push(relFrom(projectDir, path.join(dir, file)));
   }
   fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
-  removeEmptyFolders(dir);
+  removeEmptyFolder(dir, {deep: true});
   const root = path.join(projectDir, LOCAL_THEME_ROOT);
   if (receipt.madeRoot) {
     try {

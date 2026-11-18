@@ -11,6 +11,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -485,14 +486,23 @@ describe('theme add with a shared theme', () => {
     // (A hand-edited receipt that reaches out of the copy.)
     const receiptFile = path.join(app, 'src/themes/ocean/.astryx-shared.json');
     const receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
-    receipt.files['../../../vite.config.ts'] = 'x';
-    receipt.files['/etc/hostname'] = 'x';
+    // (Each with the hash of what it holds, so only the confinement keeps
+    // it.)
+    const hashOf = (/** @type {string} */ file) =>
+      crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    receipt.files['../../../vite.config.ts'] = hashOf(
+      path.join(app, 'vite.config.ts'),
+    );
+    const outside = path.join(shared, 'outside.txt');
+    fs.writeFileSync(outside, 'keep me\n');
+    receipt.files[outside] = hashOf(outside);
     receipt.installed = ['react', '@astryxdesign/theme-neutral'];
     fs.writeFileSync(receiptFile, JSON.stringify(receipt));
     runs.length = 0;
     const removed = await themeRemove('ocean', {cwd: app});
     expect(fs.existsSync(path.join(app, 'vite.config.ts'))).toBe(true);
-    expect(removed.data.undo?.removed.join('\n')).not.toMatch(/vite|etc/);
+    expect(fs.existsSync(outside)).toBe(true);
+    expect(removed.data.undo?.removed.join('\n')).not.toMatch(/vite|outside/);
     expect(runs.flatMap(r => r.args)).not.toContain('react');
   });
 
