@@ -52,7 +52,7 @@ gaps stated per piece.
 | Native piece      | What the ecosystem does well                                                                                                                                                                                                                                                                                                             | The gap Astryx closes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | System menu       | @react-native-menu/menu puts a UIMenu on iOS and a PopupMenu on Android behind one view, with subtitles, images, check states, destructive rows, and nesting. react-native-ios-context-menu wraps UIContextMenuInteraction with custom React previews and deferred rows. zeego gives both a Radix-style compound API and a web fallback. | Astryx's DropdownMenu, MoreMenu, ContextMenu, and Selector already own their rows as compound parts, so the platform takes the menu as data from them and hands it back to the drawn surface when it cannot show it (an OS without the API, React content in a row). Icon names go through Astryx's one icon table. The package takes no third-party native dependency (`spec:AST-112/FR2`), and every public API has an Astryx Stage implementation (`spec:AST-112/FR12`). The menu behaviour itself overlaps these libraries; DEC-3.                                                |
-| Action sheet      | React Native's own `ActionSheetIOS` shows UIAlertController's action sheet from the top-most controller, with destructive and disabled rows, an iPad anchor, and an interface style, at no dependency cost.                                                                                                                              | `ActionSheetIOS` answers through a callback with an index only: it reports no refused presentation, no second sheet while one is up, and no calling surface, and it has no Astryx Stage implementation. These are small gaps; OQ2 asks whether the platform builds on it instead.                                                                                                                                                                                                                                                                                                     |
+| Action sheet      | React Native's own `ActionSheetIOS` shows UIAlertController's action sheet from the top-most controller, with destructive and disabled rows, an iPad anchor, and an interface style, at no dependency cost.                                                                                                                              | `ActionSheetIOS` answers through a callback with an index only: it reports no refused presentation, no second sheet while one is up, and no calling surface, and it has no Astryx Stage implementation. These are small gaps; OQ1 asks whether the platform builds on it instead.                                                                                                                                                                                                                                                                                                     |
 | Presentation host | React Native's `Modal` presents page and form sheets and full-screen windows. react-native-screens' `formSheet` gives a navigation route UIKit's detent sheet with a grabber and corner radius. @gorhom/bottom-sheet draws a fully customisable sheet with gesture-handler and Reanimated on both platforms.                             | `Modal` has no detents, and it presents from the view controller of its own screen; when that controller already shows a sheet, UIKit refuses the next one. A react-native-screens sheet is a route of its navigator, not a component a screen opens anywhere in its tree, and the package takes no third-party navigation dependency (`spec:AST-112/DEC-9`). A drawn sheet is not the system container: no iOS 26 Liquid Glass at partial heights, no card effect, no system keyboard avoidance. The host gives every Astryx surface the system container through one queue (DEC-2). |
 | Modal host        | React Native's `Modal` host is the platform's window for drawn content, with orientations, swipe dismissal, `onRequestClose`, and VoiceOver focus save and restore.                                                                                                                                                                      | It has the same limit: UIKit refuses a second drawn window from the same screen. The modal host keeps React Native's host and changes only where it presents from, so each drawn sheet gets a window of its own.                                                                                                                                                                                                                                                                                                                                                                      |
 
@@ -64,7 +64,7 @@ gaps stated per piece.
 | `AstryxActionSheet` (`nativeActionSheet`)           | native module (Turbo Native Module)        | `ActionSheet`; through it `FileInput`'s source menu where the system menu is absent, and `Item`'s swipe actions that carry a menu.                                                                                                                                                                                                                                                                                                                                                                       | Swiping away a draft in a chat screen asks "Discard draft?" in the system action sheet, with Cancel apart at the bottom.                         |
 | `AstryxPresentationHost` (`nativePresentationHost`) | native component (Fabric Native Component) | `BottomSheet` (the system sheet), and every surface that opens one: `ActionSheet`'s drawn form, `Popover`'s, `DropdownMenu`'s and `ContextMenu`'s sheet forms, `Selector`'s picker, `DateInput`, `DateRangeInput`, `Tokenizer`, `PowerSearch`, `TopNav`'s mega menu. `Dialog`, `AlertDialog`, `CommandPalette`, and the modal `Drawer` open in its over-full-screen window. The router's stack navigator presents its `modal`, `formSheet`, `fullScreenModal`, and `transparentModal` routes through it. | A photo viewer's info sheet rests at half height in Liquid Glass, drags to full height, and a confirm dialog opened from it comes up on top.     |
 | `AstryxModalHost`                                   | native component (Fabric Native Component) | `BottomSheet`'s drawn form on iOS and the router's drawn sheet routes: each drawn sheet opens in its own window.                                                                                                                                                                                                                                                                                                                                                                                         | A drawn sheet opened from a second tab while another drawn sheet is up appears over it, and each closes on its own.                              |
-| `AstryxOverlayWindowHost` (`OverlayWindow`)         | native component (Fabric Native Component) | No Astryx component. `OverlayWindow` on the internal `./preview/host` entry; the Astryx app's preview route draws its exit control in it.                                                                                                                                                                                                                                                                                                                                                                | While previewing a project in the Astryx app, the exit control floats above everything the project shows, its own sheets included.               |
+| `AstryxOverlayWindowHost` (`OverlayWindow`)         | native component (Fabric Native Component) | No Astryx component. Part of the Preview host package and outside this record; the Astryx app's preview route draws its exit control in it.                                                                                                                                                                                                                                                                                                                                                              | While previewing a project in the Astryx app, the exit control floats above everything the project shows, its own sheets included.               |
 
 ## Non-goals
 
@@ -75,10 +75,11 @@ gaps stated per piece.
 - The library's drawn menus, sheets, and dialogs on Android and as fallbacks.
 - The router's route options and navigation state (`spec:AST-112/DEC-9`); this
   record owns the presentation the router asks for.
+- `AstryxOverlayWindowHost`, which is part of the Preview host package.
 - The window status bar view and the keyboard dock that sheets use
   (`spec:AST-129`).
 - How an app chooses between the system surface and the drawn one per
-  component (OQ5).
+  component (OQ4).
 - Equivalent internal implementations remain valid when they satisfy this contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
@@ -150,7 +151,7 @@ gaps stated per piece.
     asking surface, so it covers a sheet that asked for it. Destructive
     actions show in the system's destructive red, and Cancel is a separate
     row at the bottom. On iPad the sheet is a popover that points at the
-    bottom centre of the presenting view (OQ4).
+    bottom centre of the presenting view (OQ3).
   - Code cannot close an open action sheet; the answer still arrives.
 - **FR5 — The presentation host presents five kinds.**
   `nativePresentationHost.component` takes `kind`, `isPresented`, `isModal`,
@@ -188,7 +189,7 @@ gaps stated per piece.
   the detent the sheet opens at, and a change moves it there.
   `onDetentChange` reports the index of a detent the person moved to, on the
   same scale. `sheetGrabber` and `sheetScrollExpands` are on by default, and
-  a negative `sheetCornerRadius` keeps the system's radius. OQ8 covers the
+  a negative `sheetCornerRadius` keeps the system's radius. OQ7 covers the
   library's own counting.
   - `sheetCovered` holds a sheet at the large detent while another modal
     sheet covers it and returns it to its detent afterwards; that borrowed
@@ -417,44 +418,39 @@ draft is lost to one.
 
 ## Open questions
 
-- **OQ1 — Does the overlay window host stay in the platform's scope?**
-  (`human-design`) No Astryx component uses it; only the Astryx app's preview
-  route does, and this record specifies no contract for it. Options: keep it in the package as an internal piece of the
-  `preview` capability, which `spec:AST-112/FR1` then lists; or move it to the
-  Astryx app's preview host, outside the package.
-- **OQ2 — Does the action sheet build on React Native's `ActionSheetIOS`?**
+- **OQ1 — Does the action sheet build on React Native's `ActionSheetIOS`?**
   (`human-design`) Options: keep the platform's module, which reports `busy`,
   `no-window`, and the calling surface; or wrap `ActionSheetIOS` in the same
   result shape, with Astryx Stage implementing that wrapper.
-- **OQ3 — What does a request carry for a system alert and a popover?**
+- **OQ2 — What does a request carry for a system alert and a popover?**
   (`human-api`) The FR5 gaps need a request shape. Options: an alert with a
   title, a message, and buttons, and a popover with an anchor (the trigger's
   rect on its surface); or one anchor field shared with the action sheet
-  (OQ4).
-- **OQ4 — Does the iPad action sheet anchor at the control that asked?**
+  (OQ3).
+- **OQ3 — Does the iPad action sheet anchor at the control that asked?**
   (`human-api`) Options: add an anchor (the trigger's rect on its surface) to
   the request; or keep the bottom centre of the presenting view.
-- **OQ5 — How does an app choose the system or the drawn surface?**
+- **OQ4 — How does an app choose the system or the drawn surface?**
   (`human-api`) Components choose per call, and `nativeHosts` turns a host
   off for the whole tree. Options: one axis with the same values on every
   component that has a system form; or each component's own choice, as its
   record defines.
-- **OQ6 — Do the modal host and the over-full-screen kind merge?**
+- **OQ5 — Do the modal host and the over-full-screen kind merge?**
   (`human-design`) Both present a window from the top of the stack: the modal
   host for drawn sheets, the presentation host for dialogs and full-screen
   routes. Options: keep both; or present drawn sheets through the
   presentation host's `overFullScreen` kind and retire the modal host.
-- **OQ7 — Does Android present menus, sheets, and dialogs through system
+- **OQ6 — Does Android present menus, sheets, and dialogs through system
   hosts?** (`human-design`) Android menus are drawn, and Android sheets and
   dialogs are a drawn panel in a React Native `Modal` window. Options: native
   hosts over Material Components (its menu, its bottom sheet, its dialog); or
   the drawn surfaces.
-- **OQ8 — How does the library count detents?** (`checkable`) The native
+- **OQ7 — How does the library count detents?** (`checkable`) The native
   contracts count detents smallest first (FR6). In the library, one detent
   index counts from the smallest and another from the largest. Options: both
   move to the native order; or the library keeps its own order and converts
   at the platform boundary, with one order in every public API.
-- **OQ9 — Do bar-item menus and dropdown menus share one menu model?**
+- **OQ8 — Do bar-item menus and dropdown menus share one menu model?**
   (`human-api`) The router's bar-item and title menus use one menu shape
   (`NavigationMenu`), and `DropdownMenu`'s `items` use another
   (`DropdownMenuOption`); both reach the same system menu. Options: one shape
