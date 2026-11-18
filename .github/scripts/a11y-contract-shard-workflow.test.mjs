@@ -114,7 +114,7 @@ describe('the single contract-leg dispatch', () => {
     expect(keep.uses).toMatch(/^actions\/upload-artifact@/);
     expect(keep.with).toEqual({
       name: 'a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}',
-      path: 'test-results/',
+      path: 'test-results/\n*-audit-evidence/\n',
       'retention-days': 14,
       'if-no-files-found': 'ignore',
     });

@@ -4,7 +4,8 @@
 # main, on a runner of the release-check's size. A failure that reproduces
 # only on CI runners can then be bisected one commit at a time, without a
 # whole release-check. The leg runs the commit's own scripts, so it tests what
-# that commit's release-check ran. It keeps the leg's Playwright results.
+# that commit's release-check ran. It keeps the leg's Playwright results and
+# the frames and receipts each component audit writes.
 
 name: A11y contract shard
 
@@ -96,6 +97,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}
-          path: test-results/
+          path: |
+            test-results/
+            *-audit-evidence/
           retention-days: 14
           if-no-files-found: ignore
