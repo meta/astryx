@@ -151,6 +151,18 @@ export const theme = defineTheme({name: 'app', extends: neutralTheme, radius: {b
       "add '--radius-chat': '28px' to its tokens",
     );
 
+    // A defineTheme() theme in the same file is named too: nothing is written.
+    const mixed = `${IMPORT}export const theme = defineTheme({name: 'app'});
+export default {name: 'tokens', tokens: {'--brand': 'red'}};`;
+    const mixedError = await applyTransform(mixed).then(
+      () => null,
+      thrown => thrown,
+    );
+    expect(codemodOutcome(mixedError)).toMatchObject({kind: 'manual', line: 3});
+    expect(mixedError.message).toContain(
+      "add '--radius-chat': '28px' to the tokens of the defineTheme() call on line 2",
+    );
+
     const done = `export default {name: 'app', tokens: {'--radius-chat': '28px'}};`;
     expect(await applyTransform(done)).toBe(done);
     const other = `export default {name: 'app', title: 'Not a theme'};`;
@@ -167,15 +179,17 @@ export const e = defineTheme({name: 'e', radius: {base: 4, multiplier: 1}, adapt
     const once = await applyTransform(source);
     expect(once.match(TODO)).toHaveLength(5);
     expect(once).toContain(
-      'add "--radius-chat" at the page step of each radius scale',
+      "Add the page step of each adaptation rule's radius scale to that rule's tokens too.",
     );
     expect(once).not.toContain("'--radius-chat': '28px',");
     expect(await applyTransform(once)).toBe(once);
   });
 
-  it('leaves a top-level spread alone when the tokens after it set the token', async () => {
+  it('leaves a TODO for a top-level spread, which can bring a radius scale or adaptation rules', async () => {
     const source = `${IMPORT}export const theme = defineTheme({...base, name: 'app', tokens: {'--radius-chat': '20px'}});`;
-    expect(await applyTransform(source)).toBe(source);
+    const once = await applyTransform(source);
+    expect(once.match(TODO)).toHaveLength(1);
+    expect(await applyTransform(once)).toBe(once);
   });
 
   it('ignores a defineTheme that is not imported from Astryx, and is idempotent', async () => {
