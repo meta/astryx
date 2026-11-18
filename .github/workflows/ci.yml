@@ -1586,6 +1586,16 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
+      # This job runs even when build-core failed (its gate uses
+      # `!cancelled()`), so name the cause here before checkout and install.
+      - name: Stop when build-core did not build Core
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && needs.build-core.result != 'success'
+        env:
+          RESULT: ${{ needs.build-core.result }}
+        run: |
+          echo "::error title=Core build missing::build-core ended with '${RESULT}', so this leg has no Core build to test; see the build-core job."
+          exit 1
+
       # A spec-only change runs no other test here, so it runs the tests that
       # read a record it changes: a record such a test reads can break it, and
       # the break would otherwise show first on main (spec:AST-030 FR2). One
