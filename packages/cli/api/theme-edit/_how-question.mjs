@@ -4516,6 +4516,9 @@ export function draftAnswer(ctx, env, question) {
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
     // status said, each hue is its status's color, green success, amber
     // or yellow or orange warning, red danger, blue info.
+    // (Only the list's own items: it ends at the first item that is not a
+    // status hue, "…, and 8px corners", "with a blue accent", and the rest
+    // is read on; an accent is never a status.)
     .replace(/\bstatus(?:es)?\s+colou?rs?\s*:?\s*([^.;]*)/gi, (m, list) => {
       const ROLE = /** @type {Record<string, string>} */ ({
         green: 'success',
@@ -4525,12 +4528,32 @@ export function draftAnswer(ctx, env, question) {
         red: 'danger',
         blue: 'info',
       });
-      const parts = [
-        ...String(list).matchAll(
-          /\b(green|amber|yellow|orange|red|blue)\b(?:\s+(#[0-9a-f]{3,8}))?/gi,
-        ),
-      ].map(x => `${ROLE[x[1].toLowerCase()]} color ${x[2] ?? x[1]}`);
-      return parts.length ? parts.join(', ') : m;
+      const items = String(list).split(/(,\s*(?:and\s+)?|\s+and\s+)/);
+      const parts = [];
+      let k = 0;
+      for (; k < items.length; k += 2) {
+        // (A hue may carry its status's label, "green #15803d stable";
+        // an item that names a look or a role of its own, "8px corners",
+        // "a blue accent", is no status.)
+        const it =
+          /^\s*(green|amber|yellow|orange|red|blue)(?:\s+(#[0-9a-f]{3,8}))?\b(.*)$/i.exec(
+            items[k],
+          );
+        if (
+          !it ||
+          ROLE_WORDS.test(it[3]) ||
+          /\d/.test(it[3]) ||
+          aspectsOf(it[3]).length
+        )
+          break;
+        parts.push(`${ROLE[it[1].toLowerCase()]} color ${it[2] ?? it[1]}`);
+      }
+      if (!parts.length) return m;
+      const rest = items
+        .slice(k)
+        .join('')
+        .replace(/^(?:,\s*(?:and\s+)?|\s+and\s+)/, '');
+      return `${parts.join(', ')}${rest.trim() ? `, ${rest}` : ''}`;
     })
     // ("light gray fill #F1F2F4": a color named before
     // the value typed for it names that value; the value is the color.)

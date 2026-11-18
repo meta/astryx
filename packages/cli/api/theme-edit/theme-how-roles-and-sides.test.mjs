@@ -121,6 +121,26 @@ describe('sides', () => {
 });
 
 describe('plain looks', () => {
+  it('a status color list ends at its own items; an accent is never a status', async () => {
+    const corners = writes(
+      await how(
+        'q0',
+        'status colors green #15803d, amber #b45309, red #b91c1c, and 8px corners',
+      ),
+    );
+    expect(corners).toEqual(
+      expect.arrayContaining([
+        `set q0 success '#15803d'`,
+        `set q0 danger '#b91c1c'`,
+      ]),
+    );
+    expect(corners.some(c => /corners|radius/.test(c))).toBe(true);
+    const accent = writes(
+      await how('q0', 'status colors: green, amber, red, with a blue accent'),
+    );
+    expect(accent.some(c => /^set q0 accent /.test(c))).toBe(true);
+    expect(accent.some(c => /^set q0 info /.test(c))).toBe(false);
+  });
   it('status colors by hue, a typed value, blue-gray, clear errors', async () => {
     expect(
       top(
