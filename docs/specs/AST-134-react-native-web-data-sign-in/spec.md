@@ -103,20 +103,20 @@ no new framework to an app that opts `web` in.
   with `TurboModuleRegistry.get`, only by its own wrapper
   (`spec:AST-112/FR8`).
 
-  | Contract              | Kind                                | Methods                                                                                                                    | Platforms    |
-  | --------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxWebSessions`   | native module (Turbo Native Module) | `getConstants` (`version`), `create`, `remove`                                                                             | iOS, Android |
-  | `AstryxWebData`       | native module (Turbo Native Module) | `getConstants` (`version`), `clear`, `setPolicy`                                                                           | iOS, Android |
-  | `AstryxWebBundles`    | native module (Turbo Native Module) | `getConstants` (`version`), `register`, `remove`, `respond`, `write`, `end`, `prewarm`, `releaseWarm`, `onRequest` (event) | iOS, Android |
-  | `AstryxPageSnapshots` | native module (Turbo Native Module) | `getConstants` (`version`, `isSupported`), `capture`, `cancel`                                                             | iOS, Android |
-  | `AstryxAuthSession`   | native module (Turbo Native Module) | `getConstants` (`version`), `isSupported`, `start`, `cancel`, `getRedirectUri`, `createPkce`                               | iOS, Android |
+  | Contract              | Kind                                | Methods                                                                                        | Platforms    |
+  | --------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
+  | `AstryxWebSessions`   | native module (Turbo Native Module) | `create`, `remove`                                                                             | iOS, Android |
+  | `AstryxWebData`       | native module (Turbo Native Module) | `clear`, `setPolicy`                                                                           | iOS, Android |
+  | `AstryxWebBundles`    | native module (Turbo Native Module) | `register`, `remove`, `respond`, `write`, `end`, `prewarm`, `releaseWarm`, `onRequest` (event) | iOS, Android |
+  | `AstryxPageSnapshots` | native module (Turbo Native Module) | `getConstants` (`isSupported`), `capture`, `cancel`                                            | iOS, Android |
+  | `AstryxAuthSession`   | native module (Turbo Native Module) | `isSupported`, `start`, `cancel`, `getRedirectUri`, `createPkce`                               | iOS, Android |
   - Every method takes one request object and resolves one result object
     with `status`, `reason`, and `message` (`spec:AST-112/FR8`), `cancel`
     included.
   - `prewarm` and `releaseWarm` exist on iOS only (FR13).
 
-- **FR2 — The JavaScript objects.** Each object has `isAvailable()` and
-  `version()`, and `AstryxWebData`, `AstryxWebBundles`, and
+- **FR2 — The JavaScript objects.** Each object has `isAvailable()`, and
+  `AstryxWebData`, `AstryxWebBundles`, and
   `AstryxAuthSession`, which have named features (FR13), have
   `supports(feature)` (`spec:AST-112/FR7`). Their calls resolve
   `AstryxResult` (`spec:AST-112/FR6`):
@@ -347,7 +347,8 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 - **FR13 — Every contract is at revision 1; later behaviour is a named
   feature.**
-  - Every contract in the group reports revision 1 on iOS and Android. A
+  - Every contract in the group is at revision 1 on iOS and Android and
+    carries no revision counter (`spec:AST-112/FR8`). A
     behaviour beyond revision 1 is a named feature, `<Contract>.<feature>`,
     that the binary lists in `AstryxPlatformInfo`'s `contractFeatures`
     constant, and JavaScript checks it with `hasContractFeature` before use
@@ -430,9 +431,11 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 ## Current-state impact
 
 - `spec:AST-112/FR1` names the `web` capability as the web view and the
-  sign-in session. This record amends that list: `web` holds the web view,
-  its sessions and page store, bundled web content, page snapshots, and the
-  sign-in session.
+  sign-in session, and lists web data, bundled web folders, and page
+  snapshots among the package's app-level modules. This record places those
+  modules in `web`: it amends FR1's `web` entry to the web view, its sessions
+  and page store, bundled web content, page snapshots, and the sign-in
+  session.
 - Otherwise none beyond `spec:AST-112`. This record details its FR3 (the
   `web` capability stays opt-in), FR6 (the modules' closed reasons), FR7
   (their probes and features), FR8 (the group's revision-1 baseline), and
@@ -531,7 +534,8 @@ the person types and identity providers refuse embedded views.
   own?** (`human-api`) It needs no embedded web view, and no Astryx component
   uses it. Options: keep it in `web` with the `useAuthSession` hook; or make
   sign-in its own opt-in, so an app that signs in links no web view and an app
-  with a web view links no redirect activity. `spec:AST-131/OQ3` asks the same
+  with a web view links no redirect activity. `spec:AST-112/OQ8` and
+  `spec:AST-131/OQ3` ask the same
   question from the web view's side.
 - **OQ2 — Does `AstryxPageSnapshots` stay in the platform package?**
   (`human-design`) No Astryx component uses it. Options: keep it in `web`; make
