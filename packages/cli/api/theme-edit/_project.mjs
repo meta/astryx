@@ -567,7 +567,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -586,6 +586,14 @@ export async function baseResolved(project, like) {
     // The base theme's own part styles (neutral's pale destructive button),
     // which a one-mode setting keeps in the other mode.
     components: theme.components ?? {},
+    // The tokens the base's dark media rule (`[data-astryx-media="dark"]`:
+    // the lightbox, what sits on the overlay scrim) replaces, with their
+    // values there; Core's own when the base sets none.
+    onDark: Object.fromEntries(
+      Object.entries(theme.__onDark?.tokens ?? {}).filter(
+        ([k, v]) => k.startsWith('--') && typeof v === 'string',
+      ),
+    ),
   };
   return out;
 }
