@@ -68,7 +68,9 @@ export interface TooltipProps {
 
   /**
    * Content to display in the tooltip.
-   * Typically short, non-interactive text.
+   * Typically short, non-interactive text. It also renders once from mount
+   * as the trigger's hidden description, so a component inside it runs its
+   * effects before the tooltip first shows.
    */
   content: ReactNode;
 

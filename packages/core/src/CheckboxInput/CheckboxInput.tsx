@@ -48,7 +48,6 @@ import {FieldStatus} from '../FieldStatus/FieldStatus';
 import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
-import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
 import {mergeProps} from '../utils/mergeProps';
@@ -389,8 +388,8 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  // A visually hidden copy of the disabled reason describes the input from
-  // the first markup on. The tooltip mounts only while it can show, so a
+  // A hidden copy of the disabled reason describes the input from the first
+  // markup on. The tooltip mounts only while it can show, so a
   // checkbox with no reason runs none of its work.
   const disabledMessageID = useId();
 
@@ -652,9 +651,11 @@ export function CheckboxInput({
       )}
       {isDisabled && disabledMessage ? (
         <>
-          <VisuallyHidden id={disabledMessageID}>
+          {/* A hidden reason: aria-describedby reads it, and browse mode
+              skips it, so the reason is read once. */}
+          <span id={disabledMessageID} hidden>
             {disabledMessage}
-          </VisuallyHidden>
+          </span>
           {/* The hidden reason above describes the input, so the tooltip
               adds no description of its own. */}
           <TooltipDescribesContext value={false}>

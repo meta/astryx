@@ -21,6 +21,21 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/** Tooltip content that a component renders, with a block inside. */
+function Reactions() {
+  return (
+    <div>
+      <strong>Ada</strong> and <strong>Grace</strong> reacted
+    </div>
+  );
+}
+
+const componentTree = (
+  <p>
+    Thanks! <Tooltip content={<Reactions />}>Reactions</Tooltip>
+  </p>
+);
+
 const tree = (
   <p>
     Your plan renews monthly.{' '}
@@ -78,6 +93,29 @@ describe('Tooltip server render', () => {
     expect(trigger).toHaveAccessibleDescription(
       'Renews on the 1st.Cancel any time before then.',
     );
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('hydrates component content inside a paragraph without a mismatch, then describes the trigger with its text', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(componentTree);
+    // The server copy is empty, so no block breaks the paragraph.
+    expect(container.querySelector('p div')).toBeNull();
+    document.body.appendChild(container);
+    const logged = vi.spyOn(console, 'error');
+    const recoverableErrors: unknown[] = [];
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, componentTree, {
+        onRecoverableError: error => recoverableErrors.push(error),
+      });
+    });
+    expect(recoverableErrors).toEqual([]);
+    expect(logged).not.toHaveBeenCalled();
+    const trigger = container.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(trigger).toHaveAccessibleDescription('Ada and Grace reacted');
     act(() => {
       root.unmount();
     });

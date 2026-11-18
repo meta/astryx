@@ -232,7 +232,7 @@ describe('ButtonGroup', () => {
     const items = (group: HTMLElement): Element[] =>
       Array.from(
         group.querySelectorAll(
-          ':scope > *:not([popover]):not(template):not(dialog):not([hidden])',
+          ':scope > *:not([popover]):not(template):not(dialog):not(span[hidden][id$="-description"])',
         ),
       );
 
@@ -404,7 +404,7 @@ describe('ButtonGroup', () => {
           expect(selector).toContain('template');
           expect(selector).toContain('dialog');
           // A tooltip's hidden description follows its trigger and is skipped.
-          expect(selector).toContain('[hidden]');
+          expect(selector).toContain('span[hidden][id$=-description]');
         }
       },
     );

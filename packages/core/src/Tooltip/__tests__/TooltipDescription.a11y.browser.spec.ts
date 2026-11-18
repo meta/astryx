@@ -109,11 +109,12 @@ test('a cut label shows its full text on keyboard focus and adds no description'
   await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Tab');
   await expect(cut).toBeFocused();
-  const tooltip = page.getByRole('tooltip', {includeHidden: true});
+  // The Shift+Tab showed the previous button's tooltip, whose layer stays
+  // mounted once it has shown, so the cut label's tooltip is found by text.
+  const tooltip = page
+    .getByRole('tooltip', {includeHidden: true})
+    .filter({hasText: 'A very long button label that overflows its box'});
   await expect(tooltip).toBeVisible();
-  await expect(tooltip).toHaveText(
-    'A very long button label that overflows its box',
-  );
   await expect(cut).toHaveAccessibleDescription('');
   await expect(
     page.locator('[data-case="cut"] [hidden][id$="-description"]'),

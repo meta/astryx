@@ -558,10 +558,10 @@ const loadingStyles = stylex.create({
  * popover is never an in-flow member — it is `display: none` until shown, then
  * promoted to the top layer. Context layers also retain an inert `<template>`
  * marker so they can re-resolve their JSX position. A tooltip's description is
- * a `hidden` copy of its text after the trigger. None of these is a group
- * member, so "last member" is: no following element sibling besides those
- * pieces of layer infrastructure and hidden elements — the last sibling that
- * is not one of them.
+ * a `hidden` span after the trigger whose id ends in `-description`. None of
+ * these is a group member, so "last member" is: no following element sibling
+ * besides those pieces of layer infrastructure — the last sibling that is not
+ * one of them.
  *
  * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
  * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
@@ -584,7 +584,7 @@ const loadingStyles = stylex.create({
  * its own layer, so the first button is genuinely `:first-child`.
  */
 const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not([hidden]))';
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not(span[hidden][id$=-description]))';
 
 const groupStyles = stylex.create({
   horizontal: {

@@ -1017,6 +1017,21 @@ describe('Tooltip layer mounts at its first show', () => {
     expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(0);
   });
 
+  it('describes the trigger with the text of content a component renders', () => {
+    function Reactions() {
+      return <span>Ada and Grace reacted</span>;
+    }
+    render(
+      <Tooltip content={<Reactions />}>
+        <button type="button">Thanks</button>
+      </Tooltip>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Thanks'}),
+    ).toHaveAccessibleDescription('Ada and Grace reacted');
+    expect(layers()).toHaveLength(0);
+  });
+
   it('mounts the layer at the first hover, after the delay, and never shows two tooltips', () => {
     vi.useFakeTimers();
     try {
