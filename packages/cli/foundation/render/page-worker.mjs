@@ -1886,7 +1886,7 @@ try {
   ) {
     fail(
       'ERR_RENDER_NOT_ASTRYX',
-      `${describeFile(entry)} uses no Astryx components or styles, and \`astryx experimental export\` writes a page built with Astryx components as one HTML file. Build the page with Astryx components, or share it with your app's own build; nothing was written.`,
+      `${describeFile(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Share this page with your app's own build instead; nothing was written.`,
     );
   } else {
   parentPort?.postMessage({

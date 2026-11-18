@@ -365,7 +365,7 @@ export const doc = {
       value: 'ERR_RENDER_NOT_ASTRYX',
       stability: 'experimental',
       description:
-        '`experimental export` was given a page that uses no Astryx components or styles (its script holds no module of an Astryx package and it imports no Astryx stylesheet), or `experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Build the page with Astryx components, or share it with the app\'s own build. Raised only by the experimental import and export commands.',
+        '`experimental export` was given a page that uses no Astryx components or styles (its script holds no module of an Astryx package and it imports no Astryx stylesheet), or `experimental import` (or `export --reverse`) was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written; share such a page with the app\'s own build. Raised only by the experimental import and export commands.',
     },
     {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
