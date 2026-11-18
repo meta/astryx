@@ -113,6 +113,8 @@ export interface UseZoomStageOptions {
 export interface ZoomStageDismiss {
   /** Whether a drag can dismiss now (an image, in the touch presentation). */
   isEnabled: boolean;
+  /** Whether this drag may dismiss, after the stage's own checks pass. */
+  shouldBegin?: (pan: PanGestureRecognizer) => boolean;
   /** Each move of the drag: its downward travel, pt. */
   onDrag: (travel: number) => void;
   /**
@@ -305,7 +307,11 @@ export function useZoomStage(
         return false;
       }
       const {x, y} = pan.totalTranslation();
-      return y > 0 && y >= Math.abs(x);
+      return (
+        y > 0 &&
+        y >= Math.abs(x) &&
+        options.dismiss?.shouldBegin?.(pan) !== false
+      );
     };
   });
 
