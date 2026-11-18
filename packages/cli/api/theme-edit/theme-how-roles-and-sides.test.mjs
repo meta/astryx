@@ -121,6 +121,34 @@ describe('sides', () => {
 });
 
 describe('plain looks', () => {
+  it("a status's text at a typed size offers that size, never a step", async () => {
+    const rs = await how('q0', 'warning text 10px');
+    const offered = rs
+      .filter(r => /no part draws only/.test(r.text))
+      .flatMap(r => r.commands)
+      .filter(c => /^set /.test(c));
+    expect(offered.length).toBeGreaterThan(0);
+    for (const c of offered)
+      expect(c).toMatch(
+        / (?:10px|0\.625rem) --on [\w-]+ --when [\w-]+:warning$/,
+      );
+    expect(rs.some(r => /^not used/.test(r.text))).toBe(false);
+  });
+  it("a status's alerts keep their status for size and weight", async () => {
+    for (const [ask, status] of [
+      ['success alerts with smaller text', 'success'],
+      ['warning alerts bigger text', 'warning'],
+    ]) {
+      const w = writes(await how('q0', ask));
+      expect(w.length, ask).toBeGreaterThan(0);
+      for (const line of w)
+        expect(line, ask).toMatch(new RegExp(`--when status:${status}$`));
+    }
+    // (Every banner, when no status is said.)
+    expect(writes(await how('q0', 'banners smaller text'))[0]).not.toMatch(
+      /--when/,
+    );
+  });
   it("a status's text size or weight is never the whole theme's; its color is the status's", async () => {
     for (const ask of [
       'warning text bigger',

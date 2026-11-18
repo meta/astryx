@@ -17564,8 +17564,14 @@ export function draftAnswer(ctx, env, question) {
         (a, b) => Number(surfaces.has(b.on)) - Number(surfaces.has(a.on)),
       );
       const size = c.aspects.includes('fontsize');
+      // ("warning text 10px": the size typed, never a step from each
+      // part's own size.)
+      const typedPx = size
+        ? c.lengths.map(v => lengthPx(String(v))).find(n => n != null && n > 0)
+        : undefined;
+      const typed = typedPx != null ? `${typedPx}px` : null;
       push({
-        text: `no part draws only a status's text, so the whole theme's text is left as it is${shows.length ? `; the parts that show ${word} text, each in its ${word} look: ${shows.map(x => x.on).join(', ')} (one line each)` : ''}`,
+        text: `no part draws only a status's text, so the whole theme's text is left as it is${shows.length ? `; the parts that show ${word} text, each in its ${word} look: ${shows.map(x => x.on).join(', ')} (one line each${typed ? `, each set to ${typed}` : ''})` : ''}`,
         // (A part whose text is drawn by elements inside it, a banner's
         // title and description, takes the token its text reads.)
         options: shows.slice(0, 4).map(x => {
@@ -17597,18 +17603,20 @@ export function draftAnswer(ctx, env, question) {
           if (!held.length)
             return [
               size
-                ? set(prop, c.dir === 'less' ? 'smaller' : 'larger', x)
+                ? set(
+                    prop,
+                    typed ?? (c.dir === 'less' ? 'smaller' : 'larger'),
+                    x,
+                  )
                 : set(prop, c.neg ? 'normal' : 'bold', x),
             ];
           // (Each token its text reads, from its own size.)
           return held.map(tok => {
             const now = lengthPx(String(resolvedValue(tok) || ''));
+            const px =
+              typedPx ?? (now ?? 14) * (c.dir === 'less' ? 0.875 : 1.15);
             return size
-              ? set(
-                  tok,
-                  `${Math.round(((now ?? 14) * (c.dir === 'less' ? 0.875 : 1.15) * 1000) / 16) / 1000}rem`,
-                  x,
-                )
+              ? set(tok, `${Math.round((px * 1000) / 16) / 1000}rem`, x)
               : set(tok, c.neg ? '400' : '700', x);
           });
         }),
@@ -22528,7 +22536,12 @@ export function draftAnswer(ctx, env, question) {
         if (heldW.length)
           return {
             text: `${value} text${where}: ${heldW.join(', ')} on ${on}, the weight tokens its text reads`,
-            options: [heldW.map(tok => set(tok, value, {on}))],
+            // (On the status or variant asked, "the error banner's title".)
+            options: [
+              heldW.map(tok =>
+                set(tok, value, {on, ...(f.when ? {when: f.when} : {})}),
+              ),
+            ],
             sequence: heldW.length > 1,
           };
         const rung = Object.entries(HEADING_WEIGHTS).find(
@@ -22689,6 +22702,7 @@ export function draftAnswer(ctx, env, question) {
               const next = typedPx ?? Math.round(now * factor * 100) / 100;
               return set(tok, `${Math.round((next / 16) * 1000) / 1000}rem`, {
                 on,
+                ...(f.when ? {when: f.when} : {}),
               });
             })
             .filter(st => st != null);
@@ -22855,7 +22869,15 @@ export function draftAnswer(ctx, env, question) {
           if (value)
             return {
               text: `the text size${where}: ${largest[0]} on ${on}, the size of its main text${px ? '' : ` (now ${largest[1]})`}`,
-              options: [[set(largest[0], value, {on})]],
+              // (On the status or variant asked, "success alerts".)
+              options: [
+                [
+                  set(largest[0], value, {
+                    on,
+                    ...(f.when ? {when: f.when} : {}),
+                  }),
+                ],
+              ],
             };
         }
         const sizeTok =
