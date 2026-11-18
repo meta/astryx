@@ -97,34 +97,34 @@ export const inputWrapperStyles = stylex.create({
  * height at the theme's default text size: the block padding is what is left
  * after the text line and the two borders, so the row is exactly the size
  * there, and `inputRowPadStyles` applies it. Larger text grows the row
- * instead of being cut, keeping at least a hairline of padding. The coarse-pointer line follows the iOS 16px floor the
+ * instead of being cut. The coarse-pointer line follows the iOS 16px floor the
  * input's own font size has.
  */
 export const inputRowSizeStyles = stylex.create({
   sm: {
     minHeight: sizeVars['--size-element-sm'],
     '--_field-row-pad': {
-      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      default: `max(0px, calc((${sizeVars['--size-element-sm']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-sm']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       },
     },
   },
   md: {
     minHeight: sizeVars['--size-element-md'],
     '--_field-row-pad': {
-      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       },
     },
   },
   lg: {
     minHeight: sizeVars['--size-element-lg'],
     '--_field-row-pad': {
-      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      default: `max(0px, calc((${sizeVars['--size-element-lg']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       '@media (pointer: coarse)': {
-        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-lg']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
       },
     },
   },
