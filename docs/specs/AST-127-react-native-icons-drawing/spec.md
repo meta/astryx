@@ -69,7 +69,14 @@ apart from the departures listed under Current-state impact.
 
 ## Non-goals
 
-None.
+- Equivalent internal implementations remain valid when they satisfy this
+  contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI
+  job/workflow topology belong in architecture or implementation unless callers
+  or interoperating systems intentionally depend on that exact mechanism as a
+  public protocol. The vector scene format is such a protocol: every renderer
+  and the library's writer depend on it (FR6).
 
 ## Requirements
 
