@@ -36,17 +36,16 @@ result (`spec:AST-140/FR2`), one result vocabulary (`spec:AST-140/FR3`),
 additive evolution (`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and
 coexistence with an app's own native code (`spec:AST-140/FR9`); probes take
 the shape of `spec:AST-112/FR7`. Every piece in the group belongs to the
-platform's core (`spec:AST-112/FR1`): it links in every app and is not an opt-in
-capability. The on-screen keyboard in browsers is `spec:AST-099`; this record
+platform's core (`spec:AST-112/FR1`): it links in every app. The on-screen keyboard in browsers is `spec:AST-099`; this record
 owns the keyboard on native React Native.
 
 ## Why this exists
 
-- Safe-area provider, view and module: no behaviour gap with the ecosystem's
-  safe-area library. Astryx owns them so the package takes no third-party
-  native dependency for layout (`spec:AST-112/FR2`); an app may still use
-  react-native-safe-area-context beside these components without conflict
-  (`spec:AST-140/FR9`). OQ1 asks about scope.
+- Safe-area provider, view and module: Astryx measures its own insets, so the
+  package takes no third-party native dependency for layout
+  (`spec:AST-112/FR2`). An app uses react-native-safe-area-context itself
+  beside these components without conflict (FR5, `spec:AST-140/FR9`). OQ1
+  asks about scope.
 - Keyboard dock: Astryx's own composer and its linked list must stay on the
   keyboard through every frame of a show, a hide and an interactive dismissal,
   on both platforms, with no JavaScript per frame.
@@ -59,38 +58,19 @@ owns the keyboard on native React Native.
 
 ## Who uses it
 
-| Native piece                                         | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | What a person sees                                                                                                                                  |
-| ---------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSafeAreaProvider` (`SafeAreaProvider`, hooks) | native component (Fabric Native Component) | `AstryxAppRoot` mounts it around the tree. Through the library's shared insets (`useInsets`), fed by it: `AppShell`, `Header`, `TopNav`, `TabBar`, `Layout`, `InlineSheet`, `ChatLayout`, `ChatMessageList`, `KeyboardAccessoryView`, `VideoView`, and the layer host that places toasts; through a snapshot of the window's insets: `BottomSheet`, `Dialog`, `Drawer`, `Lightbox`, `CommandPalette`; the Astryx router's stack and tab navigators and their header search field. The `./safe-area-context` entry. | Bars, sheets, toasts and screen content clear the notch, Dynamic Island, status bar, home indicator and display cutout, and follow rotation.        |
-| `AstryxSafeAreaView` (`SafeAreaView`)                | native component (Fabric Native Component) | No Astryx component; app API (`SafeAreaView`) and the `./safe-area-context` entry.                                                                                                                                                                                                                                                                                                                                                                                                                                 | An app's own view padded by the safe area on the edges it names, from its first frame.                                                              |
-| `AstryxSafeArea`                                     | native module (Turbo Native Module)        | The library's shared insets read its window metrics when no provider is above (a navigation root without an app root), so the same components as the provider's row; `initialWindowMetrics`; the platform status's `safeArea` row; the library's launch timing, which measures the module's first read.                                                                                                                                                                                                            | No jump from zero insets to real ones on the first frame.                                                                                           |
-| `AstryxKeyboardDock` (`KeyboardDockView`)            | native component (Fabric Native Component) | `KeyboardAccessoryView`, `ChatLayout`, `BottomSheet`, `CommandPalette`; on Android, the library's shared keyboard frame, which keyboard-aware surfaces read.                                                                                                                                                                                                                                                                                                                                                       | A composer or footer that stands on the keyboard through a show, a hide and a drag down, with the newest message kept above it.                     |
-| `AstryxWindowStatusBar`                              | native component (Fabric Native Component) | The Astryx router's stack navigator: drawn full-screen and transparent modal routes on Android.                                                                                                                                                                                                                                                                                                                                                                                                                    | A modal over a dark photo shows light status bar glyphs, and the screen under it keeps its own look after the modal closes.                         |
-| `AstryxSelectableText` (`NativeSelectableTextView`)  | native component (Fabric Native Component) | `Markdown` with `isSelectable`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Long-press a word in a notes app's rendered note, drag across a heading and two paragraphs, and copy them as one text, with the system's edit menu. |
-| `Intl`                                               | engine requirement (JavaScript runtime)    | Every component that formats through the library's internationalization helpers (`./i18n`, `InternationalizationProvider`): `Calendar`, `DateInput`, `DateRangeInput`, `TimeInput`, `Timestamp`, `Timer`, `NumberInput`, `Slider`, `Stepper`, `ProgressBar`, `Pagination`, `TextArea` (the count's plural words), `Avatar` (initials), `DonutChart`, and every other component that writes a number.                                                                                                               | Dates, times, numbers and counts in the person's locale and digits, and right-to-left layout for right-to-left languages.                           |
+| Native piece                                         | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                                                     | What a person sees                                                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSafeAreaProvider` (`SafeAreaProvider`, hooks) | native component (Fabric Native Component) | `AstryxAppRoot` mounts it around the tree. Through the library's shared insets (`useInsets`), fed by it: `AppShell`, `Header`, `TopNav`, `TabBar`, `Layout`, `InlineSheet`, `ChatLayout`, `ChatMessageList`, `KeyboardAccessoryView`, `VideoView`, and the layer host that places toasts; through a snapshot of the window's insets: `BottomSheet`, `Dialog`, `Drawer`, `Lightbox`, `CommandPalette`; the Astryx router's stack and tab navigators and their header search field. | Bars, sheets, toasts and screen content clear the notch, Dynamic Island, status bar, home indicator and display cutout, and follow rotation.        |
+| `AstryxSafeAreaView` (`SafeAreaView`)                | native component (Fabric Native Component) | App API (`SafeAreaView`), for an app's own views.                                                                                                                                                                                                                                                                                                                                                                                                                                 | An app's own view padded by the safe area on the edges it names, from its first frame.                                                              |
+| `AstryxSafeArea`                                     | native module (Turbo Native Module)        | The library's shared insets read its window metrics when no provider is above (a navigation root without an app root), so the same components as the provider's row; `initialWindowMetrics`; the platform status's `safeArea` row; the library's launch timing, which measures the module's first read.                                                                                                                                                                           | No jump from zero insets to real ones on the first frame.                                                                                           |
+| `AstryxKeyboardDock` (`KeyboardDockView`)            | native component (Fabric Native Component) | `KeyboardAccessoryView`, `ChatLayout`, `BottomSheet`, `CommandPalette`; on Android, the library's shared keyboard frame, which keyboard-aware surfaces read.                                                                                                                                                                                                                                                                                                                      | A composer or footer that stands on the keyboard through a show, a hide and a drag down, with the newest message kept above it.                     |
+| `AstryxWindowStatusBar`                              | native component (Fabric Native Component) | The Astryx router's stack navigator: drawn full-screen and transparent modal routes on Android.                                                                                                                                                                                                                                                                                                                                                                                   | A modal over a dark photo shows light status bar glyphs, and the screen under it keeps its own look after the modal closes.                         |
+| `AstryxSelectableText` (`NativeSelectableTextView`)  | native component (Fabric Native Component) | `Markdown` with `isSelectable`.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Long-press a word in a notes app's rendered note, drag across a heading and two paragraphs, and copy them as one text, with the system's edit menu. |
+| `Intl`                                               | engine requirement (JavaScript runtime)    | Every component that formats through the library's internationalization helpers (`./i18n`, `InternationalizationProvider`): `Calendar`, `DateInput`, `DateRangeInput`, `TimeInput`, `Timestamp`, `Timer`, `NumberInput`, `Slider`, `Stepper`, `ProgressBar`, `Pagination`, `TextArea` (the count's plural words), `Avatar` (initials), `DonutChart`, and every other component that writes a number.                                                                              | Dates, times, numbers and counts in the person's locale and digits, and right-to-left layout for right-to-left languages.                           |
 
 ## Non-goals
 
-- The keyboard in browsers (`spec:AST-099`); how each library component lays out against the insets and
-  the keyboard (each component's own record); the router's state and
-  transitions (`spec:AST-112/DEC-9` and the navigation record); the
-  activity-level status bar and the iOS status bar, which the presentation and
-  navigation hosts answer.
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
-  are separate products; they conform to this record's contracts.
-- Equivalent internal implementations remain valid when they satisfy this contract.
-- Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. In that case, state who depends on it and why an equivalent
-  implementation would not satisfy the contract.
-- The strings catalog's words and translations, and each component's own
-  date and number formats.
-- Markdown parsing, rich text editing, and text input. Selectable text draws
-  resolved, read-only blocks.
-- Corner adaptation of insets (react-native-safe-area-context's
-  `cornerAdaptation` option): the platform reports plain insets.
+None.
 
 ## Requirements
 
@@ -101,10 +81,11 @@ owns the keyboard on native React Native.
   - It sends `onInsetsChange {insets, frame}` once it has a size and then
     whenever the insets or the frame change by more than one pixel: `insets`
     relative to the provider's own frame, `frame` in its window, in points (dp
-    on Android). The keyboard is never part of the insets.
+    on Android). The insets cover the system's bars, cutouts, corners and home
+    indicator; the keyboard dock reports the keyboard (FR6).
   - The subtree reads them with `useSafeAreaInsets()` and `useSafeAreaFrame()`
-    or `SafeAreaInsetsContext` and `SafeAreaFrameContext`. The hooks throw
-    outside every provider, as react-native-safe-area-context's do.
+    or `SafeAreaInsetsContext` and `SafeAreaFrameContext`. The hooks read the
+    nearest provider and throw where none is above.
     `onMetricsChange(metrics)` reports each measurement to the app.
   - `AstryxAppRoot` mounts a provider around the tree by default, and the
     library's insets come from it unless the app supplies its own
@@ -136,40 +117,34 @@ owns the keyboard on native React Native.
   and frame read from the native side on each call, or `null` without the
   module or a window. `initialWindowMetrics` is the same read once, when the
   package loads. A malformed answer reads as `null`; nothing throws.
-- **FR5 — The safe area has a compatibility entry.** `./safe-area-context`
-  exports react-native-safe-area-context's 5.x names over FR1 to FR4:
-  `SafeAreaProvider`, `SafeAreaView`, `useSafeAreaInsets`, `useSafeAreaFrame`,
-  the two contexts, `initialWindowMetrics`, `withSafeAreaInsets`,
-  `SafeAreaListener`, `SafeAreaConsumer`, `SafeAreaContext`, `useSafeArea`,
-  `initialWindowSafeAreaInsets`, and the types. `useSafeAreaInsets` accepts
-  `cornerAdaptation` and ignores it. The entry implements that API itself and needs no react-native-safe-area-context
-  installed; the package's only declaration of it is the optional peer of
-  `./navigation-legacy` (`spec:AST-112/FR2`, `spec:AST-112/FR5`). An app may
-  also install react-native-safe-area-context itself and use it beside these
-  components without conflict (`spec:AST-140/FR9`).
+- **FR5 — Astryx's insets work beside the ecosystem's safe-area library.** An
+  app may install react-native-safe-area-context and use it beside these
+  components without conflict (`spec:AST-140/FR9`). Each library measures its
+  own insets, and Astryx's components read Astryx's provider
+  (`spec:AST-112/FR2`).
 - **FR6 — `KeyboardDockView` holds content that stays on the keyboard.** The
   caller sizes the dock and gives it bottom padding equal to the part of the
-  dock the keyboard covers; the dock itself never resizes.
+  dock the keyboard covers; the dock keeps its own size.
   - `followsKeyboard` (default `true`): with `false` the children keep their
     laid-out position whatever the keyboard does. A screen hidden behind
     another one passes `false`, so only the visible screen's dock moves.
   - `onKeyboardDockChange({height, overlap, settled})` fires when a keyboard
     change begins (`settled: false`, with the numbers of where the keyboard is
     going) and when it ends (`settled: true`), and after a later layout only
-    if the rounded numbers changed. It never fires per frame. `height` is the
+    if the rounded numbers changed. `height` is the
     docked keyboard's height, 0 when it is hidden, floating or split;
     `overlap` is the part of the dock's frame the keyboard covers at the end
     of the change.
   - `transcriptNativeID` links one scroll view to the dock (FR8): the first
     scroll view inside the view with that `nativeID`, which must sit within
-    the dock's three closest ancestors. An ID the dock cannot find has no
-    effect, and the dock looks for it again at the next layout.
+    the dock's three closest ancestors. When the dock cannot find the ID, it
+    looks again at the next layout.
   - `bottomInset` and `restingInset` (Android): the bottom padding the caller
     gives the dock, and the padding the children keep when the keyboard is
     hidden, in dp.
   - `isKeyboardDockAvailable()` is true wherever the binary registers the
-    dock, on iOS and on Android. `animatesSideInsets` is a prop only the
-    library sets; an app that sets it gets the default behaviour.
+    dock, on iOS and on Android. The library sets `animatesSideInsets`; for an
+    app, the prop keeps the default behaviour.
 - FR6 gap: `isKeyboardDockAvailable()` answers false on Android binaries that
   register the dock.
 - **FR7 — The dock rides the keyboard with no JavaScript per frame.** The
@@ -194,11 +169,11 @@ owns the keyboard on native React Native.
   platforms, the linked scroll view's bottom content inset follows how far the
   children are above their resting place on every frame, and a list scrolled
   to its end stays at its end, so its last row stays visible above the docked
-  content. The linked list sets no `contentInset`, `scrollIndicatorInsets` or
-  `automaticallyAdjustKeyboardInsets` of its own.
-- FR8 gap: on Android the dock writes no inset to the linked scroll view; the
-  list keeps its place in the layout and moves only at a change's start and
-  end.
+  content. The dock owns the linked list's keyboard inset, in place of the
+  list's own `contentInset`, `scrollIndicatorInsets` and
+  `automaticallyAdjustKeyboardInsets`.
+- FR8 gap: on Android the linked scroll view keeps its place in the layout and
+  moves at a change's start and end.
 - **FR9 — A drawn modal window owns its status bar on Android.**
   `AstryxWindowStatusBar` is a zero-size view that sets the status bar of the
   Dialog window it is rendered in: `barStyle` (`light`, `dark`, `auto`) and
@@ -208,11 +183,10 @@ owns the keyboard on native React Native.
     with the route's status bar style and visibility. A native stack inside
     the same window takes precedence with its top screen's values. When
     nothing asks, the window shows the activity's look.
-  - Only that window's bar is written: never the activity's window, never the
-    navigation bar. In the activity's own window the view does nothing, and it
-    renders nothing when the route asks nothing.
-  - iOS does not register it: the presentation host answers a route's status
-    bar there.
+  - The view writes that window's status bar alone; the activity's window and
+    the navigation bar keep their own look. In the activity's own window the
+    view is inert, and a route that asks nothing renders no view.
+  - On iOS the presentation host answers a route's status bar.
 - **FR10 — `NativeSelectableTextView` draws blocks as one selectable text.**
   The view takes `blocks` (each a list of runs with resolved styles, a `role`
   such as `heading`, and an optional `href` per run) and draws them in one
@@ -227,8 +201,8 @@ owns the keyboard on native React Native.
     and `clearSelection()` select without showing a menu; offsets clamp to the
     text.
   - `onLinkPress({href, blockIndex})` comes for a tap on a link with no
-    selection, or for the screen reader's link action. The platform opens
-    nothing.
+    selection, or for the screen reader's link action. The app decides what
+    the link opens (DEC-5).
   - Props: `isSelectable` (default `true`; `false` keeps the text visible
     and readable by screen readers but not selectable, and links still report), `selectionColor`, `colorScheme` (iOS; the edit
     menu and handles), `allowFontScaling` (default `true`),
@@ -241,18 +215,18 @@ owns the keyboard on native React Native.
   Translate, Share on iOS; Copy, Share, Select all on Android). A block
   uses the same font face a React Native `Text` with the same style gets.
 - **FR12 — Every piece is accessible.**
-  - The safe-area provider and view and the keyboard dock expose no element of
-    their own; their children keep theirs. The dock forwards the accessibility
+  - The safe-area provider and view and the keyboard dock leave accessibility
+    to their children. The dock forwards the accessibility
     props it is given. The window status bar is hidden from screen readers.
   - Selectable text exposes one element per block to VoiceOver and TalkBack;
     a heading carries the header trait or role, and a block's links are
     actions on its element. Text grows with Dynamic Type and the system font
     scale, capped by `maxFontSizeMultiplier`, unless `allowFontScaling` is
     `false`.
-  - Reduce Motion: the dock's following of the keyboard adds no motion of its
-    own, it tracks the system's; the side-inset animation (FR7) is off, and the
+  - Reduce Motion: the dock's following of the keyboard tracks the system's
+    motion; the side-inset animation (FR7) is off, and the
     new frames land at once.
-  - Insets are in points and dp, so text size settings never change them.
+  - Insets are in points and dp, so they stay the same at every text size.
 - **FR13 — A missing piece degrades to a correct layout.** Each view has a
   probe (`isSafeAreaProviderAvailable()`, `isSafeAreaViewAvailable()`,
   `isKeyboardDockAvailable()`, `isNativeSelectableTextViewAvailable()`), and
@@ -266,35 +240,32 @@ owns the keyboard on native React Native.
   - Without the dock, `KeyboardDockView` is a plain view: the keyboard's start
     and end positions arrive through React Native's `Keyboard` events, the
     caller's padding moves the children at the start and end of a change, and
-    no `onKeyboardDockChange` comes.
+    the caller hears those events in place of `onKeyboardDockChange`.
   - Without the window status bar, the modal window keeps the look React
     Native copied into it.
   - Without the selectable text view, each block draws as a React Native
-    `Text` with `selectable`, selection works one block at a time, `onError`
-    reports `no-native-view` once per mount, and `onSelectionChange` never
-    comes.
-- **FR14 — The group follows the package's contract baseline.** Every
-  contract in this group is at revision 1 and grows only by named features
-  (`spec:AST-140/FR5`). The
-  keyboard dock's `transcriptNativeID`, `bottomInset`, `restingInset` and
-  `animatesSideInsets` belong to revision 1; the group lists no named features.
+    `Text` with `selectable`, selection works one block at a time, and
+    `onError` reports `no-native-view` once per mount.
+- **FR14 — The group follows the package's contract baseline.** Each
+  contract's baseline is its first release's shape, and it grows by named
+  features (`spec:AST-140/FR5`). The keyboard dock's `transcriptNativeID`,
+  `bottomInset`, `restingInset` and `animatesSideInsets` belong to its
+  baseline.
 
 - **FR15 — The JavaScript engine meets a declared `Intl` requirement.**
-  `Intl` is a requirement on the JavaScript runtime, not a native contract.
-  The package names each `Intl` member it relies on and each member it must
-  not use, per platform:
+  `Intl` is a requirement on the JavaScript runtime. The package names each
+  `Intl` member it relies on and each member it guards, per platform:
   - Required on iOS and Android: `Collator`, `DateTimeFormat` with
     `formatToParts`, `NumberFormat`, and `getCanonicalLocales`;
     `NumberFormat.prototype.formatToParts` on Android.
-  - Absent, so the package never calls them unguarded:
+  - Absent, so the package calls them behind a check:
     `NumberFormat.prototype.formatToParts` on iOS, `formatRange` and
     `formatRangeToParts` of `DateTimeFormat` and `NumberFormat`,
     `RelativeTimeFormat`, `PluralRules`, `ListFormat`, `Segmenter`,
     `DisplayNames`, `Locale`, and `supportedValuesOf`.
   - The table comes from a measurement of the engine in release builds on the
-    iOS Simulator and the Android emulator, never from belief. A newer engine
-    that gains a member changes nothing until a new measurement moves it to
-    required.
+    iOS Simulator and the Android emulator. A member moves to required when a
+    new measurement finds it.
 - **FR16 — Every member outside the required set has a fallback or no use.**
   Where the engine lacks a member, the library's output falls back:
   - `DateTimeFormat#formatRange`: the two dates joined by the strings
@@ -317,13 +288,13 @@ owns the keyboard on native React Native.
   - Typed numbers and dates in native digits are read as ASCII digits.
   - `DateTimeFormat#formatRangeToParts`, `NumberFormat#formatRange`,
     `NumberFormat#formatRangeToParts`, `ListFormat`, `DisplayNames` and
-    `supportedValuesOf`: the library never calls them, so they need no
+    `supportedValuesOf`: the library leaves them uncalled, so they need no
     fallback.
 - FR16 gap: evaluating the library's root or `./i18n` entry installs the
   library's plural rules as `Intl.PluralRules` where the engine has none.
 - FR16 gap: the package depends on a FormatJS package for CLDR plural data.
 - **FR17 — Native code uses only public platform API.** This group's native
-  code needs no exception to the public-API rule of `spec:AST-112/FR4`.
+  code follows the public-API rule of `spec:AST-112/FR4`.
 
 ### Native contract
 
@@ -339,21 +310,21 @@ owns the keyboard on native React Native.
 | ---------------- | ----------------------------------- | -------------------------------------------------------------------------- | ------------ |
 | `AstryxSafeArea` | native module (Turbo Native Module) | `getConstants` (`initialWindowMetrics`: the key window's insets and frame) | iOS, Android |
 
-`Intl` is a requirement on the JavaScript engine (FR15), not a native
-contract. `AstryxSelectableText`'s `content` is the blocks as JSON, with sizes in dp
+`Intl` is a requirement on the JavaScript engine (FR15).
+`AstryxSelectableText`'s `content` is the blocks as JSON, with sizes in dp
 before font scaling and colours as processed colour numbers; the wrapper builds
 it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
 
 ### Platform support
 
-| Contract                 | iOS                                                                                                                                                                                                                                                                       | Android                                                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                                                                                                                                      | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                                                                                       |
-| `AstryxSafeAreaView`     | Applies the edge rule during native layout                                                                                                                                                                                                                                | Applies the edge rule during native layout                                                                                                                                                              |
-| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                                                                                                                                               | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                                                                             |
-| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, the linked scroll view's inset, side-inset animation. A gap the caller's padding leaves between the children and the keyboard is kept through the motion | `WindowInsetsAnimationCompat` and a UI-thread offset on show and hide; the children sit on the IME's top, so a gap above the keyboard is not kept. No interactive dismissal and no `animatesSideInsets` |
-| `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                                                      |
-| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                                            |
+| Contract                 | iOS                                                                                                                                                                                                                                                                       | Android                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                                                                                                                                      | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                            |
+| `AstryxSafeAreaView`     | Applies the edge rule during native layout                                                                                                                                                                                                                                | Applies the edge rule during native layout                                                                                                   |
+| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                                                                                                                                               | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                  |
+| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, the linked scroll view's inset, side-inset animation. A gap the caller's padding leaves between the children and the keyboard is kept through the motion | `WindowInsetsAnimationCompat` and a UI-thread offset on show and hide; the children sit on the IME's top, for a show and a hide              |
+| `AstryxWindowStatusBar`  | The presentation host answers a route's status bar                                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                           |
+| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode |
 
 - Engine: the JavaScript engine on iOS meets FR15 without
   `NumberFormat#formatToParts`; on Android it meets FR15 with it.
@@ -362,7 +333,7 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
   24; the New Architecture only).
 - Unsupported behavior: a view a binary lacks reports itself unavailable and
   the wrapper draws the fallback of FR13; the module answers `null` metrics; a
-  named feature a binary lacks keeps the revision-1 behaviour or answers
+  named feature a binary lacks keeps the baseline behaviour or answers
   `unsupported` (FR14).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, and devices (`spec:AST-112/FR15`).
@@ -375,16 +346,15 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
   default.
 - Relies on `spec:AST-112` FR4 (amended): native code calls public platform
   API only.
-- Relies on `spec:AST-140` FR5: contracts start at revision 1 and grow by
-  named features.
+- Relies on `spec:AST-140` FR5: each contract's baseline is its first
+  release's shape, and it grows by named features.
 - Details `spec:AST-140/FR2`, `spec:AST-140/FR3`, `spec:AST-112/FR7` and
   `spec:AST-112/FR9` for
   this group's probes, fallbacks and app root.
-- Adds the `./safe-area-context` entry to the entries `spec:AST-112/FR5`
-  lists.
-- `spec:AST-099` is unchanged; it keeps the keyboard in browsers.
+- `spec:AST-099` keeps the keyboard in browsers.
 - The package's `Intl` engine requirement is owned here; FR16's plural rules
-  follow `spec:AST-112/DEC-10` (no global installed by an import).
+  follow `spec:AST-112/DEC-10`: an import leaves the global `Intl` as the
+  engine has it.
 
 ## Verification
 
@@ -394,7 +364,7 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
 | FR2      | Unit tests with absent, older and current module doubles                                                                      | explicit, inherited and window metrics; `initialMetrics={null}`; a provider mounted after rotation              | The initial frame lays out with zeros where metrics exist, or stale metrics after a rotation                                                            |
 | FR3      | Unit tests of the edge rule; Simulator and emulator layout checks                                                             | each edge mode; padding and margin; logical start and end; right to left with and without the swap              | Padding a frame late, a wrong combined value, or an inset on the wrong side in right to left                                                            |
 | FR4      | Unit tests with absent, malformed and current module doubles                                                                  | no window; a malformed constant                                                                                 | A throw, or a value other than `null` without the module                                                                                                |
-| FR5      | Unit tests of the entry's names against react-native-safe-area-context 5.x; package manifest check                            | each exported name; `cornerAdaptation`; the package's dependencies and peer dependencies                        | A missing name, or a declaration of react-native-safe-area-context other than the optional peer of `./navigation-legacy`                                |
+| FR5      | Unit tests with react-native-safe-area-context installed beside the package; package manifest check                           | both libraries' providers mounted in one tree; the package's dependencies and peer dependencies                 | An Astryx component that reads the other library's insets, or a package declaration of react-native-safe-area-context                                   |
 | FR6      | Unit tests through the `./testing` view doubles                                                                               | `followsKeyboard` false; an unknown `nativeID`; the library-only prop set by an app                             | An event per frame, a held dock that moves, or an app that gets the library-only behaviour                                                              |
 | FR7      | Simulator, emulator and device checks with UI-thread frame checks (no JavaScript per frame); Android unit tests of the offset | show, hide and height change on both platforms; interactive drag and release on iOS; a side-inset commit on iOS | The docked content leaves the keyboard's top on any frame, a band opens between it and the IME, an offset remains at rest, or JavaScript runs per frame |
 | FR8      | Simulator and emulator checks with UI-thread frame checks                                                                     | a list at its end; a list scrolled up; a list under a finger; a show, a hide and an interactive drag            | The last row slips under the docked content, the list jumps, or the list's own inset props fight the dock's                                             |
@@ -403,26 +373,23 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
 | FR11     | Simulator and emulator layout checks; Android instrumentation of font scaling                                                 | a width change; a text change; a `height` in style                                                              | A clipped or stale height, or a face that differs from `Text`'s                                                                                         |
 | FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                             | per-block elements; a heading; a link action; the largest text size; Reduce Motion                              | One element for the whole text, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion                          |
 | FR13     | Unit tests with each view and the module absent                                                                               | every fallback                                                                                                  | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                                                       |
-| FR14     | The platform's spec rules check                                                                                               | a contract at revision 1; a missing named feature                                                               | A revision above 1, or a named feature used without checking that the binary has it                                                                     |
+| FR14     | The platform's spec rules check                                                                                               | each contract's baseline shape; a missing named feature                                                         | A baseline that changes, or a named feature used without checking that the binary has it                                                                |
 | FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds                                               | each member on iOS and Android                                                                                  | The table differs from the probe                                                                                                                        |
 | FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                             | each fallback; an English and a non-English locale; native digits                                               | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import                             |
 | FR17     | Review of the native source against the public iOS SDK and the Android SDK and AndroidX                                       | each native piece on iOS and Android                                                                            | A private selector, a private class, or reflection into a framework                                                                                     |
 
 ## Decision log
 
-### DEC-1 — The safe area keeps react-native-safe-area-context's names and meaning
+### DEC-1 — The safe area keeps the ecosystem's names and meaning
 
 **Reference:** `spec:AST-129/DEC-1`
 **Decider:** imdreamrunner, 2026-11-17
 
 Apps and libraries already speak `SafeAreaProvider`, `SafeAreaView`,
-`useSafeAreaInsets` and `initialWindowMetrics`, so moving an app over is an
-import change, and the `./safe-area-context` entry lets code written for that
-library run unchanged. The native side is Astryx's, so the package keeps one
-dependency set.
-
-Rejected: an Astryx-specific inset API, because every app and navigation
-library would need a second vocabulary for the same numbers.
+`useSafeAreaInsets` and `initialWindowMetrics`, so Astryx's safe area reads
+familiar from the first line. Astryx measures its own insets on its own native
+side, so the package keeps one dependency set, and an app that also uses
+react-native-safe-area-context runs both side by side.
 
 ### DEC-2 — Insets apply during native layout
 
@@ -431,11 +398,8 @@ library would need a second vocabulary for the same numbers.
 
 The safe-area view applies the provider's insets during native layout, in the
 same frame that measures them, and the initial layout starts from the window's
-metrics. A rotation or a status bar change never shows content under a bar for
-a frame.
-
-Rejected: padding from JavaScript state, because it lands one frame after the
-insets change.
+metrics. Content clears every bar on every frame of a rotation or a status bar
+change.
 
 ### DEC-3 — The dock moves its children natively and reports only start and end
 
@@ -448,9 +412,6 @@ change's start and end. The composer stays on the keyboard on every frame even
 when the JavaScript thread is busy. iOS follows UIKit's keyboard layout guide
 and Android follows the IME's inset animation.
 
-Rejected: keyboard frames sent to JavaScript per frame, because each frame would
-wait on the JavaScript thread.
-
 ### DEC-4 — A modal window owns its own status bar on Android
 
 **Reference:** `spec:AST-129/DEC-4`
@@ -460,10 +421,7 @@ A drawn modal is its own Dialog window, so its route's status bar is written to
 that window only. Closing the modal leaves the activity's look exactly as it
 was, with nothing to restore.
 
-Rejected: writing the activity's window from the modal, because a dismissal
-would leave the modal's look behind.
-
-### DEC-5 — Selectable prose is one native text view; links report and never open
+### DEC-5 — Selectable prose is one native text view; links go to the app
 
 **Reference:** `spec:AST-129/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
@@ -472,9 +430,6 @@ One native text view over resolved blocks lets a selection cross headings,
 paragraphs and list items and copy as one text, with the system's menus and
 per-block accessibility. Links go to the app, which decides how to open them,
 as everywhere else in Astryx.
-
-Rejected: one selectable `Text` per block, because a selection cannot cross
-from one block to the next.
 
 ### DEC-6 — The engine's `Intl` is a measured requirement with fallbacks
 
@@ -486,17 +441,11 @@ small fallback for each member it lacks, so the bundle stays small and a newer
 engine improves the output with no change. The set is declared from a
 measurement, so a missing fallback fails in tests as it would on a device.
 
-Rejected: polyfilling every missing `Intl` member, because the bundle would
-carry code the engine may ship and tests would no longer show the device's
-gaps.
-
 ## Open questions
 
 - **OQ1 — Does `SafeAreaView` stay in the platform's core when no Astryx
   component renders it?** (`human-api`) Options: keep it as app API beside the
-  provider, as react-native-safe-area-context does; or keep it only in the
-  `./safe-area-context` entry, so the core's own app API is the provider and
-  its hooks.
+  provider; or keep the core's app API to the provider and its hooks.
 - **OQ2 — Is the dock's scroll-view link public?** (`human-api`)
   `transcriptNativeID` finds its scroll view among the dock's three closest
   ancestors. Options: a public prop any app can use for its own list; or a
@@ -513,9 +462,3 @@ gaps.
   the field's focus; iOS has the scroll view's own interactive dismissal.
   Options: a named dock behaviour on Android with its own opt-in; or no dock
   behaviour, leaving dismissal to the scroll view.
-- **OQ5 — Does the package keep an optional peer on
-  react-native-safe-area-context?** (`human-api`) `spec:AST-112/FR2` and
-  `spec:AST-112/FR5` list it as an optional peer of `./navigation-legacy`,
-  while the `./safe-area-context` entry needs none. Options: keep the optional
-  peer until `./navigation-legacy` leaves the package; or drop it and let
-  `./navigation-legacy` resolve the compatibility entry.
