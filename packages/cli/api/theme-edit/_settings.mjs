@@ -6413,19 +6413,16 @@ export function compileTheme(ctx, data, base) {
         .filter(Boolean)
         .map(layerParts);
       // The gradient replaces the image there. A position, size or repeat
-      // set in the same scope stays (a layer's own replaces it), and a
-      // plain background color set there stays as the color under the
-      // image.
+      // set in the same scope stays (a layer's own replaces it). A
+      // background shorthand set there also set the color: its color layer
+      // stays as the color under the image, and one with none (`none`, an
+      // image alone) left it transparent, as it still is.
       const under = mb.background;
       delete mb.background;
       delete mb['background-image'];
       delete mb.backgroundImage;
-      if (
-        typeof under === 'string' &&
-        !/gradient\(|url\(/i.test(under) &&
-        mb.backgroundColor == null
-      )
-        mb.backgroundColor = under;
+      if (typeof under === 'string' && mb.backgroundColor == null)
+        mb.backgroundColor = backgroundColorLayer(under).color ?? 'transparent';
       mb.backgroundImage = parts.map(x => x.image).join(', ');
       // (Only the longhands a layer gives: one it leaves out keeps what the
       // part has, a whole-part repeat included.)

@@ -190,6 +190,37 @@ describe('a stress theme of gradients', () => {
 
 describe('beside a variant gradient', () => {
   it(
+    'takes the color a background shorthand set before it gave, and transparent for one that gave none',
+    async () => {
+      if (unbuilt) return;
+      const sel = '.astryx-button[data-variant="primary"]';
+      for (const [slug, typed, color] of [
+        ['bn', 'none', 'transparent'],
+        ['br', '#123456', '#123456'],
+      ]) {
+        await themeEditNew(slug, {cwd, like: 'neutral'});
+        const scope = {cwd, on: 'button', when: 'variant:primary'};
+        await themeEditSet(slug, 'background', typed, scope);
+        await themeEditSet(
+          slug,
+          'background-image',
+          'linear-gradient(#049cdb, #0064cd)',
+          scope,
+        );
+        const rule = rulesOn(css(slug), 'button').find(r => r.selector === sel);
+        expect(rule, slug).toBeTruthy();
+        const body = /** @type {{body: string}} */ (rule).body;
+        expect(valueIn(body, 'background-color'), slug).toBe(color);
+        expect(valueIn(body, 'background-image'), slug).toBe(
+          'linear-gradient(#049cdb, #0064cd)',
+        );
+        expect(body).not.toMatch(/background-color:\s*none/);
+      }
+    },
+    T,
+  );
+
+  it(
     'keeps a background longhand set before it in the same scope, and a plain color as the color under it',
     async () => {
       if (unbuilt) return;
