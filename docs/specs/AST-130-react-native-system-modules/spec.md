@@ -38,8 +38,9 @@ and launch screen where the platform plays them. A file field opens the
 system's own picker, and the app's navigation state survives a cold start.
 
 This record details the system modules of the platform layer that
-`spec:AST-112` defines. They are core modules (`spec:AST-112/FR1`): every app
-links them. Every asynchronous call resolves the result vocabulary of
+`spec:AST-112` defines. Ten of them are core modules (`spec:AST-112/FR1`):
+every app links them. `AstryxNetwork` and `AstryxCrypto` are part of the
+optional add-on package, not core. Every asynchronous call resolves the result vocabulary of
 `spec:AST-112/FR6`, every module has the capability shape of
 `spec:AST-112/FR7`, and every interface evolves additively under
 `spec:AST-112/FR8`.
@@ -65,7 +66,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   linked capabilities, named features), which only the binary can report.
 - `AstryxPermissions`: a small gap. A closed set of permissions tied to the
   capabilities, with `not-declared` where the system would end the app (OQ1).
-- `AstryxNetwork`: for the network path, a small gap (OQ1). Cookies per
+- `AstryxNetwork` (optional add-on package): for the network path, a small
+  gap (OQ1). Cookies per
   runtime and requests with no identity belong with data and security (OQ2).
 - `AstryxBack`: React Native's activity takes every back press, so Android's
   back-to-home animation never plays at the root without this gate.
@@ -75,9 +77,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   result vocabulary (OQ1).
 - `AstryxStorage`: a small gap. One string store with the result vocabulary
   and no extra dependency (OQ1).
-- `AstryxCrypto`: no capability gap. Synchronous secure bytes with no
-  non-secure fallback, for the package's own code and its crypto installer
-  (OQ1).
+- `AstryxCrypto` (optional add-on package): no capability gap. Synchronous
+  secure bytes with no non-secure fallback, for its crypto installer (OQ1).
 
 ## Who uses it
 
@@ -89,12 +90,12 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 | `AstryxClipboard`             | native module (Turbo Native Module) | `PasteButton` (reads on the person's press); `CodeBlock`, `Chat` message actions and `Timestamp` through the library's copy hook (`useCopy`)                                                                                                                                                                                                                                                                                                     | A copy button shows its check glyph and announces "Copied"; a paste fills the field.                                                     |
 | `AstryxPlatformInfo`          | native module (Turbo Native Module) | Its revision and feature probes: every component that renders an `Icon` (where icon images load), the system menu of `ContextMenu`, `DropdownMenu` and `Selector`, the native presentation host of `BottomSheet` and modal windows, `Item` (native swipe-row support), the router's stack navigator (modal presentation kinds, header search field, stack host), the zoom pager gesture, and `useComponentRevision`; app API                     | Nothing directly: each component picks the native path the binary has, or its drawn fallback.                                            |
 | `AstryxPermissions`           | native module (Turbo Native Module) | No library component. `CameraView` (`./camera` entry) reads it; app API `useCameraPermission`                                                                                                                                                                                                                                                                                                                                                    | The system prompt appears only when the app asks, never when a view mounts.                                                              |
-| `AstryxNetwork`               | native module (Turbo Native Module) | No Astryx component calls the module; app API (`./network` entry: `useNetworkState`, `AstryxCookies`, `fetchUntrusted`) (OQ2)                                                                                                                                                                                                                                                                                                                    | An offline banner or a sign-out that the app draws.                                                                                      |
+| `AstryxNetwork`               | native module (Turbo Native Module) | No Astryx component; part of the optional add-on package, not core. App API (`useNetworkState`, `AstryxCookies`, `fetchUntrusted`) (OQ2)                                                                                                                                                                                                                                                                                                         | An offline banner or a sign-out that the app draws.                                                                                      |
 | `AstryxBack`                  | native module (Turbo Native Module) | Through the library's back handling: `AppShell`, `SearchField`, the router's stack navigator (back, modals, header search field), and the dismissible layers `BottomSheet`, `Drawer`, `Popover`, `HoverCard`, `ContextMenu`, `DropdownMenu`, `Selector`, `SplitView`, `TabMenu`, `TopNav` menus                                                                                                                                                  | Back closes the open sheet or menu first; at the root, Android plays its back-to-home animation.                                         |
 | `AstryxLaunch`                | native module (Turbo Native Module) | The router (its root's first state and its first focused screen's layout) and `AstryxPerformance.markFirstFrame`                                                                                                                                                                                                                                                                                                                                 | On Android the launch screen stays until the first screen is drawn, and a cold deep link opens on its own screen.                        |
 | `AstryxFilePicker`            | native module (Turbo Native Module) | `FileInput` through the library's file picker hook (`useFilePicker`); app API `AstryxFilePicker`                                                                                                                                                                                                                                                                                                                                                 | Choosing a file opens the system's photo or document picker; backing out changes nothing.                                                |
 | `AstryxStorage`               | native module (Turbo Native Module) | The router's state persistence (its default store) and the app update check's "Not now"; app API (`./storage` entry)                                                                                                                                                                                                                                                                                                                             | After a cold start the app opens on the screen it showed last; a dismissed update stays dismissed.                                       |
-| `AstryxCrypto`                | native module (Turbo Native Module) | No Astryx component; the public crypto installer (`./network` entry) and app API `AstryxCrypto`                                                                                                                                                                                                                                                                                                                                                  | Nothing directly: identifiers and sign-in nonces an app makes come from the system's secure generator.                                   |
+| `AstryxCrypto`                | native module (Turbo Native Module) | No Astryx component; part of the optional add-on package, not core. Its crypto installer and app API `AstryxCrypto`                                                                                                                                                                                                                                                                                                                              | Nothing directly: identifiers and sign-in nonces an app makes come from the system's secure generator.                                   |
 
 ## Non-goals
 
@@ -128,8 +129,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 ## Requirements
 
-- **FR1 — The group is twelve core native modules.** Every app links them
-  (`spec:AST-112/FR1`). Each module is read with `TurboModuleRegistry.get`,
+- **FR1 — The group is twelve native modules: ten core, two in the optional
+  add-on package.** Every app links the ten core modules
+  (`spec:AST-112/FR1`). `AstryxNetwork` and `AstryxCrypto` are part of the
+  optional add-on package, not core: an app links them only when it installs
+  that package, and without it their wrappers answer as an absent module. Each module is read with `TurboModuleRegistry.get`,
   only by its own wrapper (`spec:AST-112/FR8`), and its wrapper answers
   `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` have
   no public object: the library is their one caller.
@@ -312,6 +316,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     run learns of a refusal), and iOS answers `no-module`.
 
 - **FR10 — `AstryxNetwork` reports the network path.**
+  - `AstryxNetwork` is part of the optional add-on package, not core.
   - `getState()` answers `isConnected`, `type` (`wifi`, `cellular`,
     `ethernet`, `other`, `none`, `unknown`), `isMetered`, and `isConstrained`
     (iOS Low Data Mode, Android Data Saver for this app).
@@ -321,7 +326,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     a server answers: it is true behind a captive portal, where requests still
     fail.
   - On Android the reads need `ACCESS_NETWORK_STATE`, which the configuration
-    plugin writes for the core; without it, `getState()` answers `unavailable`
+    plugin writes when the add-on package is installed; without it, `getState()` answers `unavailable`
     and names the permission.
   - The module also carries the calling runtime's cookie jar (`AstryxCookies`:
     `get`, `set`, `remove`, `clear`; an `httpOnly` cookie's value never reaches
@@ -402,6 +407,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     update check keeps its "Not now" in the app's namespace.
 
 - **FR15 — `AstryxCrypto` gives secure random bytes synchronously.**
+  - `AstryxCrypto` is part of the optional add-on package, not core.
   - `randomBytes(byteLength)`, `getRandomValues(array)` and `randomUUID()`
     take their bytes from the system's secure generator (iOS
     `SecRandomCopyBytes`, Android `java.security.SecureRandom`). They are
@@ -411,7 +417,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     (`QuotaExceededError`), integer typed arrays only (`TypeMismatchError`).
     Where the module is absent they throw `NotSupportedError`; there is never
     a non-secure fallback.
-  - The crypto installer of `spec:AST-112/FR5` (`./network` entry) installs
+  - The crypto installer of `spec:AST-112/FR5` installs
     `crypto.getRandomValues` and `crypto.randomUUID` from this module where
     the runtime lacks them, and installs nothing and reports `no-module`
     without it.
@@ -460,8 +466,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     data and the web view's cookie store belong to the `web` capability
     (`spec:AST-112/FR3`).
   - FR19 gap: on iOS the core's storage module links WebKit to remove web
-    view data, and on Android the core's cookie API reaches the cookie
-    store through androidx.webkit.
+    view data.
 
 ### Platform support
 
@@ -489,22 +494,24 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   synchronous members answer their empty values (FR2); a missing named feature
   answers `unsupported` or keeps the revision-1 behaviour (FR18); a
   platform-only module is absent on the other platform, and the library takes
-  the path FR5, FR11 and FR12 name.
+  the path FR5, FR11 and FR12 name; an app without the optional add-on
+  package has neither `AstryxNetwork` nor `AstryxCrypto` (FR1, FR15).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, and devices (`spec:AST-112/FR15`); haptic feel needs
   a real device.
 
 ## Current-state impact
 
-- Relies on `spec:AST-112` FR3 (amended): the core links in every app, and
-  every module of this group is core.
+- Relies on `spec:AST-112` FR3 (amended): the core links in every app; ten
+  modules of this group are core.
 - Relies on `spec:AST-112` FR8 (amended): every contract is at revision 1, and
   later behaviour is a named feature that the platform info module reports.
 - Relies on `spec:AST-112` DEC-15 (amended): native code uses public platform
   API only.
 - Changes `spec:AST-112/FR1`: the core's list gains appearance, accessibility
-  settings, platform info, the Android back gate and launch hold, the file
-  picker, and secure random bytes; the `camera` capability gains camera
+  settings, platform info, the Android back gate and launch hold, and the
+  file picker; network and cookies leave the core for the optional add-on
+  package, with secure random bytes; the `camera` capability gains camera
   capture, the camera source of a picker included (FR13).
 - Changes `spec:AST-112/FR1` and FR3: the core links no web engine, and the
   `web` capability carries web view data and its cookie store (FR19).
@@ -596,7 +603,7 @@ missed call holds the splash.
 
 Haptics, the clipboard, permissions, the file pickers, storage, secure random
 bytes and network state are small wrappers
-where the ecosystem has good libraries. They stay in the core because the
+where the ecosystem has good libraries. They stay Astryx modules because the
 package takes no runtime dependency outside React and React Native
 (`spec:AST-112/FR2`), and because each needs the result vocabulary. DEC-5 holds until OQ1 is
 answered.
@@ -607,7 +614,7 @@ answered.
   `AstryxHaptics`, `AstryxClipboard`, `AstryxPermissions`, `AstryxFilePicker`,
   `AstryxStorage`, `AstryxCrypto` and the network state of `AstryxNetwork`
   fill little capability gap. Options: keep them as
-  core modules (one dependency set, one result shape); or
+  Astryx modules (one dependency set, one result shape); or
   replace their native side with adapters over community libraries, keeping
   the wrappers' API.
 - **OQ2 — Do cookies, domain info, redirect modes and `fetchUntrusted` move to
