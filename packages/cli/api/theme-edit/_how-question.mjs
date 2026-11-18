@@ -101,7 +101,7 @@ import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
 import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
-import {numberedLookValues} from './_part-pieces.mjs';
+import {numberedLookValues, oneAnswerPerFamily} from './_part-pieces.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
@@ -8238,8 +8238,8 @@ export function draftAnswer(ctx, env, question) {
   // display-3: the values its prop takes, as its component's doc types
   // them, and any more Core's data saw it drawn in. The clause names each,
   // so a clause that takes its part, "make them blue", takes them all; the
-  // answer says which.)
-  /** @type {string[]} */
+  // answer says which, once the family is written.)
+  /** @type {Array<{text: string, on: string, whens: string[]}>} */
   const pluralSaid = [];
   for (const c of clauses) {
     const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
@@ -8253,7 +8253,8 @@ export function draftAnswer(ctx, env, question) {
     if (values.length < 2) continue;
     c.parts = c.parts.flatMap(x => (x === p ? values.map(v => ({...x, when: `${m[1]}:${v}`})) : [x]));
     const said = new RegExp(`\\b${m[2]}[\\s-]+[a-z]+s\\b`).exec(c.text.toLowerCase())?.[0];
-    pluralSaid.push(`${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`);
+    const whens = values.map(v => `${m[1]}:${v}`);
+    pluralSaid.push({text: `${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`, on: p.on, whens});
   }
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
@@ -28998,6 +28999,8 @@ export function draftAnswer(ctx, env, question) {
     return toks.length ? `; ${one(on)} reads ${toks.join(', ')} for it` : '';
   }
 
+  // ("heavy display headings", "make them blue" after it: one answer.)
+  oneAnswerPerFamily(drafts, d => draftClause.get(d), clauses, pluralSaid);
   /** @type {Draft[]} */
   const result = [];
   // Several changes in one question: one answer that runs them all first,
@@ -31824,7 +31827,9 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
-  for (const t of new Set(pluralSaid)) result.push({text: t, options: []});
+  for (const f of pluralSaid)
+    if (result.some(d => d.options.flat().some(st => st.on === f.on && f.whens.includes(st.when ?? ''))))
+      result.push({text: f.text, options: []});
   // (The other reading of states said together, said last.)
   result.push(...otherReadings);
   // A panel's look written for every one (a card's) reaches the panels an

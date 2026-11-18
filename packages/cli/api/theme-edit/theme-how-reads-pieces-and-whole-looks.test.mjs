@@ -553,6 +553,15 @@ describe('a display heading', () => {
       expect(JSON.stringify(blue.results)).toMatch(
         /display headings: display-1, display-2, display-3/,
       );
+      // (One clause is one answer that covers every look.)
+      const heavy = await answer('heavy display headings');
+      expect(
+        heavy.results.filter((/** @type {any} */ r) => r.commands.some((/** @type {string} */ c) => / editor set /.test(c))),
+      ).toHaveLength(1);
+      // (Nothing written, nothing named.)
+      expect(JSON.stringify((await answer('display headings')).results)).not.toMatch(
+        /display headings: display-1/,
+      );
       const listed = first(
         await answer('display headings: heavier, tighter letter spacing'),
       );
