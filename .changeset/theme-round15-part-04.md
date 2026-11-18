@@ -31,9 +31,9 @@
 - `how` gives a part that paints no shadow at rest ("the cards look so flat", "card shadow bigger") the first shared shadow. A part's shadow steps from what Core paints.
 - `set` on one member of a group under a variant of that member (`--on selector --when variant:secondary`) now reaches only the members that have that variant, not the whole group.
 
-- `astryx experimental theme set` and `undo`: a part typed in the setting's place (`set my button background-color '#2563eb'`, `set my card padding 20px`, `undo my card`) offers the line for that part (`set my background-color '#2563eb' --on button`, the undo of each setting the theme holds on the card), never suggestions it does not take.
+- `astryx experimental theme editor set` and `undo`: a part typed in the setting's place (`set my button background-color '#2563eb'`, `set my card padding 20px`, `undo my card`) offers the line for that part (`set my background-color '#2563eb' --on button`, the undo of each setting the theme holds on the card), never suggestions it does not take.
 
-- `astryx experimental theme editor`: a theme saved by an earlier editor version opens unless a saved setting names a state, variant or part this Core does not have (that still stops with ERR_THEME_INVALID). A saved setting today's editor refuses (such as a color on a part whose inner element paints over it, so it never showed) no longer stops `show`, `set` and `compile`. The setting is kept and built as before, so nothing you see changes. A note names it, with the lines that clear it.
+- `astryx experimental theme editor`: a theme saved by an earlier editor version opens unless a saved setting names a state, variant, part or token this Core does not have, or a value the theme grammar refuses (those still stop `show` with ERR_THEME_INVALID). A saved setting today's editor refuses (such as a color on a part whose inner element paints over it, so it never showed) no longer stops `show`, `set` and `compile`. The setting is kept and built as before, so nothing you see changes. A note names it, with the lines that clear it.
 
 - `astryx experimental theme editor` gives a progress bar fill that does not read on its track a line for the variant it measured (`--when variant:accent`), so the success, warning and error bars keep their own colors, and the problem clears once that line is followed.
 
